@@ -35,7 +35,10 @@ import { appendTaskAttentionEvent } from "./attention-events.ts";
 import { parseSupervisorContactFromLine, recordSupervisorContact } from "./supervisor-contact.ts";
 import { registerStreamBridge, bridgeEventFromJsonEvent } from "./event-stream-bridge.ts";
 import { renderSkillInstructions } from "./skill-instructions.ts";
-import { DEFAULT_YIELD_CONFIG, extractYieldResult, hasYieldInOutput, isYieldEvent, type YieldResult } from "./yield-handler.ts";
+import { DEFAULT_YIELD_CONFIG, extractYieldResult, hasYieldInOutput, isYieldEvent, registerYieldTool, type YieldResult } from "./yield-handler.ts";
+
+// Register the submit_result tool handler so subprocess events can extract yield data.
+registerYieldTool();
 
 export interface TaskRunnerInput {
 	manifest: TeamRunManifest;
@@ -312,7 +315,10 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 	const yieldEnabled = input.runtimeConfig?.yield?.enabled ?? DEFAULT_YIELD_CONFIG.enabled;
 	if (yieldEnabled && collectedJsonEvents.length > 0) {
 		if (hasYieldInOutput(collectedJsonEvents)) {
-			yieldResult = extractYieldResult(collectedJsonEvents.find((e) => isYieldEvent(e))!);
+			const yieldEvent = collectedJsonEvents.find((e) => isYieldEvent(e));
+			if (yieldEvent) {
+				yieldResult = extractYieldResult(yieldEvent);
+			}
 		} else if (!error) {
 			appendEvent(manifest.eventsPath, { type: "task.attention", runId: manifest.runId, taskId: task.id, message: "Worker completed without calling submit_result tool.", data: { activityState: "needs_attention", reason: "no_yield" } });
 		}
