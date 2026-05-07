@@ -302,7 +302,7 @@ export async function handleTeamTool(params: TeamToolParamsValue, ctx: TeamConte
 		case "import": return handleImport(params, ctx);
 		case "imports": return handleImports(params, ctx);
 		case "settings": return handleSettings(params, ctx);
-	case "prune": return handlePrune(params, ctx);
+		case "prune": return handlePrune(params, ctx);
 		case "forget": return handleForget(params, ctx);
 		case "run": return handleRun(params, ctx);
 		case "status": return handleStatus(params, ctx);

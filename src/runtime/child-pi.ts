@@ -243,6 +243,7 @@ export class ChildPiLineObserver {
 	}
 }
 
+/** Mock-only path — real code path reuses a single observer. */
 function observeStdoutChunk(input: ChildPiRunInput, text: string): void {
 	const observer = new ChildPiLineObserver(input);
 	observer.observe(text);

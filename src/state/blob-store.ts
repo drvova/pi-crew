@@ -53,7 +53,7 @@ export function writeBlob(artifactsRoot: string, input: {
 	redacted?: boolean;
 	retention?: BlobMetadata["retention"];
 }): BlobWriteResult {
-	const content = typeof input.content === "string" ? input.content : input.content;
+	const content = input.content;
 	const hash = sha256Of(content);
 	const algorithm = SHA256_PREFIX;
 	const blobDir = path.join(artifactsRoot, BLOBS_DIR, algorithm);

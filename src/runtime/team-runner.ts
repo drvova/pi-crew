@@ -688,6 +688,7 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 				}
 			},
 		);
+		if (results.length === 0) break;
 		manifest = { ...results.at(-1)!.manifest, artifacts: mergeArtifacts([manifest.artifacts, ...results.map((item) => item.manifest.artifacts)].flat()) };
 		tasks = __test__mergeTaskUpdates(tasks, results);
 		const cancelledResult = results.find((item) => item.manifest.status === "cancelled");

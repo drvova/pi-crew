@@ -148,7 +148,7 @@ export function appendEvent(eventsPath: string, event: AppendTeamEvent): TeamEve
 	}
 	fs.appendFileSync(eventsPath, `${JSON.stringify(redactSecrets(fullEvent))}\n`, "utf-8");
 	// Emit to UI event bus for event-first delivery
-	try { emitFromTeamEvent(fullEvent); } catch { /* event bus errors are non-fatal */ }
+	try { emitFromTeamEvent(fullEvent); } catch (error) { logInternalError("event-log.emit", error); }
 	const seq = fullEvent.metadata?.seq ?? 0;
 	try {
 		const stat = fs.statSync(eventsPath);
