@@ -18,6 +18,7 @@ const FreeformConfig = Type.Unsafe({
 export const TeamToolParams = Type.Object({
 	action: Type.Optional(Type.Union([
 		Type.Literal("run"),
+		Type.Literal("parallel"),
 		Type.Literal("plan"),
 		Type.Literal("status"),
 		Type.Literal("list"),
@@ -91,7 +92,7 @@ export const TeamToolParams = Type.Object({
 });
 
 export interface TeamToolParamsValue {
-	action?: "run" | "plan" | "status" | "list" | "get" | "cancel" | "retry" | "resume" | "respond" | "create" | "update" | "delete" | "doctor" | "cleanup" | "events" | "artifacts" | "worktrees" | "forget" | "summary" | "prune" | "export" | "import" | "imports" | "help" | "validate" | "config" | "init" | "recommend" | "autonomy" | "api" | "settings";
+	action?: "run" | "parallel" | "plan" | "status" | "list" | "get" | "cancel" | "retry" | "resume" | "respond" | "create" | "update" | "delete" | "doctor" | "cleanup" | "events" | "artifacts" | "worktrees" | "forget" | "summary" | "prune" | "export" | "import" | "imports" | "help" | "validate" | "config" | "init" | "recommend" | "autonomy" | "api" | "settings";
 	resource?: "agent" | "team" | "workflow";
 	team?: string;
 	workflow?: string;

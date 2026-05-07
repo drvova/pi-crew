@@ -44,6 +44,7 @@ import { handleStatus } from "./team-tool/status.ts";
 import { handleArtifacts, handleEvents, handleSummary } from "./team-tool/inspect.ts";
 import { handleCleanup, handleExport, handleForget, handleImport, handleImports, handlePrune, handleWorktrees } from "./team-tool/lifecycle-actions.ts";
 import { handleCancel, handleRetry } from "./team-tool/cancel.ts";
+import { handleParallel } from "./team-tool/parallel-dispatch.ts";
 import { handleRespond } from "./team-tool/respond.ts";
 import { handlePlan } from "./team-tool/plan.ts";
 import { logInternalError } from "../utils/internal-error.ts";
@@ -309,6 +310,7 @@ export async function handleTeamTool(params: TeamToolParamsValue, ctx: TeamConte
 		case "cancel": return handleCancel(params, ctx);
 		case "retry": return handleRetry(params, ctx);
 		case "respond": return handleRespond(params, ctx);
+		case "parallel": return await handleParallel(params, ctx);
 		case "plan": return handlePlan(params, ctx);
 		case "resume": return handleResume(params, ctx);
 		case "create": return handleCreate(params, ctx);
