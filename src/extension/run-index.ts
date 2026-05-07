@@ -6,6 +6,7 @@ import { findRepoRoot, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
 import { activeRunEntries } from "../state/active-run-registry.ts";
 import { isSafePathId, resolveRealContainedPath } from "../utils/safe-paths.ts";
 import { sharedScanCache } from "../utils/scan-cache.ts";
+import { CancellationToken, createCancellationToken } from "../runtime/cancellation-token.ts";
 
 function readManifest(filePath: string): TeamRunManifest | undefined {
 	const cached = sharedScanCache.readAndCache("manifests", filePath, filePath);
@@ -21,16 +22,17 @@ function collectRuns(root: string, maxEntries?: number, signal?: AbortSignal): T
 	const runsRoot = path.join(root, DEFAULT_PATHS.state.runsSubdir);
 	if (!fs.existsSync(runsRoot)) return [];
 	if (signal?.aborted) return [];
+	const token = createCancellationToken({ signal });
 	const entries = fs.readdirSync(runsRoot, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory() && isSafePathId(entry.name))
 		.map((entry) => entry.name)
 		.sort((a, b) => b.localeCompare(a));
 	const selected = maxEntries !== undefined ? entries.slice(0, Math.max(0, maxEntries)) : entries;
 	const results: TeamRunManifest[] = [];
-	for (const entry of selected) {
-		if (signal?.aborted) break;
+	for (let i = 0; i < selected.length; i++) {
+		if (i % 10 === 0) token.heartbeat(`collectRuns:${i}/${selected.length}`);
 		try {
-			const manifest = readManifest(path.join(resolveRealContainedPath(runsRoot, entry), DEFAULT_PATHS.state.manifestFile));
+			const manifest = readManifest(path.join(resolveRealContainedPath(runsRoot, selected[i]), DEFAULT_PATHS.state.manifestFile));
 			if (manifest) results.push(manifest);
 		} catch { /* skip unreadable manifests */ }
 	}
