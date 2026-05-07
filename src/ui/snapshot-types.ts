@@ -23,6 +23,14 @@ export interface RunUiMailbox {
 	inboxUnread: number;
 	outboxPending: number;
 	needsAttention: number;
+	/** Urgent steering messages count. Default 0. */
+	steerUnread?: number;
+	/** Follow-up / continuation messages count. Default 0. */
+	followUpUnread?: number;
+	/** Response / reply messages count. Default 0. */
+	responseUnread?: number;
+	/** Generic messages count. Default 0. */
+	messageUnread?: number;
 	/** True when counts come from bounded tail reads and older messages may be omitted. */
 	approximate?: boolean;
 }

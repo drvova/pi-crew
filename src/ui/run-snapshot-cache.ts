@@ -379,6 +379,13 @@ interface MailboxCount {
 	approximate: boolean;
 }
 
+interface MailboxKindCount extends MailboxCount {
+	steer: number;
+	followUp: number;
+	response: number;
+	message: number;
+}
+
 function tailApproximate(filePath: string): boolean {
 	try {
 		return fs.statSync(filePath).size > MAX_TAIL_BYTES;
@@ -395,34 +402,54 @@ async function tailApproximateAsync(filePath: string): Promise<boolean> {
 	}
 }
 
-function readMailboxCounts(filePath: string, delivery: Record<string, MailboxMessageStatus>): MailboxCount {
+function readMailboxCounts(filePath: string, delivery: Record<string, MailboxMessageStatus>): MailboxKindCount {
+	const kindCounts = { steer: 0, followUp: 0, response: 0, message: 0 };
 	const items = tailJsonlLines(filePath, MAX_TAIL_LINES, (line) => {
 		try {
 			const parsed = JSON.parse(line) as unknown;
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return 0;
-			const message = parsed as { id?: unknown; status?: unknown };
-			if (typeof message.id !== "string" || !isMailboxStatus(message.status)) return 0;
-			return message.status !== "acknowledged" && delivery[message.id] !== "acknowledged" ? 1 : 0;
+			const msg = parsed as { id?: unknown; status?: unknown; kind?: unknown; data?: unknown };
+			if (typeof msg.id !== "string" || !isMailboxStatus(msg.status)) return 0;
+			if (msg.status !== "acknowledged" && delivery[msg.id] !== "acknowledged") {
+				const kind = typeof msg.kind === "string" ? msg.kind : typeof (msg.data as Record<string, unknown>)?.kind === "string" ? (msg.data as Record<string, unknown>).kind as string : undefined;
+				if (kind === "steer") kindCounts.steer++;
+				else if (kind === "follow-up") kindCounts.followUp++;
+				else if (kind === "response") kindCounts.response++;
+				else kindCounts.message++;
+				return 1;
+			}
+			return 0;
 		} catch {
 			return 0;
 		}
 	}) as number[];
-	return { count: items.reduce((sum, val) => sum + val, 0), approximate: tailApproximate(filePath) };
+	const count = items.reduce((sum, val) => sum + val, 0);
+	return { count, approximate: tailApproximate(filePath), steer: kindCounts.steer, followUp: kindCounts.followUp, response: kindCounts.response, message: kindCounts.message };
 }
 
-async function readMailboxCountsAsync(filePath: string, delivery: Record<string, MailboxMessageStatus>): Promise<MailboxCount> {
+async function readMailboxCountsAsync(filePath: string, delivery: Record<string, MailboxMessageStatus>): Promise<MailboxKindCount> {
+	const kindCounts = { steer: 0, followUp: 0, response: 0, message: 0 };
 	const items = await tailJsonlLinesAsync(filePath, MAX_TAIL_LINES, (line) => {
 		try {
 			const parsed = JSON.parse(line) as unknown;
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return 0;
-			const message = parsed as { id?: unknown; status?: unknown };
-			if (typeof message.id !== "string" || !isMailboxStatus(message.status)) return 0;
-			return message.status !== "acknowledged" && delivery[message.id] !== "acknowledged" ? 1 : 0;
+			const msg = parsed as { id?: unknown; status?: unknown; kind?: unknown; data?: unknown };
+			if (typeof msg.id !== "string" || !isMailboxStatus(msg.status)) return 0;
+			if (msg.status !== "acknowledged" && delivery[msg.id] !== "acknowledged") {
+				const kind = typeof msg.kind === "string" ? msg.kind : typeof (msg.data as Record<string, unknown>)?.kind === "string" ? (msg.data as Record<string, unknown>).kind as string : undefined;
+				if (kind === "steer") kindCounts.steer++;
+				else if (kind === "follow-up") kindCounts.followUp++;
+				else if (kind === "response") kindCounts.response++;
+				else kindCounts.message++;
+				return 1;
+			}
+			return 0;
 		} catch {
 			return 0;
 		}
 	}) as number[];
-	return { count: items.reduce((sum, val) => sum + val, 0), approximate: await tailApproximateAsync(filePath) };
+	const count = items.reduce((sum, val) => sum + val, 0);
+	return { count, approximate: await tailApproximateAsync(filePath), steer: kindCounts.steer, followUp: kindCounts.followUp, response: kindCounts.response, message: kindCounts.message };
 }
 
 function groupJoinsFrom(manifest: TeamRunManifest): RunUiGroupJoin[] {
@@ -437,6 +464,17 @@ async function groupJoinsFromAsync(manifest: TeamRunManifest): Promise<RunUiGrou
 	return (await readGroupJoinMailboxAsync(path.join(root, "outbox.jsonl"), delivery)).slice(-5);
 }
 
+function mergeKindCounts(a: MailboxKindCount, b: MailboxKindCount): MailboxKindCount {
+	return {
+		count: a.count + b.count,
+		approximate: a.approximate || b.approximate,
+		steer: a.steer + b.steer,
+		followUp: a.followUp + b.followUp,
+		response: a.response + b.response,
+		message: a.message + b.message,
+	};
+}
+
 function mailboxFrom(manifest: TeamRunManifest, agents: CrewAgentRecord[]): RunUiMailbox {
 	const root = path.join(manifest.stateRoot, "mailbox");
 	const delivery = readDeliveryMessages(path.join(root, "delivery.json"));
@@ -448,14 +486,17 @@ function mailboxFrom(manifest: TeamRunManifest, agents: CrewAgentRecord[]): RunU
 			if (!entry.isDirectory()) continue;
 			const taskInbox = readMailboxCounts(path.join(tasksRoot, entry.name, "inbox.jsonl"), delivery);
 			const taskOutbox = readMailboxCounts(path.join(tasksRoot, entry.name, "outbox.jsonl"), delivery);
-			inbox = { count: inbox.count + taskInbox.count, approximate: inbox.approximate || taskInbox.approximate };
-			outbox = { count: outbox.count + taskOutbox.count, approximate: outbox.approximate || taskOutbox.approximate };
+			inbox = mergeKindCounts(inbox, taskInbox);
+			outbox = mergeKindCounts(outbox, taskOutbox);
 		}
 	} catch {
 		// No task mailboxes yet.
 	}
 	const attentionAgents = agents.filter((agent) => agent.progress?.activityState === "needs_attention").length;
-	return { inboxUnread: inbox.count, outboxPending: outbox.count, needsAttention: inbox.count + attentionAgents, approximate: inbox.approximate || outbox.approximate };
+	return {
+		inboxUnread: inbox.count, outboxPending: outbox.count, needsAttention: inbox.count + attentionAgents, approximate: inbox.approximate || outbox.approximate,
+		steerUnread: inbox.steer + outbox.steer, followUpUnread: inbox.followUp + outbox.followUp, responseUnread: inbox.response + outbox.response, messageUnread: inbox.message + outbox.message,
+	};
 }
 
 async function mailboxFromAsync(manifest: TeamRunManifest, agents: CrewAgentRecord[]): Promise<RunUiMailbox> {
@@ -469,14 +510,17 @@ async function mailboxFromAsync(manifest: TeamRunManifest, agents: CrewAgentReco
 			if (!entry.isDirectory()) continue;
 			const taskInbox = await readMailboxCountsAsync(path.join(tasksRoot, entry.name, "inbox.jsonl"), delivery);
 			const taskOutbox = await readMailboxCountsAsync(path.join(tasksRoot, entry.name, "outbox.jsonl"), delivery);
-			inbox = { count: inbox.count + taskInbox.count, approximate: inbox.approximate || taskInbox.approximate };
-			outbox = { count: outbox.count + taskOutbox.count, approximate: outbox.approximate || taskOutbox.approximate };
+			inbox = mergeKindCounts(inbox, taskInbox);
+			outbox = mergeKindCounts(outbox, taskOutbox);
 		}
 	} catch {
 		// No task mailboxes yet.
 	}
 	const attentionAgents = agents.filter((agent) => agent.progress?.activityState === "needs_attention").length;
-	return { inboxUnread: inbox.count, outboxPending: outbox.count, needsAttention: inbox.count + attentionAgents, approximate: inbox.approximate || outbox.approximate };
+	return {
+		inboxUnread: inbox.count, outboxPending: outbox.count, needsAttention: inbox.count + attentionAgents, approximate: inbox.approximate || outbox.approximate,
+		steerUnread: inbox.steer + outbox.steer, followUpUnread: inbox.followUp + outbox.followUp, responseUnread: inbox.response + outbox.response, messageUnread: inbox.message + outbox.message,
+	};
 }
 
 function cancellationReasonFromEvents(events: TeamEvent[]): string | undefined {
