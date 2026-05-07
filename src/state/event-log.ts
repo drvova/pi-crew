@@ -173,7 +173,10 @@ export function readEvents(eventsPath: string): TeamEvent[] {
 		.split("\n")
 		.map((line) => line.trim())
 		.filter(Boolean)
-		.map((line) => JSON.parse(line) as TeamEvent);
+		.flatMap((line) => {
+			try { return [JSON.parse(line) as TeamEvent]; }
+			catch { return []; }
+		});
 }
 
 export interface EventCursorOptions {

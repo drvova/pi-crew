@@ -32,9 +32,13 @@ export function needsRotation(eventsPath: string, config?: Partial<RotationConfi
 		return false;
 	}
 	// Only count lines if size check didn't already trigger
-	const content = fs.readFileSync(eventsPath, "utf-8");
-	const lineCount = content.split("\n").filter(Boolean).length;
-	return lineCount > cfg.maxEventCount;
+	try {
+		const content = fs.readFileSync(eventsPath, "utf-8");
+		const lineCount = content.split("\n").filter(Boolean).length;
+		return lineCount > cfg.maxEventCount;
+	} catch {
+		return false;
+	}
 }
 
 export interface CompactionResult {
@@ -54,18 +58,28 @@ export interface CompactionResult {
 export function compactEventLog(eventsPath: string, config?: Partial<RotationConfig>): CompactionResult | undefined {
 	if (!fs.existsSync(eventsPath)) return undefined;
 	const cfg = resolveConfig(config);
-	const originalSize = fs.statSync(eventsPath).size;
+	let originalSize: number;
+	try { originalSize = fs.statSync(eventsPath).size; } catch { return undefined; }
 	const allEvents = readEvents(eventsPath);
 	if (allEvents.length <= cfg.compactToCount) return undefined;
 	const kept = allEvents.slice(-cfg.compactToCount);
-	const lines = kept.map((e) => JSON.stringify(e)).join("\n") + "\n";
-	atomicWriteFile(eventsPath, lines);
+	// Re-read after compaction to merge events appended during read
+	const finalEvents = readEvents(eventsPath);
+	const appendedAfterRead = finalEvents.slice(allEvents.length);
+	const merged = [...kept, ...appendedAfterRead];
+	const lines = merged.map((e) => JSON.stringify(e)).join("\n") + "\n";
+	try {
+		atomicWriteFile(eventsPath, lines);
+	} catch {
+		// Concurrent write conflict — skip compaction this cycle
+		return undefined;
+	}
 	const compactedSize = fs.statSync(eventsPath).size;
 	return {
 		originalSize,
 		compactedSize,
-		eventsRemoved: allEvents.length - kept.length,
-		eventsKept: kept.length,
+		eventsRemoved: allEvents.length + appendedAfterRead.length - merged.length,
+		eventsKept: merged.length,
 	};
 }
 
@@ -81,23 +95,27 @@ export interface EventLogStats {
  */
 export function getEventLogStats(eventsPath: string): EventLogStats | undefined {
 	if (!fs.existsSync(eventsPath)) return undefined;
-	const stat = fs.statSync(eventsPath);
-	const content = fs.readFileSync(eventsPath, "utf-8");
-	const lines = content.split("\n").filter(Boolean);
-	let oldestTimestamp: string | undefined;
-	let newestTimestamp: string | undefined;
-	if (lines.length > 0) {
-		try {
-			oldestTimestamp = (JSON.parse(lines[0]) as { time: string }).time;
-		} catch { /* ignore corrupt line */ }
-		try {
-			newestTimestamp = (JSON.parse(lines[lines.length - 1]) as { time: string }).time;
-		} catch { /* ignore corrupt line */ }
+	try {
+		const stat = fs.statSync(eventsPath);
+		const content = fs.readFileSync(eventsPath, "utf-8");
+		const lines = content.split("\n").filter(Boolean);
+		let oldestTimestamp: string | undefined;
+		let newestTimestamp: string | undefined;
+		if (lines.length > 0) {
+			try {
+				oldestTimestamp = (JSON.parse(lines[0]) as { time: string }).time;
+			} catch { /* ignore corrupt line */ }
+			try {
+				newestTimestamp = (JSON.parse(lines[lines.length - 1]) as { time: string }).time;
+			} catch { /* ignore corrupt line */ }
+		}
+		return {
+			fileSizeBytes: stat.size,
+			eventCount: lines.length,
+			oldestTimestamp,
+			newestTimestamp,
+		};
+	} catch {
+		return undefined;
 	}
-	return {
-		fileSizeBytes: stat.size,
-		eventCount: lines.length,
-		oldestTimestamp,
-		newestTimestamp,
-	};
 }
