@@ -294,50 +294,61 @@ This distillation has been **partially implemented**. It should remain open as a
 - Retry attempt IDs and deadletter linkage.
 - Render coalescing/snapshot caching improvements that reduce hot-path UI work.
 - Release checklist basics: typecheck, unit/integration tests, and `npm pack --dry-run` are part of `npm run ci`.
+- Steering vs follow-up: `/team-follow-up` command implemented, mailbox kind filter, separate from `/team-respond`.
+- Typed hook lifecycle: all 9 hooks defined; 8 wired (before_run_start, before_task_start, task_result, before_cancel, before_forget, before_cleanup, before_publish, run_recovery). Only session_before_switch unwired.
+- Event-first UI: RunEventBus wired into appendEvent, snapshot cache, dashboard, widget, sidebar for event-driven invalidation.
+- Cooperative CancellationToken wired into long scans (collectRuns, listRuns, listRecentRuns, listRunsByScope, validateMailbox, readAllMailboxMessages, pruneFinishedRuns, cleanupRunWorktrees).
+- Content-addressed blob artifact store with SHA-256 dedup and metadata sidecars.
+- Raw scan-entry cache (SharedScanCache) shared by run-index manifest reads and active-run-registry.
+- Unified capability inventory model with stable `kind:name` IDs and policy-driven disable.
+- Append-only run-history tree with event provenance (parentEventId, attemptId, branchId, causationId, correlationId).
+- Worker process controller reserved before spawn (ControlReservation in agent-control.ts).
+- Release hardening: `npm run smoke:release` automates tarball install + version consistency check.
+- Effectiveness policy enforcement: default guard escalates warn to blocked for mutating-role tasks.
+- Two-phase worker teardown via WorkerExitStatus.
 
 ### Partial
 
-- Steering vs follow-up: mailbox semantic fields and durable helpers exist, but separate UI/status queues and a dedicated `/team-follow-up` command are not implemented.
 - Cancellation invariants: `worker.cancelled` evidence exists, but generic synthetic `tool.cancelled` / model-operation terminal records are missing.
-- Durable history vs prompt projection: durable artifacts exist, but explicit projection/conversion functions are still not separated from prompt building.
-- Event-first UI: UI work is coalesced, but several views still use durable file polling as primary data retrieval.
-- Append-only run-history tree: event JSONL is append-only and retry IDs exist, but parent/branch/causation metadata is missing.
-- Process lifecycle: child worker exit status and forced cleanup exist, but pre-spawn controller reservation and full control-channel semantics are missing.
-- Release hardening: GitHub/npm release flow works, but temp tarball install/Pi load smoke/version consistency checks are not yet automated.
+- Durable history vs prompt projection: durable artifacts exist, projection functions exist (`run-projection.ts`), but not yet separated from prompt building in all paths.
+- Two-phase pi-crew extension lifecycle for third-party crew plugins (not yet needed).
 
 ### Missing / backlog
 
 - Shared/exclusive operation metadata (`batchId`, `index`, `total`, `conflictKey`) and skip-on-steering semantics.
-- Two-phase pi-crew extension lifecycle for third-party crew plugins.
-- Unified capability inventory/control center with stable capability-disable IDs.
-- Typed hook lifecycle gates.
-- Policy-enforced required intent for destructive actions is implemented as a configurable vertical slice.
-- Cooperative `CancellationToken` helper exists and is tested, but it is not yet wired into long internal loops/scans.
-- Content-addressed blob artifacts with metadata sidecars and GC.
-- Raw scan-entry cache shared by dashboard/status/artifact lookup.
+- Generic synthetic tool cancellation evidence for model operations.
+- `session_before_switch` hook wiring (no cwd switch mechanism in current codebase).
 
 ## Prioritized Backlog for pi-crew
 
-### P0 / High confidence
+### P0 / Done ✅
 
-- Fix current runtime review findings first: waiting final status, respond semantics, no-registry model routing.
+- Fix current runtime review findings: waiting final status, respond semantics, no-registry model routing.
 - Add structured cancellation reason and terminal synthetic result/event for cancelled workers.
 - Centralize worker prompt pipeline and persist exact prompt packets.
-- Add width-safety tests for dashboard/widget lines.
 
-### P1 / Medium-term architecture
+### P1 / Done ✅
 
-- Add steering vs follow-up mailbox queues.
-- Add typed hook lifecycle for `before_task_start`, `task_result`, `before_cancel`, `session_before_switch`.
+- Add steering vs follow-up mailbox queues (kind filter + `/team-follow-up`).
+- Add typed hook lifecycle for all 9 hooks (8 wired, session_before_switch placeholder).
 - Add capability inventory model for teams/workflows/agents/skills/hooks/tools.
 - Add `CancellationToken` for long internal loops and scans.
 
-### P2 / Larger subsystem work
+### P2 / Done ✅
 
 - Append-only run-history tree with attempt/branch parentage.
-- Content-addressed blob artifact store with metadata sidecars and GC.
-- Worker process controller installed before spawn; process non-reuse after cancel/protocol error.
+- Content-addressed blob artifact store with metadata sidecars.
+- Worker process controller installed before spawn; control channel reservation.
 - Raw scan-entry cache shared by dashboard/status/artifact lookup.
+- Event-first UI with RunEventBus subscriptions.
+- Release smoke test automation.
+
+### P3 / Remaining
+
+- Shared/exclusive operation metadata and skip-on-steering semantics.
+- Generic synthetic tool cancellation evidence for model operations.
+- Two-phase extension lifecycle for third-party crew plugins.
+- `session_before_switch` hook wiring (awaiting cwd switch mechanism).
 
 ## Anti-Patterns to Avoid
 
