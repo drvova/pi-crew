@@ -30,7 +30,7 @@ import { applyAgentProgressEvent, applyUsageToProgress, progressEventSummary, sh
 import { checkpointTask, persistSingleTaskUpdate, updateTask } from "./task-runner/state-helpers.ts";
 import { cleanResultText, isFinalChildEvent } from "./task-runner/result-utils.ts";
 import { evaluateCompletionMutationGuard } from "./completion-guard.ts";
-import { cancellationReasonFromSignal } from "./cancellation.ts";
+import { cancellationReasonFromSignal, buildSyntheticTerminalEvidence } from "./cancellation.ts";
 import { appendTaskAttentionEvent } from "./attention-events.ts";
 import { parseSupervisorContactFromLine, recordSupervisorContact } from "./supervisor-contact.ts";
 import { renderSkillInstructions } from "./skill-instructions.ts";
@@ -209,7 +209,11 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 			});
 			const evidenceStatus = childResult.exitStatus?.cancelled ? "cancelled" : childResult.error || (childResult.exitCode && childResult.exitCode !== 0) ? "failed" : "completed";
 			terminalEvidence = [...terminalEvidence, { operation: "worker", status: evidenceStatus, startedAt: attemptStartedAt.toISOString(), finishedAt: new Date().toISOString(), ...(input.signal?.aborted ? { reason: cancellationReasonFromSignal(input.signal) } : {}), ...(childResult.exitStatus ? { exitStatus: childResult.exitStatus } : {}) }];
-			if (evidenceStatus === "cancelled") appendEvent(manifest.eventsPath, { type: "worker.cancelled", runId: manifest.runId, taskId: task.id, message: input.signal?.aborted ? cancellationReasonFromSignal(input.signal).message : "Worker cancelled.", data: { terminalEvidence: terminalEvidence.at(-1) } });
+			if (evidenceStatus === "cancelled") {
+				const cancelReason = input.signal?.aborted ? cancellationReasonFromSignal(input.signal) : { code: "caller_cancelled" as const, message: "Worker cancelled." };
+				terminalEvidence.push(buildSyntheticTerminalEvidence("tool", cancelReason, attemptStartedAt.toISOString()));
+				appendEvent(manifest.eventsPath, { type: "worker.cancelled", runId: manifest.runId, taskId: task.id, message: cancelReason.message, data: { terminalEvidence: terminalEvidence.at(-1) } });
+			}
 			startupEvidence = createStartupEvidence({ command: "pi", startedAt: attemptStartedAt, finishedAt: new Date(), promptSentAt: attemptStartedAt, promptAccepted: childResult.exitCode === 0 && !childResult.error, stderr: childResult.stderr, error: childResult.error, exitCode: childResult.exitCode });
 			exitCode = childResult.exitCode;
 			finalStdout = childResult.stdout;
