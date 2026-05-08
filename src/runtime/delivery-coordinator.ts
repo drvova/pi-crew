@@ -102,8 +102,10 @@ export class DeliveryCoordinator {
 
 	flushQueuedResults(): void {
 		if (!this.active || this.pending.length === 0) return;
-		const batch = this.pending.splice(0);
+		// H7: Set flushing BEFORE splice to prevent re-entrancy
+		if (this.flushing) return;
 		this.flushing = true;
+		const batch = this.pending.splice(0);
 		try {
 			const retryLater: PendingDelivery[] = [];
 			for (const delivery of batch) {

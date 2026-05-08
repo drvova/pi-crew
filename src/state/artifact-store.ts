@@ -99,7 +99,10 @@ function resolveInside(baseDir: string, relativePath: string): string {
 	const resolved = path.resolve(base, normalizedRelativePath);
 	const relative = path.relative(base, resolved);
 	if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`Invalid artifact path: ${relativePath}`);
-	return resolved;
+	// C1: Extra normalization guard for case-insensitive / symlinked filesystems
+	const normalized = path.normalize(resolved);
+	if (!normalized.startsWith(base + path.sep) && normalized !== base) throw new Error(`Invalid artifact path (traversal): ${relativePath}`);
+	return normalized;
 }
 
 export function writeArtifact(artifactsRoot: string, options: ArtifactWriteOptions): ArtifactDescriptor {

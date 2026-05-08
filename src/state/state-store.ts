@@ -27,12 +27,15 @@ interface ManifestCacheEntry {
 	manifestSize: number;
 	tasksMtimeMs: number;
 	tasksSize: number;
+	cachedAt?: number;
 }
 
+const MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const manifestCache = new Map<string, ManifestCacheEntry>();
 
 function setManifestCache(stateRoot: string, entry: ManifestCacheEntry): void {
 	if (manifestCache.has(stateRoot)) manifestCache.delete(stateRoot);
+	entry.cachedAt = Date.now();
 	manifestCache.set(stateRoot, entry);
 	while (manifestCache.size > DEFAULT_CACHE.manifestMaxEntries) {
 		const oldest = manifestCache.keys().next().value;
@@ -196,6 +199,15 @@ export async function saveRunTasksAsync(manifest: TeamRunManifest, tasks: TeamTa
 	invalidateRunCache(manifest.stateRoot);
 }
 
+/** M8: Atomically save manifest + tasks and invalidate cache once to prevent stale reads between saves */
+export async function saveManifestAndTasksAtomic(manifest: TeamRunManifest, tasks: TeamTaskState[]): Promise<void> {
+	await Promise.all([
+		atomicWriteJsonAsync(path.join(manifest.stateRoot, "manifest.json"), manifest),
+		atomicWriteJsonAsync(manifest.tasksPath, tasks),
+	]);
+	invalidateRunCache(manifest.stateRoot);
+}
+
 export interface UpdateRunStatusOptions {
 	data?: Record<string, unknown>;
 	metadata?: Parameters<typeof appendEvent>[1]["metadata"];
@@ -266,11 +278,15 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 		&& cached.tasksMtimeMs === tasksMtimeMs
 		&& cached.tasksSize === (tasksStat?.size ?? 0)
 	) {
-		if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
+		// TTL eviction: expire stale entries even if mtime matches
+		if (cached.cachedAt && Date.now() - cached.cachedAt > MANIFEST_CACHE_TTL_MS) {
+			manifestCache.delete(stateRoot);
+		} else if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
 			manifestCache.delete(stateRoot);
 			return undefined;
+		} else {
+			return { manifest: cached.manifest, tasks: cached.tasks };
 		}
-		return { manifest: cached.manifest, tasks: cached.tasks };
 	}
 
 	const manifest = readJsonFile<TeamRunManifest>(manifestPath);
@@ -307,11 +323,15 @@ export async function loadRunManifestByIdAsync(cwd: string, runId: string): Prom
 	}
 	const tasksMtimeMs = tasksStat?.mtimeMs ?? 0;
 	if (cached && cached.manifestMtimeMs === manifestStat.mtimeMs && cached.manifestSize === manifestStat.size && cached.tasksMtimeMs === tasksMtimeMs && cached.tasksSize === (tasksStat?.size ?? 0)) {
-		if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
+		// TTL eviction: expire stale entries even if mtime matches
+		if (cached.cachedAt && Date.now() - cached.cachedAt > MANIFEST_CACHE_TTL_MS) {
+			manifestCache.delete(stateRoot);
+		} else if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
 			manifestCache.delete(stateRoot);
 			return undefined;
+		} else {
+			return { manifest: cached.manifest, tasks: cached.tasks };
 		}
-		return { manifest: cached.manifest, tasks: cached.tasks };
 	}
 	const manifest = await readJsonFileAsync<TeamRunManifest>(manifestPath);
 	if (!manifest || !validateRunManifestPaths(cwd, runId, manifest, stateRoot, tasksPath)) return undefined;

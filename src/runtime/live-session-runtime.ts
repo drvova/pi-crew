@@ -18,6 +18,7 @@ import { buildMcpProxyFromSession } from "./mcp-proxy.ts";
 import { createSubmitResultTool } from "./custom-tools/submit-result-tool.ts";
 import { createIrcTool } from "./custom-tools/irc-tool.ts";
 import { buildExtensionBridge } from "./live-extension-bridge.ts";
+import { logInternalError } from "../utils/internal-error.ts";
 import { collectLiveSessionHealth, formatLiveSessionDiagnostics, type LiveSessionHealth } from "./live-session-health.ts";
 import { listLiveAgents } from "./live-agent-manager.ts";
 
@@ -475,16 +476,17 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			const health = collectLiveSessionHealth(agents, () => undefined);
 			const diagnostics = formatLiveSessionDiagnostics(health);
 			input.onEvent?.({ type: "live-session.diagnostics", data: diagnostics });
-		} catch {
-			// Diagnostics collection should not affect error handling
+		} catch (diagError) {
+			logInternalError("live-session.diagnostics", diagError);
 		}
 
 		updateLiveAgentStatus(`${input.manifest.runId}:${input.task.id}`, "failed");
 		return { available: true, exitCode: 1, stdout: stdout.trim(), stderr: message, jsonEvents, error: message };
 	} finally {
-		if (controlTimer) clearInterval(controlTimer);
-		unsubscribeControlRealtime?.();
+		// H6: Unsubscribe listeners FIRST before clearing timer to prevent race
 		unsubscribe?.();
+		unsubscribeControlRealtime?.();
+		if (controlTimer) clearInterval(controlTimer);
 
 		// Phase 8: Emit final health snapshot
 		try {
@@ -493,8 +495,8 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 				const health = collectLiveSessionHealth(agents, () => undefined);
 				input.onEvent?.({ type: "live-session.health", data: health });
 			}
-		} catch {
-			// Health snapshot should not affect cleanup
+		} catch (healthError) {
+			logInternalError("live-session.health-snapshot", healthError);
 		}
 	}
 }

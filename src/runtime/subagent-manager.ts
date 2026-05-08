@@ -208,7 +208,7 @@ export class SubagentManager {
 			const record = this.records.get(id);
 			if (!record) return undefined;
 			if (record.status !== "running" && record.status !== "queued") return record;
-			if (record.promise) await record.promise;
+			if (record.promise) await record.promise.catch(() => { /* status already set to error */ });
 			else await new Promise((resolve) => setTimeout(resolve, 100));
 		}
 	}
@@ -235,7 +235,7 @@ export class SubagentManager {
 				if (result.isError) {
 					record.status = "error";
 					record.error = record.result;
-					return;
+					throw new Error(record.error);
 				}
 				if (record.runId) await this.pollRunToTerminal(options.cwd, record);
 				else record.status = "completed";
@@ -246,6 +246,7 @@ export class SubagentManager {
 				}
 				record.status = "error";
 				record.error = error instanceof Error ? error.message : String(error);
+				throw error; // H4: Propagate rejection so callers awaiting record.promise see the error
 			} finally {
 				this.cleanupRunSignal(record.id);
 				if (options.background) this.runningBackground = Math.max(0, this.runningBackground - 1);

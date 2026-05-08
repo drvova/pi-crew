@@ -296,6 +296,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 						}
 					}
 					if (isContextCurrent(ctx, ownerGeneration)) ctx.ui.notify(`pi-crew foreground run failed: ${message}`, "error");
+				else logInternalError("register.foreground-run-failure", error, `runId=${runId} context disposed`);
 				})
 				.finally(() => {
 					foregroundControllers.delete(key);
@@ -358,8 +359,8 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		// purgeStaleActiveRunIndex() runs at next session_start instead.
 		try {
 			purgeStaleActiveRunIndex();
-		} catch {
-			// Best-effort — must not block cleanup
+		} catch (error) {
+			logInternalError("register.cleanupRuntime.purgeStale", error);
 		}
 
 		stopCrewWidget(currentCtx, widgetState, currentCtx ? loadConfig(currentCtx.cwd).config.ui : undefined);
@@ -416,8 +417,8 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				if (cancelled.length > 0) {
 					notifyOperator({ id: `orphan_cleanup`, severity: "info", source: "crash-recovery", title: `Cleaned up ${cancelled.length} orphaned run(s)`, body: `Runs from previous sessions were auto-cancelled: ${cancelled.join(", ")}` });
 				}
-			} catch {
-				// Orphan cleanup should not block session start
+			} catch (error) {
+				logInternalError("register.sessionStart.orphanCleanup", error);
 			}
 		}
 
@@ -427,8 +428,8 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			if (purged.length > 0) {
 				notifyOperator({ id: `active_index_purge`, severity: "info", source: "crash-recovery", title: `Purged ${purged.length} stale active-run-index entr${purged.length === 1 ? "y" : "ies"}`, body: `Cleaned up global active run index` });
 			}
-		} catch {
-			// Global index purge should not block session start
+		} catch (error) {
+			logInternalError("register.sessionStart.globalIndexPurge", error);
 		}
 
 		const loadedConfig = loadConfig(ctx.cwd);
