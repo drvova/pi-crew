@@ -85,6 +85,8 @@ export function updatePiCrewPowerbar(events: EventBus, cwd: string, config?: Cre
 		return { run, agents, tasks: readTasks(run.tasksPath), snapshot };
 	}).filter((item) => isDisplayActiveRun(item.run, item.agents));
 	if (!active.length) {
+		lastEmittedActive = undefined;
+		lastEmittedProgress = undefined;
 		safeEmit(events, "powerbar:update", { id: "pi-crew-active" });
 		safeEmit(events, "powerbar:update", { id: "pi-crew-progress" });
 		if (useStatusFallback) setStatusFallback(ctx, undefined);
@@ -105,23 +107,34 @@ export function updatePiCrewPowerbar(events: EventBus, cwd: string, config?: Cre
 	const activeText = `crew ${running}a/${waiting}w${notificationBadge(notificationCount)}`;
 	const activeSuffix = [model, tokenText].filter(Boolean).join(" · ") || undefined;
 	const progressSuffix = `${completed}/${total}${tokenText ? ` · ${tokenText}` : ""}`;
-	safeEmit(events, "powerbar:update", {
-		id: "pi-crew-active",
-		icon: "⚙",
-		text: activeText,
-		suffix: activeSuffix,
-		color: running ? "accent" : "warning",
-	});
-	safeEmit(events, "powerbar:update", {
-		id: "pi-crew-progress",
-		text: (active[0]?.run as TeamRunManifest)?.team ?? "crew",
-		bar: Math.round((completed / total) * 100),
-		suffix: progressSuffix,
-		color: completed === total ? "success" : "accent",
-		barSegments: 8,
-	});
+	const activeKey = `${activeText}|${activeSuffix ?? ""}|${running}`;
+	const progressKey = `${(active[0]?.run as TeamRunManifest)?.team ?? "crew"}|${completed}/${total}|${tokenText ?? ""}`;
+	const changed = activeKey !== lastEmittedActive || progressKey !== lastEmittedProgress;
+	if (changed) {
+		lastEmittedActive = activeKey;
+		lastEmittedProgress = progressKey;
+		safeEmit(events, "powerbar:update", {
+			id: "pi-crew-active",
+			icon: "⚙",
+			text: activeText,
+			suffix: activeSuffix,
+			color: running ? "accent" : "warning",
+		});
+		safeEmit(events, "powerbar:update", {
+			id: "pi-crew-progress",
+			text: (active[0]?.run as TeamRunManifest)?.team ?? "crew",
+			bar: Math.round((completed / total) * 100),
+			suffix: progressSuffix,
+			color: completed === total ? "success" : "accent",
+			barSegments: 8,
+		});
+	}
 	if (useStatusFallback) setStatusFallback(ctx, `${activeText}${activeSuffix ? ` · ${activeSuffix}` : ""} · ${progressSuffix}`);
 }
+
+// --- Dedup state: skip emit if segment data unchanged ---
+let lastEmittedActive: string | undefined;
+let lastEmittedProgress: string | undefined;
 
 // --- Coalesced powerbar update ---
 
@@ -170,6 +183,8 @@ export function disposePowerbarCoalescer(): void {
 }
 
 export function clearPiCrewPowerbar(events: EventBus, ctx?: StatusContext): void {
+	lastEmittedActive = undefined;
+	lastEmittedProgress = undefined;
 	safeEmit(events, "powerbar:update", { id: "pi-crew-active" });
 	safeEmit(events, "powerbar:update", { id: "pi-crew-progress" });
 	setStatusFallback(ctx, undefined);
