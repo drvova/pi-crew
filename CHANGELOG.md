@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.50
+
+### Fixed
+
+- **Parallel execution** — Raised default concurrency (implementation 2→4, review 2→3, research 2→3). Fixed `defaultWorkflowConcurrency()` routing bug where review/default both returned the implementation value.
+- **Planner prompt** — Added explicit "MAXIMIZE PARALLELISM" instruction with examples, so planner models produce parallel phases instead of sequential.
+- **20 review findings** — 6 CRITICAL (optional chaining crash, env leak, path redaction, RPC validation, hook JSON safety, temp dir security), 6 HIGH (unsafe casts, busy-wait CPU, timestamp merge guard, prompt injection delimiter, binary validation), 5 MEDIUM, 3 LOW.
+- **Widget flicker** — Pinned preloaded manifests to widget component model to prevent manifestCache TTL race. Scoped snapshotCache invalidation to specific run instead of clearing all.
+- **Delegation policy** — Rewritten as mandatory decision table with concrete thresholds (>3 files read or >2 files edit = must delegate). Injected into every session via system prompt.
+- **ignoreMethod option** — New config to write ignore entries to `.git/info/exclude` instead of `.gitignore` (Closes #2).
+
 ## 0.1.49
 
 ### Added
