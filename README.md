@@ -1,351 +1,69 @@
 # pi-crew
 
-`pi-crew` is a Pi extension/package for coordinated AI teams: autonomous routing, manual slash-command controls, durable run state, artifacts, async/background execution, optional worktree isolation, resource management, validation, import/export, dashboard helpers, and safe API interop.
+**Coordinate AI agent teams inside [Pi](https://github.com/nicekate/pi-coding-agent).**
 
-NPM package:
-
-```text
-pi-crew
-```
-
-GitHub repository:
+pi-crew is a Pi extension that orchestrates autonomous multi-agent workflows — research, implementation, review, testing, and more — with durable state, parallel execution, worktree isolation, and safe defaults.
 
 ```text
-https://github.com/baphuongna/pi-crew
+npm: pi-crew
+repo: https://github.com/baphuongna/pi-crew
 ```
 
-## Status
+---
 
-`pi-crew` is published on npm and implemented with safe execution defaults and product-oriented foundations.
+## Features
 
-Current highlights:
+- **One Pi tool** — `team` handles routing, planning, execution, review, and cleanup
+- **Autonomous delegation** — policy injection decides when/how to delegate based on task complexity
+- **Real child Pi workers** — each task spawns a separate Pi process by default; scaffold/dry-run opt-out
+- **Adaptive planning** — implementation workflow lets a planner agent decide subagent fanout
+- **Parallel execution** — tasks in the same phase run concurrently with configurable concurrency
+- **Durable state** — manifest, tasks, events, artifacts all persisted to disk
+- **Async/background runs** — detached runs survive session switches with completion notifications
+- **Worktree isolation** — opt-in git worktrees per task for safe parallel edits
+- **Rich UI** — live widget, dashboard, progress tracking, model/token display
+- **Observability** — metrics registry, Prometheus/OTLP exporters, heartbeat watching, deadletter queue
+- **Resource management** — create/update/delete agents, teams, workflows with validation
+- **Import/export** — portable run bundles for sharing and archiving
 
-- one main Pi tool: `team`
-- autonomous delegation policy injection before agent start
-- metadata-aware `recommend` action for routing, decomposition, fanout hints, async/worktree suggestions
-- configurable autonomy profiles: `manual`, `suggested`, `assisted`, `aggressive`
-- builtin agents, teams, and workflows
-- user/project/builtin resource discovery where user resources override builtin resources, and project resources cannot shadow trusted user/builtin names
-- resource format support for routing metadata: `triggers`, `useWhen`, `avoidWhen`, `cost`, `category`
-- durable run state: manifest, tasks, events, artifacts, imports/exports
-- foreground workflow scheduler
-- detached async/background runner
-- stale async PID detection
-- active run summary and async completion notifications in Pi sessions
-- owner-session delivery guards so stale sessions do not receive background subagent/result/live-session completions
-- real child Pi worker execution by default, with explicit scaffold/dry-run opt-out
-- child Pi JSON output parsing for final text, usage, and event counts
-- retryable model fallback attempts per task
-- aggregate usage totals in status/summary
-- progress, summary, prompt, result, log, diff, patch, export artifacts
-- task packets, verification/green-contract evidence, policy decision artifacts, and task graph metadata
-- opt-in git worktree isolation per task
-- worktree branch mismatch detection
-- dirty worktree preservation unless `force` is explicitly set
-- cancel/resume lifecycle operations
-- forget/prune cleanup operations with explicit confirmation
-- export/import portable run bundles
-- resource create/update/delete with backups, dry-run, reference checks, and optional reference updates
-- resource validation and doctor checks
-- project initialization for `.pi` layout and `.gitignore`
-- config show/update with user/project scope and nested unset support
-- safe API interop for manifest/task/event/heartbeat/claim/mailbox operations
-- realpath containment for run/import/artifact/transcript/mailbox/agent state reads and writes, including symlink escape protection
-- read-only state APIs avoid creating mailbox files when only inspecting delivery or mailbox state
-- run-level and task-level mailbox files with validation/repair support
-- `/team-manager` interactive helper
-- `/team-dashboard` custom TUI overlay with progress preview, action shortcuts, and reload
-- `parallel-research` team/workflow for dynamic `Source/pi-*` fanout and parallel shard exploration
-- observability metrics: per-session Counter/Gauge/Histogram registry, JSONL sink, `/team-metrics`, dashboard metrics pane, Prometheus/OTLP exporters (OTLP opt-in)
-- reliability hardening: heartbeat gradient watcher, opt-in retry executor with attempt trace, crash-recovery detection, deadletter queue
-- background `Agent`/`crew_agent` completion wake-up so parent sessions can automatically join completed subagent results
-- optional `runtime.requirePlanApproval` gate for planner-first approval before mutating adaptive implementation workers run
-- optional `runtime.completionMutationGuard` to warn or fail implementation-style workers that complete without observed mutation tool calls
-- grouped result delivery is correlated through mailbox metadata, deduped by request id, and acknowledged via existing `ack-message`
-- shared redaction for common secrets before durable event/log/mailbox/artifact/metric/diagnostic persistence
-- package polish: `schema.json`, TypeScript semantic check, strip-types import smoke, cross-platform CI workflow, dry-run package verification
+---
 
 ## Install
-
-From npm:
 
 ```bash
 pi install npm:pi-crew
 ```
 
-From the workspace root for local development:
+Local development:
 
 ```bash
 pi install ./pi-crew
 ```
 
-Optional config bootstrap after npm install:
+Post-install config bootstrap:
 
 ```bash
-pi-crew
+pi-crew          # after npm install
+node ./pi-crew/install.mjs   # from local clone
 ```
 
-Optional config bootstrap from a local clone:
+---
 
-```bash
-node ./pi-crew/install.mjs
-```
+## Quick Start
 
-Local verification from this package:
-
-```bash
-cd pi-crew
-npm run ci
-```
-
-## Runtime safety model
-
-By default, `run` launches each crew task as a separate child Pi process. This matches the subagent model from `pi-subagents`: the parent session orchestrates while worker sessions execute independently and stream durable output back to run state.
-
-Use scaffold/dry-run mode only when you explicitly want prompts/artifacts without launching workers:
-
-```json
-{
-  "runtime": { "mode": "scaffold" }
-}
-```
-
-or disable workers globally:
-
-```json
-{
-  "executeWorkers": false
-}
-```
-
-Worktree mode is opt-in:
-
-```json
-{
-  "action": "run",
-  "team": "implementation",
-  "goal": "Implement feature X",
-  "workspaceMode": "worktree"
-}
-```
-
-By default, worktree mode requires a clean leader repository. Dirty task worktrees are preserved unless cleanup is called with `force: true`.
-
-## Config
-
-User config path:
+### 1. Initialize project
 
 ```text
-~/.pi/agent/extensions/pi-crew/config.json
+/team-init
 ```
 
-Project config path:
+### 2. Run a team
 
 ```text
-.crew/config.json            # default (new projects)
-.pi/teams/config.json        # legacy (when the repo already has .pi/)
+/team-run Investigate failing tests and propose a fix
 ```
 
-The project root is auto-detected by walking up from the current directory and stopping at any of: `.git`, `.pi`, `.crew`, `.hg`, `.svn`, `.factory`, `.omc`, or any common manifest file (`package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, `composer.json`, `build.gradle[.kts]`). If the project already has a `.pi/` directory, pi-crew reuses it under `.pi/teams/` to avoid creating a parallel layout; otherwise it uses `.crew/`.
-
-Config merge priority:
-
-```text
-user < project for ordinary presentation/UX settings
-```
-
-Trust-boundary exception: project config is intentionally not trusted for sensitive execution controls. Project-level values such as `executeWorkers`, `asyncByDefault`, runtime mode/live-session inheritance, autonomy mode, `agents.disableBuiltins`, `agents.overrides`, `worktree.setupHook`, and `otlp.headers` are ignored with warnings. Set those in user config when you want to trust them explicitly.
-
-Resource discovery trust boundary: project-local agents, teams, and workflows may add new names, but cannot shadow builtin or user resources with the same name.
-
-Supported config:
-
-```json
-{
-  "asyncByDefault": false,
-  "executeWorkers": true,
-  "notifierIntervalMs": 5000,
-  "requireCleanWorktreeLeader": true,
-  "autonomous": {
-    "profile": "suggested",
-    "enabled": true,
-    "injectPolicy": true,
-    "preferAsyncForLongTasks": false,
-    "allowWorktreeSuggestion": true,
-    "magicKeywords": {
-      "review": ["review", "audit", "inspect"]
-    }
-  },
-  "runtime": {
-    "mode": "auto",
-    "groupJoin": "smart",
-    "groupJoinAckTimeoutMs": 300000,
-    "requirePlanApproval": false,
-    "completionMutationGuard": "warn"
-  },
-  "limits": {
-    "maxConcurrentWorkers": 3,
-    "maxTaskDepth": 2,
-    "maxChildrenPerTask": 5,
-    "maxRunMinutes": 60,
-    "maxRetriesPerTask": 1,
-    "heartbeatStaleMs": 60000
-  },
-  "ui": {
-    "widgetPlacement": "aboveEditor",
-    "widgetMaxLines": 8,
-    "powerbar": true,
-    "dashboardPlacement": "center",
-    "dashboardWidth": 72,
-    "dashboardLiveRefreshMs": 1000,
-    "autoOpenDashboard": false,
-    "autoOpenDashboardForForegroundRuns": false,
-    "showModel": true,
-    "showTokens": true,
-    "showTools": true
-  },
-  "tools": {
-    "enableClaudeStyleAliases": true,
-    "enableSteer": true,
-    "terminateOnForeground": false
-  },
-  "telemetry": {
-    "enabled": true
-  },
-  "observability": {
-    "enabled": true,
-    "pollIntervalMs": 5000,
-    "metricRetentionDays": 7
-  },
-  "reliability": {
-    "autoRetry": false,
-    "autoRecover": false,
-    "deadletterThreshold": 3,
-    "retryPolicy": {
-      "maxAttempts": 3,
-      "backoffMs": 1000,
-      "jitterRatio": 0.3,
-      "exponentialFactor": 2
-    }
-  },
-  "otlp": {
-    "enabled": false,
-    "endpoint": "http://localhost:4318/v1/metrics"
-  }
-}
-```
-
-Safety notes:
-
-- Foreground child-process runs continue in the Pi extension process and return control to chat immediately, so large workflows do not block the interactive session. They are interrupted on session shutdown. Use `async: true` only for intentionally detached runs that may survive the current session.
-- Async completion notifications survive extension reload/auto-compaction: active runs are not marked consumed just because the notifier restarts, while stale owner-session callbacks are suppressed after session switches.
-- Background `Agent`/`crew_agent` runs notify the parent session when they reach a terminal state; the parent can then call `get_subagent_result`/`crew_agent_result` and continue the original task.
-- `tools.terminateOnForeground` is an opt-in power-user setting. When true, foreground `Agent`/`crew_agent` calls return with `terminate: true` after the child result is available, saving one follow-up LLM turn. Default is false so the assistant can still summarize raw worker output.
-- Runtime state paths are treated as untrusted data: run ids, import bundles, artifact/transcript paths, mailbox files, and agent control/log files are validated with containment checks before reads or writes.
-- `runtime.completionMutationGuard` defaults to `warn`; set `off` to disable or `fail` to fail implementation-style tasks that report success without observed mutation tool calls.
-- Group-join result messages use normal mailbox delivery and normal `ack-message`; missing acknowledgements never block run completion, and duplicate delivery attempts reuse the same request id/message instead of appending spam.
-- Common secret patterns (`token=`, `apiKey=`, `Authorization: Bearer ...`, private keys, etc.) are redacted before durable logs/events/mailbox/artifacts/metrics/diagnostics are written.
-- `observability.enabled` defaults to true for in-memory metrics and heartbeat watching. Metric JSONL snapshots are gated by `telemetry.enabled`; set `telemetry.enabled=false` to opt out of local telemetry files.
-- `reliability.autoRetry` and `reliability.autoRecover` default to false. Enabling retry may execute an idempotent task more than once; each attempt is recorded in `task.attempts`, and exhausted retries append a deadletter entry.
-- `otlp.enabled` defaults to false. Configure `otlp.endpoint` only when you want to push metrics to an OTLP HTTP collector.
-
-UI notes:
-
-- `widgetPlacement`/`widgetMaxLines` keep the persistent active-run widget compact.
-- `dashboardPlacement: "center"` is the default for `/team-dashboard`; set it to `"right"` only when you want a right-sidebar dashboard.
-- `autoOpenDashboard`/`autoOpenDashboardForForegroundRuns` control whether the live sidebar opens automatically. Both default to false so the compact widget above the input remains the primary live UI.
-- `dashboardLiveRefreshMs` controls the live sidebar refresh cadence.
-- `showModel`, `showTokens`, and `showTools` show worker model attempts, token usage, and tool activity in dashboard agent rows.
-
-Show config:
-
-```text
-/team-config
-```
-
-Update user config:
-
-```text
-/team-config asyncByDefault=true notifierIntervalMs=5000
-```
-
-Update project config:
-
-```text
-/team-config autonomous.profile=assisted autonomous.preferAsyncForLongTasks=true --project
-```
-
-Unset/delete nested config keys:
-
-```text
-/team-config --unset=autonomous.preferAsyncForLongTasks --project
-/team-config autonomous.preferAsyncForLongTasks=unset --project
-/team-config autonomous.preferAsyncForLongTasks=null --project
-```
-
-Config schema is exported as:
-
-```text
-./schema.json
-```
-
-## Main tool
-
-The extension registers one main tool:
-
-```text
-team
-```
-
-Use it for complex multi-file work, planning, implementation, tests, reviews, security audits, research, async/background runs, and worktree-isolated execution.
-
-When unsure which team/workflow to choose, call:
-
-```json
-{
-  "action": "recommend",
-  "goal": "Refactor auth flow and add tests"
-}
-```
-
-## Tool actions
-
-Supported actions:
-
-| Action | Purpose |
-|---|---|
-| `list` | List discovered teams, agents, workflows, and recent runs |
-| `get` | Inspect a named agent/team/workflow |
-| `recommend` | Suggest team/workflow/action plus decomposition and fanout hints |
-| `run` | Create a run and execute the workflow scheduler |
-| `plan` | Validate and preview workflow execution without running tasks |
-| `status` | Read durable run status |
-| `summary` | Read/write run summary artifact |
-| `events` | Read run event log |
-| `artifacts` | List run artifacts |
-| `worktrees` | List run worktree metadata |
-| `cancel` | Cancel queued/running work |
-| `resume` | Re-queue failed/cancelled/skipped/running tasks |
-| `cleanup` | Clean run worktrees; dirty worktrees are preserved unless forced |
-| `forget` | Delete run state/artifacts after `confirm: true` |
-| `prune` | Delete old finished runs after `confirm: true` |
-| `export` | Export a portable run bundle |
-| `import` | Import a run bundle into local imports |
-| `imports` | List imported run bundles |
-| `create` | Create agent/team/workflow in user/project scope |
-| `update` | Update agent/team/workflow with backup |
-| `delete` | Delete agent/team/workflow with `confirm: true` and backup |
-| `validate` | Validate agents, teams, workflows, references, and model hints |
-| `doctor` | Check local readiness and optionally run child Pi smoke check |
-| `config` | Show/update config |
-| `init` | Create project `.pi` layout and update `.gitignore` |
-| `autonomy` | Show/update autonomous delegation settings |
-| `api` | Safe interop for run/task/event/heartbeat/claim/mailbox state, including plan approval/cancel operations |
-| `help` | Show help text |
-
-## Example tool calls
-
-Run a default team safely:
+Or via tool call:
 
 ```json
 {
@@ -355,277 +73,164 @@ Run a default team safely:
 }
 ```
 
-Run async:
+### 3. Check status
+
+```text
+/team-status <runId>
+/team-dashboard
+```
+
+### 4. Get a recommendation
+
+When unsure which team/workflow fits:
 
 ```json
 {
-  "action": "run",
-  "team": "implementation",
-  "goal": "Implement the user settings screen",
-  "async": true
+  "action": "recommend",
+  "goal": "Refactor auth flow and add tests"
 }
 ```
 
-Run with worktrees:
+---
+
+## Builtin Teams
+
+| Team | Workflow | Mục đích |
+|------|----------|----------|
+| `default` | explore → plan → execute → verify | Cân bằng, đa năng |
+| `fast-fix` | explore → execute → verify | Sửa bug nhỏ nhanh |
+| `implementation` | Adaptive planner quyết fanout | Multi-file implementation |
+| `review` | explore → code-review → security-review → verify | Code review + security audit |
+| `research` | explore → analyze → write | Nghiên cứu và viết tài liệu |
+
+## Builtin Agents
+
+```
+analyst  ·  critic  ·  executor  ·  explorer  ·  planner  ·  reviewer
+security-reviewer  ·  test-engineer  ·  verifier  ·  writer
+```
+
+---
+
+## Runtime Safety
+
+By default, `run` launches each task as a **separate child Pi process**. Workers execute independently and stream output to durable state.
+
+Scaffold/dry-run mode (no real workers):
+
+```json
+{ "runtime": { "mode": "scaffold" } }
+```
+
+Disable workers globally:
+
+```json
+{ "executeWorkers": false }
+```
+
+Worktree mode is **opt-in** and requires a clean repo:
 
 ```json
 {
   "action": "run",
   "team": "implementation",
-  "workflow": "implementation",
-  "goal": "Add API endpoint and tests",
+  "goal": "Refactor auth",
   "workspaceMode": "worktree"
 }
 ```
 
-Require explicit approval after the adaptive planner writes a plan artifact and before mutating workers run:
+---
 
-```json
-{
-  "action": "run",
-  "team": "implementation",
-  "workflow": "implementation",
-  "goal": "Refactor auth and update tests",
-  "config": {
-    "runtime": { "requirePlanApproval": true }
-  }
-}
-```
+## Configuration
 
-Approve or cancel the pending plan:
+### Config Paths
 
-```json
-{
-  "action": "api",
-  "runId": "team_...",
-  "config": { "operation": "approve-plan" }
-}
-```
+| Scope | Path |
+|-------|------|
+| User | `~/.pi/agent/extensions/pi-crew/config.json` |
+| Project (new) | `.crew/config.json` |
+| Project (legacy) | `.pi/teams/config.json` |
 
-Inspect a run:
-
-```json
-{
-  "action": "status",
-  "runId": "team_..."
-}
-```
-
-Create a routed agent:
-
-```json
-{
-  "action": "create",
-  "resource": "agent",
-  "config": {
-    "scope": "project",
-    "name": "api-reviewer",
-    "description": "Reviews backend API changes",
-    "systemPrompt": "You review backend API changes for correctness and compatibility.",
-    "triggers": ["api", "endpoint", "contract"],
-    "useWhen": ["backend API change", "OpenAPI contract update"],
-    "avoidWhen": ["documentation-only edits"],
-    "cost": "cheap",
-    "category": "backend"
-  }
-}
-```
-
-## Slash commands
-
-Manual slash commands are ops/debug controls. Autonomous tool use via policy/recommendation is the primary agent-driven path.
+### Quick Config
 
 ```text
-/teams
-/team-run [--team=name] [--workflow=name] [--async] [--worktree] <goal>
-/team-cancel <runId>
+/team-config                                       # view
+/team-config asyncByDefault=true                    # update
+/team-config runtime.mode=scaffold                  # scaffold mode
+/team-config --unset=asyncByDefault                 # reset
+/team-config autonomous.profile=assisted --project  # project scope
+```
+
+### Key Settings
+
+| Section | Key Settings | Default |
+|---------|-------------|---------|
+| **Runtime** | `mode`: `auto` \| `scaffold` \| `child-process` \| `live-session` | `auto` |
+| **Concurrency** | `limits.maxConcurrentWorkers` | workflow-dependent (2–4) |
+| **Async** | `asyncByDefault`, `runtime.groupJoin` | `false`, `smart` |
+| **Autonomy** | `profile`: `manual` \| `suggested` \| `assisted` \| `aggressive` | `suggested` |
+| **UI** | `widgetPlacement`, `dashboardPlacement`, `showModel`, `showTokens` | compact widget |
+| **Reliability** | `autoRetry`, `autoRecover`, `deadletterThreshold` | all opt-in |
+| **Observability** | `prometheus.enabled`, `otlp.enabled` | opt-in |
+
+> ⚠️ **Trust boundary**: project config cannot override sensitive execution controls (workers, runtime mode, autonomy, agent overrides). Set those in **user config** only.
+
+📖 Full config reference: [docs/configuration.md](docs/configuration.md) *(coming soon — see [docs/usage.md](docs/usage.md) for now)*
+
+---
+
+## Tool Actions
+
+```json
+{ "action": "run", "team": "default", "goal": "..." }       // execute
+{ "action": "status", "runId": "team_..." }                   // monitor
+{ "action": "cancel", "runId": "team_..." }                   // stop
+{ "action": "resume", "runId": "team_..." }                   // continue
+{ "action": "recommend", "goal": "..." }                       // get advice
+{ "action": "list" }                                            // discover
+{ "action": "create", "resource": "agent", ... }              // extend
+{ "action": "doctor" }                                          // diagnose
+```
+
+📖 Full actions reference: [docs/actions-reference.md](docs/actions-reference.md)
+
+---
+
+## Slash Commands
+
+```text
+/team-run [--team=X] [--async] [--worktree] <goal>
 /team-status <runId>
-/team-summary <runId>
-/team-resume <runId>
-/team-events <runId>
-/team-artifacts <runId>
-/team-worktrees <runId>
-/team-cleanup <runId> [--force]
-/team-forget <runId> --confirm [--force]
-/team-prune --keep=20 --confirm
-/team-export <runId>
-/team-import <path-to-run-export.json> [--user]
-/team-imports
-/team-api <runId> <operation> [key=value]
-/team-metrics [filter]
-/team-manager
 /team-dashboard
-/team-init [--copy-builtins] [--overwrite]
-/team-config [key=value] [--unset=key.path] [--project]
-/team-settings [list|get <key>|set <key> <value>|unset <key>|path|scope]
-/team-autonomy [status|on|off|manual|suggested|assisted|aggressive] [--prefer-async] [--no-worktree-suggest]
-/team-validate
-/team-help
 /team-doctor
+/team-init [--copy-builtins]
+/team-config [key=value]
+/team-autonomy [status|on|off|suggested|assisted]
 ```
 
-### `/team-api` examples
+📖 Full commands reference: [docs/commands-reference.md](docs/commands-reference.md)
 
-```text
-/team-api team_... read-manifest
-/team-api team_... list-tasks
-/team-api team_... read-task taskId=task_...
-/team-api team_... read-events
-/team-api team_... read-heartbeat taskId=task_...
-/team-api team_... write-heartbeat taskId=task_... alive=true
-/team-api team_... claim-task taskId=task_... owner=worker-1
-/team-api team_... release-task-claim taskId=task_... owner=worker-1 token=...
-/team-api team_... transition-task-status taskId=task_... owner=worker-1 token=... status=running
-/team-api team_... send-message direction=outbox to=worker body="please check this"
-/team-api team_... send-message taskId=task_... direction=inbox to=worker body="task scoped message"
-/team-api team_... read-mailbox direction=outbox
-/team-api team_... read-mailbox taskId=task_... direction=inbox
-/team-api team_... ack-message messageId=msg_...   # also acknowledges group-join result messages
-/team-api team_... read-delivery
-/team-api team_... validate-mailbox repair=true
-/team-api team_... approve-plan
-/team-api team_... cancel-plan
+---
+
+## Resource Discovery
+
+Agents, teams, and workflows are discovered from three layers:
+
+```
+builtin (package)  <  user (~/.pi/agent/)  <  project (.crew/ or .pi/teams/)
 ```
 
-Use `/team-metrics` for a current metrics snapshot. The optional argument is a glob-style metric filter:
+Project resources can add new names but **cannot shadow** builtin/user resources.
 
-```text
-/team-metrics
-/team-metrics crew.task.*
-```
+### Resource Paths
 
-### `/team-settings` — view & manage config
+| Type | Builtin | User | Project |
+|------|---------|------|---------|
+| Agent | `agents/*.md` | `~/.pi/agent/agents/*.md` | `.crew/agents/*.md` |
+| Team | `teams/*.team.md` | `~/.pi/agent/teams/*.team.md` | `.crew/teams/*.team.md` |
+| Workflow | `workflows/*.workflow.md` | `~/.pi/agent/workflows/*.workflow.md` | `.crew/workflows/*.workflow.md` |
 
-List all settings, get/set individual keys, or unset (reset to default).
-
-```text
-/team-settings                          # list all known config keys
-/team-settings get limits.maxTurns      # read one key
-/team-settings set limits.maxTurns 20   # update a key
-/team-settings unset runtime.maxTurns   # reset to default
-/team-settings path                     # show config file path
-/team-settings scope                    # show current scope (user/project)
-```
-
-**Supported config keys:**
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `asyncByDefault` | boolean | Run workflows async by default |
-| `executeWorkers` | boolean | Enable real child Pi workers |
-| `notifierIntervalMs` | number | Polling interval for async notifications |
-| `runtime.mode` | `"auto"\|"scaffold"\|"child-process"\|"live-session"` | Crew runtime selection |
-| `runtime.maxTurns` | number | Max turns per worker |
-| `runtime.graceTurns` | number | Grace turns after max |
-| `runtime.inheritContext` | boolean | Workers inherit parent context |
-| `runtime.promptMode` | `"replace"\|"append"` | Prompt merge strategy |
-| `runtime.groupJoin` | `"off"\|"group"\|"smart"` | Group join strategy |
-| `runtime.groupJoinAckTimeoutMs` | number | Group join ack timeout (ms) |
-| `runtime.requirePlanApproval` | boolean | Require plan approval before execution |
-| `runtime.completionMutationGuard` | `"off"\|"warn"\|"fail"` | Mutation guard on completion |
-| `limits.maxConcurrentWorkers` | number | Max concurrent workers |
-| `limits.maxTaskDepth` | number | Max task tree depth |
-| `limits.maxChildrenPerTask` | number | Max children per task |
-| `limits.maxRunMinutes` | number | Max run duration (minutes) |
-| `limits.maxRetriesPerTask` | number | Max retries per task |
-| `limits.maxTasksPerRun` | number | Max tasks per run |
-| `limits.heartbeatStaleMs` | number | Heartbeat stale threshold (ms) |
-| `control.enabled` | boolean | Enable agent control-plane |
-| `control.needsAttentionAfterMs` | number | Attention trigger after inactivity (ms) |
-| `autonomous.profile` | `"manual"\|"suggested"\|"assisted"\|"aggressive"` | Autonomy profile |
-| `autonomous.injectPolicy` | boolean | Inject autonomy policy into prompt |
-| `autonomous.preferAsyncForLongTasks` | boolean | Auto-async for long tasks |
-| `autonomous.allowWorktreeSuggestion` | boolean | Suggest worktree mode |
-| `tools.enableClaudeStyleAliases` | boolean | Enable Claude-style tool aliases |
-| `tools.enableSteer` | boolean | Enable steer tool |
-| `tools.terminateOnForeground` | boolean | Return terminate:true from foreground Agent |
-| `agents.disableBuiltins` | boolean | Disable all builtin agents |
-| `observability.prometheus.enabled` | boolean | Enable Prometheus exporter |
-| `observability.otlp.enabled` | boolean | Enable OTLP exporter |
-| `worktree.enabled` | boolean | Enable worktree isolation |
-
-## Dashboard
-
-Open:
-
-```text
-/team-dashboard
-```
-
-Shortcuts:
-
-```text
-↑/↓ or j/k  select run
-r           reload run list
-p           toggle short/long progress preview
-Enter or s  show status
-a           list artifacts
-u           show summary
-i           API read-manifest
-q or Esc    close
-```
-
-## Manager
-
-Open:
-
-```text
-/team-manager
-```
-
-Current flows:
-
-- list resources/runs
-- run a team
-- show run status
-- cleanup run worktrees
-- create routed agent/team resources
-- update routed agent/team resources
-- doctor
-
-## Resource paths
-
-Builtin package resources:
-
-```text
-agents/*.md
-teams/*.team.md
-workflows/*.workflow.md
-```
-
-User resources:
-
-```text
-~/.pi/agent/agents/*.md
-~/.pi/agent/teams/*.team.md
-~/.pi/agent/workflows/*.workflow.md
-```
-
-Project resources (new default layout):
-
-```text
-.crew/agents/*.md
-.crew/teams/*.team.md
-.crew/workflows/*.workflow.md
-```
-
-Legacy layout (when `.pi/` already exists in the repo):
-
-```text
-.pi/teams/agents/*.md
-.pi/teams/teams/*.team.md
-.pi/teams/workflows/*.workflow.md
-```
-
-Discovery priority:
-
-```text
-builtin < user < project
-```
-
-## Resource metadata
-
-Agents and teams may include optional routing metadata in frontmatter:
+### Custom Resources with Routing Metadata
 
 ```yaml
 ---
@@ -637,292 +242,77 @@ avoidWhen: docs-only edits
 cost: cheap
 category: backend
 ---
+Your system prompt here.
 ```
 
-These fields guide autonomous policy injection and `recommend` routing.
+📖 Full resource formats: [docs/resource-formats.md](docs/resource-formats.md)
 
-## Builtin resources
+---
 
-Builtin agents include roles such as:
+## State Layout
 
-```text
-analyst
-critic
-executor
-explorer
-planner
-reviewer
-security-reviewer
-test-engineer
-verifier
-writer
+```
+<crewRoot>/                          # .crew/ (new) or .pi/teams/ (legacy)
+├── state/runs/{runId}/
+│   ├── manifest.json                # run metadata
+│   ├── tasks.json                   # task graph + status
+│   ├── events.jsonl                 # append-only events
+│   └── agents/{taskId}/status.json  # per-agent state
+├── artifacts/{runId}/
+│   ├── goal.md
+│   ├── prompts/{taskId}.md
+│   ├── results/{taskId}.txt
+│   ├── logs/{taskId}.log
+│   └── summary.md
+├── worktrees/{runId}/{taskId}/
+└── imports/{runId}/run-export.json
 ```
 
-Builtin teams include:
+---
 
-```text
-default
-fast-fix
-implementation
-research
-review
-```
+## Environment Variables
 
-Builtin workflows include:
+| Variable | Purpose |
+|----------|---------|
+| `PI_CREW_EXECUTE_WORKERS=0` | Disable child workers (scaffold mode) |
+| `PI_TEAMS_EXECUTE_WORKERS=0` | Legacy disable flag |
+| `PI_TEAMS_MOCK_CHILD_PI=success` | Mock child worker for testing |
+| `PI_TEAMS_PI_BIN=<path>` | Explicit Pi CLI path |
+| `PI_TEAMS_HOME=<path>` | Override home for tests |
 
-```text
-default
-fast-fix
-implementation
-research
-review
-```
-
-## State layout
-
-Project-local state is preferred when the cwd is inside a recognised project (any of the markers listed in the Config section above). Otherwise pi-crew falls back to user-global state.
-
-The project state root (`<crewRoot>` below) resolves to:
-
-```text
-<repoRoot>/.crew/             # default, used for new projects
-<repoRoot>/.pi/teams/         # legacy reuse when .pi/ already exists
-```
-
-Typical project-local state (`<crewRoot>` is one of the two paths above):
-
-```text
-<crewRoot>/state/runs/{runId}/manifest.json
-<crewRoot>/state/runs/{runId}/tasks.json
-<crewRoot>/state/runs/{runId}/events.jsonl
-<crewRoot>/artifacts/{runId}/...
-<crewRoot>/worktrees/{runId}/{taskId}
-<crewRoot>/imports/{runId}/run-export.json
-```
-
-Mailbox state:
-
-```text
-<crewRoot>/state/runs/{runId}/mailbox/inbox.jsonl
-<crewRoot>/state/runs/{runId}/mailbox/outbox.jsonl
-<crewRoot>/state/runs/{runId}/mailbox/delivery.json
-<crewRoot>/state/runs/{runId}/mailbox/tasks/{taskId}/inbox.jsonl
-<crewRoot>/state/runs/{runId}/mailbox/tasks/{taskId}/outbox.jsonl
-```
-
-User-global fallback (shared with other Pi tools):
-
-```text
-~/.pi/agent/extensions/pi-crew/state/runs/...
-~/.pi/agent/extensions/pi-crew/artifacts/...
-~/.pi/agent/extensions/pi-crew/imports/...
-```
-
-## Project initialization
-
-Initialize project-local layout:
-
-```text
-/team-init
-```
-
-Optionally copy builtin resources:
-
-```text
-/team-init --copy-builtins
-/team-init --copy-builtins --overwrite
-```
-
-Created directories (new projects):
-
-```text
-.crew/agents/
-.crew/teams/
-.crew/workflows/
-.crew/imports/
-```
-
-If the project already has `.pi/`, the legacy layout is initialised instead:
-
-```text
-.pi/teams/agents/
-.pi/teams/teams/
-.pi/teams/workflows/
-.pi/teams/imports/
-```
-
-`.gitignore` entries are written for whichever layout is active, e.g.:
-
-```text
-# new layout
-.crew/state/
-.crew/artifacts/
-.crew/worktrees/
-.crew/imports/
-
-# legacy layout
-.pi/teams/state/
-.pi/teams/artifacts/
-.pi/teams/worktrees/
-.pi/teams/imports/
-```
-
-## Import/export
-
-Export writes:
-
-```text
-{artifactsRoot}/export/run-export.json
-{artifactsRoot}/export/run-export.md
-```
-
-Import stores bundles under (new layout):
-
-```text
-.crew/imports/{runId}/run-export.json
-.crew/imports/{runId}/README.md
-```
-
-or under the legacy layout when `.pi/` already exists:
-
-```text
-.pi/teams/imports/{runId}/run-export.json
-.pi/teams/imports/{runId}/README.md
-```
-
-or user-global imports with `--user`:
-
-```text
-~/.pi/agent/extensions/pi-crew/imports/{runId}/run-export.json
-~/.pi/agent/extensions/pi-crew/imports/{runId}/README.md
-```
-
-## Doctor and validation
-
-Validate resources:
-
-```text
-/team-validate
-```
-
-Doctor:
-
-```text
-/team-doctor
-```
-
-Doctor checks include:
-
-- cwd
-- platform/architecture/Node.js version
-- `pi --version`
-- `git --version`
-- writable state paths
-- config parse
-- discovery counts
-- resource validation
-- current model/provider when available
-- model/fallback hints
-
-Optional child Pi smoke check is explicit only:
-
-```json
-{
-  "action": "doctor",
-  "config": {
-    "smokeChildPi": true
-  }
-}
-```
-
-## Environment variables
-
-```text
-PI_CREW_EXECUTE_WORKERS=0       disable child workers and use scaffold/dry-run mode
-PI_TEAMS_EXECUTE_WORKERS=0      legacy disable flag
-PI_TEAMS_MOCK_CHILD_PI=success   test/mock child worker success
-PI_TEAMS_MOCK_CHILD_PI=json-success
-PI_TEAMS_MOCK_CHILD_PI=retryable-failure
-PI_TEAMS_INHERIT_PROJECT_CONTEXT control child prompt context inheritance
-PI_TEAMS_INHERIT_SKILLS          control skill inheritance
-PI_TEAMS_HOME                    override home path for tests/config/state
-PI_TEAMS_PI_BIN                  optional explicit Pi CLI script/shim path for doctor/child workers
-```
+---
 
 ## Development
 
-Install dependencies:
-
 ```bash
 cd pi-crew
-npm install
+npm install          # dependencies
+npm test             # unit + integration tests
+npm run typecheck    # tsc --noEmit
+npm run ci           # full CI-equivalent check
+npm pack --dry-run   # package verification
 ```
 
-Run tests:
+CI runs on: `ubuntu-latest` · `windows-latest` · `macos-latest`
 
-```bash
-npm test
-```
-
-Typecheck and smoke import:
-
-```bash
-npm run typecheck
-```
-
-Full local CI-equivalent check:
-
-```bash
-npm run ci
-```
-
-GitHub CI runs the same typecheck/test/pack checks on:
-
-```text
-ubuntu-latest
-windows-latest
-macos-latest
-```
-
-Package dry-run only:
-
-```bash
-npm pack --dry-run
-```
+---
 
 ## Documentation
 
-Package docs:
+| Doc | Contents |
+|-----|----------|
+| [docs/actions-reference.md](docs/actions-reference.md) | Full tool actions + examples |
+| [docs/commands-reference.md](docs/commands-reference.md) | Slash commands + `/team-api` |
+| [docs/resource-formats.md](docs/resource-formats.md) | Agent/team/workflow file formats |
+| [docs/usage.md](docs/usage.md) | Usage patterns + config examples |
+| [docs/architecture.md](docs/architecture.md) | Internal architecture + run flow |
+| [docs/runtime-flow.md](docs/runtime-flow.md) | Runtime execution details |
+| [docs/live-mailbox-runtime.md](docs/live-mailbox-runtime.md) | Mailbox + live-session runtime |
+| [docs/publishing.md](docs/publishing.md) | Release & publish process |
+| [schema.json](schema.json) | Config JSON schema |
 
-```text
-pi-crew/docs/architecture.md
-pi-crew/docs/usage.md
-pi-crew/docs/resource-formats.md
-pi-crew/docs/live-mailbox-runtime.md
-pi-crew/docs/publishing.md
-```
-
-Historical workspace-level design/progress docs may exist in the original development workspace under `docs/pi-crew-*`, but package-maintained docs live under `pi-crew/docs/`.
-
-## Local Pi smoke
-
-A local Pi smoke test requires an installed Pi CLI and a real Pi environment:
-
-```bash
-cd pi-crew
-npm run smoke:pi
-```
-
-Then in Pi:
-
-```text
-/team-doctor
-/team-validate
-/team-autonomy status
-```
+---
 
 ## Acknowledgements
 
-`pi-crew` builds on ideas and selected MIT-licensed implementation patterns from `pi-subagents` and `oh-my-claudecode`.
-
-It also draws conceptual inspiration from `oh-my-openagent`; no `oh-my-openagent` source code is copied unless separately documented and license-compatible.
+`pi-crew` builds on ideas and selected MIT-licensed implementation patterns from `pi-subagents` and `oh-my-claudecode`, with conceptual inspiration from `oh-my-openagent`.
