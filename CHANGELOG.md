@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.51
+
+### Fixed
+
+- **Stale foreground spinner** — Working message/spinner now always clears when foreground run completes, even if session generation changed during the run.
+- **Completed-run widget grace period (8s)** — Runs that just completed stay visible in the widget for 8 seconds so users can see results before the widget hides.
+
 ## 0.1.50
 
 ### Fixed
