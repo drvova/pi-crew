@@ -309,7 +309,10 @@ CI runs on: `ubuntu-latest` · `windows-latest` · `macos-latest`
 | [docs/runtime-flow.md](docs/runtime-flow.md) | Runtime execution details |
 | [docs/live-mailbox-runtime.md](docs/live-mailbox-runtime.md) | Mailbox + live-session runtime |
 | [docs/publishing.md](docs/publishing.md) | Release & publish process |
+| [docs/next-upgrade-roadmap.md](docs/next-upgrade-roadmap.md) | Future upgrade roadmap |
 | [schema.json](schema.json) | Config JSON schema |
+
+Research docs (not in package): [`docs/pi-crew-research/`](https://github.com/baphuongna/pi-crew/tree/main/docs) — audits, deep research, distillation notes.
 
 ---
 
