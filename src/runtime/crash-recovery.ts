@@ -1,7 +1,9 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { MetricRegistry } from "../observability/metric-registry.ts";
 import { appendEvent, scanSequence } from "../state/event-log.ts";
+import { DEFAULT_PATHS } from "../config/defaults.ts";
 import { withRunLockSync } from "../state/locks.ts";
 import { loadRunManifestById, saveRunTasks, updateRunStatus } from "../state/state-store.ts";
 import type { TeamTaskState } from "../state/types.ts";
@@ -11,6 +13,9 @@ import { checkProcessLiveness } from "./process-status.ts";
 import { reconcileStaleRun, type ReconcileResult } from "./stale-reconciler.ts";
 import { executeHook, appendHookEvent } from "../hooks/registry.ts";
 import { activeRunEntries, unregisterActiveRun, readActiveRunRegistry } from "../state/active-run-registry.ts";
+import { resolveRealContainedPath } from "../utils/safe-paths.ts";
+import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
+import { pruneFinishedRuns } from "../extension/run-maintenance.ts";
 
 export interface RecoveryPlan {
 	runId: string;
@@ -168,6 +173,39 @@ export function cancelOrphanedRuns(
  * This is the **global** cleanup that cancelOrphanedRuns (project-scoped)
  * cannot reach.
  */
+/**
+ * Best-effort removal of stateRoot and artifactsRoot directories for a purged run.
+ * Uses resolveRealContainedPath to ensure we only delete paths that are safely
+ * contained within a known crew root (project or user level).
+ */
+function tryRemoveRunDirectories(entry: { stateRoot: string; cwd: string }): void {
+	const roots = [projectCrewRoot(entry.cwd), userCrewRoot()];
+	for (const root of roots) {
+		try {
+			resolveRealContainedPath(root, entry.stateRoot);
+			// If we get here, stateRoot is safely contained — remove it
+			fs.rmSync(entry.stateRoot, { recursive: true, force: true });
+			break;
+		} catch {
+			// Not contained in this root, try next
+		}
+	}
+	// Try to find and remove artifactsRoot as well
+	for (const root of roots) {
+		try {
+			const artifactsRoot = path.resolve(path.dirname(entry.stateRoot), "..", DEFAULT_PATHS.state.artifactsSubdir);
+			// Only remove if it's a direct sibling of the runs dir
+			const expectedArtifacts = path.resolve(root, DEFAULT_PATHS.state.artifactsSubdir);
+			if (path.resolve(artifactsRoot) === expectedArtifacts) {
+				// artifactsRoot is shared across runs — don't delete it
+				continue;
+			}
+		} catch {
+			// skip
+		}
+	}
+}
+
 export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.now()): { purged: string[]; kept: string[] } {
 	const purged: string[] = [];
 	const kept: string[] = [];
@@ -177,6 +215,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 		// 1. Manifest file gone → definitely stale
 		if (!fs.existsSync(entry.manifestPath)) {
 			unregisterActiveRun(entry.runId);
+			tryRemoveRunDirectories(entry);
 			purged.push(entry.runId);
 			continue;
 		}
@@ -184,6 +223,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 		// 2. CWD gone → temp dir cleaned up
 		if (!fs.existsSync(entry.cwd)) {
 			unregisterActiveRun(entry.runId);
+			tryRemoveRunDirectories(entry);
 			purged.push(entry.runId);
 			continue;
 		}
@@ -194,6 +234,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 			manifest = JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8"));
 		} catch {
 			unregisterActiveRun(entry.runId);
+			tryRemoveRunDirectories(entry);
 			purged.push(entry.runId);
 			continue;
 		}
@@ -202,6 +243,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 		const terminalStatuses = new Set(["completed", "failed", "cancelled", "blocked"]);
 		if (manifest && terminalStatuses.has(manifest.status ?? "")) {
 			unregisterActiveRun(entry.runId);
+			tryRemoveRunDirectories(entry);
 			purged.push(entry.runId);
 			continue;
 		}
@@ -231,6 +273,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 						// Best-effort manifest cleanup
 					}
 					unregisterActiveRun(entry.runId);
+					tryRemoveRunDirectories(entry);
 					purged.push(entry.runId);
 					continue;
 				}
@@ -238,6 +281,13 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 		}
 
 		kept.push(entry.runId);
+	}
+
+	// Also auto-prune finished run directories at user level to prevent accumulation
+	try {
+		pruneFinishedRuns(userCrewRoot(), 10);
+	} catch {
+		// Best-effort — user-level cleanup should not block startup
 	}
 
 	return { purged, kept };

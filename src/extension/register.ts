@@ -38,6 +38,7 @@ import { OTLPExporter } from "../observability/exporters/otlp-exporter.ts";
 import { HeartbeatWatcher } from "../runtime/heartbeat-watcher.ts";
 import { appendDeadletter } from "../runtime/deadletter.ts";
 import { cancelOrphanedRuns, detectInterruptedRuns, purgeStaleActiveRunIndex } from "../runtime/crash-recovery.ts";
+import { pruneFinishedRuns, pruneUserLevelRuns } from "../extension/run-maintenance.ts";
 import { DeliveryCoordinator } from "../runtime/delivery-coordinator.ts";
 import { OverflowRecoveryTracker } from "../runtime/overflow-recovery.ts";
 import { tryRegisterSessionCleanup } from "../runtime/session-resources.ts";
@@ -434,6 +435,26 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			}
 		} catch (error) {
 			logInternalError("register.sessionStart.globalIndexPurge", error);
+		}
+
+		// Auto-prune finished project-level run directories (keep 10 most recent)
+		try {
+			const { removed } = pruneFinishedRuns(ctx.cwd, 10);
+			if (removed.length > 0) {
+				notifyOperator({ id: `auto_prune_project`, severity: "info", source: "run-maintenance", title: `Auto-pruned ${removed.length} finished project run(s)`, body: `Removed old finished runs: ${removed.join(", ")}` });
+			}
+		} catch (error) {
+			logInternalError("register.sessionStart.autoPruneProject", error);
+		}
+
+		// Auto-prune finished user-level run directories (keep 10 most recent)
+		try {
+			const { removed } = pruneUserLevelRuns(10);
+			if (removed.length > 0) {
+				notifyOperator({ id: `auto_prune_user`, severity: "info", source: "run-maintenance", title: `Auto-pruned ${removed.length} finished user-level run(s)`, body: `Removed old finished runs: ${removed.join(", ")}` });
+			}
+		} catch (error) {
+			logInternalError("register.sessionStart.autoPruneUser", error);
 		}
 
 		const loadedConfig = loadConfig(ctx.cwd);

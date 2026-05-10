@@ -125,6 +125,26 @@ function writeEntries(entries: ActiveRunRegistryEntry[]): void {
 	atomicWriteJson(registryPath(), entries.slice(0, DEFAULT_CACHE.manifestMaxEntries));
 }
 
+const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "blocked"]);
+
+/**
+ * Filter out entries that are no longer active: terminal status or missing manifest.
+ * This prevents unbounded growth of the active-run-index.json file.
+ */
+function filterAliveEntries(entries: ActiveRunRegistryEntry[]): ActiveRunRegistryEntry[] {
+	return entries.filter((entry) => {
+		// Entry whose state directory is gone is definitely stale
+		if (!fs.existsSync(entry.manifestPath)) return false;
+		try {
+			const raw = JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8")) as { status?: string };
+			if (TERMINAL_STATUSES.has(raw.status ?? "")) return false;
+		} catch {
+			return false;
+		}
+		return true;
+	});
+}
+
 export function registerActiveRun(manifest: TeamRunManifest): void {
 	const entry: ActiveRunRegistryEntry = {
 		runId: manifest.runId,
@@ -134,7 +154,11 @@ export function registerActiveRun(manifest: TeamRunManifest): void {
 		updatedAt: manifest.updatedAt,
 	};
 	withRegistryLock(() => {
-		writeEntries([entry, ...readActiveRunRegistry().filter((item) => item.runId !== manifest.runId)]);
+		const existing = readActiveRunRegistry().filter((item) => item.runId !== manifest.runId);
+		// Inline cleanup: remove terminal-status and stale entries before writing.
+		// This prevents unbounded growth between sessions.
+		const alive = filterAliveEntries(existing);
+		writeEntries([entry, ...alive]);
 	});
 }
 

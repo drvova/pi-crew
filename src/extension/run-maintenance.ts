@@ -2,11 +2,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { TeamRunManifest } from "../state/types.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { projectCrewRoot } from "../utils/paths.ts";
+import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
 import { listRuns } from "./run-index.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { redactSecrets } from "../utils/redaction.ts";
 import { createCancellationToken } from "../runtime/cancellation-token.ts";
+import { DEFAULT_PATHS } from "../config/defaults.ts";
+import { isSafePathId } from "../utils/safe-paths.ts";
 
 export interface PruneRunsResult {
 	kept: string[];
@@ -65,4 +67,63 @@ export function pruneFinishedRuns(cwd: string, keep: number, options: PruneRunsO
 	}
 	const auditPath = appendPruneAudit(cwd, { action: "prune", keep, intent: options.intent, kept, removed });
 	return { kept, removed, auditPath };
+}
+
+/**
+ * Prune finished run directories at the user level (~/.pi/agent/extensions/pi-crew/state/runs/).
+ *
+ * This handles runs created without a project root (e.g. `team action='run'` from home directory)
+ * that would otherwise accumulate forever.
+ *
+ * @param keep Number of most recent finished runs to retain
+ * @returns kept and removed run IDs
+ */
+export function pruneUserLevelRuns(keep: number): PruneRunsResult {
+	const crewRoot = userCrewRoot();
+	const runsRoot = path.join(crewRoot, DEFAULT_PATHS.state.runsSubdir);
+	if (!fs.existsSync(runsRoot)) return { kept: [], removed: [] };
+
+	// Read all run directories, parse manifests, filter to finished
+	const finished: Array<{ runId: string; updatedAt: string; stateRoot: string; artifactsRoot: string }> = [];
+	const dirs = fs.readdirSync(runsRoot, { withFileTypes: true })
+		.filter((entry) => entry.isDirectory() && isSafePathId(entry.name))
+		.map((entry) => entry.name);
+
+	for (const dir of dirs) {
+		const manifestPath = path.join(runsRoot, dir, DEFAULT_PATHS.state.manifestFile);
+		let manifest: TeamRunManifest | undefined;
+		try {
+			manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as TeamRunManifest;
+		} catch {
+			continue;
+		}
+		if (!isFinished(manifest)) continue;
+
+		// Safety check: ensure stateRoot and artifactsRoot are contained within user crew root
+		try {
+			resolveRealContainedPath(crewRoot, manifest.stateRoot);
+			resolveRealContainedPath(crewRoot, manifest.artifactsRoot);
+		} catch {
+			continue;
+		}
+
+		finished.push({
+			runId: manifest.runId,
+			updatedAt: manifest.updatedAt,
+			stateRoot: manifest.stateRoot,
+			artifactsRoot: manifest.artifactsRoot,
+		});
+	}
+
+	// Sort newest first, keep top N, remove the rest
+	finished.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+	const kept = finished.slice(0, keep).map((r) => r.runId);
+	const removed: string[] = [];
+	for (const run of finished.slice(keep)) {
+		fs.rmSync(run.stateRoot, { recursive: true, force: true });
+		fs.rmSync(run.artifactsRoot, { recursive: true, force: true });
+		removed.push(run.runId);
+	}
+
+	return { kept, removed };
 }
