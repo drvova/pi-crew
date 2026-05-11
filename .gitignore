@@ -5,3 +5,4 @@ coverage/
 *.tmp
 .DS_Store
 .pi/
+.crew/cache/
