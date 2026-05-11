@@ -3,10 +3,17 @@ import { loadConfig } from "../../config/config.ts";
 // Lazy-loaded: team-tool.ts pulls in entire runtime chain (1.4s+).
 import type { handleTeamTool as HandleTeamToolFn } from "../team-tool.ts";
 let _cachedHandleTeamTool: typeof HandleTeamToolFn | undefined;
+let _handleTeamToolPromise: Promise<typeof HandleTeamToolFn> | undefined;
 async function handleTeamTool(params: Parameters<typeof HandleTeamToolFn>[0], ctx: Parameters<typeof HandleTeamToolFn>[1]): Promise<Awaited<ReturnType<typeof HandleTeamToolFn>>> {
 	if (!_cachedHandleTeamTool) {
-		const mod = await import("../team-tool.ts");
-		_cachedHandleTeamTool = mod.handleTeamTool;
+		if (!_handleTeamToolPromise) {
+			_handleTeamToolPromise = import("../team-tool.ts").then((mod) => {
+				_cachedHandleTeamTool = mod.handleTeamTool;
+				return mod.handleTeamTool;
+			});
+		}
+		const fn = await _handleTeamToolPromise;
+		return fn(params, ctx);
 	}
 	return _cachedHandleTeamTool(params, ctx);
 }
@@ -58,26 +65,33 @@ let _uiCache: {
 	AgentPickerOverlay: typeof AgentPickerOverlayType;
 	AnimatedMascot: typeof AnimatedMascotType;
 } | undefined;
+let _uiCachePromise: Promise<NonNullable<typeof _uiCache>> | undefined;
 async function ui(): Promise<NonNullable<typeof _uiCache>> {
 	if (!_uiCache) {
-		const [rd, tv, co, md, mc, ap, ma] = await Promise.all([
-			import("../../ui/run-dashboard.ts"),
-			import("../../ui/transcript-viewer.ts"),
-			import("../../ui/overlays/confirm-overlay.ts"),
-			import("../../ui/overlays/mailbox-detail-overlay.ts"),
-			import("../../ui/overlays/mailbox-compose-overlay.ts"),
-			import("../../ui/overlays/agent-picker-overlay.ts"),
-			import("../../ui/mascot.ts"),
-		]);
-		_uiCache = {
-			RunDashboard: rd.RunDashboard,
-			DurableTextViewer: tv.DurableTextViewer,
-			ConfirmOverlay: co.ConfirmOverlay,
-			MailboxDetailOverlay: md.MailboxDetailOverlay,
-			MailboxComposeOverlay: mc.MailboxComposeOverlay,
-			AgentPickerOverlay: ap.AgentPickerOverlay,
-			AnimatedMascot: ma.AnimatedMascot,
-		};
+		if (!_uiCachePromise) {
+			_uiCachePromise = (async () => {
+				const [rd, tv, co, md, mc, ap, ma] = await Promise.all([
+					import("../../ui/run-dashboard.ts"),
+					import("../../ui/transcript-viewer.ts"),
+					import("../../ui/overlays/confirm-overlay.ts"),
+					import("../../ui/overlays/mailbox-detail-overlay.ts"),
+					import("../../ui/overlays/mailbox-compose-overlay.ts"),
+					import("../../ui/overlays/agent-picker-overlay.ts"),
+					import("../../ui/mascot.ts"),
+				]);
+				_uiCache = {
+					RunDashboard: rd.RunDashboard,
+					DurableTextViewer: tv.DurableTextViewer,
+					ConfirmOverlay: co.ConfirmOverlay,
+					MailboxDetailOverlay: md.MailboxDetailOverlay,
+					MailboxComposeOverlay: mc.MailboxComposeOverlay,
+					AgentPickerOverlay: ap.AgentPickerOverlay,
+					AnimatedMascot: ma.AnimatedMascot,
+				};
+				return _uiCache!;
+			})();
+		}
+		return _uiCachePromise;
 	}
 	return _uiCache;
 }

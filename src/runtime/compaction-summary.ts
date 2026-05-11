@@ -77,9 +77,8 @@ function readTailLines(filePath: string, maxLines: number): string[] {
 				} else {
 					// No newline found in the entire tail chunk — single giant line.
 					// Fall back to reading the full file to avoid data loss.
-					fs.closeSync(fd);
-					const content = fs.readFileSync(filePath, "utf-8");
-					return content.split("\n").filter((line) => line.trim().length > 0).slice(-maxLines);
+					// Note: fd will be closed by the outer finally block.
+					throw new Error("__GIANT_LINE_FALLBACK__");
 				}
 			}
 
@@ -89,7 +88,12 @@ function readTailLines(filePath: string, maxLines: number): string[] {
 		} finally {
 			fs.closeSync(fd);
 		}
-	} catch {
+	} catch (err) {
+		// Giant-line fallback: fd already closed by finally above.
+		if (err instanceof Error && err.message === "__GIANT_LINE_FALLBACK__") {
+			const content = fs.readFileSync(filePath, "utf-8");
+			return content.split("\n").filter((line) => line.trim().length > 0).slice(-maxLines);
+		}
 		return [];
 	}
 }
