@@ -48,7 +48,17 @@ import { parsePiJsonOutput } from "../runtime/pi-json-output.ts";
 import { buildParentContext, configRecord, formatScoped, result, type TeamContext } from "./team-tool/context.ts";
 import { autonomousPatchFromConfig, configPatchFromConfig, effectiveRunConfig, formatAutonomyStatus } from "./team-tool/config-patch.ts";
 import { handleApi } from "./team-tool/api.ts";
-import { handleRun } from "./team-tool/run.ts";
+// Lazy-loaded: run.ts pulls in spawnBackgroundTeamRun, resolveCrewRuntime, etc.
+// Static import fails silently in some jiti contexts (child-process), leaving handleRun undefined.
+import type { handleRun as HandleRunFn } from "./team-tool/run.ts";
+let _cachedHandleRun: typeof HandleRunFn | undefined;
+async function handleRun(...args: Parameters<typeof HandleRunFn>): Promise<Awaited<ReturnType<typeof HandleRunFn>>> {
+	if (!_cachedHandleRun) {
+		const mod = await import("./team-tool/run.ts");
+		_cachedHandleRun = mod.handleRun;
+	}
+	return _cachedHandleRun(...args);
+}
 import { handleDoctor } from "./team-tool/doctor.ts";
 import { handleStatus } from "./team-tool/status.ts";
 import { handleArtifacts, handleEvents, handleSummary } from "./team-tool/inspect.ts";
@@ -62,7 +72,7 @@ import { normalizeSkillOverride } from "../runtime/skill-instructions.ts";
 
 export type { TeamToolDetails } from "./team-tool-types.ts";
 export type { TeamContext } from "./team-tool/context.ts";
-export { handleRun } from "./team-tool/run.ts";
+export { handleRun };
 export { handleDoctor } from "./team-tool/doctor.ts";
 export { handleStatus } from "./team-tool/status.ts";
 export { handleArtifacts, handleEvents, handleSummary } from "./team-tool/inspect.ts";
