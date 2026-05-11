@@ -9,6 +9,8 @@ npm: pi-crew
 repo: https://github.com/baphuongna/pi-crew
 ```
 
+**v0.2.0**: Security hardening + 76% faster startup. See [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## Features

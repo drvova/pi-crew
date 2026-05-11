@@ -1,6 +1,61 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — Security & Performance Hardening
+
+### Performance
+
+- **Extension registration: 72% faster** — Lazy-loaded the entire runtime chain (team-tool, team-runner, runtime-resolver, etc.) from `register.ts`. Pi cold-start: 3,200ms → 780ms.
+- **Commands UI: 65% faster** — Lazy-loaded RunDashboard (288ms), DurableTextViewer (658ms), and 5 overlay components that were statically imported but only used on demand.
+- **Verifier: 80% faster** — 6-turn budget enforced at runtime via `maxTurns` agent config. Run-once + cache strategy (tee to `.crew/cache/`) eliminates repeated 3-minute test suite runs. Typical verifier runtime: 40+ min → ~8 min.
+- **Transcript viewer: lazy-loaded** — DurableTranscriptViewer (658ms) only loaded when user runs `/crew transcript`.
+
+### Security
+
+- **[HIGH] Path traversal in `handleImport`** — Bundle paths were accepted without containment validation. Arbitrary file read was possible via absolute paths. Fix: `isContained` check validates paths stay within `cwd`, `userCrewRoot`, or `projectCrewRoot`.
+- **[HIGH] Env variable leak in hooks** — Iteration hooks and post-checks passed the full `process.env` to user bash scripts, exposing API keys and tokens. Fix: minimal env with only `PATH`, `HOME`, `USER`, `LANG`.
+- **[HIGH] Ownership check on `handleForget`** — The most destructive action (recursive `fs.rmSync`) had no session ownership guard. Any Pi session could delete any other session's run data. Fix: `foreignRun` guard matching `handleCancel`/`handleRetry`.
+- **[MEDIUM] TOCTOU on Windows `O_NOFOLLOW=0`** — On Windows where `O_NOFOLLOW` is unsupported (0), a symlink race between validation and write was possible. Fix: post-open `fstat`/`fstatSync` verification in both sync and async atomic-write paths.
+- **[MEDIUM] Ownership check on `handleCleanup`** — Worktree cleanup had no cross-session guard. Any session could clean up another session's worktrees. Fix: `foreignRun` guard added.
+- **[MEDIUM] `handleForget` scope detection** — Used `startsWith(userCrewRoot())` which could false-match `pi-crew-evil` against `pi-crew`. Fix: `startsWith(userCrewRoot() + path.sep)`.
+- **[MEDIUM] `isSafeToPrune` always used `projectCrewRoot`** — User-scoped runs could never be pruned, causing stale data accumulation. Fix: same scope detection as `handleForget`.
+- **[MEDIUM] `readJsonFile` swallowed all errors silently** — Permission denied, corrupt JSON, and other errors were silently swallowed, preventing crash recovery. Fix: `logInternalError` for non-ENOENT/ENOTDIR errors.
+- **[LOW] TOCTOU in `atomic-write mkdirSync`** — Between `isSymlinkSafePath` check and `mkdirSync`, an attacker could replace a directory with a symlink. Mitigated by `O_EXCL` on subsequent file open.
+- **[LOW] `handlePrune` cross-session behavior documented** — Pruning all finished runs regardless of session is intentional maintenance behavior, now documented.
+- **[INFO] `handleExport` intentionally cross-session** — Read-only export deliberately allows cross-session access, documented with comment.
+
+
+### Correctness
+
+- **Ghost run accumulation** — 73 deadletter runs were stuck as `queued` forever because their temp CWD directories had been cleaned by the OS. Fix: `collectRuns` now filters by CWD existence, `pruneUserLevelRuns` auto-cleans ghost runs.
+- **Double-close file descriptor in `readTailLines`** — Giant-line fallback was calling `closeSync(fd)` then falling through to `finally { closeSync(fd) }` (double close). Fix: sentinel `GiantLineFallbackError` class caught in outer `catch`.
+- **Race condition in lazy-load caches** — `ui()` and `handleTeamTool()` in `commands.ts` could trigger redundant parallel imports if multiple `/crew` commands fired before cache populated. Fix: promise-deduplication pattern (`_uiCachePromise` / `_handleTeamToolPromise`).
+- **`handlePrune` hook only fired for first run** — Batch pruning fired `before_cleanup` hook for only the first run. Fix: fires once with `removedRunIds` in data payload.
+- **`maxTurns` parsing accepted invalid values** — `parseInt("0")` → `0` (falsy → `undefined`) was accidental; `parseInt("-1")` → `-1` (truthy → passed through). Fix: explicit `Number.isFinite(n) && n > 0` check in both parsing and runtime override.
+- **`GiantLineFallbackError` sentinel string** — Using a magic string for control flow was fragile. Fix: dedicated error class.
+- **Tail reader UTF-8 corruption** — Reading from middle of file could split a multibyte character at the boundary. Fix: search for first newline boundary before reading.
+- **Tail reader empty result on giant line** — Single line >256KB with no newlines: `lines.shift()` removed ALL content. Fix: fallback to full file read when no newline found in tail chunk, with 2MB safety cap.
+- **Stale JSDoc in hooks** — Security notes still said "full inherited environment" after minimal env change. Fix: updated to "minimal environment (PATH, HOME, USER, LANG)".
+- **`readJsonFile` redundant `existsSync` check** — TOCTOU guard was redundant since `catch` handles ENOENT anyway. Fix: removed redundant check.
+
+### Architecture
+
+- **`maxTurns` agent frontmatter** — New `maxTurns` field in `AgentConfig` (parsed from `agents/*.md` frontmatter) enforces per-agent turn limits at runtime. Verifier uses `maxTurns: 6` for efficiency.
+- **Verifier efficiency contract** — Complete rewrite of `agents/verifier.md`: 6-turn budget, run-once-cache strategy, targeted verification only, PASS/FAIL with evidence format.
+- **Sensitive path detection expanded** — Added `.config/gh` (GitHub CLI tokens), `jwt.json`, `session.cookie`, `.token` to detection patterns.
+- **Manifest goal sanitization** — `manifest.goal` in compaction summaries now collapsed (newlines → spaces) and truncated (500 chars) to prevent markdown injection.
+- **`utils/atomic-write.ts` dead code removed** — This module had zero production imports; tests were testing the wrong (unsafe) version. Deleted; tests rewritten against `src/state/atomic-write.ts`.
+- **Test coverage** — 17 new tests: `atomic-write.test.ts` (9 tests), `compaction-summary.test.ts` (8 tests, all pass).
+
+### Research (not in package)
+
+- `docs/research/CAVEMAN-DEEP-RESEARCH.md` — Caveman output contract patterns, role-based compression, verification framework.
+- `docs/research/LIVE-SESSION-PRODUCTION-READY-PLAN.md` — 9-phase plan for live-session reliability, all phases implemented.
+
+### Contributors
+
+- 6 rounds of structured code review across 3 sessions
+- 30+ issues found and fixed (0 CRITICAL remaining, 0 HIGH remaining)
+
 
 ## 0.1.51
 
