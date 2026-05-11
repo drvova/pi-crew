@@ -86,6 +86,7 @@ export function pruneUserLevelRuns(keep: number): PruneRunsResult {
 	// Read all run directories, parse manifests, filter to finished
 	const MAX_DIRS = 500;
 	const finished: Array<{ runId: string; updatedAt: string; stateRoot: string; artifactsRoot: string }> = [];
+	const ghostRemoved: string[] = [];
 	const dirs = fs.readdirSync(runsRoot, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory() && isSafePathId(entry.name))
 		.slice(0, MAX_DIRS)
@@ -99,6 +100,16 @@ export function pruneUserLevelRuns(keep: number): PruneRunsResult {
 		} catch {
 			continue;
 		}
+
+		// Ghost run cleanup: active status but CWD no longer exists.
+		// These are deadletter/replay/temp runs from dead Pi sessions.
+		const isActive = manifest.status === "queued" || manifest.status === "running" || manifest.status === "planning";
+		if (isActive && manifest.cwd && !fs.existsSync(manifest.cwd)) {
+			fs.rmSync(path.join(runsRoot, dir), { recursive: true, force: true });
+			ghostRemoved.push(manifest.runId);
+			continue;
+		}
+
 		if (!isFinished(manifest)) continue;
 
 		// Safety check: ensure stateRoot and artifactsRoot are contained within user crew root
@@ -127,5 +138,5 @@ export function pruneUserLevelRuns(keep: number): PruneRunsResult {
 		removed.push(run.runId);
 	}
 
-	return { kept, removed };
+	return { kept, removed: [...removed, ...ghostRemoved] };
 }

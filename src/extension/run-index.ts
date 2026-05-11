@@ -33,7 +33,11 @@ function collectRuns(root: string, maxEntries?: number, signal?: AbortSignal): T
 		if (i % 10 === 0) token.heartbeat(`collectRuns:${i}/${selected.length}`);
 		try {
 			const manifest = readManifest(path.join(resolveRealContainedPath(runsRoot, selected[i]), DEFAULT_PATHS.state.manifestFile));
-			if (manifest) results.push(manifest);
+			if (!manifest) continue;
+			// Filter out ghost runs: active status but CWD no longer exists.
+			// These are deadletter/replay/temp runs whose temp dirs were cleaned up.
+			if ((manifest.status === "queued" || manifest.status === "running" || manifest.status === "planning") && manifest.cwd && !fs.existsSync(manifest.cwd)) continue;
+			results.push(manifest);
 		} catch { /* skip unreadable manifests */ }
 	}
 	return results;
