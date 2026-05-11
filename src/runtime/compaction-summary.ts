@@ -56,16 +56,35 @@ function readTailLines(filePath: string, maxLines: number): string[] {
 			return content.split("\n").filter((line) => line.trim().length > 0).slice(-maxLines);
 		}
 
-		// For large files, read only the last chunk
+		// For large files, read only the last chunk.
+		// Search backwards from the read boundary for a newline to avoid
+		// splitting mid-line or mid-multibyte UTF-8 character.
 		const fd = fs.openSync(filePath, "r");
 		try {
 			const readSize = Math.min(fileSize, TAIL_MAX_READ);
+			const readOffset = fileSize - readSize;
 			const buf = Buffer.alloc(readSize);
-			fs.readSync(fd, buf, 0, readSize, fileSize - readSize);
-			const content = buf.toString("utf-8");
-			// Drop the first partial line (we started reading from the middle)
+			fs.readSync(fd, buf, 0, readSize, readOffset);
+
+			// Find the first newline in the buffer to avoid partial lines.
+			// This also handles multibyte UTF-8 safety — we start after a
+			// newline boundary which is always a clean character boundary.
+			let start = 0;
+			if (readOffset > 0) {
+				const firstNewline = buf.indexOf("\n");
+				if (firstNewline >= 0) {
+					start = firstNewline + 1;
+				} else {
+					// No newline found in the entire tail chunk — single giant line.
+					// Fall back to reading the full file to avoid data loss.
+					fs.closeSync(fd);
+					const content = fs.readFileSync(filePath, "utf-8");
+					return content.split("\n").filter((line) => line.trim().length > 0).slice(-maxLines);
+				}
+			}
+
+			const content = buf.toString("utf-8", start, readSize);
 			const lines = content.split("\n").filter((line) => line.trim().length > 0);
-			if (lines.length > 0 && fileSize > readSize) lines.shift();
 			return lines.slice(-maxLines);
 		} finally {
 			fs.closeSync(fd);
