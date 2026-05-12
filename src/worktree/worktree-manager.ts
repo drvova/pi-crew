@@ -25,7 +25,7 @@ export interface WorktreeDiffStat {
 }
 
 function git(cwd: string, args: string[]): string {
-	return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+	return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, LANG: "C", LC_ALL: "C" } }).trim();
 }
 
 function sanitizeBranchPart(value: string): string {
@@ -77,7 +77,9 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 		input: JSON.stringify({ version: 1, repoRoot, worktreePath, agentCwd: worktreePath, branch, runId: manifest.runId, taskId: task.id, agent: task.agent }),
 		timeout: cfg.setupHookTimeoutMs ?? 30_000,
 		shell: false,
-		env: sanitizeEnvSecrets(process.env),
+		env: sanitizeEnvSecrets(process.env, {
+			allowList: ["PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "PI_*"],
+		}),
 	});
 	if (result.error) throw new Error(`worktree setup hook failed: ${result.error.message}`);
 	if (result.status !== 0) throw new Error(`worktree setup hook failed with exit code ${result.status}: ${result.stderr || result.stdout || "no output"}`);
@@ -140,11 +142,14 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		if (exists.local) {
 			git(repoRoot, ["worktree", "add", worktreePath, branch]);
 		} else {
+			if (exists.remoteOnly) {
+				logInternalError("worktree.branchRemoteOnly", new Error(`Branch '${branch}' exists only on remote; creating local from HEAD instead of tracking remote.`), `branch=${branch}`);
+			}
 			git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
 		}
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : String(error);
-		if (/already checked out/.test(msg)) {
+		if (/already checked out|is already used by worktree/i.test(msg)) {
 			throw new Error(`Branch '${branch}' is checked out at another worktree. Run \`team cleanup runId=${manifest.runId} force=true\` or manually remove the conflicting worktree.`);
 		}
 		throw error;

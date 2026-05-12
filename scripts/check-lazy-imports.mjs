@@ -1,26 +1,23 @@
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const out = execSync(
 	`git grep -nE "await import\\(" -- "src/**/*.ts"`,
 	{ encoding: "utf-8" },
 );
 
-const lines = out.split("\n").filter(Boolean);
 const bad = [];
+const fileCache = new Map();
 
-for (let i = 0; i < lines.length; i++) {
-	const line = lines[i];
+for (const line of out.split("\n").filter(Boolean)) {
 	if (line.includes("// LAZY:")) continue;
-	// Check if the previous line in the source file has // LAZY:
-	const match = line.match(/^([^:]+):(\d+):/);
-	if (!match) continue;
-	const [, file, lineNum] = match;
-	try {
-		const prevLine = execSync(`sed -n '${Number(lineNum) - 1}p' "${file}"`, { encoding: "utf-8" }).trim();
-		if (!prevLine.includes("// LAZY:")) bad.push(line);
-	} catch {
-		bad.push(line);
-	}
+	const m = line.match(/^([^:]+):(\d+):/);
+	if (!m) continue;
+	const [, file, lineNum] = m;
+	if (!fileCache.has(file)) fileCache.set(file, readFileSync(file, "utf-8").split(/\r?\n/));
+	const lines = fileCache.get(file);
+	const prevLine = lines[Number(lineNum) - 2] ?? "";
+	if (!prevLine.includes("// LAZY:")) bad.push(line);
 }
 
 if (bad.length > 0) {

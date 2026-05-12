@@ -26,7 +26,8 @@ export function resolveShellForScript(scriptPath: string): { command: string; ar
 			return { command: "powershell", args: ["-File", scriptPath] };
 		}
 		if (scriptPath.endsWith(".cmd") || scriptPath.endsWith(".bat")) {
-			return { command: scriptPath, args: [] };
+			// Node >= 20 blocks direct spawn of .bat/.cmd without shell (CVE-2024-27980)
+			return { command: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", scriptPath] };
 		}
 	}
 	return { command: resolveBashCmd(), args: [scriptPath] };

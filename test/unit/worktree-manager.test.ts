@@ -76,6 +76,26 @@ test("prepareTaskWorkspace reuses existing valid worktree", () => {
 	fs.rmSync(repo, { recursive: true, force: true });
 });
 
+test("prepareTaskWorkspace skips linkNodeModules when source is a file", () => {
+	const repo = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-wt-fn-"));
+	initGitRepo(repo);
+	// Place a FILE at node_modules instead of a directory, then commit it so repo is clean
+	fs.writeFileSync(path.join(repo, "node_modules"), "not a dir", "utf-8");
+	execFileSync("git", ["add", "node_modules"], { cwd: repo });
+	execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "add nm"], { cwd: repo });
+	// Write project config to enable linkNodeModules
+	const cfgDir = path.join(repo, ".crew");
+	fs.mkdirSync(cfgDir, { recursive: true });
+	fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({
+		worktree: { linkNodeModules: true },
+	}), "utf-8");
+	const manifest = minimalManifest(repo, "run-fn");
+	const task = minimalTask("task-fn", repo);
+	const result = prepareTaskWorkspace(manifest, task);
+	assert.equal(result.nodeModulesLinked, false);
+	fs.rmSync(repo, { recursive: true, force: true });
+});
+
 test("assertCleanLeader throws when repo has uncommitted changes", () => {
 	const repo = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-wt-"));
 	initGitRepo(repo);
