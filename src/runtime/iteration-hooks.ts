@@ -7,6 +7,7 @@
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import { resolveShellForScript } from "../utils/resolve-shell.ts";
+import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { DENIED_METRIC_NAMES } from "./metric-parser.ts";
 
 /** Hook execution stage. */
@@ -138,7 +139,7 @@ export async function runIterationHook(
 		const { command, args } = resolveShellForScript(hookScriptPath);
 		const child = spawn(command, args, {
 			cwd: payload.cwd,
-			env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "/tmp", USER: process.env.USER, LANG: process.env.LANG, PI_CREW_HOOK: "1" },
+			env: { ...sanitizeEnvSecrets(process.env, { allowList: ["PATH", "HOME", "USER", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "ComSpec", "SystemRoot", "PI_*"] }), PI_CREW_HOOK: "1" },
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 

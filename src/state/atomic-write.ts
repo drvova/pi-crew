@@ -107,6 +107,17 @@ export function atomicWriteFile(filePath: string, content: string): void {
 		fs.closeSync(fd);
 		renameWithRetry(tempPath, filePath);
 	} catch (error) {
+		let matches = false;
+		try {
+			const existing = fs.readFileSync(filePath, "utf-8");
+			matches = existing === content;
+		} catch {
+			/* ignore */
+		}
+		if (matches) {
+			try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
+			return;
+		}
 		try {
 			fs.rmSync(tempPath, { force: true });
 		} catch (cleanupError) {

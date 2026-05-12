@@ -7,6 +7,7 @@ import { emitFromTeamEvent } from "../ui/run-event-bus.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { readJsonlSince, type IncrementalReadState } from "../utils/incremental-reader.ts";
 import { redactSecrets } from "../utils/redaction.ts";
+import { sleepSync } from "../utils/sleep.ts";
 import { needsRotation, compactEventLog } from "./event-log-rotation.ts";
 
 export type TeamEventProvenance = "live_worker" | "test" | "healthcheck" | "replay" | "api" | "background" | "team_runner";
@@ -57,7 +58,37 @@ const TERMINAL_EVENT_TYPES = new Set<string>(DEFAULT_EVENT_LOG.terminalEventType
 const MAX_EVENTS_BYTES = 50 * 1024 * 1024;
 
 const sequenceCache = new Map<string, { size: number; mtimeMs: number; seq: number }>();
+const MAX_SEQUENCE_CACHE_ENTRIES = 256;
 let appendCounter = 0;
+
+/** Simple cross-process lock for an eventsPath to prevent JSONL interleave on concurrent append. */
+function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
+	const lockDir = `${eventsPath}.lock`;
+	const start = Date.now();
+	const timeout = 5000;
+	while (true) {
+		try {
+			fs.mkdirSync(lockDir);
+			break;
+		} catch {
+			if (Date.now() - start > timeout) {
+				logInternalError("event-log.lock-timeout", new Error(`Event log lock timeout for ${eventsPath}`), `lockDir=${lockDir}`);
+				break;
+			}
+			sleepSync(10);
+		}
+	}
+	try {
+		return fn();
+	} finally {
+		try { fs.rmdirSync(lockDir); } catch { /* best-effort */ }
+	}
+}
+
+function evictOldestSequenceCacheEntry(): void {
+	const first = sequenceCache.keys().next().value;
+	if (first !== undefined) sequenceCache.delete(first);
+}
 
 export function sequencePath(eventsPath: string): string {
 	return `${eventsPath}.seq`;
@@ -117,54 +148,59 @@ export function computeEventFingerprint(event: Pick<TeamEvent, "type" | "runId" 
 }
 
 export function appendEvent(eventsPath: string, event: AppendTeamEvent): TeamEvent {
-	fs.mkdirSync(path.dirname(eventsPath), { recursive: true });
-	const baseMetadata = event.metadata;
-	let metadata: TeamEventMetadata = {
-		seq: baseMetadata?.seq ?? nextSequence(eventsPath),
-		provenance: baseMetadata?.provenance ?? "team_runner",
-		...(baseMetadata?.parentEventId ? { parentEventId: baseMetadata.parentEventId } : {}),
-		...(baseMetadata?.attemptId ? { attemptId: baseMetadata.attemptId } : {}),
-		...(baseMetadata?.branchId ? { branchId: baseMetadata.branchId } : {}),
-		...(baseMetadata?.causationId ? { causationId: baseMetadata.causationId } : {}),
-		...(baseMetadata?.correlationId ? { correlationId: baseMetadata.correlationId } : {}),
-		...(baseMetadata?.sessionIdentity ? { sessionIdentity: baseMetadata.sessionIdentity } : {}),
-		...(baseMetadata?.ownership ? { ownership: baseMetadata.ownership } : {}),
-		...(baseMetadata?.nudgeId ? { nudgeId: baseMetadata.nudgeId } : {}),
-		...(baseMetadata?.confidence ? { confidence: baseMetadata.confidence } : {}),
-	};
-	const fullEvent: TeamEvent = {
-		time: new Date().toISOString(),
-		...event,
-		metadata,
-	};
-	if (baseMetadata?.fingerprint || TERMINAL_EVENT_TYPES.has(fullEvent.type)) {
-		metadata = { ...metadata, fingerprint: baseMetadata?.fingerprint ?? computeEventFingerprint(fullEvent) };
-		fullEvent.metadata = metadata;
-	}
-	try {
-		if (fs.existsSync(eventsPath) && fs.statSync(eventsPath).size > MAX_EVENTS_BYTES) {
-			logInternalError("event-log.size-limit", new Error(`events file ${eventsPath} exceeds ${MAX_EVENTS_BYTES} bytes`), `eventsPath=${eventsPath}`);
-			return { ...fullEvent, metadata: { ...(fullEvent.metadata ?? { seq: 0, provenance: "team_runner" }), appended: false } };
+	return withEventLogLockSync(eventsPath, () => {
+		fs.mkdirSync(path.dirname(eventsPath), { recursive: true });
+		const baseMetadata = event.metadata;
+		let metadata: TeamEventMetadata = {
+			seq: baseMetadata?.seq ?? nextSequence(eventsPath),
+			provenance: baseMetadata?.provenance ?? "team_runner",
+			...(baseMetadata?.parentEventId ? { parentEventId: baseMetadata.parentEventId } : {}),
+			...(baseMetadata?.attemptId ? { attemptId: baseMetadata.attemptId } : {}),
+			...(baseMetadata?.branchId ? { branchId: baseMetadata.branchId } : {}),
+			...(baseMetadata?.causationId ? { causationId: baseMetadata.causationId } : {}),
+			...(baseMetadata?.correlationId ? { correlationId: baseMetadata.correlationId } : {}),
+			...(baseMetadata?.sessionIdentity ? { sessionIdentity: baseMetadata.sessionIdentity } : {}),
+			...(baseMetadata?.ownership ? { ownership: baseMetadata.ownership } : {}),
+			...(baseMetadata?.nudgeId ? { nudgeId: baseMetadata.nudgeId } : {}),
+			...(baseMetadata?.confidence ? { confidence: baseMetadata.confidence } : {}),
+		};
+		const fullEvent: TeamEvent = {
+			time: new Date().toISOString(),
+			...event,
+			metadata,
+		};
+		if (baseMetadata?.fingerprint || TERMINAL_EVENT_TYPES.has(fullEvent.type)) {
+			metadata = { ...metadata, fingerprint: baseMetadata?.fingerprint ?? computeEventFingerprint(fullEvent) };
+			fullEvent.metadata = metadata;
 		}
-	} catch (error) {
-		logInternalError("event-log.size-check", error, `eventsPath=${eventsPath}`);
-	}
-	fs.appendFileSync(eventsPath, `${JSON.stringify(redactSecrets(fullEvent))}\n`, "utf-8");
-	appendCounter++;
-	if (appendCounter % 100 === 0 && needsRotation(eventsPath)) {
-		try { compactEventLog(eventsPath); } catch (error) { logInternalError("event-log.rotation", error, `eventsPath=${eventsPath}`); }
-	}
-	// Emit to UI event bus for event-first delivery
-	try { emitFromTeamEvent(fullEvent); } catch (error) { logInternalError("event-log.emit", error); }
-	const seq = fullEvent.metadata?.seq ?? 0;
-	try {
-		const stat = fs.statSync(eventsPath);
-		sequenceCache.set(eventsPath, { size: stat.size, mtimeMs: stat.mtimeMs, seq });
-		persistSequence(eventsPath, seq);
-	} catch (error) {
-		logInternalError("event-log.persist-sequence", error, `eventsPath=${eventsPath}`);
-	}
-	return fullEvent;
+		try {
+			if (fs.existsSync(eventsPath) && fs.statSync(eventsPath).size > MAX_EVENTS_BYTES) {
+				logInternalError("event-log.size-limit", new Error(`events file ${eventsPath} exceeds ${MAX_EVENTS_BYTES} bytes`), `eventsPath=${eventsPath}`);
+				return { ...fullEvent, metadata: { ...(fullEvent.metadata ?? { seq: 0, provenance: "team_runner" }), appended: false } };
+			}
+		} catch (error) {
+			logInternalError("event-log.size-check", error, `eventsPath=${eventsPath}`);
+		}
+		fs.appendFileSync(eventsPath, `${JSON.stringify(redactSecrets(fullEvent))}\n`, "utf-8");
+		appendCounter++;
+		if (appendCounter % 100 === 0 && needsRotation(eventsPath)) {
+			try { compactEventLog(eventsPath); } catch (error) { logInternalError("event-log.rotation", error, `eventsPath=${eventsPath}`); }
+		}
+		// Emit to UI event bus for event-first delivery
+		try { emitFromTeamEvent(fullEvent); } catch (error) { logInternalError("event-log.emit", error); }
+		const seq = fullEvent.metadata?.seq ?? 0;
+		try {
+			const stat = fs.statSync(eventsPath);
+			if (sequenceCache.size >= MAX_SEQUENCE_CACHE_ENTRIES) {
+				evictOldestSequenceCacheEntry();
+			}
+			sequenceCache.set(eventsPath, { size: stat.size, mtimeMs: stat.mtimeMs, seq });
+			persistSequence(eventsPath, seq);
+		} catch (error) {
+			logInternalError("event-log.persist-sequence", error, `eventsPath=${eventsPath}`);
+		}
+		return fullEvent;
+	});
 }
 
 export function readEvents(eventsPath: string): TeamEvent[] {

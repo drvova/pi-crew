@@ -58,7 +58,12 @@ interface QueuedSpawn {
 	signal?: AbortSignal;
 }
 
+function isValidSubagentId(id: string): boolean {
+	return /^[a-z0-9_]+$/i.test(id) && id.length <= 128;
+}
+
 function persistedSubagentPath(cwd: string, id: string): string {
+	if (!isValidSubagentId(id)) throw new Error(`Invalid subagent id: ${id}`);
 	return path.join(projectCrewRoot(cwd), DEFAULT_PATHS.state.subagentsSubdir, `${id}.json`);
 }
 

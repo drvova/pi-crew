@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+
 /**
  * Synchronous sleep using Atomics.wait (non-busy) with low-CPU fallback.
  *
@@ -14,7 +16,6 @@ export function sleepSync(ms: number): void {
 		// On Unix, try spawning the `sleep` command to avoid CPU busy-wait.
 		if (process.platform !== "win32" && ms >= 10) {
 			try {
-				const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
 				execFileSync("sleep", [(ms / 1000).toFixed(3)], { timeout: ms + 1000, stdio: "pipe" });
 				return;
 			} catch {

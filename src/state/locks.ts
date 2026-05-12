@@ -101,6 +101,10 @@ async function acquireLockWithRetryAsync(filePath: string, staleMs: number): Pro
 			if (Date.now() > deadline) {
 				throw new Error(`Run '${path.basename(filePath)}' is locked by another operation.`);
 			}
+			// If lock is not stale, fail fast (async should not wait for active locks)
+			if (!isLockStale(filePath, staleMs)) {
+				throw new Error(`Run '${path.basename(filePath)}' is locked by another operation.`);
+			}
 			readLockStateAsync(filePath, staleMs);
 			const delay = Math.min(250, 25 * 2 ** attempt);
 			await sleep(delay);

@@ -10,32 +10,52 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-test("withRunLock holds exclusivity across concurrent async callers", async () => {
-	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-lock-race-"));
+test("withRunLock async throws immediately on active (non-stale) lock", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-lock-active-async-"));
 	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 	const { manifest } = createRunManifest({
 		cwd,
-		team: { name: "race-team", description: "race", source: "builtin", filePath: "", roles: [{ name: "explorer", agent: "explorer" }] },
-		workflow: { name: "race", description: "", source: "builtin", filePath: "", steps: [] },
-		goal: "race",
+		team: { name: "active-team", description: "active", source: "builtin", filePath: "", roles: [{ name: "explorer", agent: "explorer" }] },
+		workflow: { name: "active", description: "", source: "builtin", filePath: "", steps: [] },
+		goal: "active",
+	});
+
+	// Hold the lock by writing a recent lock file
+	const lockFile = path.join(cwd, ".crew", "state", "runs", manifest.runId, "run.lock");
+	fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+	fs.writeFileSync(lockFile, String(Date.now()), "utf-8");
+
+	await assert.rejects(() => withRunLock(manifest, async () => "should-not-reach"), /locked/);
+
+	fs.rmSync(cwd, { recursive: true, force: true });
+});
+
+test("withRunLock serializes calls when first releases before second attempts", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-lock-seq-"));
+	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
+	const { manifest } = createRunManifest({
+		cwd,
+		team: { name: "seq-team", description: "seq", source: "builtin", filePath: "", roles: [{ name: "explorer", agent: "explorer" }] },
+		workflow: { name: "seq", description: "", source: "builtin", filePath: "", steps: [] },
+		goal: "seq",
 	});
 
 	const order: string[] = [];
-	const run1 = withRunLock(manifest, async () => {
+	const run1 = await withRunLock(manifest, async () => {
 		order.push("run-1-enter");
-		await sleep(120);
+		await sleep(50);
 		order.push("run-1-exit");
 	});
-	await sleep(10);
-	const run2 = withRunLock(manifest, async () => {
+	// run1 finished, lock released
+	const run2 = await withRunLock(manifest, async () => {
 		order.push("run-2-enter");
-		await sleep(20);
 		order.push("run-2-exit");
 	});
 
-	await Promise.all([run1, run2]);
 	assert.equal(order[0], "run-1-enter");
-	assert.deepEqual(order.indexOf("run-2-enter") > order.indexOf("run-1-exit"), true);
+	assert.equal(order[1], "run-1-exit");
+	assert.equal(order[2], "run-2-enter");
+	assert.equal(order[3], "run-2-exit");
 
 	fs.rmSync(cwd, { recursive: true, force: true });
 });
