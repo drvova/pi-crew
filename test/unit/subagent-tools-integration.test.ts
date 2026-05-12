@@ -8,6 +8,25 @@ import { readPersistedSubagentRecord, savePersistedSubagentRecord, SubagentManag
 import { registerSubagentTools } from "../../src/extension/registration/subagent-tools.ts";
 import { toolResult } from "../../src/extension/tool-result.ts";
 import { createRunManifest, updateRunStatus } from "../../src/state/state-store.ts";
+
+/** Retry rmSync on Windows EBUSY — child processes may hold file handles briefly. */
+function rmSyncRetry(target: string, opts: fs.RmOptions & { recursive?: boolean; force?: boolean } = {}, retries = 5, delayMs = 200): void {
+	for (let attempt = 0; attempt <= retries; attempt++) {
+		try {
+			fs.rmSync(target, opts);
+			return;
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			if (attempt < retries && (code === "EBUSY" || code === "EPERM" || code === "ENOTEMPTY")) {
+				// Backoff: give the OS time to release handles
+				const end = Date.now() + delayMs * (attempt + 1);
+				while (Date.now() < end) {} // busy-wait (test context, not production)
+				continue;
+			}
+			throw error;
+		}
+	}
+}
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
 
@@ -62,7 +81,7 @@ function fakeCtx(cwd: string) {
 async function removeDirWithRetry(dir: string): Promise<void> {
 	for (let attempt = 0; attempt < 30; attempt += 1) {
 		try {
-			fs.rmSync(dir, { recursive: true, force: true });
+			rmSyncRetry(dir, { recursive: true, force: true });
 			return;
 		} catch (error) {
 			if (attempt === 29) throw error;
@@ -158,7 +177,7 @@ test("registered Agent tool can run a background subagent and join its result", 
 		else process.env.PI_CREW_ROLE = previousCrewRole;
 		if (previousTeamsRole === undefined) delete process.env.PI_TEAMS_ROLE;
 		else process.env.PI_TEAMS_ROLE = previousTeamsRole;
-		fs.rmSync(cwd, { recursive: true, force: true });
+		rmSyncRetry(cwd, { recursive: true, force: true });
 	}
 });
 
@@ -301,7 +320,7 @@ test("get_subagent_result wait=true does not consume final result when wait retu
 		while (!completedStatuses.some((entry) => entry.startsWith("completed:")) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
 		assert.ok(completedStatuses.includes("completed:false"));
 	} finally {
-		fs.rmSync(cwd, { recursive: true, force: true });
+		rmSyncRetry(cwd, { recursive: true, force: true });
 	}
 });
 
@@ -333,7 +352,7 @@ test("get_subagent_result refreshes blocked records after run resumes to termina
 		assert.equal(readPersistedSubagentRecord(cwd, agentId)?.status, "completed");
 	} finally {
 		fake?.api.events.emit("session_shutdown", {});
-		fs.rmSync(cwd, { recursive: true, force: true });
+		rmSyncRetry(cwd, { recursive: true, force: true });
 	}
 });
 
@@ -362,7 +381,7 @@ test("get_subagent_result after restart fails fast for unrecoverable running rec
 		assert.equal(readPersistedSubagentRecord(cwd, agentId)?.status, "error");
 	} finally {
 		fake?.api.events.emit("session_shutdown", {});
-		fs.rmSync(cwd, { recursive: true, force: true });
+		rmSyncRetry(cwd, { recursive: true, force: true });
 	}
 });
 
