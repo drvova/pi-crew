@@ -55,6 +55,7 @@ import type { handleRun as HandleRunFn } from "./team-tool/run.ts";
 let _cachedHandleRun: typeof HandleRunFn | undefined;
 async function handleRun(...args: Parameters<typeof HandleRunFn>): Promise<Awaited<ReturnType<typeof HandleRunFn>>> {
 	if (!_cachedHandleRun) {
+		// LAZY: run.ts pulls in spawnBackgroundTeamRun + resolveCrewRuntime; also avoids jiti import race in child-process contexts.
 		const mod = await import("./team-tool/run.ts");
 		_cachedHandleRun = mod.handleRun;
 	}

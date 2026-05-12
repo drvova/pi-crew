@@ -43,8 +43,13 @@ export function resolveJitiRegisterPath(packageRoot = packageRootFromRuntime(), 
 	}
 	// Fallback: require resolution (handles global installs or isolated stores)
 	try {
-		const fromRequire = jitiRegisterPathFromPackageJson(requireFromHere.resolve("jiti/package.json"));
-		if (exists(fromRequire)) return fromRequire;
+		const pkgPath = requireFromHere.resolve("jiti/package.json");
+		const candidates = [
+			jitiRegisterPathFromPackageJson(pkgPath),
+			path.join(path.dirname(pkgPath), "register.mjs"),
+			path.join(path.dirname(pkgPath), "dist", "register.mjs"),
+		];
+		for (const c of candidates) if (exists(c)) return c;
 	} catch {
 		// Fall through.
 	}

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as path from "node:path";
+import * as os from "node:os";
 import { getBackgroundRunnerCommand, buildBackgroundSpawnOptions, resolveJitiRegisterPath, resolveTypeScriptLoader, nodeSupportsStripTypes } from "../../src/runtime/async-runner.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 
@@ -20,8 +21,8 @@ test("background runner resolves hoisted jiti loader path", () => {
 });
 
 test("background runner resolves local-source jiti loader in parent node_modules", () => {
-	const root = path.join("tmp", "workspace", "pi-crew");
-	const local = path.resolve(path.join("tmp", "workspace", "node_modules", "jiti", "lib", "jiti-register.mjs"));
+	const root = path.join(os.tmpdir(), "pi-crew-local");
+	const local = path.resolve(path.join(os.tmpdir(), "pi-crew-local", "node_modules", "jiti", "lib", "jiti-register.mjs"));
 	assert.equal(resolveJitiRegisterPath(root, (candidate) => candidate === local), local);
 });
 

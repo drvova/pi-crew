@@ -6,6 +6,7 @@
  */
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
+import { resolveShellForScript } from "../utils/resolve-shell.ts";
 import { DENIED_METRIC_NAMES } from "./metric-parser.ts";
 
 /** Hook execution stage. */
@@ -134,7 +135,8 @@ export async function runIterationHook(
 	const stderrChunks: Buffer[] = [];
 
 	return new Promise<HookResult>((resolve) => {
-		const child = spawn("bash", [hookScriptPath], {
+		const { command, args } = resolveShellForScript(hookScriptPath);
+		const child = spawn(command, args, {
 			cwd: payload.cwd,
 			env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "/tmp", USER: process.env.USER, LANG: process.env.LANG, PI_CREW_HOOK: "1" },
 			stdio: ["pipe", "pipe", "pipe"],

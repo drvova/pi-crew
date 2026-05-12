@@ -44,7 +44,8 @@
   ],
   "scripts": {
     "check": "npm run ci",
-    "ci": "npm run typecheck && npm test && npm pack --dry-run",
+    "ci": "npm run typecheck && npm run check:lazy-imports && npm test && npm pack --dry-run",
+    "check:lazy-imports": "node scripts/check-lazy-imports.mjs",
     "typecheck": "tsc --noEmit && node --experimental-strip-types -e \"await import('./index.ts'); console.log('strip-types import ok')\"",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "node --experimental-strip-types --test --test-concurrency=1 --test-timeout=30000 test/unit/*.test.ts",

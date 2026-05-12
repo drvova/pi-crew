@@ -5,6 +5,7 @@
  * Distilled from pi-autoresearch's post-check / backpressure pattern.
  */
 import { execFileSync } from "node:child_process";
+import { resolveShellForScript } from "../utils/resolve-shell.ts";
 
 /** Default timeout for post-check scripts (5 minutes). */
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -79,7 +80,8 @@ export async function runPostCheck(config: PostCheckConfig, cwd: string): Promis
 
 	return new Promise<PostCheckResult>((resolve) => {
 		try {
-			const output = execFileSync("bash", [scriptPath], {
+			const { command, args } = resolveShellForScript(scriptPath);
+		const output = execFileSync(command, args, {
 				cwd,
 				timeout: timeoutMs,
 				encoding: "utf-8",

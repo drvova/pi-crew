@@ -5,6 +5,7 @@ import { loadConfig } from "../config/config.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 
 export interface PreparedTaskWorkspace {
@@ -76,6 +77,7 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 		input: JSON.stringify({ version: 1, repoRoot, worktreePath, agentCwd: worktreePath, branch, runId: manifest.runId, taskId: task.id, agent: task.agent }),
 		timeout: cfg.setupHookTimeoutMs ?? 30_000,
 		shell: false,
+		env: sanitizeEnvSecrets(process.env),
 	});
 	if (result.error) throw new Error(`worktree setup hook failed: ${result.error.message}`);
 	if (result.status !== 0) throw new Error(`worktree setup hook failed with exit code ${result.status}: ${result.stderr || result.stdout || "no output"}`);
@@ -94,13 +96,16 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 	}
 }
 
-function branchExists(repoRoot: string, branch: string): boolean {
+function branchExists(repoRoot: string, branch: string): { local: boolean; remoteOnly: boolean } {
+	let local = false;
+	try { git(repoRoot, ["rev-parse", "--verify", `refs/heads/${branch}`]); local = true; } catch {}
+	if (local) return { local: true, remoteOnly: false };
+	// Check remote-tracking branch
 	try {
-		git(repoRoot, ["rev-parse", "--verify", `refs/heads/${branch}`]);
-		return true;
-	} catch {
-		return false;
-	}
+		const out = execFileSync("git", ["for-each-ref", "--format=%(refname)", `refs/remotes/*/${branch}`],
+			{ cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+		return { local: false, remoteOnly: out.length > 0 };
+	} catch { return { local: false, remoteOnly: false }; }
 }
 
 function pruneStaleWorktrees(repoRoot: string): void {
@@ -130,10 +135,19 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		return { cwd: worktreePath, worktreePath, branch, reused: true };
 	}
 	pruneStaleWorktrees(repoRoot);
-	if (branchExists(repoRoot, branch)) {
-		git(repoRoot, ["worktree", "add", worktreePath, branch]);
-	} else {
-		git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
+	const exists = branchExists(repoRoot, branch);
+	try {
+		if (exists.local) {
+			git(repoRoot, ["worktree", "add", worktreePath, branch]);
+		} else {
+			git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
+		}
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : String(error);
+		if (/already checked out/.test(msg)) {
+			throw new Error(`Branch '${branch}' is checked out at another worktree. Run \`team cleanup runId=${manifest.runId} force=true\` or manually remove the conflicting worktree.`);
+		}
+		throw error;
 	}
 	const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
 	const nodeModulesLinked = loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
