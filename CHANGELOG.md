@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.2.3 — Bug Fixes & Hardening (2026-05-12)
+
+### Security
+
+- **[MEDIUM] Event log append concurrency** — `appendFileSync` on Windows is not atomic; concurrent parent + background-runner writes could interleave JSONL lines. Fix: cross-process `withEventLogLockSync` using atomic `mkdirSync` + stale-lock detection via owner PID.
+- **[MEDIUM] Subagent path traversal** — `persistedSubagentPath(cwd, id)` did not validate `id` before joining into a file path. Fix: `isValidSubagentId` regex guard (`^[a-z0-9_]+$`, max 128 chars).
+- **[LOW] PEM redaction unbounded scan** — `PEM_PRIVATE_KEY_PATTERN` used `\s\S]*?` without length limit, causing full-file scan on truncated input. Fix: capped to 65,536 characters.
+- **[LOW] Sleep utility `require()` in ESM** — `sleep.ts` used `require("node:child_process")` inside an ES module. Fix: top-level ESM `import { execFileSync }`.
+
+### Correctness
+
+- **Async lock fail-fast** — `acquireLockWithRetryAsync` previously waited the full deadline (~60 s) when an active (non-stale) lock existed. Fix: throw immediately, matching sync behavior.
+- **Atomic-write sync parity** — Async `atomicWriteFileAsync` had a "matches" fallback (read existing, compare content) for race conditions; sync path lacked it. Fix: added identical fallback to sync.
+- **Sequence cache leak** — `sequenceCache` was an unbounded Map. Fix: `MAX_SEQUENCE_CACHE_ENTRIES = 256` with oldest-entry eviction.
+- **Iteration hooks / post-checks env inconsistency** — `runSetupHook` used `sanitizeEnvSecrets(..., { allowList })` but `runIterationHook` and `runPostCheck` used hard-coded env whitelists. Fix: unified all three to `sanitizeEnvSecrets` with the same allow-list (includes Windows vars: `USERPROFILE`, `TEMP`, `ComSpec`, `SystemRoot`).
+- **Worktree error parsing locale-dependent** — `git worktree add` error messages parsed with English regexes but `git()` helper did not force locale. Fix: `LANG: "C"`, `LC_ALL: "C"` injected into all `git()` calls in `worktree-manager.ts` and `cleanup.ts`.
+- **Event log lock stale-detect** — `withEventLogLockSync` previously had no stale-lock recovery and always `rmdirSync`ed in `finally` even when lock was never acquired. Fix: PID-based stale detection + conditional cleanup only on `acquired=true`.
+
+### Portability
+
+- **Windows `.cmd/.bat` spawn safety** — Node ≥ 20 CVE-2024-27980 blocks direct `.cmd/.bat` spawn. Fix: `.cmd`/`.bat` scripts on Windows now run via `cmd.exe /d /s /c scriptPath`.
+- **Git Bash fallback on Windows** — `resolveShellForScript` now prefers Git Bash (`bash.exe` from `Git\bin`) when available, falling back to PowerShell/cmd only when absent.
+- **Jiti loader resolution for hoisted installs** — `resolveJitiRegisterPath` used hard-coded `../../` candidates that failed when pi-crew was installed via local path or in a hoisted monorepo. Fix: ancestor walk upward from `packageRoot` plus fallback candidates `register.mjs` and `dist/register.mjs`.
+
+### Tests
+
+- Added `test/unit/worktree-manager.test.ts` (branch recovery, reuse, clean leader, file node_modules skip).
+- Added `test/unit/artifact-store.test.ts` (hash integrity, path traversal, nested dirs).
+- Added `test/unit/locks-race.test.ts` tests (stale lock recovery sync+async, active lock fail-fast).
+- Added `test/unit/redaction-transcript-roundtrip.test.ts`.
+- Added `test/unit/env-filter.test.ts` and `test/unit/resolve-shell.test.ts`.
+- Added `scripts/check-lazy-imports.mjs` with `npm run check:lazy-imports` CI gate.
+
+---
+
 ## 0.2.0 — Security & Performance Hardening
 
 ### Performance
