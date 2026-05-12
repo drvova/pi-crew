@@ -133,11 +133,24 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	atomicWriteJson(paths.manifestPath, executionManifest);
 	appendEvent(executionManifest.eventsPath, { type: "runtime.resolved", runId: executionManifest.runId, message: `Runtime resolved: ${runtime.kind} safety=${runtime.safety}`, data: { runtimeResolution } });
 	const runAsync = params.async ?? loadedConfig.config.asyncByDefault ?? false;
+	// Background runners are standalone Node processes — live-session (in-process Pi SDK)
+	// is only valid when tasks run inside the parent Pi agent session. Override to
+	// child-process for async runs so the background runner spawns child Pi workers.
+	let effectiveRuntime = runtime;
+	if (runAsync && runtime.kind === "live-session") {
+		effectiveRuntime = { kind: "child-process", requestedMode: runtime.requestedMode, available: true, steer: false, resume: false, liveToolActivity: false, transcript: true, safety: "trusted" as const, fallback: "child-process", reason: "Background runner cannot use live-session; falling back to child-process." };
+	}
+	const effectiveRuntimeResolution = effectiveRuntime !== runtime ? runtimeResolutionState(effectiveRuntime) : runtimeResolution;
+	const effectiveManifest = effectiveRuntime !== runtime ? { ...executionManifest, runtimeResolution: effectiveRuntimeResolution, updatedAt: new Date().toISOString() } : executionManifest;
+	if (effectiveRuntime !== runtime) {
+		atomicWriteJson(paths.manifestPath, effectiveManifest);
+		appendEvent(effectiveManifest.eventsPath, { type: "runtime.resolved", runId: effectiveManifest.runId, message: `Runtime overridden: child-process (async fallback from live-session)`, data: { runtimeResolution: effectiveRuntimeResolution } });
+	}
 	if (runAsync) {
-		if (runtime.safety === "blocked") {
-			const runningManifest = updateRunStatus(executionManifest, "running", "Checking worker runtime availability.");
-			const blocked = updateRunStatus(runningManifest, "blocked", runtime.reason ?? "Child worker execution is disabled; refusing to create no-op scaffold subagents.");
-			appendEvent(blocked.eventsPath, { type: "run.blocked", runId: blocked.runId, message: blocked.summary, data: { runtime, runtimeResolution, async: true } });
+		if (effectiveRuntime.safety === "blocked") {
+			const runningManifest = updateRunStatus(effectiveManifest, "running", "Checking worker runtime availability.");
+			const blocked = updateRunStatus(runningManifest, "blocked", effectiveRuntime.reason ?? "Child worker execution is disabled; refusing to create no-op scaffold subagents.");
+			appendEvent(blocked.eventsPath, { type: "run.blocked", runId: blocked.runId, message: blocked.summary, data: { runtime: effectiveRuntime, runtimeResolution: effectiveRuntimeResolution, async: true } });
 			unregisterActiveRun(blocked.runId);
 			return result([
 				`Blocked pi-crew run ${blocked.runId}: real subagent workers are disabled.`,
@@ -145,11 +158,11 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 				runtime.reason ?? "Child worker execution is disabled.",
 			].join("\n"), { action: "run", status: "error", runId: blocked.runId, artifactsRoot: blocked.artifactsRoot }, true);
 		}
-		const spawned = spawnBackgroundTeamRun(executionManifest);
-		const asyncManifest = { ...executionManifest, async: { pid: spawned.pid, logPath: spawned.logPath, spawnedAt: new Date().toISOString() } };
+		const spawned = spawnBackgroundTeamRun(effectiveManifest);
+		const asyncManifest = { ...effectiveManifest, async: { pid: spawned.pid, logPath: spawned.logPath, spawnedAt: new Date().toISOString() } };
 		atomicWriteJson(paths.manifestPath, asyncManifest);
-		appendEvent(executionManifest.eventsPath, { type: "async.spawned", runId: executionManifest.runId, data: { pid: spawned.pid, logPath: spawned.logPath } });
-		scheduleBackgroundEarlyExitGuard(ctx.cwd, executionManifest.runId, spawned.pid, spawned.logPath);
+		appendEvent(effectiveManifest.eventsPath, { type: "async.spawned", runId: effectiveManifest.runId, data: { pid: spawned.pid, logPath: spawned.logPath } });
+		scheduleBackgroundEarlyExitGuard(ctx.cwd, effectiveManifest.runId, spawned.pid, spawned.logPath);
 		const text = [
 			`Started async pi-crew run ${updatedManifest.runId}.`,
 			`Team: ${team.name}`,
