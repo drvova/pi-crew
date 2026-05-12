@@ -6,6 +6,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { resolveShellForScript } from "../utils/resolve-shell.ts";
+import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 
 /** Default timeout for post-check scripts (5 minutes). */
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -86,7 +87,7 @@ export async function runPostCheck(config: PostCheckConfig, cwd: string): Promis
 				timeout: timeoutMs,
 				encoding: "utf-8",
 				maxBuffer: 10 * 1024 * 1024, // 10 MB
-				env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "/tmp", USER: process.env.USER, LANG: process.env.LANG, PI_CREW_POST_CHECK: "1" },
+				env: { ...sanitizeEnvSecrets(process.env, { allowList: ["PATH", "HOME", "USER", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "ComSpec", "SystemRoot", "PI_*"] }), PI_CREW_POST_CHECK: "1" },
 			});
 
 			const durationMs = Date.now() - startTime;

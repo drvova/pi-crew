@@ -61,27 +61,54 @@ const sequenceCache = new Map<string, { size: number; mtimeMs: number; seq: numb
 const MAX_SEQUENCE_CACHE_ENTRIES = 256;
 let appendCounter = 0;
 
-/** Simple cross-process lock for an eventsPath to prevent JSONL interleave on concurrent append. */
+/** Simple cross-process lock for an eventsPath to prevent JSONL interleave on concurrent append.
+ *  Detects stale locks by checking the owner PID written inside the lock directory.
+ */
 function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
 	const lockDir = `${eventsPath}.lock`;
+	const pidFile = path.join(lockDir, "pid");
 	const start = Date.now();
 	const timeout = 5000;
+	const staleMs = 10000;
+	let acquired = false;
 	while (true) {
 		try {
 			fs.mkdirSync(lockDir);
+			try { fs.writeFileSync(pidFile, String(process.pid), "utf-8"); } catch { /* best-effort */ }
+			acquired = true;
 			break;
 		} catch {
 			if (Date.now() - start > timeout) {
 				logInternalError("event-log.lock-timeout", new Error(`Event log lock timeout for ${eventsPath}`), `lockDir=${lockDir}`);
 				break;
 			}
+			// Stale detection: if the owning process is dead, remove the stale lock.
+			try {
+				const raw = fs.readFileSync(pidFile, "utf-8").trim();
+				const ownerPid = Number.parseInt(raw, 10);
+				if (!Number.isNaN(ownerPid) && ownerPid !== process.pid) {
+					let alive = false;
+					try { process.kill(ownerPid, 0); alive = true; } catch { /* dead */ }
+					if (!alive) {
+						try {
+							const stat = fs.statSync(lockDir);
+							if (Date.now() - stat.mtimeMs > staleMs) {
+								fs.rmSync(lockDir, { recursive: true, force: true });
+								continue;
+							}
+						} catch { /* race — let loop sleep */ }
+					}
+				}
+			} catch { /* no pid file — fall through to sleep */ }
 			sleepSync(10);
 		}
 	}
 	try {
 		return fn();
 	} finally {
-		try { fs.rmdirSync(lockDir); } catch { /* best-effort */ }
+		if (acquired) {
+			try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+		}
 	}
 }
 
