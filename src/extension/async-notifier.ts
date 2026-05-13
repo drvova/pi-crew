@@ -88,8 +88,8 @@ export function startAsyncRunNotifier(ctx: ExtensionContext, state: AsyncNotifie
 		if (isFinished(run.status) && updatedAtMs < staleBeforeMs) state.seenFinishedRunIds.add(run.runId);
 	}
 	state.interval = setInterval(() => {
-		if (options.isCurrent && !options.isCurrent(generation)) return;
 		try {
+			if (options.isCurrent && !options.isCurrent(generation)) return;
 			for (const run of listRuns(ctx.cwd).slice(0, 20)) {
 				const current = markDeadAsyncRunIfNeeded(run) ?? run;
 				if (!isFinished(current.status) || state.seenFinishedRunIds.has(current.runId)) continue;
@@ -99,6 +99,11 @@ export function startAsyncRunNotifier(ctx: ExtensionContext, state: AsyncNotifie
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
+			if (message.includes("stale") || message.includes("session replacement") || message.includes("old ctx")) {
+				console.error(`[pi-crew] async notifier stale ctx detected; stopping notifier.`);
+				try { stopAsyncRunNotifier(state); } catch { /* ignore */ }
+				return;
+			}
 			console.error(`[pi-crew] async notifier error: ${message}`);
 		}
 	}, intervalMs);
