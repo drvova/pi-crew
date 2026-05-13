@@ -10,6 +10,7 @@ export const DASHBOARD_KEYS = {
 		events: ["e"],
 		output: ["o"],
 		transcript: ["v"],
+		liveConversation: ["V"],
 		reload: ["r"],
 		progressToggle: ["p"],
 	},
@@ -46,6 +47,7 @@ export type DashboardKeyAction =
 	| "events"
 	| "output"
 	| "transcript"
+	| "live-conversation"
 	| "reload"
 	| "progressToggle"
 	| "pane-agents"
@@ -80,6 +82,7 @@ export function dashboardActionForKey(data: string, activePane?: "agents" | "pro
 	if (includes(DASHBOARD_KEYS.root.events, data)) return "events";
 	if (includes(DASHBOARD_KEYS.root.output, data)) return "output";
 	if (includes(DASHBOARD_KEYS.root.transcript, data)) return "transcript";
+	if (includes(DASHBOARD_KEYS.root.liveConversation, data)) return "live-conversation";
 	if (includes(DASHBOARD_KEYS.root.reload, data)) return "reload";
 	if (includes(DASHBOARD_KEYS.root.progressToggle, data)) return "progressToggle";
 	if (includes(DASHBOARD_KEYS.pane.agents, data)) return "pane-agents";

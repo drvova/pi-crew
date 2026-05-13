@@ -8,6 +8,7 @@ import { startAsyncRunNotifier, stopAsyncRunNotifier, type AsyncNotifierState } 
 import { notifyActiveRuns } from "./session-summary.ts";
 import { LiveRunSidebar } from "../ui/live-run-sidebar.ts";
 import { loadCrewSettings, applyCrewSettingsToConfig } from "../runtime/settings-store.ts";
+import { listLiveAgents } from "../runtime/live-agent-manager.ts";
 import { registerPiCrewRpc, type PiCrewRpcHandle } from "./cross-extension-rpc.ts";
 import { stopCrewWidget, updateCrewWidget, type CrewWidgetState } from "../ui/crew-widget.ts";
 import { clearPiCrewPowerbar, disposePowerbarCoalescer, registerPiCrewPowerbarSegments, requestPowerbarUpdate, resetPowerbarDedupState, updatePiCrewPowerbar } from "../ui/powerbar-publisher.ts";
@@ -543,11 +544,12 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				});
 		};
 
-		const startPreloadLoop = (intervalMs: number): void => {
+		const startPreloadLoop = (intervalMs: number, dynamicMs?: () => number): void => {
 			if (preloadTimer) clearTimeout(preloadTimer);
 			const tick = (): void => {
 				backgroundPreload();
-				preloadTimer = setTimeout(tick, intervalMs);
+				const nextMs = dynamicMs?.() ?? intervalMs;
+				preloadTimer = setTimeout(tick, nextMs);
 				preloadTimer.unref();
 			};
 			preloadTimer = setTimeout(tick, intervalMs);
@@ -602,6 +604,9 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		};
 
 		const fallbackMs = loadedConfig.config.ui?.dashboardLiveRefreshMs ?? DEFAULT_UI.refreshMs;
+		// R3: Use faster refresh when live agents are running
+		const liveRefreshMs = 120;
+		const effectiveRefreshMs = () => listLiveAgents().some((a) => a.status === "running") ? liveRefreshMs : fallbackMs;
 		renderScheduler = new RenderScheduler(pi.events, renderTick, {
 			fallbackMs,
 			onInvalidate: (payload: unknown) => {
@@ -616,7 +621,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			},
 		});
 		// Start async preload loop — refreshes snapshot cache in background
-		startPreloadLoop(fallbackMs);
+		startPreloadLoop(fallbackMs, effectiveRefreshMs);
 	});
 	pi.on("session_before_switch", () => {
 		sessionGeneration++;

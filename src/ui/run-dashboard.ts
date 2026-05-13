@@ -43,7 +43,7 @@ export interface RunDashboardOptions {
 	registry?: MetricRegistry;
 }
 
-export type RunDashboardAction = "status" | "summary" | "artifacts" | "api" | "events" | "agents" | "agent-events" | "agent-output" | "agent-transcript" | "mailbox" | "reload" | "mailbox-detail" | "health-recovery" | "health-kill-stale" | "health-diagnostic-export" | "notifications-dismiss";
+export type RunDashboardAction = "status" | "summary" | "artifacts" | "api" | "events" | "agents" | "agent-events" | "agent-output" | "agent-transcript" | "agent-live" | "mailbox" | "reload" | "mailbox-detail" | "health-recovery" | "health-kill-stale" | "health-diagnostic-export" | "notifications-dismiss";
 export interface RunDashboardSelection {
 	runId: string;
 	action: RunDashboardAction;
@@ -457,6 +457,10 @@ export class RunDashboard implements DashboardComponent {
 		}
 		if (action === "transcript") {
 			this.done(selectedRunId ? { runId: selectedRunId, action: "agent-transcript" } : undefined);
+			return;
+		}
+		if (action === "live-conversation") {
+			this.done(selectedRunId ? { runId: selectedRunId, action: "agent-live" } : undefined);
 			return;
 		}
 		if (action === "progressToggle") {

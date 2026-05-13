@@ -126,10 +126,16 @@ export class GroupJoinManager {
 	private groups = new Map<string, AgentGroup>();
 	private agentToGroup = new Map<string, string>();
 
+	private deliverCb: DeliveryCallback;
+	private groupTimeout: number;
+
 	constructor(
-		private deliverCb: DeliveryCallback,
-		private groupTimeout = DEFAULT_TIMEOUT,
-	) {}
+		deliverCb: DeliveryCallback,
+		groupTimeout = DEFAULT_TIMEOUT,
+	) {
+		this.deliverCb = deliverCb;
+		this.groupTimeout = groupTimeout;
+	}
 
 	registerGroup(groupId: string, agentIds: string[]): void {
 		const group: AgentGroup = {

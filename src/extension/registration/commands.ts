@@ -38,7 +38,7 @@ import { dispatchDiagnosticExport, dispatchHealthRecovery, dispatchKillStaleWork
 import { DEFAULT_UI } from "../../config/defaults.ts";
 import { listRecentDiagnostic } from "../../runtime/diagnostic-export.ts";
 import { commandText, notifyCommandResult, parseRunArgs, parseScalar, pushUnset, setNestedConfig } from "./command-utils.ts";
-import { openTranscriptViewer, selectAgentTask } from "./viewers.ts";
+import { openTranscriptViewer, selectAgentTask, openLiveConversation } from "./viewers.ts";
 import { printTimings, time } from "../../utils/timings.ts";
 import { requestRenderTarget } from "../../ui/pi-ui-compat.ts";
 import type { createRunSnapshotCache } from "../../ui/run-snapshot-cache.ts";
@@ -379,7 +379,9 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 				continue;
 			}
 			if (selection.action === "agent-transcript" && await openTranscriptViewer(ctx, selection.runId)) continue;
-			const result = selection.action === "api" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-manifest" } }, teamCommandContext(ctx)) : selection.action === "agents" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "agent-dashboard" } }, teamCommandContext(ctx)) : selection.action === "mailbox" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-mailbox" } }, teamCommandContext(ctx)) : selection.action === "agent-events" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-events", limit: 50 } }, teamCommandContext(ctx)) : selection.action === "agent-output" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-output", maxBytes: 32_000 } }, teamCommandContext(ctx)) : selection.action === "agent-transcript" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-transcript" } }, teamCommandContext(ctx)) : await handleTeamTool({ action: selection.action, runId: selection.runId }, teamCommandContext(ctx));
+			if (selection.action === "agent-live" && await openLiveConversation(ctx, selection.runId)) continue;
+			if (selection.action === "agent-live") { await notifyCommandResult(ctx, commandText({ content: [{ type: "text", text: "No live agent found for this run." }] })); continue; }
+			const result = selection.action === "api" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-manifest" } }, teamCommandContext(ctx)) : selection.action === "agents" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "agent-dashboard" } }, teamCommandContext(ctx)) : selection.action === "mailbox" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-mailbox" } }, teamCommandContext(ctx)) : selection.action === "agent-events" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-events", limit: 50 } }, teamCommandContext(ctx)) : selection.action === "agent-output" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-output", maxBytes: 32_000 } }, teamCommandContext(ctx)) : selection.action === "agent-transcript" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-transcript" } }, teamCommandContext(ctx)) : await handleTeamTool({ action: selection.action as any, runId: selection.runId }, teamCommandContext(ctx));
 			await notifyCommandResult(ctx, commandText(result));
 			return;
 		}

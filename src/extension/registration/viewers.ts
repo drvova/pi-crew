@@ -2,6 +2,9 @@ import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { loadRunManifestById } from "../../state/state-store.ts";
 import { readCrewAgents } from "../../runtime/crew-agent-records.ts";
 import { loadConfig } from "../../config/config.ts";
+import { listLiveAgents, type LiveAgentHandle } from "../../runtime/live-agent-manager.ts";
+import { LiveConversationOverlay } from "../../ui/live-conversation-overlay.ts";
+import { asCrewTheme } from "../../ui/theme-adapter.ts";
 // Lazy-loaded: DurableTranscriptViewer is 658ms — only needed for /crew transcript command
 import type { DurableTranscriptViewer as DurableTranscriptViewerType } from "../../ui/transcript-viewer.ts";
 let _cachedViewer: typeof DurableTranscriptViewerType | undefined;
@@ -41,6 +44,32 @@ export async function openTranscriptViewer(ctx: ExtensionCommandContext, initial
 	const uiConfig = loadConfig(ctx.cwd).config.ui;
 	const DurableTranscriptViewer = await getViewer();
 	await ctx.ui.custom<undefined>((_tui, theme, _keybindings, done) => new DurableTranscriptViewer(loaded.manifest, theme, done, taskId, { maxTailBytes: uiConfig?.transcriptTailBytes }), {
+		overlay: true,
+		overlayOptions: { width: "90%", maxHeight: "85%", anchor: "center" },
+	});
+	return true;
+}
+
+/** R2: Open live conversation overlay for a running live-session agent. */
+export async function openLiveConversation(ctx: ExtensionCommandContext, initialRunId: string | undefined, initialTaskId?: string): Promise<boolean> {
+	const selected = await selectAgentTask(ctx, initialRunId, initialTaskId);
+	if (!selected || !ctx.hasUI) return false;
+	const liveAgents = listLiveAgents();
+	const handle = liveAgents.find((h) => h.runId === selected.runId && (selected.taskId ? h.taskId === selected.taskId : true));
+	if (!handle) return false;
+	const theme = asCrewTheme({});
+	await ctx.ui.custom<undefined>((tui: any, _theme: any, _keybindings: any, done: (result: undefined) => void) => {
+		const columns = tui?.terminal?.columns ?? 80;
+		const rows = tui?.terminal?.rows ?? 24;
+		const overlay = new LiveConversationOverlay(handle, theme, columns, rows);
+		return {
+			render(width: number) { return overlay.render(width); },
+			handleInput(data: string) {
+				if (data === "\x1b" || data === "q") { overlay.close(); done(undefined); }
+			},
+			invalidate() { /* overlay polls */ },
+		};
+	}, {
 		overlay: true,
 		overlayOptions: { width: "90%", maxHeight: "85%", anchor: "center" },
 	});

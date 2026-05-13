@@ -5,6 +5,7 @@ import { readCrewAgents } from "../runtime/crew-agent-records.ts";
 import type { CrewAgentRecord } from "../runtime/crew-agent-runtime.ts";
 import { isDisplayActiveRun } from "../runtime/process-status.ts";
 import { listLiveAgents, type LiveAgentHandle } from "../runtime/live-agent-manager.ts";
+import { getTaskUsage } from "../runtime/usage-tracker.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 import type { ManifestCache } from "../runtime/manifest-cache.ts";
 import { colorForStatus, iconForStatus, type RunStatus } from "./status-colors.ts";
@@ -34,6 +35,12 @@ const STATUS_KEY = "pi-crew";
 
 const MAX_LINES_DEFAULT = DEFAULT_UI.widgetMaxLines;
 const MAX_AGENTS_DISPLAY = 3;
+/** R1: How many turns finished agents linger before disappearing. */
+const FINISHED_LINGER_MAX_AGE = 1;
+const ERROR_LINGER_MAX_AGE = 2;
+const ERROR_STATUSES = new Set(["failed", "cancelled", "stopped"]);
+/** R3: Faster refresh when live agents are running. */
+const LIVE_REFRESH_MS = 120;
 
 type WidgetComponent = { render(width: number): string[]; invalidate(): void };
 
@@ -86,7 +93,12 @@ function describeLiveActivity(handle: LiveAgentHandle): string {
 		}
 		const parts: string[] = [];
 		for (const [label, count] of groups) {
-			parts.push(count > 1 ? `${label} ${count} items` : label);
+			if (count > 1) {
+				const noun = label === "searching" ? "patterns" : label === "listing" ? "entries" : "files";
+				parts.push(`${label} ${count} ${noun}`);
+			} else {
+				parts.push(label);
+			}
 		}
 		return parts.join(", ") + "…";
 	}
@@ -113,6 +125,12 @@ function agentActivity(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): st
 	return "done";
 }
 
+function formatTokensCompact(count: number): string {
+	if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M tok`;
+	if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k tok`;
+	return `${count} tok`;
+}
+
 function agentStats(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): string {
 	const parts: string[] = [];
 	if (liveHandle) {
@@ -120,23 +138,37 @@ function agentStats(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): strin
 		// G3: Turn counter with limit
 		if (act.maxTurns != null) parts.push(`\u27F3${act.turnCount}\u2264${act.maxTurns}`);
 		else if (act.turnCount > 0) parts.push(`\u27F3${act.turnCount}`);
-		if (act.toolUses > 0) parts.push(`${act.toolUses} tools`);
-		// G4: Context % from live session
+		if (act.toolUses > 0) parts.push(`${act.toolUses} tool${act.toolUses === 1 ? "" : "s"}`);
+		// G4: Token + context % + compaction in one annotation
+		const tokenAnnot: string[] = [];
 		try {
-			const ctxPct = liveHandle.session.getSessionStats?.()?.contextUsage?.percent;
-			if (ctxPct != null) parts.push(`${Math.round(ctxPct)}% ctx`);
+			const stats = liveHandle.session.getSessionStats?.();
+			const ctxPct = stats?.contextUsage?.percent;
+			if (ctxPct != null) {
+				const color = ctxPct >= 85 ? "error" : ctxPct >= 70 ? "warning" : "dim";
+				tokenAnnot.push(`${Math.round(ctxPct)}%`);
+			}
 		} catch { /* ignore */ }
-		// G6: Compaction indicator
-		if (act.compactionCount > 0) parts.push(`\u21BB${act.compactionCount}`);
-		// Duration
+		if (act.compactionCount > 0) tokenAnnot.push(`\u21BB${act.compactionCount}`);
+		const usage = getTaskUsage(liveHandle.taskId);
+		const total = (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheWrite ?? 0);
+		if (total > 0) {
+			const tokStr = formatTokensCompact(total);
+			if (tokenAnnot.length > 0) parts.push(`${tokStr} (${tokenAnnot.join(" · ")})`);
+			else parts.push(tokStr);
+		} else if (tokenAnnot.length > 0) {
+			parts.push(`(${tokenAnnot.join(" · ")})`);
+		}
+		// R7: Duration with (running) suffix
 		const ms = (act.completedAtMs ?? Date.now()) - act.startedAtMs;
-		if (ms > 0) parts.push(`${(ms / 1000).toFixed(1)}s`);
+		const dur = `${(ms / 1000).toFixed(1)}s`;
+		parts.push(liveHandle.status === "running" ? `${dur} (running)` : dur);
 	} else {
-		if (agent.toolUses) parts.push(`${agent.toolUses} tools`);
-		if (agent.progress?.tokens) parts.push(`${agent.progress.tokens} tok`);
+		if (agent.toolUses) parts.push(`${agent.toolUses} tool${agent.toolUses === 1 ? "" : "s"}`);
+		if (agent.progress?.tokens) parts.push(formatTokensCompact(agent.progress.tokens));
 		if (agent.progress?.turns) parts.push(`\u27F3${agent.progress.turns}`);
 		const age = elapsed(agent.completedAt ?? agent.startedAt);
-		if (age) parts.push(agent.completedAt ? age : `${age} ago`);
+		if (age) parts.push(agent.completedAt ? age : `${age} (running)`);
 	}
 	return parts.join(" · ");
 }
@@ -207,24 +239,39 @@ export function buildCrewWidgetLines(cwd: string, frame = 0, maxLines = 8, provi
 	const lines: string[] = [widgetHeader(runs, runningGlyph, maxLines, notificationCount)];
 	for (const { run, agents, snapshot } of runs) {
 		const activeAgents = agents.filter((item) => item.status === "running" || item.status === "queued" || item.status === "waiting");
+		// R1: Include recently finished agents (linger 1-2 turns)
+		const finishedAgents = agents.filter((item) =>
+			item.status !== "running" && item.status !== "queued" && item.status !== "waiting" && item.completedAt,
+		);
 		const completed = agents.filter((agent) => agent.status === "completed").length;
 		const runGlyph = iconForStatus(run.status, { runningGlyph });
 		const phaseLine = snapshot ? formatPhaseProgressLine(computePhaseProgress(snapshot.tasks)) : "";
 		const progressPart = phaseLine ? `${phaseLine}` : `${completed}/${agents.length} done`;
-		lines.push(`├─ ${runGlyph} ${shortRunLabel(run)} · ${progressPart} · ${run.runId.slice(-8)}`);
-		const visibleAgents = activeAgents.slice(0, MAX_AGENTS_DISPLAY);
+		lines.push(`\u251C\u2500 ${runGlyph} ${shortRunLabel(run)} \u00B7 ${progressPart} \u00B7 ${run.runId.slice(-8)}`);
 		const liveForRun = listLiveAgents().filter((a) => a.runId === run.runId);
+		// Render finished agents first (compact 1-line format)
+		for (const agent of finishedAgents.slice(0, 2)) {
+			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
+			const name = liveHandle?.agent ?? agent.agent;
+			const icon = agent.status === "completed" ? "\u2713" : agent.status === "failed" ? "\u2717" : "\u25AA";
+			const stats = agentStats(agent, liveHandle);
+			const desc = liveHandle?.description ?? agent.role;
+			lines.push(`\u2502  \u251C\u2500 ${icon} ${name} \u00B7 ${desc}${stats ? ` \u00B7 ${stats}` : ""}`);
+		}
+		// Render active agents
+		const visibleAgents = activeAgents.slice(0, MAX_AGENTS_DISPLAY);
 		for (const [index, agent] of visibleAgents.entries()) {
 			const last = index === visibleAgents.length - 1 && activeAgents.length <= MAX_AGENTS_DISPLAY;
-			const branch = last ? "└─" : "├─";
+			const branch = last ? "\u2514\u2500" : "\u251C\u2500";
 			const agentGlyph = iconForStatus(agent.status, { runningGlyph });
 			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
 			const stats = agentStats(agent, liveHandle);
 			const name = liveHandle?.agent ?? agent.agent;
-			lines.push(`│  ${branch} ${agentGlyph} ${name} · ${agent.role}`);
-			lines.push(`│     ⎿ ${agentActivity(agent, liveHandle)}${stats ? ` · ${stats}` : ""}`);
+			const desc = liveHandle?.description ?? "";
+			lines.push(`\u2502  ${branch} ${agentGlyph} ${name}${desc ? ` \u00B7 ${desc}` : ` \u00B7 ${agent.role}`}`);
+			lines.push(`\u2502     \u23B7 ${agentActivity(agent, liveHandle)}${stats ? ` \u00B7 ${stats}` : ""}`);
 		}
-		if (activeAgents.length > MAX_AGENTS_DISPLAY) lines.push(`│  └─ … +${activeAgents.length - MAX_AGENTS_DISPLAY} more agents`);
+		if (activeAgents.length > MAX_AGENTS_DISPLAY) lines.push(`\u2502  \u2514\u2500 \u2026 +${activeAgents.length - MAX_AGENTS_DISPLAY} more agents`);
 		if (lines.length >= maxLines) break;
 	}
 	return lines.slice(0, maxLines);

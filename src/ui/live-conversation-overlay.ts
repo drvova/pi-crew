@@ -1,8 +1,8 @@
 /**
  * live-conversation-overlay.ts — Live conversation overlay for viewing live-session agent output.
  *
- * Displays a scrollable, live-updating view of a live-session agent's output.
- * Polls the LiveAgentHandle.activity for real-time updates.
+ * R8: Subscribes to session events for real-time streaming updates.
+ * Falls back to polling LiveAgentHandle.activity when subscribe is unavailable.
  */
 import type { LiveAgentHandle } from "../runtime/live-agent-manager.ts";
 import { iconForStatus } from "./status-colors.ts";
@@ -18,10 +18,10 @@ export class LiveConversationOverlay {
 	private closed = false;
 	private frame = 0;
 	private pollTimer: ReturnType<typeof setInterval> | undefined;
-	private lastContent = "";
-	private cachedLines: string[] = [];
+	cachedLines: string[] = [];
 	private columns: number;
 	private rows: number;
+	private unsubscribe: (() => void) | undefined;
 
 	constructor(
 		private handle: LiveAgentHandle,
@@ -31,25 +31,40 @@ export class LiveConversationOverlay {
 	) {
 		this.columns = columns;
 		this.rows = rows;
+		// R8: Subscribe to real session events if available
+		const session = handle.session as Record<string, unknown>;
+		if (typeof session.subscribe === "function") {
+			try {
+				this.unsubscribe = (session.subscribe as (cb: (event: unknown) => void) => () => void)((event) => {
+					if (this.closed) return;
+					const obj = event as Record<string, unknown>;
+					const text = typeof obj.text === "string" ? obj.text : typeof obj.content === "string" ? obj.content : "";
+					if (text.trim()) {
+						this.cachedLines.push(text);
+						if (this.autoScroll) this.scrollOffset = Math.max(0, this.cachedLines.length - this.viewportHeight());
+					}
+				});
+			} catch { /* ignore */ }
+		}
+		// Also poll for summary updates
 		this.pollTimer = setInterval(() => {
 			if (this.closed) return;
 			this.frame++;
-			this.refreshContent();
+			this.refreshSummary();
 		}, 200);
-		this.refreshContent();
+		this.refreshSummary();
 	}
 
-	private refreshContent(): void {
+	private refreshSummary(): void {
 		const act = this.handle.activity;
-		const parts: string[] = [];
-		if (act.responseText) parts.push(act.responseText);
-		parts.push(`[${act.turnCount} turns · ${act.toolUses} tools · ${((act.completedAtMs ?? Date.now()) - act.startedAtMs) / 1000}s]`);
-		const content = parts.join("\n");
-		if (content !== this.lastContent) {
-			this.lastContent = content;
-			this.cachedLines = content.split("\n");
-			if (this.autoScroll) this.scrollOffset = Math.max(0, this.cachedLines.length - this.viewportHeight());
+		const summary = `[${act.turnCount} turns · ${act.toolUses} tools · ${((act.completedAtMs ?? Date.now()) - act.startedAtMs) / 1000}s]`;
+		const lastLine = this.cachedLines[this.cachedLines.length - 1];
+		if (lastLine?.startsWith("[")) {
+			this.cachedLines[this.cachedLines.length - 1] = summary;
+		} else {
+			this.cachedLines.push(summary);
 		}
+		if (this.autoScroll) this.scrollOffset = Math.max(0, this.cachedLines.length - this.viewportHeight());
 	}
 
 	private viewportHeight(): number {
@@ -116,6 +131,8 @@ export class LiveConversationOverlay {
 	close(): void {
 		if (this.closed) return;
 		this.closed = true;
+		this.unsubscribe?.();
+		this.unsubscribe = undefined;
 		if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = undefined; }
 	}
 
