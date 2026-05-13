@@ -4,6 +4,7 @@ import { listRecentRuns } from "../extension/run-index.ts";
 import { readCrewAgents } from "../runtime/crew-agent-records.ts";
 import type { CrewAgentRecord } from "../runtime/crew-agent-runtime.ts";
 import { isDisplayActiveRun } from "../runtime/process-status.ts";
+import { listLiveAgents, type LiveAgentHandle } from "../runtime/live-agent-manager.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 import type { ManifestCache } from "../runtime/manifest-cache.ts";
 import { colorForStatus, iconForStatus, type RunStatus } from "./status-colors.ts";
@@ -75,7 +76,29 @@ function elapsed(iso: string | undefined, now = Date.now()): string | undefined 
 	return `${Math.floor(ms / 3_600_000)}h`;
 }
 
-function agentActivity(agent: CrewAgentRecord): string {
+function describeLiveActivity(handle: LiveAgentHandle): string {
+	const act = handle.activity;
+	if (act.activeTools.size > 0) {
+		const groups = new Map<string, number>();
+		for (const toolName of act.activeTools.values()) {
+			const label = TOOL_LABELS[toolName] ?? toolName;
+			groups.set(label, (groups.get(label) ?? 0) + 1);
+		}
+		const parts: string[] = [];
+		for (const [label, count] of groups) {
+			parts.push(count > 1 ? `${label} ${count} items` : label);
+		}
+		return parts.join(", ") + "…";
+	}
+	if (act.responseText?.trim()) {
+		const line = act.responseText.split("\n").find((l) => l.trim())?.trim() ?? "";
+		return line.length > 60 ? line.slice(0, 60) + "…" : line;
+	}
+	return "thinking…";
+}
+
+function agentActivity(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): string {
+	if (liveHandle && liveHandle.status === "running") return describeLiveActivity(liveHandle);
 	if (agent.progress?.currentTool) return `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`;
 	const recent = agent.progress?.recentOutput?.at(-1);
 	if (recent) return recent.replace(/\s+/g, " ").trim();
@@ -90,13 +113,31 @@ function agentActivity(agent: CrewAgentRecord): string {
 	return "done";
 }
 
-function agentStats(agent: CrewAgentRecord): string {
+function agentStats(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): string {
 	const parts: string[] = [];
-	if (agent.toolUses) parts.push(`${agent.toolUses} tools`);
-	if (agent.progress?.tokens) parts.push(`${agent.progress.tokens} tok`);
-	if (agent.progress?.turns) parts.push(`⟳${agent.progress.turns}`);
-	const age = elapsed(agent.completedAt ?? agent.startedAt);
-	if (age) parts.push(agent.completedAt ? age : `${age} ago`);
+	if (liveHandle) {
+		const act = liveHandle.activity;
+		// G3: Turn counter with limit
+		if (act.maxTurns != null) parts.push(`\u27F3${act.turnCount}\u2264${act.maxTurns}`);
+		else if (act.turnCount > 0) parts.push(`\u27F3${act.turnCount}`);
+		if (act.toolUses > 0) parts.push(`${act.toolUses} tools`);
+		// G4: Context % from live session
+		try {
+			const ctxPct = liveHandle.session.getSessionStats?.()?.contextUsage?.percent;
+			if (ctxPct != null) parts.push(`${Math.round(ctxPct)}% ctx`);
+		} catch { /* ignore */ }
+		// G6: Compaction indicator
+		if (act.compactionCount > 0) parts.push(`\u21BB${act.compactionCount}`);
+		// Duration
+		const ms = (act.completedAtMs ?? Date.now()) - act.startedAtMs;
+		if (ms > 0) parts.push(`${(ms / 1000).toFixed(1)}s`);
+	} else {
+		if (agent.toolUses) parts.push(`${agent.toolUses} tools`);
+		if (agent.progress?.tokens) parts.push(`${agent.progress.tokens} tok`);
+		if (agent.progress?.turns) parts.push(`\u27F3${agent.progress.turns}`);
+		const age = elapsed(agent.completedAt ?? agent.startedAt);
+		if (age) parts.push(agent.completedAt ? age : `${age} ago`);
+	}
 	return parts.join(" · ");
 }
 
@@ -172,13 +213,16 @@ export function buildCrewWidgetLines(cwd: string, frame = 0, maxLines = 8, provi
 		const progressPart = phaseLine ? `${phaseLine}` : `${completed}/${agents.length} done`;
 		lines.push(`├─ ${runGlyph} ${shortRunLabel(run)} · ${progressPart} · ${run.runId.slice(-8)}`);
 		const visibleAgents = activeAgents.slice(0, MAX_AGENTS_DISPLAY);
+		const liveForRun = listLiveAgents().filter((a) => a.runId === run.runId);
 		for (const [index, agent] of visibleAgents.entries()) {
 			const last = index === visibleAgents.length - 1 && activeAgents.length <= MAX_AGENTS_DISPLAY;
 			const branch = last ? "└─" : "├─";
 			const agentGlyph = iconForStatus(agent.status, { runningGlyph });
-			const stats = agentStats(agent);
-			lines.push(`│  ${branch} ${agentGlyph} ${agent.agent} · ${agent.role}`);
-			lines.push(`│     ⎿ ${agentActivity(agent)}${stats ? ` · ${stats}` : ""}`);
+			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
+			const stats = agentStats(agent, liveHandle);
+			const name = liveHandle?.agent ?? agent.agent;
+			lines.push(`│  ${branch} ${agentGlyph} ${name} · ${agent.role}`);
+			lines.push(`│     ⎿ ${agentActivity(agent, liveHandle)}${stats ? ` · ${stats}` : ""}`);
 		}
 		if (activeAgents.length > MAX_AGENTS_DISPLAY) lines.push(`│  └─ … +${activeAgents.length - MAX_AGENTS_DISPLAY} more agents`);
 		if (lines.length >= maxLines) break;
@@ -240,13 +284,14 @@ class CrewWidgetComponent implements WidgetComponent {
 	}
 
 	private buildSignature(runs: WidgetRun[]): string {
+		const liveSig = listLiveAgents().map((h) => `${h.agentId}:${h.status}:${h.activity.turnCount}:${h.activity.toolUses}:${[...h.activity.activeTools.values()].join(",")}:${h.activity.responseText.slice(-30)}`).join("|");
 		return runs
 			.map((entry) => entry.snapshot?.signature ?? `${entry.run.runId}:${entry.run.status}:${entry.run.updatedAt}:` + entry.agents.map((agent) => {
 				const recentOutput = agent.progress?.recentOutput.at(-1) ?? "";
 				const progress = [agent.progress?.currentTool ?? "", agent.progress?.toolCount ?? 0, agent.progress?.tokens ?? 0, agent.progress?.turns ?? 0, agent.progress?.lastActivityAt ?? "", recentOutput].join(":");
 				return `${agent.status}:${agent.startedAt}:${agent.completedAt ?? ""}:${agent.toolUses ?? 0}:${progress}`;
 			}).join(","))
-			.join("|");
+			.join("|") + `|live:${liveSig}`;
 	}
 
 	private colorize(lines: string[], width: number): string[] {

@@ -14,10 +14,33 @@ type LiveSessionHandle = {
 	};
 };
 
+/** Real-time activity state for a live-session agent. */
+export interface LiveAgentActivity {
+	/** Currently active tools (toolName → description). */
+	activeTools: Map<string, string>;
+	/** Total tool invocations. */
+	toolUses: number;
+	/** Current turn count. */
+	turnCount: number;
+	/** Effective max turns (undefined = unlimited). */
+	maxTurns?: number;
+	/** Latest assistant text snippet. */
+	responseText: string;
+	/** Number of context compactions survived. */
+	compactionCount: number;
+	/** Started-at timestamp (ms epoch). */
+	startedAtMs: number;
+	/** Completed-at timestamp (ms epoch), if finished. */
+	completedAtMs?: number;
+}
+
 export interface LiveAgentHandle {
 	agentId: string;
 	taskId: string;
 	runId: string;
+	role?: string;
+	agent?: string;
+	description?: string;
 	session: LiveSessionHandle;
 	createdAt: string;
 	updatedAt: string;
@@ -26,14 +49,31 @@ export interface LiveAgentHandle {
 	pendingFollowUps: string[];
 	/** Phase 7: Pending IRC messages for this agent. */
 	pendingMessages: IrcMessage[];
+	/** G1-G6: Real-time activity tracking (in-memory only). */
+	activity: LiveAgentActivity;
 }
 
 const liveAgents = new Map<string, LiveAgentHandle>();
 
-export function registerLiveAgent(input: Omit<LiveAgentHandle, "createdAt" | "updatedAt" | "pendingSteers" | "pendingFollowUps" | "pendingMessages">): LiveAgentHandle {
+export function registerLiveAgent(input: Omit<LiveAgentHandle, "createdAt" | "updatedAt" | "pendingSteers" | "pendingFollowUps" | "pendingMessages" | "activity">): LiveAgentHandle {
 	const now = new Date().toISOString();
 	const existing = liveAgents.get(input.agentId);
-	const handle: LiveAgentHandle = { ...input, createdAt: existing?.createdAt ?? now, updatedAt: now, pendingSteers: existing?.pendingSteers ?? [], pendingFollowUps: existing?.pendingFollowUps ?? [], pendingMessages: existing?.pendingMessages ?? [] };
+	const handle: LiveAgentHandle = {
+		...input,
+		createdAt: existing?.createdAt ?? now,
+		updatedAt: now,
+		pendingSteers: existing?.pendingSteers ?? [],
+		pendingFollowUps: existing?.pendingFollowUps ?? [],
+		pendingMessages: existing?.pendingMessages ?? [],
+		activity: existing?.activity ?? {
+			activeTools: new Map(),
+			toolUses: 0,
+			turnCount: 0,
+			responseText: "",
+			compactionCount: 0,
+			startedAtMs: Date.now(),
+		},
+	};
 	liveAgents.set(input.agentId, handle);
 	if (handle.pendingSteers.length && typeof handle.session.steer === "function") {
 		const pending = [...handle.pendingSteers];
@@ -156,6 +196,47 @@ export async function resumeLiveAgent(agentIdOrTaskId: string, prompt: string): 
 	handle.status = "completed";
 	handle.updatedAt = new Date().toISOString();
 	return handle;
+}
+
+/** G2: Track tool start for a live agent. */
+export function trackLiveAgentToolStart(agentIdOrTaskId: string, toolName: string): void {
+	const handle = getLiveAgent(agentIdOrTaskId);
+	if (!handle) return;
+	handle.activity.activeTools.set(toolName, toolName);
+	handle.activity.toolUses++;
+	handle.updatedAt = new Date().toISOString();
+}
+
+/** G2: Track tool end for a live agent. */
+export function trackLiveAgentToolEnd(agentIdOrTaskId: string, toolName: string): void {
+	const handle = getLiveAgent(agentIdOrTaskId);
+	if (!handle) return;
+	handle.activity.activeTools.delete(toolName);
+}
+
+/** G3/G6: Track turn end and compaction. */
+export function trackLiveAgentTurnEnd(agentIdOrTaskId: string, compaction = false): void {
+	const handle = getLiveAgent(agentIdOrTaskId);
+	if (!handle) return;
+	handle.activity.turnCount++;
+	if (compaction) handle.activity.compactionCount++;
+	handle.activity.activeTools.clear();
+	handle.updatedAt = new Date().toISOString();
+}
+
+/** G2: Track assistant response text. */
+export function trackLiveAgentResponseText(agentIdOrTaskId: string, text: string): void {
+	const handle = getLiveAgent(agentIdOrTaskId);
+	if (!handle) return;
+	handle.activity.responseText = text.slice(-200);
+}
+
+/** Mark live agent completed with timestamp. */
+export function markLiveAgentCompleted(agentIdOrTaskId: string): void {
+	const handle = getLiveAgent(agentIdOrTaskId);
+	if (!handle) return;
+	handle.activity.completedAtMs = Date.now();
+	handle.activity.activeTools.clear();
 }
 
 export function clearLiveAgentsForTest(): void {

@@ -6,7 +6,7 @@ import type { TeamRunManifest, TeamTaskState, UsageState } from "../state/types.
 import { buildMemoryBlock } from "./agent-memory.ts";
 import { trackTaskUsage } from "./usage-tracker.ts";
 import { createStreamingOutput, type StreamingOutputHandle } from "./streaming-output.ts";
-import { registerLiveAgent, disposeLiveAgentSession, terminateLiveAgent, updateLiveAgentStatus } from "./live-agent-manager.ts";
+import { registerLiveAgent, disposeLiveAgentSession, terminateLiveAgent, updateLiveAgentStatus, trackLiveAgentToolStart, trackLiveAgentToolEnd, trackLiveAgentTurnEnd, trackLiveAgentResponseText, markLiveAgentCompleted } from "./live-agent-manager.ts";
 import { applyLiveAgentControlRequest, applyLiveAgentControlRequests, type LiveAgentControlCursor } from "./live-agent-control.ts";
 import { subscribeLiveControlRealtime } from "./live-control-realtime.ts";
 import { eventToSidechainType, sidechainOutputPath, writeSidechainEntry } from "./sidechain-output.ts";
@@ -317,7 +317,7 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 		const inherited = input.runtimeConfig?.inheritContext === true && input.parentContext ? ` with inherited context: ${input.parentContext}` : "";
 		const event = { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: `Mock live-session success for ${input.agent.name}${inherited}` }] } };
 		const mockSession = { steer: async () => {}, prompt: async () => {}, abort: async () => {} };
-		registerLiveAgent({ agentId, runId: input.manifest.runId, taskId: input.task.id, session: mockSession, status: "running" });
+		registerLiveAgent({ agentId, runId: input.manifest.runId, taskId: input.task.id, role: input.task.role, agent: input.agent?.name ?? "mock", description: "mock", session: mockSession, status: "running" });
 		appendTranscript(input.transcriptPath, event);
 		const sidechainPath = sidechainOutputPath(input.manifest.stateRoot, input.task.id);
 		writeSidechainEntry(sidechainPath, { agentId, type: "user", message: { role: "user", content: input.prompt }, cwd: input.task.cwd });
@@ -326,6 +326,7 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 		const stdout = `Mock live-session success for ${input.agent.name}${inherited}`;
 		if (isCurrent()) input.onOutput?.(stdout);
 		updateLiveAgentStatus(agentId, "completed");
+		markLiveAgentCompleted(agentId);
 		return { available: true, exitCode: 0, stdout, stderr: "", jsonEvents: 1 };
 	}
 	const availability = await isLiveSessionRuntimeAvailable();
@@ -411,7 +412,7 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			}
 		}
 
-		registerLiveAgent({ agentId, runId: input.manifest.runId, taskId: input.task.id, session, status: "running" });
+		registerLiveAgent({ agentId, runId: input.manifest.runId, taskId: input.task.id, role: input.task.role, agent: input.agent?.name ?? "unknown", description: input.task.adaptive?.task ?? input.step?.task ?? "", session, status: "running" });
 		streamOut = createStreamingOutput(input.manifest, input.task.id);
 		let controlCursor: LiveAgentControlCursor = { offset: 0 };
 		const seenControlRequestIds = new Set<string>();
@@ -449,6 +450,7 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 				const obj = asRecord(event);
 				if (obj?.type === "turn_end") {
 					turnCount += 1;
+					trackLiveAgentTurnEnd(agentId);
 					if (maxTurns !== undefined && !softLimitReached && turnCount >= maxTurns) {
 						softLimitReached = true;
 						void session?.steer?.("You have reached your turn limit. Wrap up immediately — provide your final answer now.");
@@ -472,7 +474,17 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 				if (text.trim()) {
 					stdout += `${text}\n`;
 					streamOut?.write(text + "\n");
+					trackLiveAgentResponseText(agentId, text);
 					input.onOutput?.(text);
+				}
+				// G2: Track tool start/end for activity display
+				if (obj?.type === "tool_use" || obj?.type === "tool_execution_start") {
+					const toolName = (obj as any).tool?.name ?? (obj as any).name ?? "unknown";
+					trackLiveAgentToolStart(agentId, toolName);
+				}
+				if (obj?.type === "tool_result" || obj?.type === "tool_execution_end") {
+					const toolName = (obj as any).tool?.name ?? (obj as any).name ?? "unknown";
+					trackLiveAgentToolEnd(agentId, toolName);
 				}
 				// Phase 1: collect events for yield detection
 				if (event && typeof event === "object" && !Array.isArray(event)) {
@@ -596,6 +608,7 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 
 		const usage = usageFromStats(typeof session.getStats === "function" ? session.getStats() : session.stats);
 		updateLiveAgentStatus(agentId, "completed");
+		markLiveAgentCompleted(agentId);
 		return { available: true, exitCode: 0, stdout: stdout.trim(), stderr: created.modelFallbackMessage ?? "", jsonEvents, usage, yieldResult };
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
