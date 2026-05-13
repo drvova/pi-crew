@@ -4,7 +4,6 @@ import type { TeamRunManifest } from "../state/types.ts";
 
 export interface StreamingOutputHandle {
 	write(text: string): void;
-	flush(): void;
 	close(): void;
 	getPath(): string;
 }
@@ -13,35 +12,25 @@ export function createStreamingOutput(manifest: TeamRunManifest, taskId: string)
 	const outputDir = path.join(manifest.artifactsRoot, "streaming");
 	fs.mkdirSync(outputDir, { recursive: true });
 	const outputPath = path.join(outputDir, `${taskId}.md`);
-	const stream = fs.createWriteStream(outputPath, { flags: "a", encoding: "utf-8" });
 	let buffer = "";
 	let closed = false;
-
-	const flush = (): void => {
-		if (closed || !buffer) return;
-		try {
-			stream.write(buffer);
-			buffer = "";
-		} catch {
-			/* ignore write errors after close */
-		}
-	};
-
-	const timer = setInterval(flush, 500);
 
 	return {
 		write(text: string) {
 			if (closed) return;
 			buffer += text;
-			if (buffer.length > 4096) flush();
+			if (buffer.length > 4096) {
+				fs.appendFileSync(outputPath, buffer, "utf-8");
+				buffer = "";
+			}
 		},
-		flush,
 		close() {
 			if (closed) return;
 			closed = true;
-			clearInterval(timer);
-			flush();
-			try { stream.end(); } catch { /* ignore */ }
+			if (buffer) {
+				fs.appendFileSync(outputPath, buffer, "utf-8");
+				buffer = "";
+			}
 		},
 		getPath: () => outputPath,
 	};

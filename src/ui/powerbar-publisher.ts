@@ -6,6 +6,7 @@ import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
 import type { TeamTaskState, TeamRunManifest } from "../state/types.ts";
 import { aggregateUsage } from "../state/usage.ts";
 import { isDisplayActiveRun } from "../runtime/process-status.ts";
+import { listLiveAgents } from "../runtime/live-agent-manager.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import type { ManifestCache } from "../runtime/manifest-cache.ts";
 import type { RunSnapshotCache, RunUiSnapshot } from "./snapshot-types.ts";
@@ -104,7 +105,8 @@ export function updatePiCrewPowerbar(events: EventBus, cwd: string, config?: Cre
 	const tokenTotal = hasUsage ? (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0) : snapshotTokens;
 	const model = config?.showModel === false ? undefined : agents.find((agent) => agent.model)?.model?.split("/").at(-1);
 	const tokenText = config?.showTokens === false || !tokenTotal ? undefined : compactTokens(tokenTotal);
-	const activeText = `crew ${running}a/${waiting}w${notificationBadge(notificationCount)}`;
+	const liveRunning = listLiveAgents().filter((a) => a.status === "running").length;
+	const activeText = `crew ${running}a/${waiting}w${liveRunning > 0 ? `/${liveRunning}live` : ""}${notificationBadge(notificationCount)}`;
 	const activeSuffix = [model, tokenText].filter(Boolean).join(" · ") || undefined;
 	const progressSuffix = `${completed}/${total}${tokenText ? ` · ${tokenText}` : ""}`;
 	const activeKey = `${activeText}|${activeSuffix ?? ""}|${running}`;

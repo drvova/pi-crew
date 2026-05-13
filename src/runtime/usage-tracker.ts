@@ -54,6 +54,11 @@ export function clearAllTrackedTaskUsage(): void {
 	taskUsageMap.clear();
 }
 
+// Aliases for public API
+export const getTaskUsage = getTrackedTaskUsage;
+export const getRunUsage = getTrackedTaskUsage;
+export const clearAllTaskUsage = clearAllTrackedTaskUsage;
+
 export function aggregateTrackedUsageForRun(manifest: TeamRunManifest, tasks: TeamTaskState[]): UsageState {
 	const total = emptyLifetimeUsage();
 	for (const task of tasks) {

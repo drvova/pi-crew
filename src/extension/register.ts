@@ -12,6 +12,7 @@ import { registerPiCrewRpc, type PiCrewRpcHandle } from "./cross-extension-rpc.t
 import { stopCrewWidget, updateCrewWidget, type CrewWidgetState } from "../ui/crew-widget.ts";
 import { clearPiCrewPowerbar, disposePowerbarCoalescer, registerPiCrewPowerbarSegments, requestPowerbarUpdate, resetPowerbarDedupState, updatePiCrewPowerbar } from "../ui/powerbar-publisher.ts";
 import { loadRunManifestById, updateRunStatus } from "../state/state-store.ts";
+import { appendEvent } from "../state/event-log.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 import { terminateActiveChildPiProcesses } from "../subagents/spawn.ts";
 import { SubagentManager } from "../subagents/manager.ts";
@@ -28,6 +29,7 @@ import { registerCompactionGuard } from "./registration/compaction-guard.ts";
 import { requestRender, setExtensionWidget, setWorkingIndicator, showCustom } from "../ui/pi-ui-compat.ts";
 import { createRunSnapshotCache } from "../ui/run-snapshot-cache.ts";
 import { RenderScheduler } from "../ui/render-scheduler.ts";
+import { CrewScheduler } from "../runtime/scheduler.ts";
 import { NotificationRouter, type NotificationDescriptor } from "./notification-router.ts";
 import { createJsonlSink, type NotificationSink } from "./notification-sink.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
@@ -241,6 +243,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	const foregroundControllers = new Map<string | symbol, AbortController>();
 	let liveSidebarRunId: string | undefined;
 	let renderScheduler: RenderScheduler | undefined;
+	let crewScheduler: CrewScheduler | undefined;
 	let preloadTimer: ReturnType<typeof setTimeout> | undefined;
 	const stopSessionBoundSubagents = (): void => {
 		for (const controller of foregroundControllers.values()) controller.abort();
@@ -357,6 +360,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		cleanedUp = true;
 		if (preloadTimer) { clearTimeout(preloadTimer); preloadTimer = undefined; }
 		stopSessionBoundSubagents();
+		crewScheduler?.stop();
 		stopAsyncRunNotifier(notifierState);
 
 		// P0: Purge all stale active-run-index entries on session cleanup.
@@ -469,7 +473,28 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 
 
 		const loadedConfig = loadConfig(ctx.cwd);
-		applyCrewSettingsToConfig(loadedConfig.config, loadCrewSettings(ctx.cwd));
+		const crewSettings = loadCrewSettings(ctx.cwd);
+		applyCrewSettingsToConfig(loadedConfig.config, crewSettings);
+
+		// Start scheduler with event-based executor
+		crewScheduler = new CrewScheduler();
+		crewScheduler.start({
+			emit: (event) => {
+				if (cleanedUp) return;
+			},
+			executor: (job) => {
+				return `scheduled-${job.id}-${Date.now()}`;
+			},
+			finalizer: (_jobId, _agentId) => {
+				// no-op for now; future: launch team run
+			},
+		});
+		// Load scheduled jobs from settings if present
+		if (Array.isArray((crewSettings as any).scheduledJobs)) {
+			for (const job of (crewSettings as any).scheduledJobs) {
+				try { crewScheduler.add(job); } catch { /* skip invalid */ }
+			}
+		}
 		autoRecoveryLast.clear();
 		configureNotifications(ctx);
 		configureObservability(ctx);

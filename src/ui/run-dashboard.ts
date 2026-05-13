@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import type { TeamRunManifest, TeamTaskState, UsageState } from "../state/types.ts";
 import { readCrewAgents } from "../runtime/crew-agent-records.ts";
-import { getLiveAgentContextPercent } from "../runtime/live-agent-manager.ts";
+import { getLiveAgentContextPercent, listLiveAgents } from "../runtime/live-agent-manager.ts";
 import type { CrewAgentRecord } from "../runtime/crew-agent-runtime.ts";
 import { isDisplayActiveRun, isLikelyOrphanedActiveRun } from "../runtime/process-status.ts";
 import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
@@ -416,7 +416,7 @@ export class RunDashboard implements DashboardComponent {
 						usage: aggregateUsage(selectedTasks),
 						contextPercent,
 						contextWindow,
-						badges: [`team ${selectedDisplayRun.team}`, `workflow ${selectedDisplayRun.workflow ?? "none"}`, `${selectedDisplayRun.artifacts.length} artifacts`, selectedDisplayRun.workspaceMode],
+						badges: [`team ${selectedDisplayRun.team}`, `workflow ${selectedDisplayRun.workflow ?? "none"}`, `${selectedDisplayRun.artifacts.length} artifacts`, selectedDisplayRun.workspaceMode, (() => { const live = listLiveAgents().filter((a) => a.runId === selectedDisplayRun.runId && a.status === "running"); return live.length > 0 ? `● ${live.length} live` : undefined; })()].filter((s): s is string => Boolean(s)),
 					}, this.theme);
 					lines.push(border("├", "┤"));
 					for (const footerLine of footer.render(innerWidth - 1)) {
