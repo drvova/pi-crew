@@ -40,6 +40,8 @@ export interface LiveAgentHandle {
 	agentId: string;
 	taskId: string;
 	runId: string;
+	/** Workspace where this agent was spawned — used for session-scoped visibility. */
+	workspaceId: string;
 	role?: string;
 	agent?: string;
 	description?: string;
@@ -59,7 +61,22 @@ export interface LiveAgentHandle {
 
 const liveAgents = new Map<string, LiveAgentHandle>();
 
-export function registerLiveAgent(input: Omit<LiveAgentHandle, "createdAt" | "updatedAt" | "pendingSteers" | "pendingFollowUps" | "pendingMessages" | "activity">): LiveAgentHandle {
+/**
+ * List all live agents for a specific workspace.
+ * Only agents belonging to the given workspaceId are returned.
+ */
+export function listLiveAgentsByWorkspace(workspaceId: string): LiveAgentHandle[] {
+	return listLiveAgents().filter((a) => a.workspaceId === workspaceId);
+}
+
+/**
+ * List only active agents (running/queued/waiting) for a specific workspace.
+ */
+export function listActiveLiveAgentsByWorkspace(workspaceId: string): LiveAgentHandle[] {
+	return listActiveLiveAgents().filter((a) => a.workspaceId === workspaceId);
+}
+
+export function registerLiveAgent(input: Omit<LiveAgentHandle, "createdAt" | "updatedAt" | "pendingSteers" | "pendingFollowUps" | "pendingMessages" | "activity"> & { workspaceId: string }): LiveAgentHandle {
 	const now = new Date().toISOString();
 	const existing = liveAgents.get(input.agentId);
 	const handle: LiveAgentHandle = {

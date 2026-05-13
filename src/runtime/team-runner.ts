@@ -56,6 +56,8 @@ export interface ExecuteTeamRunInput {
 	skillOverride?: string[] | false;
 	/** Optional callback for JSON events from child Pi. Used for overflow recovery tracking. */
 	onJsonEvent?: (taskId: string, runId: string, event: unknown) => void;
+	/** Workspace where this run was initiated — used for session-scoped live-agent visibility. */
+	workspaceId: string;
 }
 
 function findStep(workflow: WorkflowConfig, task: TeamTaskState): WorkflowStep {
@@ -751,7 +753,7 @@ async function executeTeamRunCore(
 				const agent = findAgent(input.agents, task);
 				const teamRole = input.team.roles.find((role) => role.name === task.role);
 				const perTaskRuntime = resolveTaskRuntimeKind(runtimeKind, task.role, input.runtimeConfig?.isolationPolicy);
-				const baseInput = { manifest, tasks, task, step, agent, signal: input.signal, executeWorkers: input.executeWorkers, runtimeKind: runtimeKind, taskRuntimeOverride: perTaskRuntime !== runtimeKind ? perTaskRuntime : undefined, runtimeConfig: input.runtimeConfig, parentContext: input.parentContext, parentModel: input.parentModel, modelRegistry: input.modelRegistry, modelOverride: input.modelOverride, teamRoleModel: teamRole?.model, teamRoleSkills: teamRole?.skills, skillOverride: input.skillOverride, limits: input.limits, onJsonEvent: input.onJsonEvent };
+				const baseInput = { manifest, tasks, task, step, agent, signal: input.signal, executeWorkers: input.executeWorkers, runtimeKind: runtimeKind, taskRuntimeOverride: perTaskRuntime !== runtimeKind ? perTaskRuntime : undefined, runtimeConfig: input.runtimeConfig, parentContext: input.parentContext, parentModel: input.parentModel, modelRegistry: input.modelRegistry, modelOverride: input.modelOverride, teamRoleModel: teamRole?.model, teamRoleSkills: teamRole?.skills, skillOverride: input.skillOverride, limits: input.limits, onJsonEvent: input.onJsonEvent, workspaceId: input.workspaceId };
 				if (input.reliability?.autoRetry !== true) return withCorrelation(childCorrelation(manifest.runId, task.id), () => runTeamTask(baseInput));
 				let lastFailed: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined;
 				let lastAttemptId: string | undefined;

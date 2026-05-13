@@ -65,6 +65,8 @@ export interface TaskRunnerInput {
 	skillBlock?: string;
 	skillNames?: string[];
 	skillPaths?: string[];
+	/** Workspace where this task run was initiated — used for session-scoped live-agent visibility. */
+	workspaceId: string;
 	/** Optional callback for JSON events from child Pi. Used for overflow recovery tracking. */
 	onJsonEvent?: (taskId: string, runId: string, event: unknown) => void;
 }
@@ -295,7 +297,7 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 	} else if (runtimeKind === "live-session") {
 		// LAZY: live-executor is only needed for live-session runtime branches.
 		const { runLiveTask } = await import("./task-runner/live-executor.ts");
-		const live = await runLiveTask({ manifest, tasks, task, step: input.step, agent: input.agent, prompt, signal: input.signal, runtimeConfig: input.runtimeConfig, parentContext: input.parentContext, parentModel: input.parentModel, modelRegistry: input.modelRegistry, modelOverride: input.modelOverride, teamRoleModel: input.teamRoleModel });
+		const live = await runLiveTask({ manifest, tasks, task, step: input.step, agent: input.agent, prompt, signal: input.signal, runtimeConfig: input.runtimeConfig, parentContext: input.parentContext, parentModel: input.parentModel, modelRegistry: input.modelRegistry, modelOverride: input.modelOverride, teamRoleModel: input.teamRoleModel, workspaceId: input.workspaceId });
 		task = live.task;
 		tasks = live.tasks;
 		startupEvidence = live.startupEvidence;

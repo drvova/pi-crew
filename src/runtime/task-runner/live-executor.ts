@@ -28,6 +28,10 @@ export interface RunLiveTaskInput {
 	modelOverride?: string;
 	teamRoleModel?: string;
 	isCurrent?: () => boolean;
+	/** Workspace where this task run was initiated — used for session-scoped live-agent visibility. */
+	workspaceId: string;
+	/** Phase 2: Output schema for validating yield data. */
+	outputSchema?: unknown;
 }
 
 export interface RunLiveTaskOutput {
@@ -98,6 +102,7 @@ export async function runLiveTask(input: RunLiveTaskInput): Promise<RunLiveTaskO
 		modelOverride: input.modelOverride,
 		teamRoleModel: input.teamRoleModel,
 		isCurrent,
+		workspaceId: input.workspaceId,
 		// Phase 2: Pass output schema for yield validation
 		outputSchema: undefined,
 		onOutput: (text) => {

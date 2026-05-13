@@ -385,21 +385,6 @@ export function resolveGitHubUrl(parsed: Parsed, scheme: "issue" | "pr", cwd: st
 
 		if (parsed.mode === "list") {
 			try {
-				const files = ghJson<Array<{ filename: string; additions: number; deletions: number; status: string }>>(
-					cwd,
-					["pr", "list-files", "--repo", repo, "--limit", "100", "--json", "filename,additions,deletions,status"],
-				).then ? (() => {
-					// ghJson is sync in our implementation
-					const raw = execSync(`gh pr list-files --repo ${repo} --limit 100 --json filename,additions,deletions,status`, {
-						cwd,
-						encoding: "utf-8",
-						timeout: 30_000,
-						stdio: ["pipe", "pipe", "pipe"],
-					});
-					return JSON.parse(raw);
-				})() : [];
-
-				// Actually let's just do it properly
 				const raw = execSync(
 					`gh pr view ${parsed.number} --repo ${repo} --json files --jq '.files[] | "\(.filename) +\(.additions) -\(.deletions) [\(.status)]"'`,
 					{ cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] }

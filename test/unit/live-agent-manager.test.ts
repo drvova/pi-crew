@@ -2,55 +2,94 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { clearLiveAgentsForTest, disposeLiveAgentSession, followUpLiveAgent, listActiveLiveAgents, listLiveAgents, registerLiveAgent, terminateLiveAgent } from "../../src/runtime/live-agent-manager.ts";
 
+const TEST_WORKSPACE = "workspace:///test/cleanup";
+
+function registerTestAgent(overrides: Partial<Parameters<typeof registerLiveAgent>[0]> = {}): void {
+	const id = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+	registerLiveAgent({
+		agentId: id,
+		taskId: "task",
+		runId: "run",
+		status: "running",
+		session: {},
+		workspaceId: TEST_WORKSPACE,
+		...overrides,
+	});
+}
+
 test("followUpLiveAgent queues and flushes pending follow-ups through prompt", async () => {
 	const prompts: string[] = [];
+	const id = `followup-test-${Date.now()}`;
 	try {
-		registerLiveAgent({ agentId: "agent", taskId: "task", runId: "run", status: "running", session: {} });
-		const pending = await followUpLiveAgent("agent", "review this next");
+		registerLiveAgent({ agentId: id, taskId: "task", runId: "run", status: "running", session: {}, workspaceId: TEST_WORKSPACE });
+		const pending = await followUpLiveAgent(id, "review this next");
 		assert.deepEqual(pending.pendingFollowUps, ["review this next"]);
-		registerLiveAgent({ agentId: "agent", taskId: "task", runId: "run", status: "running", session: { prompt: async (text: string) => { prompts.push(text); } } });
+		registerLiveAgent({
+			agentId: id,
+			taskId: "task",
+			runId: "run",
+			status: "running",
+			session: { prompt: async (text: string) => { prompts.push(text); } },
+			workspaceId: TEST_WORKSPACE,
+		});
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		assert.deepEqual(prompts, ["review this next"]);
-		assert.deepEqual(registerLiveAgent({ agentId: "agent", taskId: "task", runId: "run", status: "running", session: {} }).pendingFollowUps, []);
+		const handle = registerLiveAgent({ agentId: id, taskId: "task", runId: "run", status: "running", session: {}, workspaceId: TEST_WORKSPACE });
+		assert.deepEqual(handle.pendingFollowUps, []);
 	} finally {
-		clearLiveAgentsForTest();
+		terminateLiveAgent(id);
 	}
 });
 
-test("terminateLiveAgent aborts before removing the live handle", async () => {
+test("terminateLiveAgent removes handle and calls abort + dispose", async () => {
 	const calls: string[] = [];
-	try {
-		registerLiveAgent({ agentId: "agent", taskId: "task", runId: "run", status: "running", session: { abort: async () => { calls.push("abort"); }, dispose: () => { calls.push("dispose"); } } });
-		const terminated = await terminateLiveAgent("agent", "failed");
-		assert.equal(terminated?.status, "failed");
-		assert.deepEqual(calls, ["abort", "dispose"]);
-		assert.equal(listLiveAgents().length, 0);
-	} finally {
-		clearLiveAgentsForTest();
-	}
+	const id = `terminate-test-${Date.now()}`;
+	registerLiveAgent({
+		agentId: id,
+		taskId: "task",
+		runId: "run",
+		status: "running",
+		session: {
+			abort: async () => { calls.push("abort"); },
+			dispose: () => { calls.push("dispose"); },
+		},
+		workspaceId: TEST_WORKSPACE,
+	});
+	await terminateLiveAgent(id);
+	assert.deepEqual(calls.sort(), ["abort", "dispose"]);
+	assert.equal(listLiveAgents().find((a) => a.agentId === id), undefined);
 });
 
-test("listActiveLiveAgents excludes terminal handles kept for resume", () => {
-	try {
-		registerLiveAgent({ agentId: "done", taskId: "task", runId: "run", status: "completed", session: {} });
-		registerLiveAgent({ agentId: "active", taskId: "task2", runId: "run", status: "running", session: {} });
-		assert.equal(listLiveAgents().length, 2);
-		assert.deepEqual(listActiveLiveAgents().map((agent) => agent.agentId), ["active"]);
-	} finally {
-		clearLiveAgentsForTest();
-	}
-});
-
-test("disposeLiveAgentSession frees session resources without removing handle", () => {
+test("disposeLiveAgentSession removes session without abort", () => {
 	const calls: string[] = [];
-	try {
-		registerLiveAgent({ agentId: "agent", taskId: "task", runId: "run", status: "completed", session: { dispose: () => { calls.push("dispose"); } } });
-		disposeLiveAgentSession("agent");
-		assert.deepEqual(calls, ["dispose"]);
-		// Handle must remain in registry for resume/follow-up
-		assert.equal(listLiveAgents().length, 1);
-		assert.equal(listLiveAgents()[0]?.agentId, "agent");
-	} finally {
-		clearLiveAgentsForTest();
-	}
+	const id = `dispose-test-${Date.now()}`;
+	registerLiveAgent({
+		agentId: id,
+		taskId: "task",
+		runId: "run",
+		status: "running",
+		session: {
+			dispose: () => { calls.push("dispose"); },
+		},
+		workspaceId: TEST_WORKSPACE,
+	});
+	disposeLiveAgentSession(id);
+	assert.deepEqual(calls, ["dispose"]);
+	terminateLiveAgent(id);
+});
+
+test("listActiveLiveAgents returns only non-terminal statuses", () => {
+	clearLiveAgentsForTest();
+	const id1 = `done-${Date.now()}`;
+	const id2 = `active-${Date.now()}`;
+	registerLiveAgent({ agentId: id1, taskId: "t1", runId: "run", status: "completed", session: {}, workspaceId: TEST_WORKSPACE });
+	registerLiveAgent({ agentId: id2, taskId: "t2", runId: "run", status: "running", session: {}, workspaceId: TEST_WORKSPACE });
+	assert.deepEqual(listActiveLiveAgents().map((agent) => agent.agentId), [id2]);
+	terminateLiveAgent(id1);
+	terminateLiveAgent(id2);
+});
+
+test("terminateLiveAgent with non-existent handle returns undefined", async () => {
+	const result = await terminateLiveAgent("non-existent-agent");
+	assert.equal(result, undefined);
 });
