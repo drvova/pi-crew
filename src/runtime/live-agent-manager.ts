@@ -7,6 +7,11 @@ type LiveSessionHandle = {
 	prompt?: (text: string, options?: Record<string, unknown>) => Promise<void>;
 	abort?: () => Promise<void> | void;
 	dispose?: () => void;
+	/** Upstream session stats (input/output/cacheWrite tokens, context %). */
+	getSessionStats?: () => {
+		tokens?: { input?: number; output?: number; cacheWrite?: number; cacheRead?: number };
+		contextUsage?: { percent?: number | null; window?: number };
+	};
 };
 
 export interface LiveAgentHandle {
@@ -100,6 +105,16 @@ export function listLiveAgents(): LiveAgentHandle[] {
 
 export function listActiveLiveAgents(): LiveAgentHandle[] {
 	return listLiveAgents().filter((agent) => agent.status === "running" || agent.status === "queued" || agent.status === "waiting");
+}
+
+export function getLiveAgentContextPercent(agentIdOrTaskId: string): number | null {
+	const handle = getLiveAgent(agentIdOrTaskId);
+	if (!handle || handle.status !== "running") return null;
+	try {
+		return handle.session.getSessionStats?.().contextUsage?.percent ?? null;
+	} catch {
+		return null;
+	}
 }
 
 export async function steerLiveAgent(agentIdOrTaskId: string, message: string): Promise<LiveAgentHandle> {

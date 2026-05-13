@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import type { TeamRunManifest, TeamTaskState, UsageState } from "../state/types.ts";
 import { readCrewAgents } from "../runtime/crew-agent-records.ts";
+import { getLiveAgentContextPercent } from "../runtime/live-agent-manager.ts";
 import type { CrewAgentRecord } from "../runtime/crew-agent-runtime.ts";
 import { isDisplayActiveRun, isLikelyOrphanedActiveRun } from "../runtime/process-status.ts";
 import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
@@ -395,11 +396,26 @@ export class RunDashboard implements DashboardComponent {
 						lines.push(`│ ${pad(truncate(detail, innerWidth - 1), innerWidth - 1)}│`);
 					}
 					const selectedTasks = selectedSnapshot?.tasks ?? readRunTasks(selectedDisplayRun, this.options.snapshotCache);
+					// Live-session context %: pick the first running agent with stats
+					let contextPercent: number | undefined;
+					let contextWindow: number | undefined;
+					for (const agent of selectedAgents) {
+						if (agent.status === "running" && agent.runtime === "live-session") {
+							const pct = getLiveAgentContextPercent(agent.taskId);
+							if (pct != null) {
+								contextPercent = pct;
+								// window size isn't exposed by getSessionStats; leave undefined
+								break;
+							}
+						}
+					}
 					const footer = new CrewFooter({
 						pwd: selectedDisplayRun.cwd,
 						runId: selectedDisplayRun.runId,
 						status: isLikelyOrphanedActiveRun(selectedDisplayRun, selectedAgents) ? "stale" : selectedDisplayRun.status,
 						usage: aggregateUsage(selectedTasks),
+						contextPercent,
+						contextWindow,
 						badges: [`team ${selectedDisplayRun.team}`, `workflow ${selectedDisplayRun.workflow ?? "none"}`, `${selectedDisplayRun.artifacts.length} artifacts`, selectedDisplayRun.workspaceMode],
 					}, this.theme);
 					lines.push(border("├", "┤"));
