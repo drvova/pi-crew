@@ -296,6 +296,15 @@ export function flushEventLogBuffer(): void {
 	for (const eventsPath of [...bufferedQueues.keys()]) flushOneEventLogBuffer(eventsPath);
 }
 
+/**
+ * 2.2 caller-migration helper — schedule a buffered append but do not return
+ * the resulting Promise. Use only for events whose return value is ignored
+ * (high-frequency `task.progress`). Errors are logged via logInternalError.
+ */
+export function appendEventFireAndForget(eventsPath: string, event: AppendTeamEvent, bufferMs = DEFAULT_BUFFER_MS): void {
+	appendEventBuffered(eventsPath, event, bufferMs).catch((error) => logInternalError("event-log.fire-and-forget", error, eventsPath));
+}
+
 // Auto-flush on process exit so buffered events do not silently leak.
 process.on("exit", () => flushEventLogBuffer());
 process.on("SIGTERM", () => flushEventLogBuffer());

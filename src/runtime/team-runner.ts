@@ -6,7 +6,7 @@ import type { CrewRuntimeKind } from "./crew-agent-runtime.ts";
 import { resolveTaskRuntimeKind } from "./runtime-policy.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
 import { executeHook, appendHookEvent } from "../hooks/registry.ts";
-import { appendEvent } from "../state/event-log.ts";
+import { appendEvent, appendEventFireAndForget } from "../state/event-log.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
 import type { ArtifactDescriptor, PolicyDecision, TeamRunManifest, TaskAttemptState, TeamTaskState } from "../state/types.ts";
 import { loadRunManifestById, saveRunManifest, saveRunManifestAsync, saveRunTasksAsync, updateRunStatus } from "../state/state-store.ts";
@@ -451,7 +451,8 @@ async function executeTeamRunCore(
 			return { manifest, tasks };
 		}
 
-		appendEvent(manifest.eventsPath, { type: "task.progress", runId: manifest.runId, message: `Starting ready batch with ${readyBatch.length} task(s).`, data: { taskIds: readyBatch.map((task) => task.id), readyCount: snapshot.ready.length, blockedCount: snapshot.blocked.length, runningCount: snapshot.running.length, doneCount: snapshot.done.length, selectedCount: readyBatch.length, maxConcurrent: concurrency.maxConcurrent, defaultConcurrency: concurrency.defaultConcurrency, concurrencyReason: approvalPending ? `${concurrency.reason};plan-approval-read-only` : concurrency.reason } });
+		// 2.2 caller migration: batch progress is high-frequency informational.
+		appendEventFireAndForget(manifest.eventsPath, { type: "task.progress", runId: manifest.runId, message: `Starting ready batch with ${readyBatch.length} task(s).`, data: { taskIds: readyBatch.map((task) => task.id), readyCount: snapshot.ready.length, blockedCount: snapshot.blocked.length, runningCount: snapshot.running.length, doneCount: snapshot.done.length, selectedCount: readyBatch.length, maxConcurrent: concurrency.maxConcurrent, defaultConcurrency: concurrency.defaultConcurrency, concurrencyReason: approvalPending ? `${concurrency.reason};plan-approval-read-only` : concurrency.reason } });
 		// Execute before_task_start hooks for the batch
 		for (const task of readyBatch) {
 			const taskReport = await executeHook("before_task_start", { runId: manifest.runId, taskId: task.id, cwd: manifest.cwd });
