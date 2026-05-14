@@ -33,7 +33,7 @@ import { RenderScheduler } from "../ui/render-scheduler.ts";
 import { CrewScheduler } from "../runtime/scheduler.ts";
 import { NotificationRouter, type NotificationDescriptor } from "./notification-router.ts";
 import { createJsonlSink, type NotificationSink } from "./notification-sink.ts";
-import { projectCrewRoot } from "../utils/paths.ts";
+import { clearProjectRootCache, projectCrewRoot } from "../utils/paths.ts";
 import { summarizeHeartbeats } from "../ui/heartbeat-aggregator.ts";
 import { createMetricRegistry, type MetricRegistry } from "../observability/metric-registry.ts";
 import { wireEventToMetrics, type EventToMetricSubscription } from "../observability/event-to-metric.ts";
@@ -393,6 +393,8 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		overflowTracker = undefined;
 		manifestCache.dispose();
 		runSnapshotCache.dispose?.();
+		// 2.10: drop cached findRepoRoot results when the extension reloads.
+		clearProjectRootCache();
 		renderScheduler?.dispose();
 		renderScheduler = undefined;
 		autoRecoveryLast.clear();
