@@ -12,6 +12,7 @@ import { probeLiveSessionRuntime } from "../../subagents/live/session-runtime.ts
 import { currentCrewRole, permissionForRole } from "../../runtime/role-permission.ts";
 import { touchWorkerHeartbeat } from "../../runtime/worker-heartbeat.ts";
 import { agentOutputPath, readCrewAgentEventsCursor, readCrewAgentStatus, readCrewAgents } from "../../runtime/crew-agent-records.ts";
+import { terminateLiveAgentsForRun } from "../../runtime/live-agent-manager.ts";
 import { buildAgentDashboard, readAgentOutput } from "../../runtime/agent-observability.ts";
 import { readForegroundControlStatus, writeForegroundInterruptRequest } from "../../runtime/foreground-control.ts";
 import { followUpLiveAgent, getLiveAgent, listActiveLiveAgents, resumeLiveAgent, steerLiveAgent, stopLiveAgent } from "../../subagents/live/manager.ts";
@@ -121,6 +122,7 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 				saveRunTasks(manifest, tasks);
 				appendEvent(manifest.eventsPath, { type: "plan.cancelled", runId: manifest.runId, taskId: approval.planTaskId, message: "Adaptive implementation plan was cancelled.", metadata: { provenance: "api" } });
 				manifest = updateRunStatus(manifest, "cancelled", "Plan approval was cancelled.");
+				void terminateLiveAgentsForRun(manifest.runId, "cancelled").catch(() => {});
 				return result(JSON.stringify({ planApproval: manifest.planApproval, cancelledTasks: tasks.filter((task) => task.status === "cancelled").map((task) => task.id) }, null, 2), { action: "api", status: "ok", runId: manifest.runId, artifactsRoot: manifest.artifactsRoot });
 			});
 		} catch (error) {

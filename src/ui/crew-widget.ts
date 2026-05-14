@@ -110,7 +110,13 @@ function describeLiveActivity(handle: LiveAgentHandle): string {
 }
 
 function agentActivity(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): string {
-	if (liveHandle && liveHandle.status === "running") return describeLiveActivity(liveHandle);
+	if (liveHandle && liveHandle.status === "running") {
+		const live = describeLiveActivity(liveHandle);
+		// If live activity is just the fallback, prefer richer agent.progress data
+		// (persistLiveProgress writes tool events to agentProgress before live tracking picks them up)
+		if (live === "thinking…" && agent.progress?.currentTool) return `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`;
+		return live;
+	}
 	if (agent.progress?.currentTool) return `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`;
 	const recent = agent.progress?.recentOutput?.at(-1);
 	if (recent) return recent.replace(/\s+/g, " ").trim();
@@ -273,7 +279,7 @@ export function buildCrewWidgetLines(cwd: string, frame = 0, maxLines = 8, provi
 			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
 			const stats = agentStats(agent, liveHandle);
 			const name = liveHandle?.agent ?? agent.agent;
-			const desc = liveHandle?.description ?? "";
+			const desc = liveHandle?.description ?? agent.role;
 			lines.push(`\u2502  ${branch} ${agentGlyph} ${name}${desc ? ` \u00B7 ${desc}` : ` \u00B7 ${agent.role}`}`);
 			lines.push(`\u2502     \u23B7 ${agentActivity(agent, liveHandle)}${stats ? ` \u00B7 ${stats}` : ""}`);
 		}
