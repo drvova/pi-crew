@@ -78,19 +78,19 @@ test("resolveTaskSkillNames drops unsafe skill names", () => {
 
 test("normalizeSkillOverride accepts comma strings, arrays, true, and false", () => {
 	assert.deepEqual(normalizeSkillOverride("git-master, safe-bash"), ["git-master", "safe-bash"]);
-	assert.deepEqual(normalizeSkillOverride(["verify-evidence"]), ["verify-evidence"]);
+	assert.deepEqual(normalizeSkillOverride(["verification-before-done"]), ["verification-before-done"]);
 	assert.equal(normalizeSkillOverride(true), undefined);
 	assert.equal(normalizeSkillOverride(false), false);
 });
 
 test("renderSkillInstructions loads selected SKILL.md content for worker prompts", () => {
-	const rendered = renderSkillInstructions({ cwd: process.cwd(), role: "verifier", override: ["verify-evidence"] });
-	assert.ok(rendered.names.includes("verify-evidence"));
+	const rendered = renderSkillInstructions({ cwd: process.cwd(), role: "verifier", override: ["verification-before-done"] });
+	assert.ok(rendered.names.includes("verification-before-done"));
 	assert.match(rendered.block, /# Applicable Skills/);
-	assert.match(rendered.block, /verify-evidence/);
-	assert.match(rendered.block, /Final verification evidence checklist/);
-	assert.match(rendered.block, /Source: (project|package):skills\/verify-evidence/);
-	assert.ok(rendered.paths.some((entry) => entry.endsWith(path.join("skills", "verify-evidence"))));
+	assert.match(rendered.block, /verification-before-done/);
+	assert.match(rendered.block, /evidence before claims/);
+	assert.match(rendered.block, /Source: (project|package):skills\/verification-before-done/);
+	assert.ok(rendered.paths.some((entry) => entry.endsWith(path.join("skills", "verification-before-done"))));
 	assert.doesNotMatch(rendered.block, new RegExp(process.cwd().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
@@ -98,12 +98,12 @@ test("renderSkillInstructions loads selected SKILL.md content for worker prompts
 test("renderSkillInstructions uses project skills before package skills", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-skill-"));
 	try {
-		const skillDir = path.join(cwd, "skills", "verify-evidence");
+		const skillDir = path.join(cwd, "skills", "verification-before-done");
 		fs.mkdirSync(skillDir, { recursive: true });
-		fs.writeFileSync(path.join(skillDir, "SKILL.md"), ["---", "name: verify-evidence", "description: Project override", "---", "", "# Project Skill", "", "Project-specific verification."].join("\n"));
-		const rendered = renderSkillInstructions({ cwd, role: "unknown", override: ["verify-evidence"] });
+		fs.writeFileSync(path.join(skillDir, "SKILL.md"), ["---", "name: verification-before-done", "description: Project override", "---", "", "# Project Skill", "", "Project-specific verification."].join("\n"));
+		const rendered = renderSkillInstructions({ cwd, role: "unknown", override: ["verification-before-done"] });
 		assert.match(rendered.block, /Project-specific verification/);
-		assert.match(rendered.block, /Source: project:skills\/verify-evidence/);
+		assert.match(rendered.block, /Source: project:skills\/verification-before-done/);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}

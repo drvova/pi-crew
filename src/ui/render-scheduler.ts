@@ -6,7 +6,13 @@ export interface RenderSchedulerEventBus {
 
 export interface RenderSchedulerOptions {
 	debounceMs?: number;
-	fallbackMs?: number;
+	/**
+	 * Maximum interval (ms) between auto-refreshes when no event arrives.
+	 * Can be a function returning a dynamic interval — useful to tick fast
+	 * while a run is active (e.g., 160ms aligned with spinner) and slow
+	 * down when idle (e.g., 1000ms) without burning CPU.
+	 */
+	fallbackMs?: number | (() => number);
 	events?: string[];
 	onInvalidate?: (payload: unknown) => void;
 }
@@ -35,7 +41,7 @@ export class RenderScheduler {
 	private readonly render: () => void;
 	private readonly onInvalidate?: (payload: unknown) => void;
 	private readonly debounceMs: number;
-	private readonly fallbackMs: number;
+	private readonly fallbackProvider: () => number;
 	private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	private fallbackTimer: ReturnType<typeof setTimeout> | undefined;
 	private disposed = false;
@@ -48,10 +54,21 @@ export class RenderScheduler {
 		this.render = render;
 		this.onInvalidate = options.onInvalidate;
 		this.debounceMs = options.debounceMs ?? 75;
-		this.fallbackMs = options.fallbackMs ?? 750;
+		const fallback = options.fallbackMs ?? 750;
+		this.fallbackProvider = typeof fallback === "function" ? fallback : () => fallback;
 		for (const event of options.events ?? DEFAULT_EVENTS) this.subscribe(events, event);
-		this.fallbackTimer = setTimeout(() => this.fallbackLoop(), this.fallbackMs);
+		this.fallbackTimer = setTimeout(() => this.fallbackLoop(), this.currentFallbackMs());
 		this.fallbackTimer.unref();
+	}
+
+	private currentFallbackMs(): number {
+		try {
+			const value = this.fallbackProvider();
+			return Number.isFinite(value) && value > 0 ? value : 750;
+		} catch (error) {
+			logInternalError("render-scheduler.fallbackProvider", error);
+			return 750;
+		}
 	}
 
 	private subscribe(events: RenderSchedulerEventBus | undefined, event: string): void {
@@ -68,15 +85,16 @@ export class RenderScheduler {
 	/** Recursive setTimeout — avoids setInterval timer storms. */
 	private fallbackLoop(): void {
 		if (this.disposed) return;
-		if (Date.now() - this.lastEventAt < this.fallbackMs) {
+		const fallbackMs = this.currentFallbackMs();
+		if (Date.now() - this.lastEventAt < fallbackMs) {
 			if (this.disposed) return;
-			this.fallbackTimer = setTimeout(() => this.fallbackLoop(), this.fallbackMs);
+			this.fallbackTimer = setTimeout(() => this.fallbackLoop(), fallbackMs);
 			this.fallbackTimer.unref();
 			return;
 		}
 		this.schedule();
 		if (this.disposed) return;
-		this.fallbackTimer = setTimeout(() => this.fallbackLoop(), this.fallbackMs);
+		this.fallbackTimer = setTimeout(() => this.fallbackLoop(), this.currentFallbackMs());
 		this.fallbackTimer.unref();
 	}
 

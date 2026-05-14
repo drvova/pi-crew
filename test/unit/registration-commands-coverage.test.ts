@@ -15,6 +15,8 @@ test("registration commands module registers the public slash command set", () =
 		getManifestCache: () => ({ list: () => [] }),
 	});
 	assert.deepEqual(names.sort(), [
+		"skill-create",
+		"skill-list",
 		"team-api",
 		"team-artifacts",
 		"team-autonomy",

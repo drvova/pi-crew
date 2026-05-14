@@ -30,10 +30,10 @@ test("package snapshot keeps Phase 6 runtime docs, skills, and jiti loader depen
 		"docs/commands-reference.md",
 		"docs/actions-reference.md",
 		"skills/safe-bash/SKILL.md",
-		"skills/verify-evidence/SKILL.md",
+		"skills/verification-before-done/SKILL.md",
 		"skills/git-master/SKILL.md",
 		"skills/read-only-explorer/SKILL.md",
-		"skills/task-packet/SKILL.md",
+		"skills/event-log-tracing/SKILL.md",
 	]) {
 		assert.equal(fs.existsSync(path.join(root, relativePath)), true, `${relativePath} must exist for npm pack`);
 	}

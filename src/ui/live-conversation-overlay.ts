@@ -6,7 +6,7 @@
  */
 import type { LiveAgentHandle } from "../runtime/live-agent-manager.ts";
 import { iconForStatus } from "./status-colors.ts";
-import { SUBAGENT_SPINNER_FRAMES, spinnerFrame } from "./spinner.ts";
+import { spinnerFrame } from "./spinner.ts";
 import type { CrewTheme } from "./theme-adapter.ts";
 
 const CHROME_LINES = 6;
@@ -96,7 +96,7 @@ export class LiveConversationOverlay {
 
 		// Header
 		const statusIcon = this.handle.status === "running"
-			? th.fg("accent", SUBAGENT_SPINNER_FRAMES[this.frame % SUBAGENT_SPINNER_FRAMES.length] ?? "●")
+			? th.fg("accent", spinnerFrame(this.handle.taskId ?? this.handle.agentId))
 			: iconForStatus(this.handle.status);
 		const name = this.handle.agent ?? this.handle.taskId;
 		const act = this.handle.activity;

@@ -23,7 +23,7 @@ Before any completion claim:
 
 | Claim | Requires | Not sufficient |
 |---|---|---|
-| Tests pass | Fresh test output with zero failures | Prior run, “should pass” |
+| Tests pass | Fresh test output with zero failures | Prior run, "should pass" |
 | Typecheck passes | Typecheck command exit 0 | Lint or targeted tests only |
 | Bug fixed | Original symptom/regression test passes | Code changed |
 | Requirements met | Checklist against request/plan | Generic test success |
@@ -52,6 +52,15 @@ Include:
 - skipped checks and why;
 - risks and rollback notes.
 
+## Required Final Evidence
+
+Before finalizing any work, report:
+
+- **changed files**: list of files modified (or `none` for read-only work)
+- **tests/checks run**: command and pass/fail result for each
+- **artifacts**: run IDs, log paths, or state files inspected
+- **risks and rollback notes**: any known risks, how to undo the changes
+
 ## Red Flags
 
-Stop before saying done if you are using words like “should”, “probably”, “looks”, “seems”, “I think”, or if you are trusting an agent report without checking evidence.
+Stop before saying done if you are using words like "should", "probably", "looks", "seems", "I think", or if you are trusting an agent report without checking evidence.

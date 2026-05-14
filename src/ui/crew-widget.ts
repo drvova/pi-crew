@@ -18,8 +18,9 @@ import type { RunSnapshotCache, RunUiSnapshot } from "./snapshot-types.ts";
 import { runEventBus } from "./run-event-bus.ts";
 import { DEFAULT_UI } from "../config/defaults.ts";
 import { computePhaseProgress, formatPhaseProgressLine } from "../runtime/phase-progress.ts";
+import { SUBAGENT_SPINNER_FRAMES, spinnerBucket, spinnerFrame } from "./spinner.ts";
 
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER = SUBAGENT_SPINNER_FRAMES;
 const TOOL_LABELS: Record<string, string> = {
 	read: "reading",
 	bash: "running command",
@@ -39,8 +40,8 @@ const MAX_AGENTS_DISPLAY = 3;
 const FINISHED_LINGER_MAX_AGE = 1;
 const ERROR_LINGER_MAX_AGE = 2;
 const ERROR_STATUSES = new Set(["failed", "cancelled", "stopped"]);
-/** R3: Faster refresh when live agents are running. */
-const LIVE_REFRESH_MS = 120;
+/** R3: Faster refresh when live agents are running. Aligned with spinner frame. */
+const LIVE_REFRESH_MS = 160;
 
 type WidgetComponent = { render(width: number): string[]; invalidate(): void };
 
@@ -247,7 +248,9 @@ function shortRunLabel(run: TeamRunManifest): string {
 export function buildCrewWidgetLines(cwd: string, frame = 0, maxLines = 8, providedRuns?: WidgetRun[], notificationCount = 0): string[] {
 	const runs = providedRuns ?? activeWidgetRuns(cwd);
 	if (!runs.length) return [];
-	const runningGlyph = SPINNER[frame % SPINNER.length] ?? SPINNER[0];
+	// Time-based spinner glyph so animation stays smooth at the renderer's
+	// natural cadence — independent of how often `frame` counter advances.
+	const runningGlyph = spinnerFrame("widget-header");
 	const lines: string[] = [widgetHeader(runs, runningGlyph, maxLines, notificationCount)];
 	for (const { run, agents, snapshot } of runs) {
 		const activeAgents = agents.filter((item) => item.status === "running" || item.status === "queued" || item.status === "waiting");
@@ -349,13 +352,19 @@ class CrewWidgetComponent implements WidgetComponent {
 
 	private buildSignature(runs: WidgetRun[]): string {
 		const liveSig = listLiveAgents().map((h) => `${h.agentId}:${h.status}:${h.activity.turnCount}:${h.activity.toolUses}:${[...h.activity.activeTools.values()].join(",")}:${h.activity.responseText.slice(-30)}`).join("|");
+		// When any agent is running we want per-agent runningGlyph (baked into
+		// cachedBaseLines) to re-rotate in step with the spinner bucket. Without
+		// this, finished+running rows would freeze between data updates.
+		const hasRunning = runs.some((entry) => entry.agents.some((agent) => agent.status === "running"))
+			|| listLiveAgents().some((h) => h.status === "running");
+		const animation = hasRunning ? `:spin=${spinnerBucket()}` : "";
 		return runs
 			.map((entry) => entry.snapshot?.signature ?? `${entry.run.runId}:${entry.run.status}:${entry.run.updatedAt}:` + entry.agents.map((agent) => {
 				const recentOutput = agent.progress?.recentOutput.at(-1) ?? "";
 				const progress = [agent.progress?.currentTool ?? "", agent.progress?.toolCount ?? 0, agent.progress?.tokens ?? 0, agent.progress?.turns ?? 0, agent.progress?.lastActivityAt ?? "", recentOutput].join(":");
 				return `${agent.status}:${agent.startedAt}:${agent.completedAt ?? ""}:${agent.toolUses ?? 0}:${progress}`;
 			}).join(","))
-			.join("|") + `|live:${liveSig}`;
+			.join("|") + `|live:${liveSig}${animation}`;
 	}
 
 	private colorize(lines: string[], width: number): string[] {
@@ -375,9 +384,11 @@ class CrewWidgetComponent implements WidgetComponent {
 
 	render(width: number): string[] {
 		const runs = activeWidgetRuns(this.model.cwd, this.model.manifestCache, this.model.snapshotCache, this.model.preloadManifests);
-		const signature = `${this.buildSignature(runs)}:${this.model.notificationCount ?? 0}:${this.model.frame}`;
-		const runningGlyph = SPINNER[this.model.frame % SPINNER.length] ?? SPINNER[0];
-		const headerGlyph = runs.length ? SPINNER[0] : " ";
+		const signature = `${this.buildSignature(runs)}:${this.model.notificationCount ?? 0}`;
+		// Time-based glyphs so the spinner animates every render call rather than
+		// only when state.frame is bumped (which happens at the slower data refresh).
+		const runningGlyph = spinnerFrame("widget-header");
+		const headerGlyph = runs.length ? spinnerFrame("widget-header") : " ";
 
 		if (this.cacheSignature !== signature || width !== this.cachedWidth || this.cachedTheme !== this.theme) {
 			this.cachedBaseLines = buildCrewWidgetLines(this.model.cwd, 0, this.model.maxLines, runs, this.model.notificationCount ?? 0).map((line, index) => {

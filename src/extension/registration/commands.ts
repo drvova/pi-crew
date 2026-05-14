@@ -39,6 +39,8 @@ import { DEFAULT_UI } from "../../config/defaults.ts";
 import { listRecentDiagnostic } from "../../runtime/diagnostic-export.ts";
 import { commandText, notifyCommandResult, parseRunArgs, parseScalar, pushUnset, setNestedConfig } from "./command-utils.ts";
 import { openTranscriptViewer, selectAgentTask, openLiveConversation } from "./viewers.ts";
+import { getBuiltinTemplates, instantiateTemplate, listTemplates } from "../../skills/skill-templates.ts";
+import * as fs from "node:fs";
 import { printTimings, time } from "../../utils/timings.ts";
 import { requestRenderTarget } from "../../ui/pi-ui-compat.ts";
 import type { createRunSnapshotCache } from "../../ui/run-snapshot-cache.ts";
@@ -444,6 +446,79 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 	] as const) pi.registerCommand(name, { description, handler: async (_args: string, ctx: ExtensionCommandContext) => {
 		const result = await handleTeamTool({ action }, teamCommandContext(ctx));
 		await notifyCommandResult(ctx, commandText(result));
+	} });
+
+	pi.registerCommand("skill-list", { description: "List available builtin skill templates. Use --json for machine-readable output.", handler: async (args: string, ctx: ExtensionCommandContext) => {
+		const asJson = args.trim().split(/\s+/).includes("--json");
+		const templates = listTemplates();
+		if (asJson) {
+			await notifyCommandResult(ctx, JSON.stringify(templates, null, 2));
+		} else {
+			const lines = ["Available builtin skill templates:", ""];
+			for (const t of templates) {
+				lines.push(`  ${t.id.padEnd(20)} ${t.description}`);
+				lines.push(`    Variables: ${t.variables.map((v) => (v.required ? "[required] " : "[optional] ") + v.name).join(", ")}`);
+			}
+			lines.push("");
+			lines.push("Create a skill: /skill-create <template-id> --var key=value [--var ...]");
+			await notifyCommandResult(ctx, lines.join("\n"));
+		}
+	} });
+
+	pi.registerCommand("skill-create", { description: "Create a skill from a builtin template: <template-id> [--var key=value...] [--project]", handler: async (args: string, ctx: ExtensionCommandContext) => {
+		const { withSessionId } = await import("../team-tool/context.ts");
+		const sessionId = withSessionId(ctx);
+		const cwd = (ctx as unknown as { workspaceFolder?: { uri: { fsPath: string } } }).workspaceFolder?.uri?.fsPath ?? process.cwd();
+		const tokens = args.trim().split(/\s+/).filter(Boolean);
+		const useProject = tokens.includes("--project");
+		const varEntries = tokens.filter((t) => t.startsWith("--var=") || t.startsWith("--var ")).map((t) => t.replace(/^--var(?:\s+|=)/, "").split("=", 2) as [string, string]);
+		const templateId = tokens.find((t) => !t.startsWith("--") && !t.includes("="));
+		if (!templateId) {
+			await notifyCommandResult(ctx, "Usage: /skill-create <template-id> [--var key=value...] [--project]\nRun /skill-list to see available templates.");
+			return;
+		}
+		const template = getBuiltinTemplates().find((t) => t.id === templateId);
+		if (!template) {
+			await notifyCommandResult(ctx, `Unknown template '${templateId}'. Run /skill-list to see available templates.`);
+			return;
+		}
+		const variables: Record<string, string> = {};
+		const errors: string[] = [];
+		for (const v of template.variables) {
+			const entry = varEntries.find(([k]) => k === v.name);
+			if (!entry) {
+				if (v.required) errors.push(`Missing required variable: ${v.name} (${v.description})`);
+				else if (v.defaultValue !== undefined) variables[v.name] = v.defaultValue;
+				continue;
+			}
+			const [, value] = entry;
+			if (v.options && !v.options.includes(value)) {
+				errors.push(`Invalid value '${value}' for '${v.name}'. Allowed: ${v.options.join(", ")}`);
+				continue;
+			}
+			variables[v.name] = value;
+		}
+		if (errors.length > 0) {
+			await notifyCommandResult(ctx, errors.join("\n"));
+			return;
+		}
+		let instantiated: { filename: string; content: string };
+		try {
+			instantiated = instantiateTemplate(template, variables);
+		} catch (error) {
+			await notifyCommandResult(ctx, error instanceof Error ? error.message : String(error));
+			return;
+		}
+		const skillsDir = path.resolve(cwd, useProject ? "skills" : path.join(path.dirname(require.resolve("../../../package.json", { paths: [__dirname] })), "skills"));
+		const skillDir = path.join(skillsDir, template.id);
+		const skillPath = path.join(skillDir, "SKILL.md");
+		try {
+			fs.mkdirSync(skillDir, { recursive: true });
+			fs.writeFileSync(skillPath, instantiated.content, "utf-8");
+			await notifyCommandResult(ctx, `Created skill '${template.id}' at:\n${skillPath}\n\n${instantiated.content.slice(0, 200)}...`);
+		} catch (error) {
+			await notifyCommandResult(ctx, `Failed to write skill: ${error instanceof Error ? error.message : String(error)}`);
+		}
 	} });
 
 	pi.registerCommand("team-help", { description: "Show pi-crew command help", handler: async (_args: string, ctx: ExtensionCommandContext) => {

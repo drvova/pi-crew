@@ -29,6 +29,100 @@ Use this skill when working on model/context propagation.
 - Passing full session transcripts to every child by default.
 - Losing thinking level or model changes across session switch/fork flows.
 
+## Worked Examples
+
+### Model precedence chain with all fields
+
+When every level provides a model:
+
+```typescript
+// Requested by user/tool: "sonnet-4-2025-01-16"
+// Step model (workflow): undefined
+// Team role model: undefined
+// Agent model: "haiku-4"
+// Parent model: "sonnet-4-2025-01-16"
+// Model registry: { default: "claude-sonnet-4" }
+
+const result = buildConfiguredModelRouting({
+  overrideModel: "sonnet-4-2025-01-16",  // tool override wins
+  stepModel: undefined,
+  teamRoleModel: undefined,
+  agentModel: "haiku-4",
+  fallbackModels: ["haiku-3"],
+  parentModel: "sonnet-4-2025-01-16",
+  modelRegistry: { default: "claude-sonnet-4" },
+  cwd,
+});
+
+// Result: candidates = ["sonnet-4-2025-01-16"]
+// resolved = "sonnet-4-2025-01-16" (override wins)
+// reason = "tool override"
+```
+
+### Override at each level
+
+```typescript
+// Level 1: tool override (highest)
+buildConfiguredModelRouting({ overrideModel: "sonnet-4-2025-01-16" });
+// → candidates = ["sonnet-4-2025-01-16"]
+
+// Level 2: step model
+buildConfiguredModelRouting({ overrideModel: undefined, stepModel: "haiku-4" });
+// → candidates = ["haiku-4"]
+
+// Level 3: team role model
+buildConfiguredModelRouting({ overrideModel: undefined, stepModel: undefined, teamRoleModel: "sonnet-3.5" });
+// → candidates = ["sonnet-3.5"]
+
+// Level 4: agent model with fallback
+buildConfiguredModelRouting({ overrideModel: undefined, stepModel: undefined, teamRoleModel: undefined, agentModel: "haiku-3", fallbackModels: ["claude-3-5-haiku-20241022"] });
+// → candidates = ["haiku-3", "claude-3-5-haiku-20241022"]
+```
+
+### Empty/whitespace/null handling
+
+```typescript
+// Empty string treated as absent
+buildConfiguredModelRouting({ agentModel: "" });
+// → agentModel ignored, falls through to parent
+
+// Whitespace treated as absent
+buildConfiguredModelRouting({ agentModel: "   " });
+// → agentModel ignored
+
+// null/undefined treated as absent
+buildConfiguredModelRouting({ agentModel: undefined });
+// → agentModel ignored
+
+// With thinking level suffix
+applyThinkingSuffix("sonnet-4-2025-01-16", "medium")
+// → "sonnet-4-2025-01-16:medium"
+
+// Invalid thinking level falls back to model without suffix
+applyThinkingSuffix("sonnet-4-2025-01-16", "invalid")
+// → "sonnet-4-2025-01-16" (suffix ignored)
+```
+
+## Common Mistakes
+
+1. **Empty string blocking parent fallback**:
+   ```typescript
+   // ❌ agentModel: "" blocks parent fallback
+   buildConfiguredModelRouting({ agentModel: "" });
+
+   // ✅ Empty string treated as absent
+   buildConfiguredModelRouting({ agentModel: undefined });
+   ```
+
+2. **Losing thinking level on session switch**:
+   ```typescript
+   // ❌ Thinking level not persisted in config
+   const config = { model: "sonnet-4" }; // no thinking
+
+   // ✅ Thinking level in model suffix
+   const config = { model: "sonnet-4:medium" };
+   ```
+
 ## Verification
 
 ```bash

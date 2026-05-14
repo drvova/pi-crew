@@ -3,7 +3,7 @@ import * as path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const expectedSkills = ["safe-bash", "verify-evidence", "git-master", "read-only-explorer", "task-packet"];
+const expectedSkills = ["safe-bash", "verification-before-done", "git-master", "read-only-explorer", "event-log-tracing"];
 
 test("package ships built-in coding skills", () => {
 	const root = process.cwd();

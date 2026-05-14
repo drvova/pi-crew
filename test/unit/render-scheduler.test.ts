@@ -47,3 +47,30 @@ test("RenderScheduler fallback renders when no events arrive", async () => {
 	scheduler.dispose();
 	assert.ok(renders >= 1);
 });
+
+test("RenderScheduler accepts dynamic fallbackMs and adapts tick frequency", async () => {
+	let renders = 0;
+	let mode: "fast" | "slow" = "fast";
+	const fallbackMs = () => mode === "fast" ? 20 : 5_000;
+	const scheduler = new RenderScheduler(undefined, () => { renders += 1; }, { debounceMs: 5, fallbackMs });
+	await sleep(120);
+	const fastRenders = renders;
+	assert.ok(fastRenders >= 2, `expected >= 2 fast renders, got ${fastRenders}`);
+	mode = "slow";
+	const baseline = renders;
+	await sleep(120);
+	scheduler.dispose();
+	const delta = renders - baseline;
+	assert.ok(delta <= 1, `expected slow mode to render at most once, got ${delta}`);
+});
+
+test("RenderScheduler handles fallbackMs thrower without crashing", async () => {
+	let renders = 0;
+	const scheduler = new RenderScheduler(undefined, () => { renders += 1; }, {
+		debounceMs: 5,
+		fallbackMs: () => { throw new Error("boom"); },
+	});
+	await sleep(50);
+	scheduler.dispose();
+	assert.ok(renders >= 0);
+});
