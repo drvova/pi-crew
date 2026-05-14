@@ -3,7 +3,7 @@ import { withRunLockSync } from "../../state/locks.ts";
 import { loadRunManifestById, saveRunTasks, updateRunStatus } from "../../state/state-store.ts";
 import { appendEvent } from "../../state/event-log.ts";
 import { appendMailboxMessage, updateMailboxMessageReply } from "../../state/mailbox.ts";
-import { saveCrewAgents, recordFromTask } from "../../runtime/crew-agent-records.ts";
+import { readCrewAgents, saveCrewAgents, recordFromTask } from "../../runtime/crew-agent-records.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
 import { result, type TeamContext } from "./context.ts";
@@ -98,7 +98,8 @@ export function handleRespond(params: TeamToolParamsValue, ctx: TeamContext): Pi
 			appendEvent(manifest.eventsPath, { type: "task.resumed", runId: manifest.runId, taskId, message: message || "Task re-queued after respond.", data: { mailboxIds } });
 		}
 		try {
-			saveCrewAgents(fresh.manifest, updatedTasks.map((task) => recordFromTask(fresh.manifest, task, "child-process")));
+			const existingRuntimes = new Map(readCrewAgents(fresh.manifest).map((a) => [a.taskId, a.runtime]));
+			saveCrewAgents(fresh.manifest, updatedTasks.map((task) => recordFromTask(fresh.manifest, task, existingRuntimes.get(task.id) ?? "child-process")));
 		} catch (error) {
 			logInternalError("team-tool.handleRespond.crewAgents", error, `runId=${fresh.manifest.runId}`);
 		}

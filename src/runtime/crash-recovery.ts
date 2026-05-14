@@ -265,6 +265,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 							});
 							saveRunTasks(fullLoaded.manifest, repairedTasks);
 							updateRunStatus(fullLoaded.manifest, "cancelled", "Orphaned run: worker process dead and no recent activity");
+							void terminateLiveAgentsForRun(fullLoaded.manifest.runId, "cancelled").catch(() => {});
 						}
 					} catch {
 						// Best-effort manifest cleanup
@@ -298,6 +299,7 @@ export function reconcileAllStaleRuns(cwd: string, manifestCache: ManifestCache,
 			if (result.repaired) {
 				if (result.repairedTasks) saveRunTasks(fresh.manifest, result.repairedTasks);
 				updateRunStatus(fresh.manifest, "failed", `Stale run reconciled: ${result.detail}`);
+				void terminateLiveAgentsForRun(fresh.manifest.runId, "failed").catch(() => {});
 				appendEvent(fresh.manifest.eventsPath, { type: "crew.run.reconciled_stale", runId: manifest.runId, message: result.detail, data: { verdict: result.verdict } });
 			}
 			if (result.verdict !== "healthy") {
