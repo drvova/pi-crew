@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Streaming progress for `team` and `Agent` foreground tool calls** — The Pi tool widget previously showed only the tool label "Agent" / "Team" while a foreground run was executing, then dumped the full result at completion. Both tools now wire the `onUpdate` callback and stream a compact 3-4 line progress block once per second (status, elapsed, active agent role, current tool, latest output snippet). Background subagents are unchanged. Files: `src/ui/tool-progress-formatter.ts` (new), `src/extension/registration/subagent-tools.ts`, `src/extension/registration/team-tool.ts`.
+
+### Tests
+
+- Added `test/unit/tool-progress-formatter.test.ts` (5 cases covering empty run, run-only header, active agent with tool, long-output trimming + usage tokens fallback, spawn error).
+
+---
+
 ## 0.2.3 — Bug Fixes & Hardening (2026-05-12)
 
 ### Security

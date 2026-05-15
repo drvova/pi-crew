@@ -18,6 +18,13 @@ import { loadConfig } from "../../config/config.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
 import { __test__subagentSpawnParams, formatSubagentRecord, readSubagentRunResult, refreshPersistedSubagentRecord, subagentToolResult } from "./subagent-helpers.ts";
 import { t } from "../../i18n.ts";
+import { loadRunManifestById } from "../../state/state-store.ts";
+import { readCrewAgents } from "../../runtime/crew-agent-records.ts";
+import { formatCompactToolProgress } from "../../ui/tool-progress-formatter.ts";
+
+const TOOL_PROGRESS_TICK_MS = 1000;
+
+type OnUpdate = (chunk: { content: { type: "text"; text: string }[] }) => void;
 
 export interface SubagentToolRegistrationOptions {
 	ownerSessionGeneration?: () => number;
@@ -43,7 +50,7 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 			max_turns: Type.Optional(Type.Number({ description: "Reserved for live-session subagents; child-process runtime may ignore this." })),
 			run_in_background: Type.Optional(Type.Boolean({ description: "Run in background and return an agent ID immediately." })),
 		}) as never,
-		async execute(_id, params, signal, _onUpdate, ctx) {
+		async execute(_id, params, signal, onUpdate, ctx) {
 			const currentRole = currentCrewRole();
 			const permission = checkSubagentSpawnPermission(currentRole);
 			if (!permission.allowed) return subagentToolResult(permission.reason ?? "Current role cannot spawn subagents.", { role: currentRole, mode: permission.mode }, true);
@@ -59,7 +66,12 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 				savePersistedSubagentRecord(ctx.cwd, record);
 				return { ...subagentToolResult([t("agent.started", { state: record.status === "queued" ? "queued" : "started" }), t("agent.id", { id: record.id }), t("agent.type", { type: record.type }), t("agent.description", { description: record.description }), t("agent.retrieveHint")].join("\n"), { agentId: record.id, status: record.status }), terminate: true };
 			}
-			await record.promise;
+			const stopProgress = startAgentToolProgress(ctx.cwd, record.id, onUpdate as OnUpdate | undefined, subagentManager);
+			try {
+				await record.promise;
+			} finally {
+				stopProgress();
+			}
 			const output = readSubagentRunResult(ctx, record) ?? record.result ?? t("agent.noOutput");
 			const foregroundResult = subagentToolResult([t("agent.foregroundStatus", { id: record.id, status: record.status }), "", output].join("\n"), { agentId: record.id, runId: record.runId, status: record.status }, record.status === "failed" || record.status === "error");
 			if (loadConfig(ctx.cwd).config.tools?.terminateOnForeground === true) {
@@ -156,4 +168,43 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 			}
 		}
 	}
+}
+
+function startAgentToolProgress(cwd: string, agentRecordId: string, onUpdate: OnUpdate | undefined, manager: SubagentManager): () => void {
+	if (!onUpdate) return () => {};
+	const startedAt = Date.now();
+	const tick = (): void => {
+		try {
+			const record = manager.getRecord(agentRecordId);
+			if (!record) return;
+			let manifest;
+			let tasks;
+			let agents;
+			if (record.runId) {
+				const loaded = loadRunManifestById(cwd, record.runId);
+				if (loaded) {
+					manifest = loaded.manifest;
+					tasks = loaded.tasks;
+					try { agents = readCrewAgents(loaded.manifest); } catch { /* ignore */ }
+				}
+			}
+			const text = formatCompactToolProgress({
+				agentId: record.id,
+				status: record.status,
+				runId: record.runId,
+				startedAt: record.startedAt ?? startedAt,
+				manifest,
+				tasks,
+				agents,
+				error: record.error,
+			});
+			onUpdate({ content: [{ type: "text", text }] });
+		} catch (error) {
+			logInternalError("subagent-tools.progress", error, `agentId=${agentRecordId}`);
+		}
+	};
+	tick();
+	const timer = setInterval(tick, TOOL_PROGRESS_TICK_MS);
+	if (typeof timer.unref === "function") timer.unref();
+	return () => clearInterval(timer);
 }
