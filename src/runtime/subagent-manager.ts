@@ -168,31 +168,32 @@ export class SubagentManager {
 		return [...this.records.values()].sort((a, b) => b.startedAt - a.startedAt);
 	}
 
-	abort(id: string): boolean {
+	abort(id: string, reason?: string): boolean {
 		const record = this.records.get(id);
 		if (!record) return false;
 		if (record.status === "queued") {
 			this.queue = this.queue.filter((entry) => entry.record.id !== id);
-			this.markStopped(record);
+			this.markStopped(record, reason ?? "Aborted by caller.");
 			return true;
 		}
 		if (record.status !== "running" && record.status !== "blocked") return false;
 		this.controllers.get(id)?.abort();
-		this.markStopped(record);
+		this.markStopped(record, reason ?? "Aborted by caller.");
 		return true;
 	}
 
-	abortAll(): number {
+	abortAll(reason?: string): number {
 		let count = 0;
+		const stopReason = reason ?? "Aborted (session switch or shutdown).";
 		for (const entry of this.queue) {
-			this.markStopped(entry.record);
+			this.markStopped(entry.record, stopReason);
 			count++;
 		}
 		this.queue = [];
 		for (const record of this.records.values()) {
 			if (record.status === "running" || record.status === "blocked") {
 				this.controllers.get(record.id)?.abort();
-				this.markStopped(record);
+				this.markStopped(record, stopReason);
 				count++;
 			}
 		}
@@ -246,7 +247,9 @@ export class SubagentManager {
 				else record.status = "completed";
 			} catch (error) {
 				if (record.status === "stopped" || runSignal.aborted) {
+					const abortReason = runSignal.aborted ? "Signal aborted — agent cancelled by parent (session switch, user cancel, or tool timeout)." : undefined;
 					record.status = "stopped";
+					if (!record.error) record.error = abortReason ?? (error instanceof Error ? error.message : String(error));
 					return;
 				}
 				record.status = "error";
@@ -269,9 +272,10 @@ export class SubagentManager {
 		})();
 	}
 
-	private markStopped(record: SubagentRecord): void {
+	private markStopped(record: SubagentRecord, reason?: string): void {
 		record.status = "stopped";
 		record.completedAt = Date.now();
+		if (reason && !record.error) record.error = reason;
 		const cwd = this.cwdByRecord.get(record.id);
 		if (cwd) savePersistedSubagentRecord(cwd, record);
 	}

@@ -322,7 +322,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	const stopSessionBoundSubagents = (): void => {
 		for (const controller of foregroundControllers.values()) controller.abort();
 		foregroundControllers.clear();
-		subagentManager.abortAll();
+		subagentManager.abortAll("Session switching — foreground subagents cancelled.");
 		terminateActiveChildPiProcesses();
 		disposeRenderSchedulerSubscriptions();
 		renderScheduler?.dispose();
@@ -844,7 +844,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		const eventType = typeof record.type === "string" ? record.type : undefined;
 		if (eventType) overflowTracker?.feedEvent(taskId, runId, eventType);
 	} });
-	registerSubagentTools(pi, subagentManager, { ownerSessionGeneration: captureSessionGeneration });
+	registerSubagentTools(pi, subagentManager, { ownerSessionGeneration: captureSessionGeneration, startForegroundRun: (ctx, runner, runId) => startForegroundRun(ctx as ExtensionContext, runner, runId) });
 	time("register.tools");
 
 	registerTeamCommands(pi, { startForegroundRun, abortForegroundRun, openLiveSidebar, getManifestCache, getRunSnapshotCache, getMetricRegistry: () => metricRegistry, dismissNotifications: () => {

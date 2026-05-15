@@ -28,6 +28,7 @@ type OnUpdate = (chunk: { content: { type: "text"; text: string }[] }) => void;
 
 export interface SubagentToolRegistrationOptions {
 	ownerSessionGeneration?: () => number;
+	startForegroundRun?: (ctx: unknown, runner: (signal?: AbortSignal) => Promise<void>, runId?: string) => void;
 }
 
 export function registerSubagentTools(pi: ExtensionAPI, subagentManager: SubagentManager, options: SubagentToolRegistrationOptions = {}): void {
@@ -51,13 +52,18 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 			run_in_background: Type.Optional(Type.Boolean({ description: "Run in background and return an agent ID immediately." })),
 		}) as never,
 		async execute(_id, params, signal, onUpdate, ctx) {
+			// Diagnostic: detect pre-aborted signal before spawn
+			if (signal?.aborted) {
+				logInternalError("subagent-tools.pre-aborted-signal", undefined, `params=${JSON.stringify(params).slice(0, 200)}`);
+				return subagentToolResult("Agent tool signal was already aborted before execution started. This usually means Pi cancelled the tool call before it ran.", { action: "agent", status: "error" }, true);
+			}
 			const currentRole = currentCrewRole();
 			const permission = checkSubagentSpawnPermission(currentRole);
 			if (!permission.allowed) return subagentToolResult(permission.reason ?? "Current role cannot spawn subagents.", { role: currentRole, mode: permission.mode }, true);
 			const spawnOptions = __test__subagentSpawnParams(params as Record<string, unknown>, ctx);
 			spawnOptions.ownerSessionGeneration = options.ownerSessionGeneration?.();
 			if (!spawnOptions.prompt.trim()) return subagentToolResult(t("agent.requiresPrompt"), {}, true);
-			const runner = async (currentOptions: SubagentSpawnOptions, childSignal?: AbortSignal) => handleTeamTool({ action: "run", agent: currentOptions.type, goal: currentOptions.prompt, model: currentOptions.model, skill: currentOptions.skill, async: currentOptions.background, config: currentOptions.maxTurns ? { runtime: { maxTurns: currentOptions.maxTurns } } : undefined } as TeamToolParamsValue, currentOptions.background ? { ...ctx, signal: childSignal } : { ...ctx, signal: childSignal });
+			const runner = async (currentOptions: SubagentSpawnOptions, childSignal?: AbortSignal) => handleTeamTool({ action: "run", agent: currentOptions.type, goal: currentOptions.prompt, model: currentOptions.model, skill: currentOptions.skill, async: currentOptions.background, config: currentOptions.maxTurns ? { runtime: { maxTurns: currentOptions.maxTurns } } : undefined } as TeamToolParamsValue, { ...ctx, signal: childSignal, ...(options.startForegroundRun ? { startForegroundRun: (runRunner: (sig?: AbortSignal) => Promise<void>, runId?: string) => options.startForegroundRun!(ctx, runRunner, runId) } : {}) });
 			const record = subagentManager.spawn(spawnOptions, runner, spawnOptions.background ? undefined : signal);
 			if (spawnOptions.background || record.status === "queued") {
 				// Phase 1.1a: Terminate turn for background queued — no LLM follow-up needed.
@@ -72,8 +78,12 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 			} finally {
 				stopProgress();
 			}
-			const output = readSubagentRunResult(ctx, record) ?? record.result ?? t("agent.noOutput");
-			const foregroundResult = subagentToolResult([t("agent.foregroundStatus", { id: record.id, status: record.status }), "", output].join("\n"), { agentId: record.id, runId: record.runId, status: record.status }, record.status === "failed" || record.status === "error");
+			// Diagnostic: log when foreground subagent ends in "stopped" to surface the abort reason
+			if (record.status === "stopped") {
+				logInternalError("subagent-tools.foreground-stopped", undefined, `agentId=${record.id} runId=${record.runId ?? ""} error=${record.error ?? "(none)"} result=${(record.result ?? "").slice(0, 200)}`);
+			}
+			const output = readSubagentRunResult(ctx, record) ?? record.result ?? record.error ?? t("agent.noOutput");
+			const foregroundResult = subagentToolResult([t("agent.foregroundStatus", { id: record.id, status: record.status }), "", output].join("\n"), { agentId: record.id, runId: record.runId, status: record.status }, record.status === "failed" || record.status === "error" || record.status === "stopped");
 			if (loadConfig(ctx.cwd).config.tools?.terminateOnForeground === true) {
 				record.terminated = true;
 				savePersistedSubagentRecord(ctx.cwd, record);
