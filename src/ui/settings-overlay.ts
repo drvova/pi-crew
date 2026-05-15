@@ -92,8 +92,51 @@ const SETTINGS: SettingDef[] = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatValue(value: unknown): string {
-	if (value === undefined || value === null) return "<default>";
+// ---------------------------------------------------------------------------
+// Effective defaults — values used when config key is not set
+// ---------------------------------------------------------------------------
+
+const EFFECTIVE_DEFAULTS: Record<string, unknown> = {
+	"runtime.mode": "auto",
+	"runtime.maxTurns": 10000,
+	"runtime.graceTurns": 5,
+	"runtime.inheritContext": false,
+	"runtime.promptMode": "replace",
+	"runtime.completionMutationGuard": "warn",
+	"runtime.isolationPolicy": undefined,
+	"limits.maxConcurrentWorkers": 1024,
+	"limits.maxTaskDepth": 100,
+	"limits.maxRunMinutes": 1440,
+	"limits.maxRetriesPerTask": 100,
+	"limits.maxTasksPerRun": 10000,
+	"limits.heartbeatStaleMs": 86400000,
+	"agents.disableBuiltins": false,
+	"ui.showModel": true,
+	"ui.showTokens": true,
+	"ui.showTools": true,
+	"ui.dashboardPlacement": "center",
+	"ui.dashboardWidth": 72,
+	"ui.autoOpenDashboard": false,
+	"ui.widgetPlacement": "aboveEditor",
+	"autonomous.enabled": true,
+	"autonomous.injectPolicy": true,
+	"autonomous.preferAsyncForLongTasks": false,
+	"autonomous.allowWorktreeSuggestion": true,
+	"executeWorkers": true,
+	"asyncByDefault": false,
+	"notifierIntervalMs": 5000,
+	"reliability.autoRetry": false,
+	"reliability.autoRecover": false,
+	"telemetry.enabled": false,
+	"notifications.enabled": false,
+};
+
+function formatValue(value: unknown, id: string): string {
+	if (value === undefined || value === null) {
+		const def = EFFECTIVE_DEFAULTS[id];
+		if (def !== undefined) return `${String(def)} (default)`;
+		return "<not set>";
+	}
 	if (typeof value === "boolean") return value ? "true" : "false";
 	if (typeof value === "number") return String(value);
 	if (typeof value === "object") return JSON.stringify(value);
@@ -448,7 +491,7 @@ export class SettingsOverlay {
 			for (let i = visibleStart; i < visibleEnd; i++) {
 				const def = settings[i]!;
 				const effective = this.changedValues.has(def.id) ? this.changedValues.get(def.id) : getNestedValue(this.config, def.id);
-				const valueStr = formatValue(effective);
+				const valueStr = formatValue(effective, def.id);
 				const isSelected = i === this.selectedIndex;
 				const prefix = isSelected ? " → " : "   ";
 				const label = def.label.padEnd(24);

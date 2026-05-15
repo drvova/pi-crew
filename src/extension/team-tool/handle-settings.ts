@@ -6,6 +6,45 @@ import type { PiTeamsToolResult } from "../tool-result.ts";
 import { suggestConfigKey } from "../../config/suggestions.ts";
 
 // ---------------------------------------------------------------------------
+// Effective defaults — values used when config key is not set
+// ---------------------------------------------------------------------------
+
+const EFFECTIVE_DEFAULTS: Record<string, unknown> = {
+	"runtime.mode": "auto",
+	"runtime.maxTurns": 10000,
+	"runtime.graceTurns": 5,
+	"runtime.inheritContext": false,
+	"runtime.promptMode": "replace",
+	"runtime.completionMutationGuard": "warn",
+	"runtime.isolationPolicy": undefined,
+	"limits.maxConcurrentWorkers": 1024,
+	"limits.maxTaskDepth": 100,
+	"limits.maxRunMinutes": 1440,
+	"limits.maxRetriesPerTask": 100,
+	"limits.maxTasksPerRun": 10000,
+	"limits.heartbeatStaleMs": 86400000,
+	"agents.disableBuiltins": false,
+	"ui.showModel": true,
+	"ui.showTokens": true,
+	"ui.showTools": true,
+	"ui.dashboardPlacement": "center",
+	"ui.dashboardWidth": 72,
+	"ui.autoOpenDashboard": false,
+	"ui.widgetPlacement": "aboveEditor",
+	"autonomous.enabled": true,
+	"autonomous.injectPolicy": true,
+	"autonomous.preferAsyncForLongTasks": false,
+	"autonomous.allowWorktreeSuggestion": true,
+	"executeWorkers": true,
+	"asyncByDefault": false,
+	"notifierIntervalMs": 5000,
+	"reliability.autoRetry": false,
+	"reliability.autoRecover": false,
+	"telemetry.enabled": false,
+	"notifications.enabled": false,
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -31,8 +70,12 @@ function getNested(obj: Record<string, unknown>, path: string): unknown {
 	return current;
 }
 
-function formatValue(value: unknown): string {
-	if (value === undefined) return "<not set>";
+function formatValue(value: unknown, key?: string): string {
+	if (value === undefined || value === null) {
+		const def = key ? EFFECTIVE_DEFAULTS[key] : undefined;
+		if (def !== undefined) return `${String(def)} (default)`;
+		return "<not set>";
+	}
 	if (typeof value === "object") return JSON.stringify(value, null, 2);
 	return String(value);
 }
@@ -68,13 +111,13 @@ function flattenConfig(obj: unknown, prefix: string = ""): string[] {
 				if (hasNestedObjects) {
 					lines.push(...flattenConfig(value, dotted));
 				} else {
-					lines.push(`  ${dotted} = ${formatValue(value)}`);
+					lines.push(`  ${dotted} = ${formatValue(value, dotted)}`);
 				}
 			} else if (entries.length > 0) {
 				lines.push(...flattenConfig(value, dotted));
 			}
 		} else {
-			lines.push(`  ${dotted} = ${formatValue(value)}`);
+			lines.push(`  ${dotted} = ${formatValue(value, dotted)}`);
 		}
 	}
 	return lines;
@@ -309,7 +352,7 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 			if (suggestion) note = `\n(did you mean '${suggestion}'?)`;
 			else note = "\n(unknown key — may not take effect)";
 		}
-		return result(`${key} = ${formatValue(value)}${note}`, { ...OK, key, value } as never);
+		return result(`${key} = ${formatValue(value, key)}${note}`, { ...OK, key, value } as never);
 	}
 
 	// team-settings unset <key>
@@ -358,8 +401,8 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 			}
 
 			return result([
-				`Set ${key} = ${formatValue(value)}`,
-				`Effective: ${formatValue(effectiveValue)}`,
+				`Set ${key} = ${formatValue(value, key)}`,
+				`Effective: ${formatValue(effectiveValue, key)}`,
 				`Saved to: ${saved.path}`,
 				warning,
 			].filter(Boolean).join("\n"), { ...OK, key, value } as never);
