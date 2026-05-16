@@ -319,7 +319,16 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	// immediate cache invalidate via renderScheduler.schedule. Falls back to
 	// poll-only behavior on systems where fs.watch errors.
 	let crewWatcher: import("node:fs").FSWatcher | undefined;
+	// Separate map for foreground team-run AbortControllers (distinct from subagent controllers).
+	// P0 fix: stopSessionBoundSubagents must NOT abort foreground team runs on session switch.
+	// Foreground team runs run in the same process as the session; they naturally clean up
+	// when the session context is torn down. Only subagents need explicit abort on switch.
+	const foregroundTeamRunControllers = new Map<string | symbol, AbortController>();
+
 	const stopSessionBoundSubagents = (): void => {
+		// Only abort subagent controllers — NOT foreground team runs.
+		// Foreground team runs are bound to the session lifecycle; they will be aborted
+		// by cleanupRuntime during session_shutdown.
 		for (const controller of foregroundControllers.values()) controller.abort();
 		foregroundControllers.clear();
 		subagentManager.abortAll("Session switching — foreground subagents cancelled.");
@@ -361,7 +370,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		const ownerGeneration = captureSessionGeneration();
 		const controller = new AbortController();
 		const key = runId ?? Symbol();
-		foregroundControllers.set(key, controller);
+		foregroundTeamRunControllers.set(key, controller);
 		if (ctx.hasUI) {
 			setWorkingIndicator(ctx, { frames: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"], intervalMs: 80 });
 			ctx.ui.setWorkingMessage(runId ? `pi-crew foreground run ${runId}...` : "pi-crew foreground run...");
@@ -382,7 +391,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				else logInternalError("register.foreground-run-failure", error, `runId=${runId} context disposed`);
 				})
 				.finally(() => {
-					foregroundControllers.delete(key);
+					foregroundTeamRunControllers.delete(key);
 					const ownerCurrent = isContextCurrent(ctx, ownerGeneration);
 					if (ctx.hasUI) {
 						// Always clear working message/spinner — stale spinners for completed runs are confusing.
@@ -439,11 +448,15 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		if (preloadTimer) { clearTimeout(preloadTimer); preloadTimer = undefined; }
 		closeWatcher(crewWatcher); crewWatcher = undefined;
 		stopSessionBoundSubagents();
+		// P0 fix: also abort foreground team runs on session shutdown (not on session switch).
+		// This is the only place where foreground team run controllers should be aborted.
+		for (const controller of foregroundTeamRunControllers.values()) controller.abort();
+		foregroundTeamRunControllers.clear();
 		crewScheduler?.stop();
 		stopAsyncRunNotifier(notifierState);
 
 		// Best-effort: kill any async background runners that are still alive.
-		// Foreground child processes are already handled by stopSessionBoundSubagents().
+		// Foreground child processes (team run tasks) are handled above.
 		try {
 			for (const manifest of manifestCache.list(50)) {
 				if (manifest.async?.pid !== undefined && checkProcessLiveness(manifest.async.pid).alive) {
@@ -815,12 +828,12 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	} catch { /* older Pi without resources_discover */ }
 
 	const abortForegroundRun = (runId: string): boolean => {
-		const controller = foregroundControllers.get(runId);
+		const controller = foregroundTeamRunControllers.get(runId);
 		if (!controller) return false;
 		controller.abort();
 		return true;
 	};
-	registerCompactionGuard(pi, { foregroundControllers });
+	registerCompactionGuard(pi, { foregroundControllers, foregroundTeamRunControllers });
 
 	// Phase 1.4: Permission gate for destructive team actions.
 	// AGENTS.md requires confirm=true for management deletes.

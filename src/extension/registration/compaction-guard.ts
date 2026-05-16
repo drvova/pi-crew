@@ -4,6 +4,7 @@ import type { ArtifactDescriptor, TeamRunManifest } from "../../state/types.ts";
 
 export interface RegisterCompactionGuardOptions {
 	foregroundControllers: Map<string | symbol, AbortController>;
+	foregroundTeamRunControllers: Map<string | symbol, AbortController>;
 }
 
 const TRIGGER_RATIO = 0.75;
@@ -95,7 +96,7 @@ export function registerCompactionGuard(pi: ExtensionAPI, options: RegisterCompa
 
 	// Phase 1.2: Defer compaction during foreground runs unless context is critically full.
 	pi.on("session_before_compact", async (_event, ctx) => {
-		if (options.foregroundControllers.size === 0) return;
+		if (options.foregroundControllers.size === 0 && options.foregroundTeamRunControllers.size === 0) return;
 		const ratio = usageRatio(ctx);
 		if (ratio !== undefined && ratio >= HARD_RATIO) {
 			ctx.ui.notify("Compaction allowed despite foreground run: context is critically full", "warning");
@@ -109,14 +110,15 @@ export function registerCompactionGuard(pi: ExtensionAPI, options: RegisterCompa
 	// Phase 2.1: Proactive compaction with dynamic threshold based on model context window.
 	pi.on("turn_end", (_event, ctx) => {
 		if (compactionInProgress) return;
-		if (options.foregroundControllers.size === 0 && pendingCompactReason) {
+		const hasActiveForeground = options.foregroundControllers.size > 0 || options.foregroundTeamRunControllers.size > 0;
+		if (!hasActiveForeground && pendingCompactReason) {
 			pendingCompactReason = null;
 			startCompact(ctx, "deferred");
 			return;
 		}
 		const ratio = usageRatio(ctx);
 		if (ratio === undefined || ratio < TRIGGER_RATIO) return;
-		if (options.foregroundControllers.size > 0) {
+		if (hasActiveForeground) {
 			pendingCompactReason = "threshold-during-foreground-run";
 			return;
 		}

@@ -1,0 +1,1 @@
+Mock JSON success for verifier
