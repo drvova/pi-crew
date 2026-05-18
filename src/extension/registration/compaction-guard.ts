@@ -94,32 +94,37 @@ export function registerCompactionGuard(pi: ExtensionAPI, options: RegisterCompa
 		});
 	};
 
-	// Phase 1.2: Defer compaction during foreground runs unless context is critically full.
+	// Phase 1.2: Always allow compaction to proceed.
+	// Previously this deferred compaction during foreground runs, but that prevented
+	// context-mode's PreCompact hook from running (which needs compaction to build resume snapshots).
+	// pi-crew state is preserved via customInstructions and artifactIndex appended above.
 	pi.on("session_before_compact", async (_event, ctx) => {
-		if (options.foregroundControllers.size === 0 && options.foregroundTeamRunControllers.size === 0) return;
-		const ratio = usageRatio(ctx);
-		if (ratio !== undefined && ratio >= HARD_RATIO) {
-			ctx.ui.notify("Compaction allowed despite foreground run: context is critically full", "warning");
-			return;
-		}
-		pendingCompactReason = "deferred-during-foreground-run";
-		ctx.ui.notify("Compaction deferred: foreground team run in progress", "info");
-		return { cancel: true };
+		// Always allow compaction - context-mode needs it for resume snapshots
+		return;
 	});
 
-	// Phase 2.1: Proactive compaction with dynamic threshold based on model context window.
+	// Phase 2.1: Proactive compaction with dynamic threshold.
+	// Only trigger compaction when context usage >=75%, or when deferred from a previous high-usage turn.
 	pi.on("turn_end", (_event, ctx) => {
 		if (compactionInProgress) return;
 		const hasActiveForeground = options.foregroundControllers.size > 0 || options.foregroundTeamRunControllers.size > 0;
+		const ratio = usageRatio(ctx);
+		// If deferred compaction is pending and foreground just ended, check if still needed
 		if (!hasActiveForeground && pendingCompactReason) {
 			pendingCompactReason = null;
+			// Only compact if ratio still >= TRIGGER_RATIO, otherwise skip
+			if (ratio === undefined || ratio < TRIGGER_RATIO) return;
 			startCompact(ctx, "deferred");
 			return;
 		}
-		const ratio = usageRatio(ctx);
 		if (ratio === undefined || ratio < TRIGGER_RATIO) return;
+		// During foreground run: defer unless context is critically full
 		if (hasActiveForeground) {
-			pendingCompactReason = "threshold-during-foreground-run";
+			if (ratio >= HARD_RATIO) {
+				startCompact(ctx, "critical");
+			} else {
+				pendingCompactReason = "threshold-during-foreground-run";
+			}
 			return;
 		}
 		startCompact(ctx, "threshold");

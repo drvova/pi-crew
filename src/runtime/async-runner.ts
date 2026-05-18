@@ -120,11 +120,18 @@ export interface SpawnBackgroundTeamRunResult {
 }
 
 export function buildBackgroundSpawnOptions(manifest: TeamRunManifest, logFd: number): SpawnOptions {
+	// NOTE: Do NOT set PI_CREW_PARENT_PID for the background runner.
+	// The background runner is a top-level worker spawned by the team tool.
+	// When the team tool finishes, its process exits, and the background runner
+	// would incorrectly detect a "dead parent" and self-terminate.
+	// Child workers spawned BY the background runner will have the background
+	// runner as their parent, so they correctly die when the runner exits.
+	const { PI_CREW_PARENT_PID: _, ...envWithoutParentPid } = process.env;
 	return {
 		cwd: manifest.cwd,
 		detached: true,
 		stdio: ["ignore", logFd, logFd],
-		env: { ...process.env, PI_CREW_PARENT_PID: String(process.pid) },
+		env: envWithoutParentPid,
 		windowsHide: true,
 	};
 }

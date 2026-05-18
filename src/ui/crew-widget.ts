@@ -121,7 +121,10 @@ function agentActivity(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): st
 	}
 	if (agent.progress?.currentTool) return `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`;
 	const recent = agent.progress?.recentOutput?.at(-1);
-	if (recent) return recent.replace(/\s+/g, " ").trim();
+	if (recent) {
+		const cleaned = recent.replace(/\s+/g, " ").trim();
+		return cleaned.length > 60 ? cleaned.slice(0, 60) + "…" : cleaned;
+	}
 	if (agent.progress?.activityState === "needs_attention") return "needs attention";
 	if (agent.status === "queued") return "queued";
 	if (agent.status === "running") {
@@ -152,7 +155,36 @@ function agentStats(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): strin
 			const ctxPct = stats?.contextUsage?.percent;
 			if (ctxPct != null) parts.push(`${Math.round(ctxPct)}% ctx`);
 		} catch { /* ignore */ }
-		const ms = (act.completedAtMs ?? Date.now()) - act.startedAtMs;
+		const rawStarted = act.startedAtMs || 0;
+		const rawCompleted = act.completedAtMs || 0;
+		const nowMs = Date.now();
+		const nowSec = Math.floor(nowMs / 1000);
+		// Detect if value is in seconds vs milliseconds by comparing distance to current time
+		// If value is closer to nowSec (within ±2 years) AND not close to nowMs, treat as seconds
+		const isSeconds = (v: number) => {
+			if (v <= 0) return false;
+			const distToSec = Math.abs(v - nowSec);
+			const distToMs = Math.abs(v - nowMs);
+			// If distance to seconds is much smaller AND value is in valid seconds range
+			return distToSec < distToMs && distToSec < 31536000 * 2 && v > 1000000000;
+		};
+		// Simple fix: detect if value is Unix seconds and convert properly
+		// Unix seconds are ~10 digits (e.g., 1779082445), Unix ms are ~13 digits (e.g., 1779082445000)
+		const toMs = (v: number): number => {
+			if (v <= 0) return 0;
+			// If 10 digits (or 9 with recent), treat as seconds
+			if (v > 1000000000 && v < 10000000000) return v * 1000;
+			// If 13 digits, treat as ms
+			if (v > 100000000000 && v < 10000000000000) return v;
+			// Fallback: use as-is
+			return v;
+		};
+		const startedMs = toMs(rawStarted);
+		const completedMs = rawCompleted > 0 ? toMs(rawCompleted) : 0;
+		// Validate bounds
+		const isValidStarted = startedMs > 0 && startedMs < nowMs + 60000 && startedMs > nowMs - 3155692600000;
+		const isValidCompleted = completedMs === 0 || (completedMs > 0 && completedMs < nowMs + 60000);
+		const ms = (isValidCompleted ? completedMs : nowMs) - (isValidStarted ? startedMs : nowMs);
 		parts.push(`${(ms / 1000).toFixed(1)}s`);
 	} else {
 		if (agent.toolUses) parts.push(`${agent.toolUses} tools`);
@@ -175,7 +207,7 @@ function agentsFor(run: TeamRunManifest): CrewAgentRecord[] {
 let lastStaleReconcileAt = 0;
 const STALE_RECONCILE_INTERVAL_MS = 60_000;
 
-export function activeWidgetRuns(cwd: string, manifestCache?: ManifestCache, snapshotCache?: RunSnapshotCache, preloadedManifests?: TeamRunManifest[]): WidgetRun[] {
+export function activeWidgetRuns(cwd: string, manifestCache?: ManifestCache, snapshotCache?: RunSnapshotCache, preloadedManifests?: TeamRunManifest[], workspaceId?: string): WidgetRun[] {
 	// Evict stale live-agent handles (terminal status >10min, or running >30min with no update)
 	evictStaleLiveAgentHandles();
 	// Periodic stale reconciliation: detect ghost runs on disk with dead PIDs
@@ -185,7 +217,11 @@ export function activeWidgetRuns(cwd: string, manifestCache?: ManifestCache, sna
 		lastStaleReconcileAt = now;
 		try { reconcileAllStaleRuns(cwd, manifestCache); } catch { /* non-critical background maintenance */ }
 	}
-	const runs = preloadedManifests ?? (manifestCache ? manifestCache.list(20) : listRecentRuns(cwd, 20));
+	let runs = preloadedManifests ?? (manifestCache ? manifestCache.list(20) : listRecentRuns(cwd, 20));
+	// Filter by workspaceId for session isolation
+	if (workspaceId) {
+		runs = runs.filter((run) => !run.ownerSessionId || run.ownerSessionId === workspaceId);
+	}
 	return runs
 		.map((run) => {
 			try {
@@ -409,7 +445,7 @@ class CrewWidgetComponent implements WidgetComponent {
 }
 
 export function updateCrewWidget(
-	ctx: Pick<ExtensionContext, "cwd" | "hasUI" | "ui">,
+	ctx: Pick<ExtensionContext, "cwd" | "hasUI" | "ui" | "sessionManager">,
 	state: CrewWidgetState,
 	config?: CrewUiConfig,
 	manifestCache?: ManifestCache,
@@ -419,7 +455,14 @@ export function updateCrewWidget(
 	if (!ctx.hasUI) return;
 	state.frame += 1;
 	const maxLines = config?.widgetMaxLines ?? MAX_LINES_DEFAULT;
-	const runs = activeWidgetRuns(ctx.cwd, manifestCache, snapshotCache, preloadedManifests);
+	// Get workspaceId from sessionManager, fallback to ownerSessionId from active runs
+	let workspaceId = ctx.sessionManager?.getSessionId?.();
+	if (!workspaceId && manifestCache) {
+		const runs = manifestCache.list(20);
+		const active = runs.find((r) => r.status === "running" || r.status === "queued");
+		if (active?.ownerSessionId) workspaceId = active.ownerSessionId;
+	}
+	const runs = activeWidgetRuns(ctx.cwd, manifestCache, snapshotCache, preloadedManifests, workspaceId);
 	const lines = buildCrewWidgetLines(ctx.cwd, state.frame, maxLines, runs, state.notificationCount ?? 0);
 	const placement = config?.widgetPlacement ?? DEFAULT_UI.widgetPlacement;
 	ctx.ui.setStatus(STATUS_KEY, lines.length ? statusSummary(runs) : undefined);

@@ -130,7 +130,9 @@ async function main(): Promise<void> {
 		appendEvent(manifest.eventsPath, { type: "runtime.resolved", runId: manifest.runId, message: `Runtime resolved: ${runtime.kind} safety=${runtime.safety}`, data: { runtimeResolution, async: true } });
 		if (runtime.safety === "blocked") throw new Error(runtime.reason ?? "Child worker execution is disabled; refusing to create no-op scaffold subagents.");
 		const executeWorkers = runtime.kind !== "scaffold";
-		const result = await executeTeamRun({ manifest, tasks, team, workflow, agents, executeWorkers, limits: runConfig.limits, runtime, runtimeConfig: runConfig.runtime, skillOverride: manifest.skillOverride, reliability: runConfig.reliability, workspaceId: manifest.cwd });
+		// Use ownerSessionId for workspaceId to ensure agents are only visible to the session that spawned them.
+		// manifest.cwd would cause cross-session visibility since all sessions share the same project directory.
+		const result = await executeTeamRun({ manifest, tasks, team, workflow, agents, executeWorkers, limits: runConfig.limits, runtime, runtimeConfig: runConfig.runtime, skillOverride: manifest.skillOverride, reliability: runConfig.reliability, workspaceId: manifest.ownerSessionId ?? manifest.cwd });
 		manifest = result.manifest;
 		tasks = result.tasks;
 		appendEvent(manifest.eventsPath, { type: "async.completed", runId: manifest.runId, data: { status: manifest.status, tasks: tasks.length } });

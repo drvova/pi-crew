@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 // Lazy-loaded: team-tool.ts pulls in entire runtime chain.
 import type { handleTeamTool as HandleTeamToolFn } from "../team-tool.ts";
+import { withSessionId } from "../team-tool/context.ts";
 let _cachedHandleTeamTool: typeof HandleTeamToolFn | undefined;
 async function handleTeamTool(params: Parameters<typeof HandleTeamToolFn>[0], ctx: Parameters<typeof HandleTeamToolFn>[1]): Promise<Awaited<ReturnType<typeof HandleTeamToolFn>>> {
 	if (!_cachedHandleTeamTool) {
@@ -63,7 +64,10 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 			const spawnOptions = __test__subagentSpawnParams(params as Record<string, unknown>, ctx);
 			spawnOptions.ownerSessionGeneration = options.ownerSessionGeneration?.();
 			if (!spawnOptions.prompt.trim()) return subagentToolResult(t("agent.requiresPrompt"), {}, true);
-			const runner = async (currentOptions: SubagentSpawnOptions, childSignal?: AbortSignal) => handleTeamTool({ action: "run", agent: currentOptions.type, goal: currentOptions.prompt, model: currentOptions.model, skill: currentOptions.skill, async: currentOptions.background, config: currentOptions.maxTurns ? { runtime: { maxTurns: currentOptions.maxTurns } } : undefined } as TeamToolParamsValue, { ...ctx, signal: childSignal, ...(options.startForegroundRun ? { startForegroundRun: (runRunner: (sig?: AbortSignal) => Promise<void>, runId?: string) => options.startForegroundRun!(ctx, runRunner, runId) } : {}) });
+			// Extract sessionId from sessionManager.getSessionId() so team runs created
+			// by the Agent tool have proper session ownership for isolation.
+			const ctxWithSession = withSessionId(ctx);
+			const runner = async (currentOptions: SubagentSpawnOptions, childSignal?: AbortSignal) => handleTeamTool({ action: "run", agent: currentOptions.type, goal: currentOptions.prompt, model: currentOptions.model, skill: currentOptions.skill, async: currentOptions.background, config: currentOptions.maxTurns ? { runtime: { maxTurns: currentOptions.maxTurns } } : undefined } as TeamToolParamsValue, { ...ctxWithSession, signal: childSignal, ...(options.startForegroundRun ? { startForegroundRun: (runRunner: (sig?: AbortSignal) => Promise<void>, runId?: string) => options.startForegroundRun!(ctxWithSession, runRunner, runId) } : {}) });
 			const record = subagentManager.spawn(spawnOptions, runner, spawnOptions.background ? undefined : signal);
 			if (spawnOptions.background || record.status === "queued") {
 				// Phase 1.1a: Terminate turn for background queued — no LLM follow-up needed.

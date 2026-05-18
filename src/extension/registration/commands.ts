@@ -204,7 +204,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 	pi.registerCommand("team-run", {
 		description: "Manually start a pi-crew run (agent may also use the team tool autonomously)",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
-			const result = await handleTeamTool(parseRunArgs(args), { ...teamCommandContext(ctx), metricRegistry: deps.getMetricRegistry?.(), startForegroundRun: (runner, runId) => deps.startForegroundRun(ctx as ExtensionContext, runner, runId), abortForegroundRun: deps.abortForegroundRun, onRunStarted: (runId) => deps.openLiveSidebar(ctx as ExtensionContext, runId) });
+			const result = await handleTeamTool(parseRunArgs(args), { ...teamCommandContext(ctx), metricRegistry: deps.getMetricRegistry?.(), startForegroundRun: (runner, runId) => deps.startForegroundRun(ctx as ExtensionContext, runner, runId), abortForegroundRun: deps.abortForegroundRun, onRunStarted: undefined });
 			await notifyCommandResult(ctx, commandText(result));
 		},
 	});
@@ -387,12 +387,14 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 
 	pi.registerCommand("team-dashboard", { description: "Open a pi-crew run dashboard overlay", handler: async (_args: string, ctx: ExtensionCommandContext) => {
 		for (;;) {
+			// Extract sessionId for workspace-scoped filtering
+			const sessionId = ctx.sessionManager?.getSessionId?.();
 			const runs = deps.getManifestCache(ctx.cwd).list(50);
 			const uiConfig = loadConfig(ctx.cwd).config.ui;
 			const rightPanel = (uiConfig?.dashboardPlacement ?? DEFAULT_UI.dashboardPlacement) === "right";
 			const width = rightPanel ? Math.min(90, Math.max(40, uiConfig?.dashboardWidth ?? DEFAULT_UI.dashboardWidth)) : "90%";
 			const { RunDashboard } = await ui();
-			const selection = await ctx.ui.custom<RunDashboardSelection | undefined>((tui, theme, _keybindings, done) => new RunDashboard(runs, done, theme, { placement: rightPanel ? "right" : "center", showModel: uiConfig?.showModel, showTokens: uiConfig?.showTokens, showTools: uiConfig?.showTools, snapshotCache: deps.getRunSnapshotCache?.(ctx.cwd), runProvider: () => deps.getManifestCache(ctx.cwd).list(50), registry: deps.getMetricRegistry?.(), requestRender: () => requestRenderTarget(tui) }), { overlay: true, overlayOptions: rightPanel ? { width, minWidth: 40, maxHeight: "100%", anchor: "top-right", offsetX: 0, offsetY: 0, margin: { top: 0, right: 0, bottom: 0, left: 0 } } : { width, maxHeight: "90%", anchor: "center", margin: 2 } });
+			const selection = await ctx.ui.custom<RunDashboardSelection | undefined>((tui, theme, _keybindings, done) => new RunDashboard(runs, done, theme, { placement: rightPanel ? "right" : "center", showModel: uiConfig?.showModel, showTokens: uiConfig?.showTokens, showTools: uiConfig?.showTools, snapshotCache: deps.getRunSnapshotCache?.(ctx.cwd), runProvider: () => deps.getManifestCache(ctx.cwd).list(50), registry: deps.getMetricRegistry?.(), workspaceId: sessionId, requestRender: () => requestRenderTarget(tui) }), { overlay: true, overlayOptions: rightPanel ? { width, minWidth: 40, maxHeight: "100%", anchor: "top-right", offsetX: 0, offsetY: 0, margin: { top: 0, right: 0, bottom: 0, left: 0 } } : { width, maxHeight: "90%", anchor: "center", margin: 2 } });
 			if (!selection) return;
 			if (selection.action === "reload") continue;
 			if (selection.action === "notifications-dismiss") {

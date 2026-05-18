@@ -65,6 +65,8 @@ export class LiveRunSidebar {
 	private cachedLines: string[] = [];
 	private cachedWidth = 0;
 	private cachedSignature = "";
+	private autoCloseTimeout?: NodeJS.Timeout;
+	private hasAutoClosed = false;
 
 	constructor(input: { cwd: string; runId: string; done: Done; theme?: unknown; config?: CrewUiConfig; snapshotCache?: RunSnapshotCache }) {
 		this.cwd = input.cwd;
@@ -167,6 +169,24 @@ export class LiveRunSidebar {
 			lines.push(border("├", "─", "┤", w));
 			for (const entry of formatTaskGraphLines(tasks).slice(0, 6)) lines.push(line(entry, w));
 			lines.push(line("q close · /team-dashboard details", w), border("╰", "─", "╯", w));
+			// Auto-close logic: if run is terminal and no active agents, close after delay
+			const isTerminal = ["completed", "failed", "cancelled", "blocked"].includes(run.status);
+			const hasActiveAgents = agents.some((a) => a.status === "running");
+			if (isTerminal && !hasActiveAgents && !this.hasAutoClosed) {
+				const autoCloseMs = (this.config?.autoCloseDashboardMs ?? 3000);
+				if (autoCloseMs > 0) {
+					this.autoCloseTimeout = setTimeout(() => {
+						this.hasAutoClosed = true;
+						this.done(undefined);
+					}, autoCloseMs);
+					lines.push(line(`auto-close in ${Math.round(autoCloseMs / 1000)}s…`, w));
+				}
+			}
+			// Clear timeout if conditions change
+			else if (this.autoCloseTimeout) {
+				clearTimeout(this.autoCloseTimeout);
+				this.autoCloseTimeout = undefined;
+			}
 			this.cachedLines = renderLines(lines.map((entry) => this.colorLine(entry)), w);
 			this.cachedSignature = signature;
 			this.cachedWidth = w;

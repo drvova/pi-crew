@@ -3,7 +3,7 @@ import { iconForStatus } from "../status-colors.ts";
 import type { RunUiSnapshot } from "../snapshot-types.ts";
 import { spinnerFrame } from "../spinner.ts";
 import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
-import { listLiveAgents, type LiveAgentHandle } from "../../runtime/live-agent-manager.ts";
+import { listLiveAgents, listLiveAgentsByWorkspace, type LiveAgentHandle } from "../../runtime/live-agent-manager.ts";
 
 /**
  * Returns true if this agent did real work (LLM call, tool use, or non-trivial duration).
@@ -52,7 +52,11 @@ function describeActivity(handle: LiveAgentHandle): string {
 export function renderAgentsPane(snapshot: RunUiSnapshot | undefined, options: RunDashboardOptions = {}): string[] {
 	if (!snapshot) return ["(snapshot unavailable)"];
 	if (!snapshot.agents.length) return ["(no agents)"];
-	const liveForRun = listLiveAgents().filter(h => h.runId === snapshot.runId);
+	// Filter live agents by workspaceId for session isolation
+	const allLive = options.workspaceId
+		? listLiveAgentsByWorkspace(options.workspaceId)
+		: listLiveAgents();
+	const liveForRun = allLive.filter(h => h.runId === snapshot.runId);
 	const { completed, total } = snapshot.progress;
 
 	const lines: string[] = [];

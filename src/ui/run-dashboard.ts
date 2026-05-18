@@ -42,6 +42,12 @@ export interface RunDashboardOptions {
 	runProvider?: () => TeamRunManifest[];
 	registry?: MetricRegistry;
 	/**
+	 * Workspace/session ID for filtering runs and live agents. When provided,
+	 * only runs with matching ownerSessionId and live agents with matching
+	 * workspaceId are shown. This ensures session isolation in the UI.
+	 */
+	workspaceId?: string;
+	/**
 	 * Poke the host TUI to repaint after a state change. Must be wired from
 	 * `commands.ts` (`() => requestRenderTarget(tui)`) so keypresses and event-bus
 	 * updates immediately refresh the overlay instead of waiting on the next
@@ -279,7 +285,12 @@ export class RunDashboard implements DashboardComponent {
 		theme: unknown = {},
 		options: RunDashboardOptions = {},
 	) {
-		this.runs = runs;
+		// Filter runs by workspaceId for session isolation
+		// If workspaceId is provided, only show runs owned by that session or runs with no owner (legacy)
+		const filteredRuns = options.workspaceId
+			? runs.filter((run) => !run.ownerSessionId || run.ownerSessionId === options.workspaceId)
+			: runs;
+		this.runs = filteredRuns;
 		this.done = done;
 		this.theme = asCrewTheme(theme);
 		this.options = options;
