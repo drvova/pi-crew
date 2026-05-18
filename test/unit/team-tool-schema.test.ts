@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Value } from "typebox/value";
+import { Value } from "@sinclair/typebox/value";
 import { TeamToolParams } from "../../src/schema/team-tool-schema.ts";
 
 function walkSchema(node: unknown, visit: (node: Record<string, unknown>) => void): void {

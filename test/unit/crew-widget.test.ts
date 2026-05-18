@@ -25,7 +25,7 @@ test("crew widget renders installed-style run and agent summary lines", async ()
 		assert.match(lines.join("\n"), /running command/);
 		const calls: Array<{ key: string; content: string[] | undefined }> = [];
 		const state: CrewWidgetState = { frame: 0 };
-		updateCrewWidget({ cwd, hasUI: true, ui: { setStatus: () => {}, setWidget: (key: string, content: string[] | undefined) => calls.push({ key, content }) } as never }, state);
+		updateCrewWidget({ cwd, hasUI: true, sessionManager: { getSessionId: () => "test-session" } as never, ui: { setStatus: () => {}, setWidget: (key: string, content: string[] | undefined) => calls.push({ key, content }) } as never }, state);
 		assert.equal(calls.at(-1)?.key, "pi-crew-active");
 		assert.ok(calls.at(-1)?.content?.length);
 	} finally {

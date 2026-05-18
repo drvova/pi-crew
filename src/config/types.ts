@@ -76,6 +76,7 @@ export interface CrewUiConfig {
 	dashboardLiveRefreshMs?: number;
 	autoOpenDashboard?: boolean;
 	autoOpenDashboardForForegroundRuns?: boolean;
+	autoCloseDashboardMs?: number;
 	showModel?: boolean;
 	showTokens?: boolean;
 	showTools?: boolean;

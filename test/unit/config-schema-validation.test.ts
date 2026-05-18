@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { configPath, loadConfig } from "../../src/config/config.ts";
-import { Value } from "typebox/value";
+import { Value } from "@sinclair/typebox/value";
 import { PiTeamsConfigSchema } from "../../src/schema/config-schema.ts";
 
 test("parseConfig accepts valid values and drops invalid siblings using TypeBox validation", () => {
