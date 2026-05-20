@@ -46,6 +46,7 @@ export function wireEventToMetrics(events: ExtensionAPI["events"] | undefined, r
 		["crew.run.cancelled", (data) => { const item = recordValue(data); runCount.inc({ status: "cancelled", reason: cancellationReasonLabel(item.reason) }); }],
 		["crew.task.completed", (data) => { const item = recordValue(data); taskCount.inc({ status: "completed" }); taskDuration.observe({ role: stringValue(item.role, "unknown") }, numberValue(item.durationMs)); tokenUsage.observe({ role: stringValue(item.role, "unknown") }, numberValue(item.tokens)); }],
 		["crew.task.failed", () => taskCount.inc({ status: "failed" })],
+		["crew.task.needs_attention", () => taskCount.inc({ status: "needs_attention" })],
 		["crew.task.retry_attempt", (data) => { const item = recordValue(data); taskCount.inc({ status: "retry" }); retryAttemptCount.inc({ runId: stringValue(item.runId, "unknown"), taskId: stringValue(item.taskId, "unknown") }); }],
 		["crew.task.deadletter", (data) => { const item = recordValue(data); deadletterCount.inc({ reason: stringValue(item.reason, "unknown") }); }],
 		["crew.task.overflow", (data) => { const item = recordValue(data); overflowCount.inc({ phase: stringValue(item.phase, "unknown"), previous_phase: stringValue(item.previousPhase, "none") }); }],

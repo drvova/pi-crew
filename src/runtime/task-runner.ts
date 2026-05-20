@@ -826,6 +826,7 @@ export async function runTeamTask(
 		// --- Yield-based completion contract ---
 		// _yieldResult: preserved for future use — yield completion contract not yet wired to task.result
 		let _yieldResult: YieldResult | undefined;
+		let noYield = false;
 		const yieldEnabled =
 			input.runtimeConfig?.yield?.enabled ?? DEFAULT_YIELD_CONFIG.enabled;
 		if (yieldEnabled && collectedJsonEvents.length > 0) {
@@ -837,8 +838,9 @@ export async function runTeamTask(
 					_yieldResult = extractYieldResult(yieldEvent);
 				}
 			} else if (!error) {
+				noYield = true;
 				appendEvent(manifest.eventsPath, {
-					type: "task.attention",
+					type: "task.needs_attention",
 					runId: manifest.runId,
 					taskId: task.id,
 					message:
@@ -957,7 +959,7 @@ export async function runTeamTask(
 
 		task = {
 			...task,
-			status: error ? "failed" : "completed",
+			status: error ? "failed" : noYield ? "needs_attention" : "completed",
 			finishedAt: new Date().toISOString(),
 			exitCode,
 			modelAttempts,
@@ -1079,7 +1081,7 @@ export async function runTeamTask(
 		});
 		appendHookEvent(manifest, hookReport);
 		appendEvent(manifest.eventsPath, {
-			type: error ? "task.failed" : "task.completed",
+			type: error ? "task.failed" : noYield ? "task.needs_attention" : "task.completed",
 			runId: manifest.runId,
 			taskId: task.id,
 			message: error,

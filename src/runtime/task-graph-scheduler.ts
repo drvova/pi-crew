@@ -43,7 +43,7 @@ function withQueue(task: TeamTaskState, index: TaskGraphIndex): TeamTaskState {
 	if (task.status === "running") {
 		return { ...task, graph: task.graph ? { ...task.graph, queue: "running" } : task.graph };
 	}
-	if (task.status === "completed" || task.status === "skipped") {
+	if (task.status === "completed" || task.status === "skipped" || task.status === "needs_attention") {
 		return { ...task, graph: task.graph ? { ...task.graph, queue: "done" } : task.graph };
 	}
 	return { ...task, graph: task.graph ? { ...task.graph, queue: "blocked" } : task.graph };

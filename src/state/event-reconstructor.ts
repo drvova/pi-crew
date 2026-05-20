@@ -11,7 +11,7 @@ import type { TeamEvent } from "./event-log.ts";
 import { readEvents } from "./event-log.ts";
 
 /** Task status values that can be reconstructed from lifecycle events. */
-const RECONSTRUCTABLE_STATUSES = new Set(["created", "queued", "running", "completed", "failed", "cancelled", "skipped", "waiting"]);
+const RECONSTRUCTABLE_STATUSES = new Set(["created", "queued", "running", "completed", "failed", "cancelled", "skipped", "waiting", "needs_attention"]);
 
 /** Event types that carry task lifecycle state transitions. */
 const TASK_LIFECYCLE_EVENT_TYPES = new Set([
@@ -21,6 +21,7 @@ const TASK_LIFECYCLE_EVENT_TYPES = new Set([
 	"task.failed",
 	"task.skipped",
 	"task.cancelled",
+	"task.needs_attention",
 	"task.waiting",
 	"task.resumed",
 	"task.retried",
@@ -31,7 +32,7 @@ const TASK_LIFECYCLE_EVENT_TYPES = new Set([
 ]);
 
 /** Terminal events that set finishedAt. */
-const TERMINAL_EVENTS = new Set(["task.completed", "task.failed", "task.cancelled", "task.skipped"]);
+const TERMINAL_EVENTS = new Set(["task.completed", "task.failed", "task.cancelled", "task.skipped", "task.needs_attention"]);
 
 /** Mapping from event type to the reconstructed task status. */
 const EVENT_STATUS_MAP: Readonly<Record<string, string>> = {
@@ -41,6 +42,7 @@ const EVENT_STATUS_MAP: Readonly<Record<string, string>> = {
 	"task.failed": "failed",
 	"task.skipped": "skipped",
 	"task.cancelled": "cancelled",
+	"task.needs_attention": "needs_attention",
 	"task.waiting": "waiting",
 	"task.resumed": "running",
 	"task.retried": "queued",

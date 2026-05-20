@@ -1,11 +1,11 @@
 export const TEAM_RUN_STATUSES = ["queued", "planning", "running", "blocked", "completed", "failed", "cancelled"] as const;
 export type TeamRunStatus = typeof TEAM_RUN_STATUSES[number];
 
-export const TEAM_TASK_STATUSES = ["queued", "running", "waiting", "completed", "failed", "cancelled", "skipped"] as const;
+export const TEAM_TASK_STATUSES = ["queued", "running", "waiting", "completed", "failed", "cancelled", "skipped", "needs_attention"] as const;
 export type TeamTaskStatus = typeof TEAM_TASK_STATUSES[number];
 
 export const TEAM_TERMINAL_RUN_STATUSES: ReadonlySet<TeamRunStatus> = new Set(["blocked", "completed", "failed", "cancelled"]);
-export const TEAM_TERMINAL_TASK_STATUSES: ReadonlySet<TeamTaskStatus> = new Set(["completed", "failed", "cancelled", "skipped"]);
+export const TEAM_TERMINAL_TASK_STATUSES: ReadonlySet<TeamTaskStatus> = new Set(["completed", "failed", "cancelled", "skipped", "needs_attention"]);
 
 export const TEAM_RUN_STATUS_TRANSITIONS: Readonly<Record<TeamRunStatus, readonly TeamRunStatus[]>> = {
 	queued: ["planning", "running", "cancelled", "failed"],
@@ -25,6 +25,7 @@ export const TEAM_TASK_STATUS_TRANSITIONS: Readonly<Record<TeamTaskStatus, reado
 	failed: ["queued", "cancelled"],
 	cancelled: ["queued"],
 	skipped: ["queued", "cancelled"],
+	needs_attention: ["queued", "running"],
 };
 
 export const TEAM_EVENT_TYPES = [
@@ -46,6 +47,7 @@ export const TEAM_EVENT_TYPES = [
 	"task.failed",
 	"task.cancelled",
 	"task.skipped",
+	"task.needs_attention",
 	"review.approved",
 	"review.rejected",
 	"policy.action",
@@ -77,6 +79,7 @@ export const TEAM_WAKEABLE_EVENT_TYPES: ReadonlySet<TeamEventType> = new Set([
 	"task.failed",
 	"task.cancelled",
 	"task.skipped",
+	"task.needs_attention",
 	"async.completed",
 	"async.failed",
 	"async.stale",

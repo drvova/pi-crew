@@ -26,7 +26,7 @@ const WORKER_PROGRESS_TYPES = new Set([
 	"tool_execution_start", "tool_result", "agent_progress", "worker_status",
 ]);
 const WORKER_LIFECYCLE_TYPES = new Set([
-	"task.started", "task.completed", "task.failed",
+	"task.started", "task.completed", "task.failed", "task.needs_attention",
 	"task_started", "task_completed", "task_failed", "task_cancelled",
 	"run.started", "run.completed", "run.cancelled", "run.failed",
 	"run_started", "run_completed", "run_cancelled", "run_blocked",

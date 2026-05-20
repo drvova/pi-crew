@@ -40,7 +40,7 @@ export const DEFAULT_CONCURRENCY = {
 };
 
 export const DEFAULT_EVENT_LOG = {
-	terminalEventTypes: ["run.blocked", "run.completed", "run.failed", "run.cancelled", "task.completed", "task.failed", "task.skipped", "task.cancelled"],
+	terminalEventTypes: ["run.blocked", "run.completed", "run.failed", "run.cancelled", "task.completed", "task.failed", "task.skipped", "task.cancelled", "task.needs_attention"],
 };
 
 export const DEFAULT_ARTIFACT_CLEANUP = {

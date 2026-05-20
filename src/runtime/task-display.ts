@@ -31,7 +31,7 @@ export function waitingReason(task: TeamTaskState, tasks: TeamTaskState[]): stri
 export function formatTaskGraphLines(tasks: TeamTaskState[]): string[] {
 	if (tasks.length === 0) return ["- (none)"];
 	return tasks.map((task) => {
-		const icon = task.status === "completed" ? "✓" : task.status === "running" ? "⠋" : task.status === "failed" ? "✗" : task.status === "cancelled" || task.status === "skipped" ? "■" : "◦";
+		const icon = task.status === "completed" ? "✓" : task.status === "running" ? "⠋" : task.status === "failed" ? "✗" : task.status === "cancelled" || task.status === "skipped" ? "■" : task.status === "needs_attention" ? "⚠" : "◦";
 		const wait = waitingReason(task, tasks);
 		return `- ${icon} ${task.id} [${task.status}] ${task.role}->${task.agent}${wait && wait !== "ready" ? ` (${wait})` : ""}`;
 	});

@@ -40,7 +40,7 @@ const MAX_AGENTS_DISPLAY = 3;
 /** R1: How many turns finished agents linger before disappearing. */
 const FINISHED_LINGER_MAX_AGE = 1;
 const ERROR_LINGER_MAX_AGE = 2;
-const ERROR_STATUSES = new Set(["failed", "cancelled", "stopped"]);
+const ERROR_STATUSES = new Set(["failed", "cancelled", "stopped", "needs_attention"]);
 /** R3: Faster refresh when live agents are running. Aligned with spinner frame. */
 const LIVE_REFRESH_MS = 160;
 
@@ -303,7 +303,7 @@ export function buildCrewWidgetLines(cwd: string, frame = 0, maxLines = 8, provi
 		for (const agent of finishedAgents.slice(0, 2)) {
 			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
 			const name = liveHandle?.agent ?? agent.agent;
-			const icon = agent.status === "completed" ? "\u2713" : agent.status === "failed" ? "\u2717" : "\u25AA";
+			const icon = agent.status === "completed" ? "\u2713" : agent.status === "failed" ? "\u2717" : agent.status === "needs_attention" ? "\u26A0" : "\u25AA";
 			const stats = agentStats(agent, liveHandle);
 			const desc = liveHandle?.description ?? agent.role;
 			lines.push(`\u2502  \u251C\u2500 ${icon} ${name} \u00B7 ${desc}${stats ? ` \u00B7 ${stats}` : ""}`);

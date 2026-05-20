@@ -48,7 +48,7 @@ export interface RunProgress {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "skipped"]);
+const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "skipped", "needs_attention"]);
 
 /**
  * Extract the phase label for a task.

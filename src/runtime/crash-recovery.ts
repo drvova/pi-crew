@@ -24,7 +24,7 @@ export interface RecoveryPlan {
 }
 
 function isTerminalTask(task: TeamTaskState): boolean {
-	return task.status === "completed" || task.status === "failed" || task.status === "cancelled" || task.status === "skipped";
+	return task.status === "completed" || task.status === "failed" || task.status === "cancelled" || task.status === "skipped" || task.status === "needs_attention";
 }
 
 function shouldRecoverTask(task: TeamTaskState, deadMs: number): boolean {

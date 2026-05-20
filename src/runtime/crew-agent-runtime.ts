@@ -2,7 +2,7 @@ import type { TeamTaskStatus } from "../state/contracts.ts";
 import type { CrewActivityState, ModelRoutingState, UsageState } from "../state/types.ts";
 
 export type CrewRuntimeKind = "scaffold" | "child-process" | "live-session";
-export type CrewAgentStatus = "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "stopped";
+export type CrewAgentStatus = "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "stopped" | "needs_attention";
 
 export interface CrewAgentRecentTool {
 	tool: string;
@@ -56,5 +56,6 @@ export function taskStatusToAgentStatus(status: TeamTaskStatus): CrewAgentStatus
 	if (status === "cancelled" || status === "skipped") return "cancelled";
 	if (status === "running") return "running";
 	if (status === "waiting") return "waiting";
+	if (status === "needs_attention") return "needs_attention";
 	return "queued";
 }

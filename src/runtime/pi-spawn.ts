@@ -160,8 +160,14 @@ export function getPiSpawnCommand(args: string[]): PiSpawnCommand {
 		}
 	}
 	if (process.platform === "win32") {
+		// Windows: resolve via resolvePiCliScript to find the bundled .js entry point
 		const script = resolvePiCliScript();
 		if (script) return { command: process.execPath, args: [script, ...args] };
 	}
+	// Linux/macOS: also resolve the full path so child processes can find 'pi' even if
+	// PATH is minimal (e.g. in detached background-runner processes). Fall back to "pi"
+	// only if resolution fails.
+	const script = resolvePiCliScript();
+	if (script) return { command: process.execPath, args: [script, ...args] };
 	return { command: "pi", args };
 }

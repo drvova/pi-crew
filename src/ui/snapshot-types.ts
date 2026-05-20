@@ -11,6 +11,7 @@ export interface RunUiProgress {
 	waiting?: number;
 	cancelled?: number;
 	skipped?: number;
+	needsAttention?: number;
 }
 
 export interface RunUiUsage {

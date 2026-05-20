@@ -548,7 +548,7 @@ async function executeTeamRunCore(
 		tasks = mergeTaskUpdatesPreservingTerminal(tasks, results);
 
 		// Advance workflow phases whose tasks are all in terminal state
-		const terminalStatuses = new Set(["completed", "failed", "skipped", "cancelled"]);
+		const terminalStatuses = new Set(["completed", "failed", "skipped", "cancelled", "needs_attention"]);
 		const phaseTaskMap = new Map<string, string[]>();
 		for (const task of tasks) {
 			if (!task.stepId) continue;

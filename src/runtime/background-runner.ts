@@ -25,6 +25,34 @@ import { writeAsyncStartMarker } from "./async-marker.ts";
 import { startParentGuard, stopParentGuard } from "./parent-guard.ts";
 
 /**
+ * Heartbeat mechanism: periodically write a heartbeat file so the stale reconciler
+ * can distinguish "process died" from "process still alive but quiet".
+ * Without this, the reconciler relies solely on process.kill(pid, 0) which can
+ * false-positive when a process is SIGKILLed and the PID hasn't been recycled yet.
+ */
+function startHeartbeat(stateRoot: string, eventsPath: string, runId: string): () => void {
+	const heartbeatPath = path.join(stateRoot, "heartbeat.json");
+	const writeHeartbeat = (): void => {
+		try {
+			const mem = process.memoryUsage();
+			fs.writeFileSync(heartbeatPath, JSON.stringify({
+				pid: process.pid,
+				at: Date.now(),
+				runId,
+				memory: { heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024), rssMb: Math.round(mem.rss / 1024 / 1024) },
+			}), "utf-8");
+		} catch {
+			/* ignore — best-effort */
+		}
+	};
+	// Write immediately so the stale reconciler can use heartbeat age as liveness evidence.
+	writeHeartbeat();
+	const interval = setInterval(writeHeartbeat, 15_000);
+	interval.unref();
+	return () => clearInterval(interval);
+}
+
+/**
  * Remove macOS malloc-stack-logging vars that get inherited by child shells.
  * Without this, every subprocess prints "MallocStackLogging: can't turn off..." to stderr.
  */
@@ -91,6 +119,18 @@ function setupUnhandledRejectionGuard(state: { cwd?: string; runId?: string; eve
 async function main(): Promise<void> {
 	// Scrub macOS malloc vars BEFORE anything else — must be clean for all child processes
 	scrubProcessEnv();
+	// Install signal handlers EARLY — log events before exiting so we can distinguish
+	// OOM/SIGKILL (no event) from SIGTERM/SIGINT (event written).
+	const signalLog = (sig: string): void => {
+		const cwd = argValue("--cwd");
+		const runId = argValue("--run-id");
+		if (cwd && runId) {
+			const loaded = loadRunManifestById(cwd, runId);
+			if (loaded) appendEvent(loaded.manifest.eventsPath, { type: "async.failed", runId, message: `Background runner received ${sig} — exiting.`, data: { signal: sig, pid: process.pid } });
+		}
+	};
+	process.on("SIGTERM", () => { signalLog("SIGTERM"); process.exit(143); });
+	process.on("SIGINT", () => { signalLog("SIGINT"); process.exit(130); });
 
 	// Start parent guard FIRST — if parent is already dead, exit immediately
 	const parentPid = Number(process.env.PI_CREW_PARENT_PID);
@@ -111,6 +151,7 @@ async function main(): Promise<void> {
 
 	appendEvent(manifest.eventsPath, { type: "async.started", runId: manifest.runId, data: { pid: process.pid } });
 	writeAsyncStartMarker(manifest, { pid: process.pid, startedAt: new Date().toISOString() });
+	const stopHeartbeat = startHeartbeat(manifest.stateRoot, manifest.eventsPath, manifest.runId);
 	const stopInterruptGuard = startInterruptGuard(manifest);
 
 	try {
@@ -156,6 +197,7 @@ async function main(): Promise<void> {
 	} finally {
 		stopInterruptGuard();
 		stopParentGuard();
+		stopHeartbeat();
 	}
 }
 

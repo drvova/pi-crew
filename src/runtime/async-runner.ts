@@ -102,14 +102,20 @@ export function getBackgroundRunnerCommand(
 ): { args: string[]; loader: "jiti" | "strip-types" } {
 	const loader = normalizeLoaderInput(loaderInput);
 	if (!loader) throw new Error(buildLoaderUnavailableMessage(packageRootFromRuntime()));
+	// Limit V8 heap to 512MB for the background runner to avoid triggering the
+	// Linux OOM killer. The runner itself is lightweight — it delegates work to
+	// child Pi processes — so 512MB is generous. Without this limit, Node.js
+	// defaults to ~1.5GB on 64-bit systems, which combined with jiti compilation
+	// and child processes can exhaust system memory.
+	const memoryLimit = "--max-old-space-size=512";
 	if (loader.kind === "jiti") {
 		return {
-			args: ["--import", pathToFileURL(loader.path).href, runnerPath, "--cwd", cwd, "--run-id", runId],
+			args: [memoryLimit, "--import", pathToFileURL(loader.path).href, runnerPath, "--cwd", cwd, "--run-id", runId],
 			loader: "jiti",
 		};
 	}
 	return {
-		args: ["--experimental-strip-types", runnerPath, "--cwd", cwd, "--run-id", runId],
+		args: [memoryLimit, "--experimental-strip-types", runnerPath, "--cwd", cwd, "--run-id", runId],
 		loader: "strip-types",
 	};
 }

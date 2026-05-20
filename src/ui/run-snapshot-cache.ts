@@ -307,7 +307,7 @@ async function recentOutputLinesAsync(manifest: TeamRunManifest, agents: CrewAge
 }
 
 function progressFromTasks(tasks: TeamTaskState[]): RunUiProgress {
-	const progress: RunUiProgress = { total: tasks.length, completed: 0, running: 0, failed: 0, queued: 0, waiting: 0, cancelled: 0, skipped: 0 };
+	const progress: RunUiProgress = { total: tasks.length, completed: 0, running: 0, failed: 0, queued: 0, waiting: 0, cancelled: 0, skipped: 0, needsAttention: 0 };
 	for (const task of tasks) {
 		if (task.status === "completed") progress.completed += 1;
 		else if (task.status === "running") progress.running += 1;
@@ -316,6 +316,7 @@ function progressFromTasks(tasks: TeamTaskState[]): RunUiProgress {
 		else if (task.status === "waiting") progress.waiting = (progress.waiting ?? 0) + 1;
 		else if (task.status === "cancelled") progress.cancelled = (progress.cancelled ?? 0) + 1;
 		else if (task.status === "skipped") progress.skipped = (progress.skipped ?? 0) + 1;
+		else if (task.status === "needs_attention") progress.needsAttention = (progress.needsAttention ?? 0) + 1;
 	}
 	return progress;
 }

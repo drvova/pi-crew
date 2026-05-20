@@ -106,8 +106,10 @@ export function startAsyncRunNotifier(ctx: ExtensionContext, state: AsyncNotifie
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			if (message.includes("stale") || message.includes("session replacement") || message.includes("old ctx")) {
-				console.error(`[pi-crew] async notifier stale ctx detected; stopping notifier.`);
-				try { stopAsyncRunNotifier(state); } catch { /* ignore */ }
+				// Don't stop the interval — session_start will create a new notifier
+				// with the refreshed ctx. The isCurrent guard will make this old
+				// notifier dormant once sessionGeneration increments.
+				// Stopping here creates a race: old notifier dies before new one starts.
 				return;
 			}
 			console.error(`[pi-crew] async notifier error: ${message}`);

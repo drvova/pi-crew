@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { checkProcessLiveness } from "./process-status.ts";
 import { recordFromTask, upsertCrewAgent } from "./crew-agent-records.ts";
@@ -30,7 +32,7 @@ function checkResultFile(
 ): { found: boolean; repaired: boolean } {
 	// Check if all tasks already have terminal status (result was written but manifest wasn't updated)
 	const allTerminal = tasks.length > 0 && tasks.every(
-		(t) => t.status === "completed" || t.status === "failed" || t.status === "cancelled" || t.status === "skipped",
+		(t) => t.status === "completed" || t.status === "failed" || t.status === "cancelled" || t.status === "skipped" || t.status === "needs_attention",
 	);
 	if (allTerminal) {
 		// Sync agent records even when tasks are already terminal
@@ -45,8 +47,12 @@ function checkResultFile(
 
 /**
  * Phase 2: Check PID liveness.
+ * Uses process.kill(pid, 0) for the authoritative check, but also checks
+ * the heartbeat file as corroborating evidence. If a heartbeat was recently
+ * written, treat the PID as alive even if process.kill returns false
+ * (handles SIGKILL race where PID hasn't been recycled yet).
  */
-function checkPidLiveness(pid: number | undefined): {
+function checkPidLiveness(pid: number | undefined, stateRoot?: string): {
 	alive: boolean;
 	detail: string;
 } {
@@ -54,6 +60,27 @@ function checkPidLiveness(pid: number | undefined): {
 		return { alive: false, detail: "no pid recorded" };
 	}
 	const liveness = checkProcessLiveness(pid);
+	// If process is alive per kill(0), we're done.
+	if (liveness.alive) return { alive: true, detail: liveness.detail };
+	// Process is dead per kill(0). Check heartbeat as corroborating evidence.
+	if (stateRoot) {
+		const heartbeatPath = path.join(stateRoot, "heartbeat.json");
+		try {
+			if (fs.existsSync(heartbeatPath)) {
+				const hb = JSON.parse(fs.readFileSync(heartbeatPath, "utf-8")) as { pid?: number; at?: number };
+				if (hb?.pid === pid && hb?.at) {
+					const ageMs = Date.now() - hb.at;
+					// Heartbeat written < 5 min ago → process was alive recently.
+					// Don't repair yet; let the next reconciliation cycle catch it.
+					if (ageMs < 5 * 60_000) {
+						return { alive: true, detail: `process dead but heartbeat ${Math.round(ageMs / 1000)}s old` };
+					}
+				}
+			}
+		} catch {
+			/* ignore — best-effort */
+		}
+	}
 	return { alive: liveness.alive, detail: liveness.detail };
 }
 
@@ -143,7 +170,7 @@ export function reconcileStaleRun(
 
 	// Phase 2: Check PID liveness
 	const pid = manifest.async?.pid;
-	const pidStatus = checkPidLiveness(pid);
+	const pidStatus = checkPidLiveness(pid, manifest.stateRoot);
 
 	if (pidStatus.detail === "no pid recorded") {
 		// No async PID may be a foreground/live run. Preserve it if task heartbeat

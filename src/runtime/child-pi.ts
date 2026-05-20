@@ -115,6 +115,8 @@ export interface ChildPiLifecycleEvent {
 	exitCode?: number | null;
 	/** Error message for error events. */
 	error?: string;
+	/** Stderr captured at timeout moment (for response_timeout events). */
+	stderr?: string;
 	/** Timestamp (ISO). */
 	ts: string;
 }
@@ -155,8 +157,42 @@ export interface ChildPiRunResult {
 }
 
 export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): SpawnOptions {
-	// Filter out env vars whose keys match secret patterns to avoid leaking credentials to child processes
-	const filteredEnv = sanitizeEnvSecrets(env);
+	// Filter out env vars whose keys match secret patterns to avoid leaking credentials to child processes.
+	// IMPORTANT: preserve model provider API keys — they are needed by the child Pi to call the LLM.
+	// Also preserve essential non-secret vars (PATH, HOME, USER, etc.) so the child process can function.
+	// Bug #10 fix: allow-list preserves model provider keys.
+	// Bug #12 fix: essential env vars (PATH, HOME, etc.) are always preserved so child can find npm/node.
+	const filteredEnv = sanitizeEnvSecrets(env, {
+		allowList: [
+			// Model provider API keys (these are safe to pass — they're meant for API calls)
+			"MINIMAX_*",
+			"OPENAI_*",
+			"ANTHROPIC_*",
+			"GOOGLE_*",
+			"AZURE_*",
+			"AWS_*",
+			"ZEU_*",
+			"ZERODEV_*",
+			"*_API_KEY",
+			"*_TOKEN",
+			"*_SECRET",
+			// Essential non-secret vars for child process to function
+			"PATH",
+			"HOME",
+			"USER",
+			"SHELL",
+			"TERM",
+			"LANG",
+			"LC_*",
+			"XDG_*",
+			"NVM_*",
+			"NODE_*",
+			"npm_*",
+			"PI_*",
+			"PI_CREW_*",
+			"PI_TEAMS_*",
+		],
+	});
 	return {
 		cwd,
 		env: { ...filteredEnv, PI_CREW_PARENT_PID: String(process.pid) },
@@ -374,7 +410,9 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				if (noResponseTimer) clearTimeout(noResponseTimer);
 				noResponseTimer = setTimeout(() => {
 					responseTimeoutHit = true;
-					input.onLifecycleEvent?.({ type: "response_timeout", pid: child.pid, error: `No output for ${responseTimeoutMs}ms`, ts: new Date().toISOString() });
+					// Capture stderr at timeout moment for debugging
+					const timeoutStderr = stderr.slice(-1024); // Last 1KB of stderr
+					input.onLifecycleEvent?.({ type: "response_timeout", pid: child.pid, error: `No output for ${responseTimeoutMs}ms`, ts: new Date().toISOString(), stderr: timeoutStderr || undefined });
 					killProcessTree(child.pid, child);
 					try {
 						child.kill(process.platform === "win32" ? undefined : "SIGTERM");
@@ -572,7 +610,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				} catch (err) {
 					logInternalError("child-pi.on-lifecycle-event", err, `event=close, pid=${child.pid}`);
 				}
-				const timeoutError = responseTimeoutHit && !stderr.trim() ? { error: `Child Pi produced no new output for ${responseTimeoutMs}ms; process was terminated as unresponsive.` } : undefined;
+				const timeoutError = responseTimeoutHit && !stderr.trim() ? { error: `Child Pi produced no new output for ${responseTimeoutMs}ms; process was terminated as unresponsive.` } : responseTimeoutHit && stderr.trim() ? { error: `Child Pi timed out after ${responseTimeoutMs}ms with stderr: ${stderr.slice(-500)}` } : undefined;
 				// M6 fix: log when forced final drain converts non-zero exit to 0.
 			// This is expected in normal operation (child finished cleanly but linger was killed),
 			// but the telemetry helps detect regressions where crashes are hidden.
