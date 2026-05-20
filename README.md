@@ -9,7 +9,7 @@ npm: pi-crew
 repo: https://github.com/baphuongna/pi-crew
 ```
 
-**v0.2.0**: Security hardening + 76% faster startup. See [CHANGELOG.md](CHANGELOG.md).
+**v0.2.20**: 14 bugs fixed — needs_attention terminal status, heartbeat-based stale detection, 3-layer OOM protection for background runs, model API key preservation. See [CHANGELOG.md](CHANGELOG.md) and [docs/pi-crew-bugs.md](docs/pi-crew-bugs.md).
 
 ---
 
@@ -17,6 +17,7 @@ repo: https://github.com/baphuongna/pi-crew
 
 - **One Pi tool** — `team` handles routing, planning, execution, review, and cleanup
 - **Autonomous delegation** — policy injection decides when/how to delegate based on task complexity
+- **needs_attention status** — tasks that complete without calling `submit_result` get `needs_attention` (terminal) instead of `completed`; allows retry/re-run without blocking downstream phases
 - **Real child Pi workers** — each task spawns a separate Pi process by default; scaffold/dry-run opt-out
 - **Adaptive planning** — implementation workflow lets a planner agent decide subagent fanout
 - **Parallel execution** — tasks in the same phase run concurrently with configurable concurrency
@@ -104,6 +105,7 @@ When unsure which team/workflow fits:
 | `implementation` | Adaptive planner quyết fanout | Multi-file implementation |
 | `review` | explore → code-review → security-review → verify | Code review + security audit |
 | `research` | explore → analyze → write | Nghiên cứu và viết tài liệu |
+| `parallel-research` | Parallel shards → synthesize → write | Multi-source research |
 
 ## Builtin Agents
 
@@ -172,7 +174,7 @@ Worktree mode is **opt-in** and requires a clean repo:
 | **Async** | `asyncByDefault`, `runtime.groupJoin` | `false`, `smart` |
 | **Autonomy** | `profile`: `manual` \| `suggested` \| `assisted` \| `aggressive` | `suggested` |
 | **UI** | `widgetPlacement`, `dashboardPlacement`, `showModel`, `showTokens` | compact widget |
-| **Reliability** | `autoRetry`, `autoRecover`, `deadletterThreshold` | all opt-in |
+| **Reliability** | `autoRetry`, `autoRecover`, `deadletterThreshold`, `retryPolicy` | all opt-in |
 | **Observability** | `prometheus.enabled`, `otlp.enabled` | opt-in |
 
 > ⚠️ **Trust boundary**: project config cannot override sensitive execution controls (workers, runtime mode, autonomy, agent overrides). Set those in **user config** only.

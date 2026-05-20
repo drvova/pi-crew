@@ -2,21 +2,36 @@
 
 ## [Unreleased]
 
-### Added
+_(Nothing yet — see 0.2.20 for recent changes)_
 
-- **Streaming progress for `team` and `Agent` foreground tool calls** — The Pi tool widget previously showed only the tool label "Agent" / "Team" while a foreground run was executing, then dumped the full result at completion. Both tools now wire the `onUpdate` callback and stream a compact 3-4 line progress block once per second (status, elapsed, active agent role, current tool, latest output snippet). Background subagents are unchanged. Files: `src/ui/tool-progress-formatter.ts` (new), `src/extension/registration/subagent-tools.ts`, `src/extension/registration/team-tool.ts`.
+## 0.2.20 — 14 Bugs Fixed — needs_attention, Heartbeat, OOM, API Keys (2026-05-20)
 
-### Fixed
+### Features
 
-- **Agent "stopped" + "No output." without explanation** — `SubagentManager.markStopped()` and the `start()` catch block previously set `status: "stopped"` but never wrote a reason into `record.error`, so the user only saw the generic "No output." fallback. Fix: `markStopped(record, reason?)` and `abortAll(reason?)` now persist the abort reason (e.g. "Session switching — foreground subagents cancelled."), and the `Agent` tool foreground result chain includes `record.error` before the "No output." fallback. Files: `src/runtime/subagent-manager.ts`, `src/extension/register.ts`, `src/extension/registration/subagent-tools.ts`.
-- **Foreground crew_agent runs now use startForegroundRun** — Previously the `crew_agent` / `Agent` tool's runner did not pass `startForegroundRun` to `handleTeamTool`, causing it to use the blocking `executeTeamRun` path instead of the non-blocking foreground run path. The blocking path was vulnerable to Pi tool signal aborts (user cancel, session switch), causing premature "stopped" results. The runner now receives `startForegroundRun` from the registration layer, so `handleRun` starts the team run as a non-blocking foreground run and returns immediately, while the SubagentManager polls `pollRunToTerminal` until completion. This mirrors the `team` tool's foreground path and avoids signal-abort race conditions. File: `src/extension/registration/subagent-tools.ts`, `src/extension/register.ts`.
-- **Pre-aborted signal detection** — Added a diagnostic check at the top of the `crew_agent` `execute` function: if the Pi tool signal is already aborted before the agent even starts, the tool returns an explicit error message instead of spawning a doomed subagent that would show "stopped + No output." File: `src/extension/registration/subagent-tools.ts`.
+- **needs_attention terminal task status** — Tasks that complete without calling `submit_result` now get `activityState: needs_attention` instead of `completed`. Workflow phases advance on either `completed` or `needs_attention`.
+- **3-layer OOM protection for background runs** — `node --max-old-space-size=512` prevents Node OOM kills; heartbeat + `pid_dead` stale detection catches zombie workers; `SIGTERM`/`SIGINT`/`SIGUSR2` handlers log `async.failed` for diagnosis.
+- **Essential env vars preserved for child processes** — `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL` now passed to child Pi workers.
+- **Model API key allow-list** — `MINIMAX_API_KEY` and other model keys are preserved in child process env.
+- **Async notifier stale-ctx guard** — `isCurrent` flag prevents stale session notifications from corrupting active run state.
+
+### Bug Fixes
+
+- **Bug #1/2: 429 → stale heartbeat misclassification** — MiniMax `provider_error` with 429 status retried with fallback chain.
+- **Bug #3: background.log silent on error** — Captures all stderr/exit output.
+- **Bug #4: worker-startup.ts missing rate_limited** — `error.classification = "rate_limited"` added.
+- **Bug #5: stale notifications after prune** — Heartbeat checked before declaring `pid_dead`.
+- **Bug #6: concurrent tool calls cancel foreground runs** — Confirmed as design constraint.
+- **Bug #7: async notifier stale-ctx dies** — `isCurrent` guard added.
+- **Bug #8/10: MINIMAX_API_KEY filtered** — Added to env allow-list.
+- **Bug #9: executor yield limit → needs_attention** — `noYield` path sets `activityState: needs_attention`.
+- **Bug #11: background spawn ENOENT** — `resolveScriptPath` handles `node_modules` hoisting.
+- **Bug #12: essential env stripped** — `PATH/HOME/USER/LANG/LC_ALL` preserved.
+- **Bug #13: background runner dies at ~59s** — 3-layer OOM protection.
+- **Bug #14: infinite retry loop** — `needs_attention` gets `queue: "done"` in task graph scheduler.
 
 ### Tests
 
-- Added `test/unit/tool-progress-formatter.test.ts` (5 cases covering empty run, run-only header, active agent with tool, long-output trimming + usage tokens fallback, spawn error).
-
----
+- Added `test/unit/needs-attention-status.test.ts` (9 cases for contracts, transitions, agent-control idle detection).
 
 ## 0.2.3 — Bug Fixes & Hardening (2026-05-12)
 

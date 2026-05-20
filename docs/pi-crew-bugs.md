@@ -1,8 +1,11 @@
-# pi-crew v0.2.20 — Bug Report
+# pi-crew v0.2.20 — Bug Report & Fixes
 
 **Ngày:** 2026-05-19  
 **Session:** Comprehensive integration test + root cause analysis  
 **Environment:** linux/x64, Node v22.22.0, Pi CLI v0.75.3, pi-crew v0.2.20
+**Trạng thái:** ✅ 14/14 bugs fixed (commits `de9e8b4` và `5dc794e`)
+
+> **All bugs fixed ✅** — Source code verified. Xem [pi-crew-test-final.md](pi-crew-test-final.md) cho kết quả end-to-end test.
 
 ---
 

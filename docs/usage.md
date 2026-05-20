@@ -48,6 +48,20 @@ Supported fields:
     "showModel": true,
     "showTokens": true,
     "showTools": true
+  },
+  "limits": {
+    "maxConcurrentWorkers": 4
+  },
+  "reliability": {
+    "autoRetry": false,
+    "autoRecover": false,
+    "deadletterThreshold": 3,
+    "retryPolicy": {
+      "maxAttempts": 3,
+      "initialDelayMs": 1000,
+      "backoffMultiplier": 2,
+      "maxDelayMs": 30000
+    }
   }
 }
 ```
