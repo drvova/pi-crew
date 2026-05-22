@@ -70,15 +70,16 @@ test("implementation workflow produces runnable result with mock child-pi", asyn
 	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
 	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
 	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+		let run;
 	try {
-		const run = await handleTeamTool({ action: "run", team: "implementation", goal: "mock test" }, { cwd });
+		run = await handleTeamTool({ action: "run", team: "implementation", goal: "mock test" }, { cwd });
 		assert.equal(run.isError, false);
 		const loaded = loadRunManifestById(cwd, run.details.runId!);
 		// With mock child-pi, the workflow completes with one of these statuses
 		assert.ok(["blocked", "running", "completed", "needs_attention"].includes(loaded?.manifest.status ?? ""),
 			`Expected blocked/running/completed/needs_attention, got ${loaded?.manifest.status}`);
 	} finally {
-		unregisterActiveRun(run.details.runId!);
+		if (run) unregisterActiveRun(run.details.runId!);
 		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
 		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -95,8 +96,9 @@ test("implementation workflow with PI_CREW_ADAPTIVE_REPAIR=0 behaves consistentl
 	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
 	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 	process.env.PI_CREW_ADAPTIVE_REPAIR = "0";
+		let run;
 	try {
-		const run = await handleTeamTool({ action: "run", team: "implementation", goal: "test no repair" }, { cwd });
+		run = await handleTeamTool({ action: "run", team: "implementation", goal: "test no repair" }, { cwd });
 		assert.equal(run.isError, false);
 		const loaded = loadRunManifestById(cwd, run.details.runId!);
 		// With repair disabled, the mock output may or may not produce valid adaptive plan
@@ -104,7 +106,7 @@ test("implementation workflow with PI_CREW_ADAPTIVE_REPAIR=0 behaves consistentl
 		assert.ok(["blocked", "running", "completed"].includes(loaded?.manifest.status ?? ""),
 			`Expected blocked/running/completed, got ${loaded?.manifest.status}`);
 	} finally {
-		unregisterActiveRun(run.details.runId!);
+		if (run) unregisterActiveRun(run.details.runId!);
 		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
 		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
 		restoreEnv("PI_CREW_ADAPTIVE_REPAIR", previousRepair);

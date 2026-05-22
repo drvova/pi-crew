@@ -2,13 +2,20 @@ import * as fs from "node:fs";
 import type { AgentConfig } from "../../agents/agent-config.ts";
 import type { CrewRuntimeConfig } from "../../config/config.ts";
 import { writeArtifact } from "../../state/artifact-store.ts";
-import { appendEvent, appendEventFireAndForget } from "../../state/event-log.ts";
-import { loadRunManifestById } from "../../state/state-store.ts";
-import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../../state/types.ts";
+import {
+	appendEvent,
+	appendEventFireAndForget,
+} from "../../state/event-log.ts";
+import type {
+	ArtifactDescriptor,
+	TeamRunManifest,
+	TeamTaskState,
+} from "../../state/types.ts";
+import { loadRunManifestById, saveRunTasks } from "../../state/state-store.ts";
+import { persistSingleTaskUpdate } from "./state-helpers.ts";
 import type { WorkflowStep } from "../../workflows/workflow-config.ts";
 import { appendCrewAgentEvent, appendCrewAgentOutput, emptyCrewAgentProgress, recordFromTask, upsertCrewAgent } from "../crew-agent-records.ts";
 import { createWorkerHeartbeat, touchWorkerHeartbeat } from "../worker-heartbeat.ts";
-import { loadRunManifestById, saveRunTasks } from "../../state/state-store.ts";
 import { createStartupEvidence, type WorkerStartupEvidence } from "../worker-startup.ts";
 import { runLiveSessionTask } from "../live-session-runtime.ts";
 import { shouldAppendProgressEventUpdate, type ProgressEventSummary } from "../progress-event-coalescer.ts";

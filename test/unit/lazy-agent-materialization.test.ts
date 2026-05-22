@@ -20,12 +20,13 @@ test("queued dependency tasks are shown as waiting tasks, not materialized agent
 	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-lazy-agents-"));
+	let runId: string | undefined;
 	try {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		let scheduled: ((signal?: AbortSignal) => Promise<void>) | undefined;
 		const run = await handleTeamTool({ action: "run", team: "research", goal: "lazy agent materialization" }, { cwd, startForegroundRun: (runner) => { scheduled = runner; } });
+		runId = run.details.runId!;
 		assert.equal(run.isError, false);
-		const runId = run.details.runId!;
 		const loadedBefore = loadRunManifestById(cwd, runId)!;
 		assert.deepEqual(readCrewAgents(loadedBefore.manifest), []);
 		const statusBefore = await handleTeamTool({ action: "status", runId }, { cwd });
@@ -35,7 +36,7 @@ test("queued dependency tasks are shown as waiting tasks, not materialized agent
 		const loadedAfter = loadRunManifestById(cwd, runId)!;
 		assert.equal(readCrewAgents(loadedAfter.manifest).length, 3);
 	} finally {
-		unregisterActiveRun(runId);
+		if (runId) unregisterActiveRun(runId);
 		restore("PI_TEAMS_MOCK_CHILD_PI", previousMock);
 		restore("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
 		fs.rmSync(cwd, { recursive: true, force: true });

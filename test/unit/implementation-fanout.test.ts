@@ -35,10 +35,11 @@ test("implementation run injects planner-selected multi-agent ready batches", as
 	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
 	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
 	process.env.PI_TEAMS_MOCK_CHILD_PI = "adaptive-plan";
+		let runId: string | undefined;
 	try {
 		const run = await handleTeamTool({ action: "run", team: "implementation", goal: "fanout smoke" }, { cwd });
 		assert.equal(run.isError, false);
-		const runId = run.details.runId;
+		runId = run.details.runId;
 		assert.ok(runId);
 		const loaded = loadRunManifestById(cwd, runId);
 		assert.equal(loaded?.manifest.status, "completed");

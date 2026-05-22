@@ -1,16 +1,1 @@
-[
-  {
-    "runId": "team_20260522081609_cdc1d5bb2cf89c52",
-    "cwd": "/tmp/debug-test-1779437769894",
-    "stateRoot": "/tmp/debug-test-1779437769894/.crew/state/runs/team_20260522081609_cdc1d5bb2cf89c52",
-    "manifestPath": "/tmp/debug-test-1779437769894/.crew/state/runs/team_20260522081609_cdc1d5bb2cf89c52/manifest.json",
-    "updatedAt": "2026-05-22T08:16:09.930Z"
-  },
-  {
-    "runId": "team_20260522081423_162ac53d1bf6ad4a",
-    "cwd": "/tmp/call-test-FVtIep",
-    "stateRoot": "/tmp/call-test-FVtIep/.crew/state/runs/team_20260522081423_162ac53d1bf6ad4a",
-    "manifestPath": "/tmp/call-test-FVtIep/.crew/state/runs/team_20260522081423_162ac53d1bf6ad4a/manifest.json",
-    "updatedAt": "2026-05-22T08:14:23.445Z"
-  }
-]
+[]
