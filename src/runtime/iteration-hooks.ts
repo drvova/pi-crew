@@ -69,7 +69,7 @@ const HOOK_TIMEOUT_MS = 30_000;
 export function isAllowedHookPath(hookPath: string): boolean {
 	// DEBUG: log path behavior on Windows
 	if (hookPath === ".hooks/hook.sh" || hookPath === ".hooks/my-hook.sh") {
-		console.log("DEBUG_GHCI_" + hookPath + "_SEP=" + JSON.stringify(path.sep) + "_NORM=" + JSON.stringify(path.normalize(hookPath)) + "_ISABS=" + String(path.isAbsolute(hookPath)) + "_RES=" + String(normalized === ".hooks" || normalized.startsWith(".hooks/")));", JSON.stringify({
+		process.stdout.write("DEBUG_S1:" + hookPath + ":" + String(path.isAbsolute(hookPath)) + "\n");", JSON.stringify({
 			hookPath,
 			isAbsolute: path.isAbsolute(hookPath),
 			normalize: JSON.stringify(path.normalize(hookPath)),
