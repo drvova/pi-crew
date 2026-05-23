@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.3.0] — Phase 3a+3b: Discovery Cache, Dynamic Agent Registry, Rich TUI Rendering (2026-05-23)
+
+### Phase 3a: Agent Discovery Cache
+- **500ms TTL cache** with max 32 entries and per-cwd invalidation
+- **FIFO eviction** when cache is full
+- Cache pruned on every `discoverAgents()` call
+- `invalidateAgentDiscoveryCache(cwd?)` exposed for explicit invalidation
+
+### Phase 3b: Dynamic Agent Registry
+- **`registerDynamicAgent(config)`** — runtime agent registration with cache invalidation
+- **`unregisterDynamicAgent(name)`** — throws on missing agent
+- **`listDynamicAgents()`** — returns all registered dynamic agents
+- Dynamic agents get **highest priority** over discovered agents (security: project < builtin < user < dynamic)
+- **CrewRegistry v2** — extended from v1 with `registerAgent`/`unregisterAgent`/`listDynamicAgents`
+- Factory `installCrewGlobalRegistry()` for clean initialization
+
+### Rich TUI Tool Rendering
+- **New `src/ui/tool-render.ts`** (304 lines) — shared rendering module ported from pi-subagent4
+- **`renderTeamToolCall`** — collapsed: `team action='run' (default) "goal preview"` / expanded: header + goal streaming
+- **`renderAgentToolCall`** — collapsed: `Agent explorer "prompt preview"` / expanded: header + prompt
+- **`renderTeamToolResult`** — `[status] goal text` for run actions / compact info for others
+- **`renderAgentToolResult`** — status icons (⟳○✓✗) + output lines for agent results
+- **`renderAgentProgress`** — icon + header + tool log + context gauge + usage line (↑↓RW$ctx)
+- Helpers: `formatTokens`, `formatDuration`, `formatContextUsage`, `truncLine`, `formatToolPreview`
+- All tools use **`@mariozechner/pi-tui`** Components (Container, Text, Spacer) directly
+- `renderCall`/`renderResult` added to: `team`, `Agent` tools
+
+### Tests
+- **1662 tests pass** (1652 unit + 46 integration + 4 new)
+- New test suites: `agent-discovery-cache.test.ts` (10 tests), `tool-render.test.ts` (10 tests)
+- Bug fix: `allAgents` priority corrected (discovery: project < builtin < user; dynamic separate/highest)
+
 ## [0.2.21] — 3 Bugs Fixed — Background Runner, Child-pi stdin, Phantom Runs (2026-05-22)
 
 ## [0.2.25] — CI Fixes & needs_attention Terminal Status (2026-05-22)
