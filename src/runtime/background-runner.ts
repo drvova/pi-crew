@@ -147,16 +147,21 @@ async function main(): Promise<void> {
 			if (loaded) appendEvent(loaded.manifest.eventsPath, { type: "async.failed", runId, message: `Background runner received ${sig} — exiting.`, data: { signal: sig, pid: process.pid } });
 		}
 	};
-	// BUG #17 DIAGNOSTIC: Write exit code to file for debugging.
-	process.on("exit", (code) => {
-		try {
-			require("node:fs").appendFileSync(
-				manifest.stateRoot + '/exit-code.txt',
-				`${new Date().toISOString()} exit_code=${code} pid=${process.pid}\n`
-			);
-		} catch {}
-	});
-
+	// BUG #17 FIX: Compute exitCodePath at module load time using args,
+	// NOT by referencing `manifest` (declared inside main() and not in scope at module load).
+	const exitCodePath = ((): string | undefined => {
+		const cwd = argValue("--cwd");
+		const runId = argValue("--run-id");
+		if (!cwd || !runId) return undefined;
+		return path.join(cwd, ".crew", "state", "runs", runId, "exit-code.txt");
+	})();
+	if (exitCodePath) {
+		process.on("exit", (code) => {
+			try {
+				fs.appendFileSync(exitCodePath, `${new Date().toISOString()} exit_code=${code} pid=${process.pid}\n`);
+			} catch {}
+		});
+	}
 	process.on("SIGTERM", () => {
 		// BUG #17 FIX: Ignore SIGTERM.
 		// IMPORTANT: Perform real I/O here to flush io_uring state after EINTR.

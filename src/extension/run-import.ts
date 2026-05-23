@@ -21,11 +21,20 @@ function importRoot(cwd: string, scope: "project" | "user"): string {
 
 export function importRunBundle(cwd: string, bundlePath: string, scope: "project" | "user" = "project"): ImportedRunBundleInfo {
 	const resolvedPath = path.isAbsolute(bundlePath) ? bundlePath : path.resolve(cwd, bundlePath);
-	// Path containment: only allow reading bundles from cwd or user home
-	const allowedBases = [cwd];
+	// Path containment: use resolveRealContainedPath for canonical real-path check
+	// to prevent symlink/../ bypass of the startsWith string comparison.
+	const allowedBases: string[] = [];
 	try { allowedBases.push(userCrewRoot()); } catch { /* ignore */ }
 	try { allowedBases.push(projectCrewRoot(cwd)); } catch { /* ignore */ }
-	const isContained = allowedBases.some((base) => resolvedPath.startsWith(base + path.sep) || resolvedPath === base);
+	allowedBases.push(cwd); // always include cwd last (highest priority)
+	let isContained = false;
+	for (const base of allowedBases) {
+		try {
+			resolveRealContainedPath(base, resolvedPath);
+			isContained = true;
+			break;
+		} catch { /* not contained — try next base */ }
+	}
 	if (!isContained) throw new Error(`Import path must be within project directory or crew root: ${resolvedPath}`);
 	const raw = JSON.parse(fs.readFileSync(resolvedPath, "utf-8")) as unknown;
 	assertRunBundle(raw);

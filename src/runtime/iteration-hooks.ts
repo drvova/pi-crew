@@ -6,6 +6,7 @@
  */
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { resolveShellForScript } from "../utils/resolve-shell.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { DENIED_METRIC_NAMES } from "./metric-parser.ts";
@@ -55,6 +56,25 @@ const MAX_STDOUT_BYTES = 8192;
 
 /** Hook execution timeout in milliseconds (30 seconds). */
 const HOOK_TIMEOUT_MS = 30_000;
+
+/**
+ * Validates that a hook script path is within an allowed directory.
+ * Allowed paths:
+ * - Relative paths starting with ".hooks/" (case-sensitive)
+ * - Absolute paths under $HOME/.pi/hooks/
+ * All other paths are rejected to prevent arbitrary script execution.
+ * @param hookPath - The hook script path to validate
+ * @returns true if the path is allowed, false otherwise
+ */
+export function isAllowedHookPath(hookPath: string): boolean {
+	if (!hookPath || hookPath.trim().length === 0) return false;
+	if (!path.isAbsolute(hookPath)) {
+		const normalized = path.normalize(hookPath);
+		return normalized === ".hooks" || normalized.startsWith(".hooks/");
+	}
+	const homeHooks = path.join(process.env.HOME ?? "", "", ".pi", "hooks");
+	return hookPath === homeHooks || hookPath.startsWith(homeHooks + path.sep);
+}
 
 /**
  * Create a not-fired result for when the hook script is absent or not executable.
@@ -113,9 +133,9 @@ function isScriptRunnable(scriptPath: string): boolean {
  * Spawns `bash <script>` with the hook payload as JSON on stdin.
  * Captures stdout (capped at 8KB) and stderr. Enforces a 30-second timeout.
  *
- * **Security note:** The script path is user-configurable and executed with
- * minimal environment (PATH, HOME, USER, LANG). Only use with trusted script paths from
- * workspace-owned configuration. No path containment validation is performed.
+ * **Security note:** Hook paths are restricted to `.hooks/` relative paths
+ * or `$HOME/.pi/hooks/` absolute paths. All other paths are rejected before
+ * execution.
  *
  * @param payload - Structured hook payload
  * @param hookScriptPath - Absolute or relative path to the hook script
@@ -126,7 +146,12 @@ export async function runIterationHook(
 	hookScriptPath: string,
 	options?: { timeoutMs?: number },
 ): Promise<HookResult> {
-	if (!isScriptRunnable(hookScriptPath)) {
+	if (!isAllowedHookPath(hookScriptPath)) {
+		return { fired: false, stdout: "", stderr: "hook path not allowed: " + hookScriptPath, exitCode: null, timedOut: false, durationMs: 0 };
+	}
+	// Resolve relative paths relative to cwd
+	const resolvedScript = path.isAbsolute(hookScriptPath) ? hookScriptPath : path.join(payload.cwd, hookScriptPath);
+	if (!isScriptRunnable(resolvedScript)) {
 		return notFiredResult();
 	}
 
@@ -136,7 +161,7 @@ export async function runIterationHook(
 	const stderrChunks: Buffer[] = [];
 
 	return new Promise<HookResult>((resolve) => {
-		const { command, args } = resolveShellForScript(hookScriptPath);
+		const { command, args } = resolveShellForScript(resolvedScript);
 		const child = spawn(command, args, {
 			cwd: payload.cwd,
 			env: { ...sanitizeEnvSecrets(process.env, { allowList: ["PATH", "HOME", "USER", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "ComSpec", "SystemRoot", "PI_*"] }), PI_CREW_HOOK: "1" },

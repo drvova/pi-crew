@@ -1,3 +1,5 @@
+import { isSensitivePath } from "./sensitive-paths.ts";
+
 export type RolePermissionMode = "read_only" | "workspace_write" | "danger_full_access" | "explicit_confirm";
 
 const READ_ONLY_ROLES = new Set(["explorer", "reviewer", "security-reviewer", "verifier", "analyst", "critic", "planner", "writer"]);
@@ -21,8 +23,12 @@ export function isReadOnlyCommand(command: string): boolean {
 	return READ_ONLY_COMMANDS.has(first) && !/\s(-i|--in-place)\b|\s>{1,2}\s|\brm\b|\bmv\b|\bcp\b|\b(?:npm|pnpm|yarn|bun)\s+(install|add|ci|remove)\b|\bgit\s+(commit|push|merge|rebase|reset|checkout|clean)\b/.test(command);
 }
 
-export function checkRolePermission(role: string, command: string): PermissionCheckResult {
+export function checkRolePermission(role: string, command: string, filePath?: string): PermissionCheckResult {
 	const mode = permissionForRole(role);
+	// Also block access to known sensitive paths even for read-only commands
+	if (filePath && isSensitivePath(filePath)) {
+		return { allowed: false, mode, reason: `Path '${filePath}' is sensitive (credentials, SSH keys, etc.) — access denied for all roles.` };
+	}
 	if (mode === "read_only" && !isReadOnlyCommand(command)) return { allowed: false, mode, reason: `Role '${role}' is read-only and command may modify state.` };
 	return { allowed: true, mode };
 }

@@ -145,12 +145,12 @@ export async function terminateLiveAgent(agentIdOrTaskId: string, status: CrewAg
 	if (!handle) return undefined;
 	handle.status = status;
 	handle.updatedAt = new Date().toISOString();
-	liveAgents.delete(handle.agentId);
 	try { if (eventLogFn && eventsPath) eventLogFn(eventsPath, { type: "live_agent.terminated", runId: handle.runId, taskId: handle.taskId, message: `Live agent terminated: ${handle.agent} status=${status}`, data: { agentId: handle.agentId, status, role: handle.role, workspaceId: handle.workspaceId } }); } catch { /* non-critical */ }
 	try {
 		await handle.session.abort?.();
 	} finally {
 		safeDisposeLiveSession(handle);
+		liveAgents.delete(handle.agentId);  // Move AFTER abort completes to prevent race
 	}
 	return handle;
 }

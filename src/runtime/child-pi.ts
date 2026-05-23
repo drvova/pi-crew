@@ -394,7 +394,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			const finalDrainMs = input.finalDrainMs ?? FINAL_DRAIN_MS;
 			const hardKillMs = input.hardKillMs ?? HARD_KILL_MS;
 			const responseTimeoutEnv = Number.parseInt(process.env.PI_TEAMS_CHILD_RESPONSE_TIMEOUT_MS ?? "", 10);
-			const responseTimeoutMs = Number.isFinite(responseTimeoutEnv) && responseTimeoutEnv >= 0 ? responseTimeoutEnv : input.responseTimeoutMs ?? RESPONSE_TIMEOUT_MS;
+			const responseTimeoutMs = Number.isFinite(responseTimeoutEnv) && responseTimeoutEnv > 0 ? responseTimeoutEnv : input.responseTimeoutMs ?? RESPONSE_TIMEOUT_MS;
 			let responseTimeoutHit = false;
 			let forcedFinalDrain = false;
 			let abortRequested = input.signal?.aborted === true;

@@ -68,11 +68,38 @@ function normalizeSyntheticPath(worktreePath: string, rawPath: string): string {
 	return path.normalize(relative);
 }
 
+/**
+ * Validates that a worktree setupHook script path is within an allowed directory.
+ * Allowed paths:
+ * - Relative paths starting with ".hooks/" (case-sensitive)
+ * - Absolute paths under $HOME/.pi/hooks/
+ * Rejects all other paths to prevent arbitrary script execution.
+ * @param hookPath - The hook script path to validate
+ * @returns true if the path is allowed, false otherwise
+ */
+function isAllowedSetupHook(hookPath: string): boolean {
+	if (!hookPath || hookPath.trim().length === 0) return false;
+	if (!path.isAbsolute(hookPath)) {
+		const normalized = path.normalize(hookPath);
+		return normalized === ".hooks" || normalized.startsWith(".hooks/");
+	}
+	const homeHooks = path.join(process.env.HOME ?? "", "", ".pi", "hooks");
+	return hookPath === homeHooks || hookPath.startsWith(homeHooks + path.sep);
+}
+
 function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: string, worktreePath: string, branch: string): string[] {
 	const cfg = loadConfig(manifest.cwd).config.worktree;
 	if (!cfg?.setupHook) return [];
-	const hookPath = path.isAbsolute(cfg.setupHook) ? cfg.setupHook : path.resolve(repoRoot, cfg.setupHook);
-	if (!fs.existsSync(hookPath) || fs.statSync(hookPath).isDirectory()) throw new Error(`worktree setup hook not found or not a file: ${hookPath}`);
+	const rawHookPath = cfg.setupHook;
+	if (!isAllowedSetupHook(rawHookPath)) {
+		logInternalError("worktree.setupHook.rejected", new Error("hook path not allowed: " + rawHookPath), `cwd=${manifest.cwd}`);
+		return [];
+	}
+	const hookPath = path.isAbsolute(rawHookPath) ? rawHookPath : path.resolve(repoRoot, rawHookPath);
+	if (!fs.existsSync(hookPath) || fs.statSync(hookPath).isDirectory()) {
+		logInternalError("worktree.setupHook.missing", new Error("hook not found or is directory: " + hookPath), `cwd=${manifest.cwd}`);
+		return [];
+	}
 	const nodeHook = hookPath.endsWith(".js") || hookPath.endsWith(".cjs") || hookPath.endsWith(".mjs");
 	const result = spawnSync(nodeHook ? process.execPath : hookPath, nodeHook ? [hookPath] : [], {
 		cwd: worktreePath,
