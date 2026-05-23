@@ -9,6 +9,7 @@ import type { createManifestCache } from "../../runtime/manifest-cache.ts";
 import type { createRunSnapshotCache } from "../../ui/run-snapshot-cache.ts";
 import type { MetricRegistry } from "../../observability/metric-registry.ts";
 import { resolveRealContainedPath } from "../../utils/safe-paths.ts";
+import { renderTeamToolCall, renderTeamToolResult } from "../../ui/tool-render.ts";
 // Team tool handler — lazy-loaded because team-tool.ts imports many modules
 import type { handleTeamTool as HandleTeamToolFn } from "../team-tool.ts";
 let _cachedHandleTeamTool: typeof HandleTeamToolFn | undefined;
@@ -103,6 +104,12 @@ export function registerTeamTool(pi: ExtensionAPI, deps: RegisterTeamToolDeps): 
 				deps.foregroundControllers.delete(toolKey);
 				stopProgress.stop();
 			}
+		},
+		renderCall(args: any, theme: any, context: any): any {
+			return renderTeamToolCall(args, theme, context);
+		},
+		renderResult(result: any, options: any, theme: any, context: any): any {
+			return renderTeamToolResult(result, options, theme, context);
 		},
 	};
 	pi.registerTool(tool);

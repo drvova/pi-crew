@@ -22,6 +22,7 @@ import { t } from "../../i18n.ts";
 import { loadRunManifestById } from "../../state/state-store.ts";
 import { readCrewAgents } from "../../runtime/crew-agent-records.ts";
 import { formatCompactToolProgress } from "../../ui/tool-progress-formatter.ts";
+import { renderAgentToolCall, renderAgentToolResult } from "../../ui/tool-render.ts";
 
 const TOOL_PROGRESS_TICK_MS = 1000;
 
@@ -94,6 +95,12 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 				return { ...foregroundResult, terminate: true };
 			}
 			return foregroundResult;
+		},
+		renderCall(args: any, theme: any, context: any): any {
+			return renderAgentToolCall(args, theme, context);
+		},
+		renderResult(result: any, options: any, theme: any, context: any): any {
+			return renderAgentToolResult(result, options, theme, context);
 		},
 	};
 

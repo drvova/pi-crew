@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { allAgents, discoverAgents } from "../agents/discover-agents.ts";
+import { allAgents, discoverAgents, invalidateAgentDiscoveryCache, registerDynamicAgent, unregisterDynamicAgent, listDynamicAgents } from "../agents/discover-agents.ts";
+import type { AgentConfig } from "../agents/agent-config.ts";
 import { allTeams, discoverTeams } from "../teams/discover-teams.ts";
 import { allWorkflows, discoverWorkflows } from "../workflows/discover-workflows.ts";
 import { loadConfig, updateAutonomousConfig, updateConfig } from "../config/config.ts";
@@ -383,13 +384,24 @@ export async function handleTeamTool(params: TeamToolParamsValue, ctx: TeamConte
  */
 const CREW_REGISTRY_KEY = Symbol.for("pi-crew:registry");
 interface CrewRegistry {
-	version: 1;
+	version: 2;
 	getRecord: (runId: string) => TeamRunManifest | undefined;
 	listRuns: () => Array<{ runId: string; status: string; goal: string }>;
 	appendEvent: (runId: string, event: Record<string, unknown>) => void;
 	waitForAll: (runId: string) => Promise<void>;
 	hasRunning: (runId: string) => boolean;
+	/** Register a dynamic agent at runtime. Invalidates the discovery cache. */
+	registerAgent: (config: AgentConfig) => void;
+	/** Unregister a previously registered dynamic agent. Invalidates the discovery cache. */
+	unregisterAgent: (name: string) => void;
+	/** List all currently registered dynamic agents. */
+	listDynamicAgents: () => AgentConfig[];
 }
+
+// ─── Dynamic Agent Registry (Phase 3b) ───────────────────────────────────
+// The dynamic agent store lives in discover-agents.ts and is merged into
+// discovery results with highest priority. The CrewRegistry interface exposes
+// registerAgent/unregisterAgent/listDynamicAgents for cross-extension access.
 
 export function registerCrewGlobalRegistry(registry: CrewRegistry): void {
 	(globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] = registry;
@@ -397,4 +409,19 @@ export function registerCrewGlobalRegistry(registry: CrewRegistry): void {
 
 export function getCrewGlobalRegistry(): CrewRegistry | undefined {
 	return (globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] as CrewRegistry | undefined;
+}
+
+/** Create and install the global CrewRegistry singleton. Call once at extension init. */
+export function installCrewGlobalRegistry(): void {
+	registerCrewGlobalRegistry({
+		version: 2,
+		getRecord: (runId: string) => undefined as unknown as TeamRunManifest,
+		listRuns: () => [],
+		appendEvent: () => {},
+		waitForAll: async () => {},
+		hasRunning: () => false,
+		registerAgent: registerDynamicAgent,
+		unregisterAgent: unregisterDynamicAgent,
+		listDynamicAgents,
+	});
 }

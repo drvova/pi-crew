@@ -445,35 +445,36 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	// Register global RPC registry for cross-extension access (mirrors pi-subagents3's Symbol.for pattern)
 	// Uses lazy import to avoid pulling team-tool.ts into module load.
 	// Other extensions access via: const reg = globalThis[Symbol.for("pi-crew:registry")];
-	void import("./team-tool.ts").then(({ registerCrewGlobalRegistry }) => {
+	void import("./team-tool.ts").then(({ registerCrewGlobalRegistry, installCrewGlobalRegistry }) => {
+		// Phase 3b: installCrewGlobalRegistry creates a v2 registry with agent registration API.
+		// We then patch the manifest-backed methods with real implementations below.
 		const manifestCacheForRegistry = getManifestCache(currentCtx?.cwd ?? process.cwd());
-		registerCrewGlobalRegistry({
-			version: 1,
-			getRecord: (runId) => manifestCacheForRegistry.get(runId),
-			listRuns: () => manifestCacheForRegistry.list(100).map((m) => ({ runId: m.runId, status: m.status, goal: m.goal })),
-			appendEvent: (runId, event) => {
-				const manifest = manifestCacheForRegistry.get(runId);
-				if (manifest) void import("../state/event-log.ts").then(({ appendEventFireAndForget }) => appendEventFireAndForget(manifest.eventsPath, event as Parameters<typeof appendEventFireAndForget>[1]));
-			},
-			waitForAll: async (runId) => {
-				// LAZY: loadRunManifestById is already imported at top of file, but kept here for consistency
-				const { loadRunManifestById } = await import("../state/state-store.ts");
-				const check = (): boolean => {
-					const loaded = loadRunManifestById(currentCtx?.cwd ?? process.cwd(), runId);
-					if (!loaded) return true;
-					return !loaded.tasks.some((t: { status: string }) => t.status === "running" || t.status === "queued");
-				};
-				while (!check()) await new Promise((resolve) => setTimeout(resolve, 500));
-			},
-			hasRunning: (runId) => {
-				const manifest = manifestCacheForRegistry.get(runId);
-				if (!manifest) return false;
-				const { loadRunManifestById } = require("../state/state-store.ts");
+		installCrewGlobalRegistry();
+		const CREW_REGISTRY_KEY = Symbol.for("pi-crew:registry");
+		const registry = (globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] as Record<string, unknown>;
+		registry.getRecord = (runId: string) => manifestCacheForRegistry.get(runId);
+		registry.listRuns = () => manifestCacheForRegistry.list(100).map((m: { runId: string; status: string; goal: string }) => ({ runId: m.runId, status: m.status, goal: m.goal }));
+		registry.appendEvent = (runId: string, event: Record<string, unknown>) => {
+			const manifest = manifestCacheForRegistry.get(runId);
+			if (manifest) void import("../state/event-log.ts").then(({ appendEventFireAndForget }) => appendEventFireAndForget(manifest.eventsPath, event as Parameters<typeof appendEventFireAndForget>[1]));
+		};
+		registry.waitForAll = async (runId: string) => {
+			const { loadRunManifestById } = await import("../state/state-store.ts");
+			const check = (): boolean => {
 				const loaded = loadRunManifestById(currentCtx?.cwd ?? process.cwd(), runId);
-				if (!loaded) return false;
-				return loaded.tasks.some((t: { status: string }) => t.status === "running" || t.status === "queued");
-			},
-		});
+				if (!loaded) return true;
+				return !loaded.tasks.some((t: { status: string }) => t.status === "running" || t.status === "queued");
+			};
+			while (!check()) await new Promise((resolve) => setTimeout(resolve, 500));
+		};
+		registry.hasRunning = (runId: string) => {
+			const manifest = manifestCacheForRegistry.get(runId);
+			if (!manifest) return false;
+			const { loadRunManifestById } = require("../state/state-store.ts");
+			const loaded = loadRunManifestById(currentCtx?.cwd ?? process.cwd(), runId);
+			if (!loaded) return false;
+			return loaded.tasks.some((t: { status: string }) => t.status === "running" || t.status === "queued");
+		};
 	});
 
 	const cleanupRuntime = (): void => {
