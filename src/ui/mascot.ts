@@ -122,6 +122,7 @@ export class AnimatedMascot {
 	private gridVersion = 0;
 	private cachedWidth = 0;
 	private cachedVersion = -1;
+	private cachedFrame = -1;
 	private cachedLines: string[] = [];
 
 	constructor(themeLike: unknown, onDone: () => void, options: AnimatedMascotOptions = {}) {
@@ -398,7 +399,7 @@ export class AnimatedMascot {
 	}
 
 	render(width: number): string[] {
-		if (width === this.cachedWidth && this.cachedVersion === this.gridVersion && this.cachedLines.length) {
+		if (width === this.cachedWidth && this.cachedVersion === this.gridVersion && this.cachedFrame === this.frame && this.cachedLines.length) {
 			return this.cachedLines;
 		}
 		const safeWidth = Math.max(20, width);
@@ -424,6 +425,7 @@ export class AnimatedMascot {
 		result.push(`${this.theme.fg("border", "╰")}${horizontal}${this.theme.fg("border", "╯")}`);
 		this.cachedWidth = safeWidth;
 		this.cachedVersion = this.gridVersion;
+		this.cachedFrame = this.frame;
 		this.cachedLines = result;
 		return result;
 	}
