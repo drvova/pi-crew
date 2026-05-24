@@ -61,9 +61,11 @@ function resolveRunStateRoot(cwd: string, runId: string): string | undefined {
 	assertSafePathId("runId", runId);
 	const runsRoot = path.join(scopeBaseRoot(cwd), DEFAULT_PATHS.state.runsSubdir);
 	const scopedPath = resolveContainedRelativePath(runsRoot, runId, "runId");
-	if (!fs.existsSync(scopedPath)) return undefined;
 	try {
-		if (fs.lstatSync(scopedPath).isSymbolicLink()) return undefined;
+		// Single atomic validation: resolves through symlinks via realpath,
+		// verifies containment within runsRoot, and throws ENOENT if missing.
+		// Eliminates the TOCTOU window from the previous existsSync + lstatSync
+		// + resolveRealContainedPath sequence.
 		resolveRealContainedPath(runsRoot, runId);
 	} catch {
 		return undefined;
