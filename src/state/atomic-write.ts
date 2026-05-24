@@ -102,7 +102,7 @@ export function atomicWriteFile(filePath: string, content: string): void {
 	// Write temp with restrictive permissions
 	const O_NOFOLLOW = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
 	try {
-		const fd = fs.openSync(tempPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | O_NOFOLLOW, 0o644);
+		const fd = fs.openSync(tempPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | O_NOFOLLOW, 0o600);
 		// Post-open verification: on Windows O_NOFOLLOW is 0, so verify FD is a regular file
 		const openedStat = fs.fstatSync(fd);
 		if (!openedStat.isFile()) {
@@ -168,7 +168,7 @@ export async function atomicWriteFileAsync(filePath: string, content: string): P
 	const tempPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
 	try {
 		const O_NOFOLLOW = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
-		const fd = await fs.promises.open(tempPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | O_NOFOLLOW, 0o644);
+		const fd = await fs.promises.open(tempPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | O_NOFOLLOW, 0o600);
 		// Post-open verification: on Windows O_NOFOLLOW is 0, so verify FD is a regular file
 		const openedStat = await fd.stat();
 		if (!openedStat.isFile()) {
