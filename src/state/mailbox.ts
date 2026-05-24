@@ -122,8 +122,21 @@ function mailboxFile(manifest: TeamRunManifest, direction: MailboxDirection, tas
 }
 
 function deliveryFile(manifest: TeamRunManifest, create = false): string {
-	const parent = safeMailboxDir(manifest, create);
-	return safeMailboxFile(path.join(parent, "delivery.json"), parent);
+	// Pass create=true to ensure mailbox dir exists before computing delivery.json path.
+	// This mirrors ensureRunMailbox() pattern — always create before computing nested paths.
+	// When create=false, a missing directory is tolerated (callers like readDeliveryState
+	// handle missing file via try/catch; but missing directory must not throw here).
+	try {
+		const parent = safeMailboxDir(manifest, create);
+		return safeMailboxFile(path.join(parent, "delivery.json"), parent);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			// Directory missing and create=false: return unvalidated path so callers
+			// (readDeliveryState) that have their own try/catch can handle gracefully.
+			return path.join(mailboxDir(manifest), "delivery.json");
+		}
+		throw err;
+	}
 }
 
 function ensureRunMailbox(manifest: TeamRunManifest): void {
