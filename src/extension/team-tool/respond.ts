@@ -6,6 +6,7 @@ import { appendMailboxMessage, updateMailboxMessageReply } from "../../state/mai
 import { readCrewAgents, saveCrewAgents, recordFromTask } from "../../runtime/crew-agent-records.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
+import { locateRunCwd } from "../team-tool.ts";
 import { result, type TeamContext } from "./context.ts";
 
 /**
@@ -17,11 +18,13 @@ export function handleRespond(params: TeamToolParamsValue, ctx: TeamContext): Pi
 	if (!params.runId) return result("Respond requires runId.", { action: "respond", status: "error" }, true);
 	if (!params.message && !params.taskId) return result("Respond requires taskId and/or message.", { action: "respond", status: "error" }, true);
 
-	const loaded = loadRunManifestById(ctx.cwd, params.runId);
+	const runCwd = locateRunCwd(params.runId, ctx.cwd);
+	if (!runCwd) return result(`Run '${params.runId}' not found.`, { action: "respond", status: "error" }, true);
+	const loaded = loadRunManifestById(runCwd, params.runId);
 	if (!loaded) return result(`Run '${params.runId}' not found.`, { action: "respond", status: "error" }, true);
 
 	return withRunLockSync(loaded.manifest, () => {
-		const fresh = loadRunManifestById(ctx.cwd, params.runId!);
+		const fresh = loadRunManifestById(loaded.manifest.cwd, params.runId!);
 		if (!fresh) return result(`Run '${params.runId}' not found.`, { action: "respond", status: "error" }, true);
 		const foreignRun = typeof fresh.manifest.ownerSessionId === "string" && fresh.manifest.ownerSessionId !== ctx.sessionId;
 		if (foreignRun && !params.force) return result(`Run ${fresh.manifest.runId} belongs to another session. Use force: true to override.`, { action: "respond", status: "error", runId: fresh.manifest.runId }, true);

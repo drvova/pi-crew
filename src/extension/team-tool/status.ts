@@ -11,11 +11,14 @@ import { formatTaskGraphLines, waitingReason } from "../../runtime/task-display.
 import { verifyTaskCompletion, formatOutputPreview } from "../../runtime/completion-guard.ts";
 import { evaluateRunEffectiveness } from "../../runtime/effectiveness.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
+import { locateRunCwd } from "../team-tool.ts";
 import { result, type TeamContext } from "./context.ts";
 
 export function handleStatus(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	if (!params.runId) return result("Status requires runId.", { action: "status", status: "error" }, true);
-	const loaded = loadRunManifestById(ctx.cwd, params.runId);
+	const runCwd = locateRunCwd(params.runId, ctx.cwd);
+	if (!runCwd) return result(`Run '${params.runId}' not found.`, { action: "status", status: "error" }, true);
+	const loaded = loadRunManifestById(runCwd, params.runId);
 	if (!loaded) return result(`Run '${params.runId}' not found.`, { action: "status", status: "error" }, true);
 	let { manifest, tasks } = loaded;
 	let asyncLivenessLine: string | undefined;

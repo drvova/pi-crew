@@ -1,4 +1,6 @@
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { loadRunManifestById } from "../state/state-store.ts";
 import { isFinishedRunStatus } from "./process-status.ts";
 
@@ -75,6 +77,15 @@ export async function waitForRun(
 	// Slow path: background run — poll with exponential backoff capped at pollIntervalMs
 	let attempt = 0;
 	while (Date.now() < deadline) {
+		if (attempt === 0) {
+			// Early exit: if the run directory doesn't exist, don't waste time polling
+			const runDir = path.join(cwd, ".crew", "state", "runs", runId);
+			if (!fs.existsSync(runDir)) {
+				throw new Error(
+					`Run ${runId} not found. No run directory at ${runDir}`,
+				);
+			}
+		}
 		const fresh = loadRunManifestById(cwd, runId);
 		if (fresh && isFinishedRunStatus(fresh.manifest.status)) {
 			return fresh;

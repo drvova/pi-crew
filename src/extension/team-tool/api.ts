@@ -21,6 +21,7 @@ import { liveControlRealtimeMessage, publishLiveControlRealtime } from "../../su
 import { buildCapabilityInventory } from "../../runtime/capability-inventory.ts";
 import { resolveRealContainedPath } from "../../utils/safe-paths.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
+import { locateRunCwd } from "../team-tool.ts";
 import { configRecord, result, type TeamContext } from "./context.ts";
 
 function globMatch(value: string, pattern: string): boolean {
@@ -83,7 +84,9 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 		return result(JSON.stringify(inventory, null, 2), { action: "api", status: "ok" });
 	}
 	if (!params.runId) return result("API requires runId.", { action: "api", status: "error" }, true);
-	const loaded = loadRunManifestById(ctx.cwd, params.runId);
+	const runCwd = locateRunCwd(params.runId, ctx.cwd);
+	if (!runCwd) return result(`Run '${params.runId}' not found.`, { action: "api", status: "error" }, true);
+	const loaded = loadRunManifestById(runCwd, params.runId);
 	if (!loaded) return result(`Run '${params.runId}' not found.`, { action: "api", status: "error" }, true);
 	if (operation === "read-manifest") {
 		return result(JSON.stringify(loaded.manifest, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });

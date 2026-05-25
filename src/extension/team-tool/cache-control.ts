@@ -12,11 +12,11 @@ export interface CacheControlDeps {
  */
 export function invalidateSnapshot(
 	runId: string,
-	cwd: string,
+	runCwd: string,
 	deps: CacheControlDeps,
 ): void {
 	// 1. Invalidate snapshot cache entry
-	deps.getRunSnapshotCache(cwd).invalidate(runId);
+	deps.getRunSnapshotCache(runCwd).invalidate(runId);
 
 	// 2. Emit runEventBus event so renderScheduler coalescer fires
 	runEventBus.emit({ runId, type: "run.cache_invalidated" });

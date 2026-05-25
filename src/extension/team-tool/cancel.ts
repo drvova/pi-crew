@@ -10,6 +10,7 @@ import { killProcessPid } from "../../runtime/child-pi.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
 import { executeHook, appendHookEvent } from "../../hooks/registry.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
+import { locateRunCwd } from "../team-tool.ts";
 import { result, type TeamContext } from "./context.ts";
 import { enforceDestructiveIntent, intentFromConfig } from "./intent-policy.ts";
 import { invalidateSnapshot, type CacheControlDeps } from "./cache-control.ts";
@@ -38,7 +39,9 @@ export function abortOwned(
 	ctx: TeamContext,
 	force?: boolean,
 ): AbortOwnedResult {
-	const loaded = loadRunManifestById(ctx.cwd, runId);
+	const runCwd = locateRunCwd(runId, ctx.cwd);
+	if (!runCwd) return { abortedIds: [], missingIds: taskIds ?? [], foreignIds: [] };
+	const loaded = loadRunManifestById(runCwd, runId);
 	if (!loaded) return { abortedIds: [], missingIds: taskIds ?? [], foreignIds: [] };
 
 	const result: AbortOwnedResult = { abortedIds: [], missingIds: [], foreignIds: [] };
@@ -76,7 +79,9 @@ function cancelReasonFromParams(params: TeamToolParamsValue): CancellationReason
 
 export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext, deps?: CacheControlDeps): Promise<PiTeamsToolResult> {
 	if (!params.runId) return result("Retry requires runId.", { action: "retry", status: "error" }, true);
-	const loaded = loadRunManifestById(ctx.cwd, params.runId);
+	const runCwd = locateRunCwd(params.runId, ctx.cwd);
+	if (!runCwd) return result(`Run '${params.runId}' not found.`, { action: "retry", status: "error" }, true);
+	const loaded = loadRunManifestById(runCwd, params.runId);
 	if (!loaded) return result(`Run '${params.runId}' not found.`, { action: "retry", status: "error" }, true);
 
 	// Pre-lock ownership check: reject foreign-owned runs unless force is set
@@ -124,7 +129,7 @@ export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext,
 			appendEvent(loaded.manifest.eventsPath, { type: "task.retried", runId: loaded.manifest.runId, taskId, message: `Task ${taskId} queued for retry.` });
 		}
 
-		if (deps) invalidateSnapshot(loaded.manifest.runId, ctx.cwd, deps);
+		if (deps) invalidateSnapshot(loaded.manifest.runId, runCwd, deps);
 		return result(`Retried ${retriedTaskIds.length} task(s) in run ${loaded.manifest.runId}.`, {
 			action: "retry",
 			status: "ok",
@@ -139,7 +144,9 @@ export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext
 	const intentError = enforceDestructiveIntent("cancel", params, ctx.config);
 	if (intentError) return intentError;
 	if (!params.runId) return result("Cancel requires runId.", { action: "cancel", status: "error" }, true);
-	const loaded = loadRunManifestById(ctx.cwd, params.runId);
+	const runCwd = locateRunCwd(params.runId, ctx.cwd);
+	if (!runCwd) return result(`Run '${params.runId}' not found.`, { action: "cancel", status: "error" }, true);
+	const loaded = loadRunManifestById(runCwd, params.runId);
 	if (!loaded) return result(`Run '${params.runId}' not found.`, { action: "cancel", status: "error" }, true);
 
 	// Pre-lock ownership check: reject foreign-owned runs unless force is set
@@ -214,7 +221,7 @@ export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext
 		if (abortResult.foreignIds.length > 0) parts.push(` ${abortResult.foreignIds.length} task(s) belong to another session and were not cancelled: ${abortResult.foreignIds.join(", ")}.`);
 		if (abortResult.missingIds.length > 0) parts.push(` ${abortResult.missingIds.length} task ID(s) not found: ${abortResult.missingIds.join(", ")}.`);
 
-		if (deps) invalidateSnapshot(updated.runId, ctx.cwd, deps);
+		if (deps) invalidateSnapshot(updated.runId, runCwd, deps);
 		return result(parts.join(""), {
 			action: "cancel",
 			status: "ok",
