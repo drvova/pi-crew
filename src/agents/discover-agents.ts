@@ -174,7 +174,8 @@ export function listDynamicAgents(): AgentConfig[] {
 	return [...dynamicAgents.values()];
 }
 
-export function allAgents(discovery: AgentDiscoveryResult): AgentConfig[] {
+export function allAgents(discovery: AgentDiscoveryResult | undefined): AgentConfig[] {
+	if (!discovery) return [];
 	const byName = new Map<string, AgentConfig>();
 	// Priority for disambiguation (security): project < builtin < user.
 	// Project config cannot override trusted builtins (security-hardening).

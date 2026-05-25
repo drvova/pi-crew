@@ -123,6 +123,9 @@ function readWorkflowDir(dir: string, source: ResourceSource): WorkflowConfig[] 
 }
 
 export function discoverWorkflows(cwd: string): WorkflowDiscoveryResult {
+	if (!cwd || typeof cwd !== "string") {
+		return { builtin: [], user: [], project: [] };
+	}
 	return {
 		builtin: readWorkflowDir(path.join(packageRoot(), "workflows"), "builtin"),
 		user: readWorkflowDir(path.join(userPiRoot(), "workflows"), "user"),
@@ -130,7 +133,8 @@ export function discoverWorkflows(cwd: string): WorkflowDiscoveryResult {
 	};
 }
 
-export function allWorkflows(discovery: WorkflowDiscoveryResult): WorkflowConfig[] {
+export function allWorkflows(discovery: WorkflowDiscoveryResult | undefined): WorkflowConfig[] {
+	if (!discovery) return [];
 	const byName = new Map<string, WorkflowConfig>();
 	for (const workflow of [...discovery.project, ...discovery.builtin, ...discovery.user]) {
 		byName.set(workflow.name, workflow);

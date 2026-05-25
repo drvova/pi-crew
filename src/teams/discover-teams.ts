@@ -107,7 +107,8 @@ export function discoverTeams(cwd: string): TeamDiscoveryResult {
 	};
 }
 
-export function allTeams(discovery: TeamDiscoveryResult): TeamConfig[] {
+export function allTeams(discovery: TeamDiscoveryResult | undefined): TeamConfig[] {
+	if (!discovery) return [];
 	const byName = new Map<string, TeamConfig>();
 	for (const team of [...discovery.project, ...discovery.builtin, ...discovery.user]) {
 		byName.set(team.name, team);
