@@ -48,7 +48,7 @@ import { runEventBus } from "../ui/run-event-bus.ts";
 import { CrewScheduler } from "../runtime/scheduler.ts";
 import { NotificationRouter, type NotificationDescriptor } from "./notification-router.ts";
 import { createJsonlSink, type NotificationSink } from "./notification-sink.ts";
-import { clearProjectRootCache, projectCrewRoot } from "../utils/paths.ts";
+import { clearProjectRootCache, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
 import { closeWatcher, watchCrewState } from "../utils/fs-watch.ts";
 import { summarizeHeartbeats } from "../ui/heartbeat-aggregator.ts";
 import { createMetricRegistry, type MetricRegistry } from "../observability/metric-registry.ts";
@@ -319,6 +319,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	// immediate cache invalidate via renderScheduler.schedule. Falls back to
 	// poll-only behavior on systems where fs.watch errors.
 	let crewWatcher: import("node:fs").FSWatcher | undefined;
+	let userCrewWatcher: import("node:fs").FSWatcher | undefined;
 	// Separate map for foreground team-run AbortControllers (distinct from subagent controllers).
 	// P0 fix: stopSessionBoundSubagents must NOT abort foreground team runs on session switch.
 	// Foreground team runs run in the same process as the session; they naturally clean up
@@ -375,6 +376,13 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			setWorkingIndicator(ctx, { frames: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"], intervalMs: 80 });
 			ctx.ui.setWorkingMessage(runId ? `pi-crew foreground run ${runId}...` : "pi-crew foreground run...");
 		}
+		// Start watchdog for foreground run — periodic health check that
+		// auto-notifies the assistant if the run appears hung or completes.
+		if (runId) {
+			void import("../runtime/foreground-watchdog.ts").then(({ startForegroundWatchdog }) => {
+				startForegroundWatchdog({ pi, cwd: ctx.cwd, runId });
+			}).catch(() => { /* non-critical */ });
+		}
 		setImmediate(() => {
 			void runner(controller.signal)
 				.catch((error) => {
@@ -392,6 +400,12 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				})
 				.finally(() => {
 					foregroundTeamRunControllers.delete(key);
+					// Stop watchdog — run has finished
+					if (runId) {
+						void import("../runtime/foreground-watchdog.ts").then(({ stopWatchdog }) => {
+							stopWatchdog(runId);
+						}).catch(() => {});
+					}
 					const ownerCurrent = isContextCurrent(ctx, ownerGeneration);
 					if (ctx.hasUI) {
 						// Always clear working message/spinner — stale spinners for completed runs are confusing.
@@ -424,6 +438,27 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 								goal: loaded?.manifest.goal,
 							});
 						}
+					}
+					// Always send followUp notification regardless of ownerCurrent.
+					// The run completed — the assistant needs to know even if the
+					// originating session generation has changed (compaction, etc.).
+					if (runId) {
+						const loaded = loadRunManifestById(ctx.cwd, runId);
+						const status = loaded?.manifest.status ?? "finished";
+						const teamName = loaded?.manifest.team ?? "unknown";
+						const goalSummary = (loaded?.manifest.goal ?? "").slice(0, 100);
+						try {
+							pi.sendUserMessage(
+								[
+									`pi-crew run ${status}: ${runId} (${teamName})`,
+									`Goal: ${goalSummary}`,
+									status === "completed"
+										? "Review the run results. If the run modified source files, run tests to verify. Summarize what was done."
+										: "The run ended with status: " + status + ". Check the run artifacts and take appropriate action.",
+								].join("\n"),
+								{ deliverAs: "followUp" },
+							);
+						} catch { /* non-critical */ }
 					}
 					if (ownerCurrent && currentCtx) {
 						const config = loadConfig(currentCtx.cwd).config.ui;
@@ -485,6 +520,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		cleanedUp = true;
 		if (preloadTimer) { clearTimeout(preloadTimer); preloadTimer = undefined; }
 		closeWatcher(crewWatcher); crewWatcher = undefined;
+		closeWatcher(userCrewWatcher); userCrewWatcher = undefined;
 		stopSessionBoundSubagents();
 		// P0 fix: also abort foreground team runs on session shutdown (not on session switch).
 		// This is the only place where foreground team run controllers should be aborted.
@@ -830,6 +866,11 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			const stateDir = path.join(projectCrewRoot(ctx.cwd), "state");
 			const watcher = watchCrewState(stateDir, (runId) => {
 				if (cleanedUp || sessionGeneration !== ownerGeneration) return;
+				// Invalidate snapshot cache so the next renderTick reads fresh state from disk.
+				// Without this, renderTick re-renders from stale lastPreloadedManifests and
+				// shows ghost "running" entries for runs that already completed on disk.
+				const sc = getRunSnapshotCache(currentCtx?.cwd ?? process.cwd());
+				sc.invalidate(runId);
 				renderScheduler?.schedule({ runId });
 			}, (error) => {
 				logInternalError("register.crewWatcher.error", error);
@@ -839,6 +880,29 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			if (watcher) crewWatcher = watcher;
 		} catch (error) {
 			logInternalError("register.crewWatcher.start", error);
+		}
+		// Also watch user-level state dir — fast-fix and other user-scoped runs
+		// write manifests there. Without this watcher, runs completing in user-level
+		// state never trigger cache invalidation, causing ghost "running" entries.
+		try {
+			closeWatcher(userCrewWatcher);
+			userCrewWatcher = undefined;
+			const userStateDir = path.join(userCrewRoot(), "state");
+			if (fs.existsSync(userStateDir)) {
+				const userWatcher = watchCrewState(userStateDir, (runId) => {
+					if (cleanedUp || sessionGeneration !== ownerGeneration) return;
+					const sc = getRunSnapshotCache(currentCtx?.cwd ?? process.cwd());
+					sc.invalidate(runId);
+					renderScheduler?.schedule({ runId });
+				}, (error) => {
+					logInternalError("register.userCrewWatcher.error", error);
+					closeWatcher(userCrewWatcher);
+					userCrewWatcher = undefined;
+				});
+				if (userWatcher) userCrewWatcher = userWatcher;
+			}
+		} catch (error) {
+			logInternalError("register.userCrewWatcher.start", error);
 		}
 	});
 	pi.on("session_before_switch", () => {

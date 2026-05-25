@@ -263,7 +263,7 @@ export interface InjectAdaptivePlanResult {
 export function injectAdaptivePlanIfReady(input: InjectAdaptivePlanInput): InjectAdaptivePlanResult {
 	if (input.workflow.name !== "implementation") return { tasks: input.tasks, workflow: input.workflow, injected: false, missingPlan: false };
 	if (input.tasks.some((task) => task.stepId?.startsWith("adaptive-"))) return { tasks: input.tasks, workflow: reconstructAdaptiveWorkflow(input.workflow, input.tasks), injected: false, missingPlan: false };
-	const completedAssess = input.tasks.find((task) => task.stepId === "assess" && task.status === "completed");
+	const completedAssess = input.tasks.find((task) => task.stepId === "assess" && (task.status === "completed" || task.status === "needs_attention"));
 	if (!completedAssess) return { tasks: input.tasks, workflow: input.workflow, injected: false, missingPlan: false };
 	if (!completedAssess.resultArtifact?.path) {
 		appendEvent(input.manifest.eventsPath, { type: "adaptive.plan_missing", runId: input.manifest.runId, taskId: completedAssess.id, message: "Adaptive planner result artifact is missing." });

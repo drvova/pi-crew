@@ -35,6 +35,7 @@ export function piTeamsHelp(): string {
 		"- /team-imports",
 		"",
 		"Diagnostics:",
+		"- /team-health",
 		"- /team-doctor",
 		"- /team-init [--copy-builtins] [--overwrite]",
 		"- /team-config [key=value] [--unset=key.path] [--project]",

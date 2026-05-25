@@ -221,10 +221,23 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 	] as const) {
 		pi.registerCommand(name, { description, handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const runId = args.trim() || undefined;
-			const result = await handleTeamTool({ action, runId }, teamCommandContext(ctx));
+			const result = await handleTeamTool({ action, runId }, { ...teamCommandContext(ctx), getRunSnapshotCache: deps.getRunSnapshotCache });
 			await notifyCommandResult(ctx, commandText(result));
 		} });
 	}
+
+	pi.registerCommand("team-invalidate", {
+		description: "Invalidate the snapshot cache for a run so the UI refreshes immediately: <runId>",
+		handler: async (args: string, ctx: ExtensionCommandContext) => {
+			const runId = args.trim() || undefined;
+			if (!runId) {
+				await notifyCommandResult(ctx, "Usage: /team-invalidate <runId>");
+				return;
+			}
+			const result = await handleTeamTool({ action: "invalidate", runId }, { ...teamCommandContext(ctx), getRunSnapshotCache: deps.getRunSnapshotCache });
+			await notifyCommandResult(ctx, commandText(result));
+		},
+	});
 
 	pi.registerCommand("team-retry", {
 		description: "Retry failed/cancelled pi-crew tasks: <runId> [taskId]",
@@ -236,7 +249,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 				await notifyCommandResult(ctx, "Usage: /team-retry <runId> [taskId]");
 				return;
 			}
-			const retryResult = await handleTeamTool({ action: "retry", runId, taskId }, teamCommandContext(ctx));
+			const retryResult = await handleTeamTool({ action: "retry", runId, taskId }, { ...teamCommandContext(ctx), getRunSnapshotCache: deps.getRunSnapshotCache });
 			await notifyCommandResult(ctx, commandText(retryResult));
 		},
 	});

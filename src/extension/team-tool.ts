@@ -65,10 +65,12 @@ async function handleRun(...args: Parameters<HandleRunFn>): Promise<Awaited<Retu
 	return _cachedHandleRun(...args);
 }
 import { handleDoctor } from "./team-tool/doctor.ts";
+import { handleHealthMonitor } from "./team-tool/health-monitor.ts";
 import { handleStatus } from "./team-tool/status.ts";
 import { handleArtifacts, handleEvents, handleSummary } from "./team-tool/inspect.ts";
 import { handleCleanup, handleExport, handleForget, handleImport, handleImports, handlePrune, handleWorktrees } from "./team-tool/lifecycle-actions.ts";
 import { handleCancel, handleRetry } from "./team-tool/cancel.ts";
+import { invalidateSnapshot, type CacheControlDeps } from "./team-tool/cache-control.ts";
 import { handleParallel } from "./team-tool/parallel-dispatch.ts";
 import { handleRespond } from "./team-tool/respond.ts";
 import { handlePlan } from "./team-tool/plan.ts";
@@ -275,6 +277,20 @@ export function handleSteer(params: TeamToolParamsValue, ctx: TeamContext): PiTe
 	return result(`Steer queued for task '${taskId}'. It will be delivered when the task's session is ready.`, { action: "steer", status: "ok" });
 }
 
+function cacheControlDepsFromContext(ctx: TeamContext): CacheControlDeps | undefined {
+	if (!ctx.getRunSnapshotCache) return undefined;
+	return { getRunSnapshotCache: ctx.getRunSnapshotCache };
+}
+
+function handleInvalidate(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
+	const runId = params.runId;
+	if (!runId) return result("Invalidate requires runId.", { action: "invalidate", status: "error" }, true);
+	const deps = cacheControlDepsFromContext(ctx);
+	if (!deps) return result("Cache invalidation not available (no snapshot cache).", { action: "invalidate", status: "error" }, true);
+	invalidateSnapshot(runId, ctx.cwd, deps);
+	return result(`Cache invalidated for run ${runId}.`, { action: "invalidate", status: "ok", runId });
+}
+
 export async function handleTeamTool(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
 	const action = params.action ?? "list";
 	switch (action) {
@@ -363,8 +379,9 @@ export async function handleTeamTool(params: TeamToolParamsValue, ctx: TeamConte
 		case "forget": return handleForget(params, ctx);
 		case "run": return handleRun(params, ctx);
 		case "status": return handleStatus(params, ctx);
-		case "cancel": return handleCancel(params, ctx);
-		case "retry": return handleRetry(params, ctx);
+		case "cancel": return handleCancel(params, ctx, cacheControlDepsFromContext(ctx));
+		case "retry": return handleRetry(params, ctx, cacheControlDepsFromContext(ctx));
+		case "invalidate": return handleInvalidate(params, ctx);
 		case "respond": return handleRespond(params, ctx);
 		case "parallel": return await handleParallel(params, ctx);
 		case "plan": return handlePlan(params, ctx);
@@ -373,6 +390,7 @@ export async function handleTeamTool(params: TeamToolParamsValue, ctx: TeamConte
 		case "update": return handleUpdate(params, ctx);
 		case "delete": return handleDelete(params, ctx);
 		case "steer": return handleSteer(params, ctx);
+		case "health": return handleHealthMonitor(ctx, params);
 		default: return result(`Unknown action: ${action}`, { action: "unknown", status: "error" }, true);
 	}
 }

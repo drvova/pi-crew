@@ -12,6 +12,7 @@ import { executeHook, appendHookEvent } from "../../hooks/registry.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
 import { result, type TeamContext } from "./context.ts";
 import { enforceDestructiveIntent, intentFromConfig } from "./intent-policy.ts";
+import { invalidateSnapshot, type CacheControlDeps } from "./cache-control.ts";
 
 export interface AbortOwnedResult {
 	abortedIds: string[];
@@ -73,7 +74,7 @@ function cancelReasonFromParams(params: TeamToolParamsValue): CancellationReason
 	return { code: reason.code, message: reason.message };
 }
 
-export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
+export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext, deps?: CacheControlDeps): Promise<PiTeamsToolResult> {
 	if (!params.runId) return result("Retry requires runId.", { action: "retry", status: "error" }, true);
 	const loaded = loadRunManifestById(ctx.cwd, params.runId);
 	if (!loaded) return result(`Run '${params.runId}' not found.`, { action: "retry", status: "error" }, true);
@@ -123,6 +124,7 @@ export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext)
 			appendEvent(loaded.manifest.eventsPath, { type: "task.retried", runId: loaded.manifest.runId, taskId, message: `Task ${taskId} queued for retry.` });
 		}
 
+		if (deps) invalidateSnapshot(loaded.manifest.runId, ctx.cwd, deps);
 		return result(`Retried ${retriedTaskIds.length} task(s) in run ${loaded.manifest.runId}.`, {
 			action: "retry",
 			status: "ok",
@@ -133,7 +135,7 @@ export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext)
 	});
 }
 
-export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
+export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext, deps?: CacheControlDeps): Promise<PiTeamsToolResult> {
 	const intentError = enforceDestructiveIntent("cancel", params, ctx.config);
 	if (intentError) return intentError;
 	if (!params.runId) return result("Cancel requires runId.", { action: "cancel", status: "error" }, true);
@@ -212,6 +214,7 @@ export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext
 		if (abortResult.foreignIds.length > 0) parts.push(` ${abortResult.foreignIds.length} task(s) belong to another session and were not cancelled: ${abortResult.foreignIds.join(", ")}.`);
 		if (abortResult.missingIds.length > 0) parts.push(` ${abortResult.missingIds.length} task ID(s) not found: ${abortResult.missingIds.join(", ")}.`);
 
+		if (deps) invalidateSnapshot(updated.runId, ctx.cwd, deps);
 		return result(parts.join(""), {
 			action: "cancel",
 			status: "ok",

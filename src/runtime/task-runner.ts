@@ -829,8 +829,13 @@ export async function runTeamTask(
 		// _yieldResult: preserved for future use — yield completion contract not yet wired to task.result
 		let _yieldResult: YieldResult | undefined;
 		let noYield = false;
+		// Child-process workers do not have a submit_result tool — the yield contract
+		// only applies to live-session workers where submit_result is injected by the
+		// runtime. Skipping yield detection for child-process prevents every child
+		// worker from incorrectly being marked needs_attention.
 		const yieldEnabled =
-			input.runtimeConfig?.yield?.enabled ?? DEFAULT_YIELD_CONFIG.enabled;
+			runtimeKind !== "child-process" &&
+			(input.runtimeConfig?.yield?.enabled ?? DEFAULT_YIELD_CONFIG.enabled);
 		if (yieldEnabled && collectedJsonEvents.length > 0) {
 			if (hasYieldInOutput(collectedJsonEvents)) {
 				const yieldEvent = collectedJsonEvents.find((e) =>

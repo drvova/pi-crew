@@ -11,7 +11,8 @@ export type RunEventType =
 	| "run_started"
 	| "run_completed"
 	| "run_blocked"
-	| "run_cancelled";
+	| "run_cancelled"
+	| "run.cache_invalidated";
 
 /** Typed channel names for category-based event subscription. */
 export type EventChannel =

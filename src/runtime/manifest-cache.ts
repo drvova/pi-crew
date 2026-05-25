@@ -108,8 +108,10 @@ function parseManifestIfChanged(root: string, runId: string, filePath: string, p
 
 function listRunRoots(cwd: string): string[] {
 	const roots = new Set<string>();
-	const base = findRepoRoot(cwd) ? projectCrewRoot(cwd) : userCrewRoot();
-	roots.add(path.join(base, DEFAULT_PATHS.state.runsSubdir));
+	// Always include user-level runs (fast-fix, direct-agent, etc. write here)
+	roots.add(path.join(userCrewRoot(), DEFAULT_PATHS.state.runsSubdir));
+	const projectRoot = findRepoRoot(cwd);
+	if (projectRoot) roots.add(path.join(projectCrewRoot(cwd), DEFAULT_PATHS.state.runsSubdir));
 	return [...roots];
 }
 

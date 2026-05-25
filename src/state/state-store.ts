@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { TeamRunManifest, TeamTaskState } from "./types.ts";
-import { canTransitionRunStatus } from "./contracts.ts";
+import { canTransitionRunStatus, isTerminalRunStatus } from "./contracts.ts";
+import { unregisterActiveRun } from "./active-run-registry.ts";
 import { atomicWriteJson, atomicWriteJsonAsync, atomicWriteJsonCoalesced, readJsonFile } from "./atomic-write.ts";
 import { appendEvent } from "./event-log.ts";
 import { DEFAULT_CACHE, DEFAULT_PATHS } from "../config/defaults.ts";
@@ -244,6 +245,13 @@ export function updateRunStatus(manifest: TeamRunManifest, status: TeamRunManife
 	}
 	const updated: TeamRunManifest = { ...manifest, status, updatedAt: new Date().toISOString(), summary: summary ?? manifest.summary };
 	saveRunManifest(updated);
+	// Unregister from active-run-index when run reaches a terminal status.
+	// Without this, stale entries accumulate (e.g. integration tests in /tmp) and
+	// Pi UI shows ghost "queued" runs that are actually completed/failed/cancelled.
+	// Note: "blocked" is excluded because blocked runs can be unblocked later.
+	if (status === "completed" || status === "failed" || status === "cancelled") {
+		try { unregisterActiveRun(updated.runId); } catch { /* non-critical */ }
+	}
 	appendEvent(updated.eventsPath, {
 		type: `run.${status}`,
 		runId: updated.runId,

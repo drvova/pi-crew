@@ -2,6 +2,7 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { PiTeamsConfig } from "../../config/config.ts";
 import type { MetricRegistry } from "../../observability/metric-registry.ts";
 import type { TeamToolDetails } from "../team-tool-types.ts";
+import type { RunSnapshotCache } from "../../ui/run-snapshot-cache.ts";
 import { toolResult, type PiTeamsToolResult } from "../tool-result.ts";
 
 export type TeamContext = Pick<ExtensionContext, "cwd"> & Partial<Pick<ExtensionContext, "model">> & {
@@ -16,6 +17,7 @@ export type TeamContext = Pick<ExtensionContext, "cwd"> & Partial<Pick<Extension
 	onRunStarted?: (runId: string) => void;
 	onJsonEvent?: (taskId: string, runId: string, event: unknown) => void;
 	config?: PiTeamsConfig;
+	getRunSnapshotCache?: (cwd: string) => RunSnapshotCache;
 };
 
 export function withSessionId<T extends Pick<ExtensionContext, "sessionManager">>(ctx: T): T & { sessionId?: string } {

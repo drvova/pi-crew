@@ -81,7 +81,7 @@ export function registerTeamTool(pi: ExtensionAPI, deps: RegisterTeamToolDeps): 
 					const runLabel = resolved.team ?? resolved.agent ?? "direct";
 					pi.setSessionName(`pi-crew: ${runLabel}/${resolved.workflow ?? "default"} — ${resolved.goal.slice(0, 60)}`);
 				}
-				const output = await handleTeamTool(resolved, { ...toolCtx, signal: controller.signal, metricRegistry: deps.getMetricRegistry?.(), startForegroundRun: (runner, runId) => deps.startForegroundRun(toolCtx, runner, runId), abortForegroundRun: deps.abortForegroundRun, onRunStarted: (runId) => { stopProgress.attach(toolCtx.cwd, runId); deps.openLiveSidebar(toolCtx, runId); }, onJsonEvent: deps.onJsonEvent });
+				const output = await handleTeamTool(resolved, { ...toolCtx, signal: controller.signal, metricRegistry: deps.getMetricRegistry?.(), startForegroundRun: (runner, runId) => deps.startForegroundRun(toolCtx, runner, runId), abortForegroundRun: deps.abortForegroundRun, onRunStarted: (runId) => { stopProgress.attach(toolCtx.cwd, runId); deps.openLiveSidebar(toolCtx, runId); }, onJsonEvent: deps.onJsonEvent, getRunSnapshotCache: deps.getRunSnapshotCache });
 				if (resolved.action === "run" && !output.isError && typeof output.details?.runId === "string") {
 					pi.appendEntry("crew:run-started", {
 						runId: output.details.runId,
