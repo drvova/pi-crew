@@ -4,6 +4,7 @@
 
 ### Features
 - **Periodic auto-repair timer** — `autoRepairIntervalMs` in `CrewReliabilityConfig` (default 60s, 0 to disable) calls `reconcileAllStaleRuns` via `configureObservability`. Timer uses `.unref()` to avoid blocking Node exit; cleaned up on session shutdown.
+- **`wait` action** — New `team action='wait'` polls a running team until completion. Accepts `runId` (required), `config.timeoutMs` (default 300 000 ms), and `config.pollIntervalMs` (default 2 000 ms). Returns run status, summary, and per-task statuses. Resolves via `waitForRun` in `run-tracker.ts`.
 
 ### Bug Fixes
 - **No-PID zombie run repair** — Runs without async PID (e.g. live-session /tmp workspaces) previously waited 24h for repair. Now `stale-reconciler` checks if ALL running tasks have heartbeats stale >5min (`NO_PID_HEARTBEAT_STALE_MS`) and repairs immediately.
