@@ -22,9 +22,14 @@ function collectTypeScriptFiles(root: string): string[] {
 
 function fileHasTeamContextImportFromTeamTool(filePath: string): boolean {
 	const content = fs.readFileSync(filePath, "utf-8");
-	const matches = content.matchAll(/(?:^|\n)\s*import[\s\S]*?from\s+["'][^"']*team-tool\.ts["']/g);
-	for (const match of matches) {
-		if (match[0]?.includes("TeamContext")) return true;
+	// Split by lines and check each line individually
+	const lines = content.split("\n");
+	// Match import statements from team-tool.ts (not team-tool/context.ts or team-tool/something.ts)
+	const importRegex = /from\s+["'][^"']*\/team-tool\.ts["']/;
+	for (const line of lines) {
+		if (importRegex.test(line) && line.includes("TeamContext")) {
+			return true;
+		}
 	}
 	return false;
 }
