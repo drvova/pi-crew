@@ -19,6 +19,7 @@ async function executeTeamRun(...args: Parameters<typeof ExecuteTeamRunFn>): Pro
 	return _cachedExecuteTeamRun(...args);
 }
 import { resolveCrewRuntime, runtimeResolutionState } from "./runtime-resolver.ts";
+import { terminateActiveChildPiProcesses } from "./child-pi.ts";
 import { directTeamAndWorkflowFromRun } from "./direct-run.ts";
 import { expandParallelResearchWorkflow } from "./parallel-research.ts";
 import { writeAsyncStartMarker } from "./async-marker.ts";
@@ -67,7 +68,7 @@ function argValue(name: string): string | undefined {
 	return process.argv[index + 1];
 }
 
-function startInterruptGuard(manifest: { runId: string; stateRoot: string; eventsPath: string }): () => void {
+function startInterruptGuard(manifest: { runId: string; stateRoot: string; eventsPath: string }, abortController: AbortController): () => void {
 	const controlPath = path.join(manifest.stateRoot, "foreground-control.json");
 	const interval = setInterval(() => {
 		try {
@@ -75,13 +76,21 @@ function startInterruptGuard(manifest: { runId: string; stateRoot: string; event
 			const parsed = JSON.parse(fs.readFileSync(controlPath, "utf-8")) as { requests?: Array<{ type: string; acknowledged?: boolean }> };
 			const last = parsed.requests?.at(-1);
 			if (last?.type === "interrupt" && last?.acknowledged !== true) {
-				appendEvent(manifest.eventsPath, { type: "async.interrupt_detected", runId: manifest.runId, message: "Background runner detected foreground interrupt request — exiting." });
+				appendEvent(manifest.eventsPath, { type: "async.interrupt_detected", runId: manifest.runId, message: "Background runner detected foreground interrupt — killing child processes and exiting." });
+				// FIX: Terminate ALL child-pi processes IMMEDIATELY before exiting.
+				// Previously this was missing, causing orphaned child processes to run forever
+				// after the background-runner exited. terminateActiveChildPiProcesses sends
+				// SIGTERM then SIGKILL (after HARD_KILL_MS=3s) to every active child.
+				const killed = terminateActiveChildPiProcesses();
+				console.log(`[background-runner] interrupt: killed ${killed} child processes`);
+				// Also abort the run signal so executeTeamRun exits quickly via its signal check.
+				abortController.abort();
 				process.exit(130);
 			}
 		} catch {
 			/* ignore read/parse errors */
 		}
-	}, 3_000);
+	}, 500);  // FIX: Reduced from 3000ms to 500ms for faster cancel response
 	interval.unref();
 	return () => clearInterval(interval);
 }
@@ -238,8 +247,13 @@ async function main(): Promise<void> {
 	appendEvent(manifest.eventsPath, { type: "async.started", runId: manifest.runId, data: { pid: process.pid } });
 	console.log(`[background-runner] DEBUG: async.started written, pid=${process.pid}`);
 	writeAsyncStartMarker(manifest, { pid: process.pid, startedAt: new Date().toISOString() });
+	// FIX: Create AbortController EARLY so interrupt guard can use it.
+	// abortController.signal flows through: executeTeamRun → runTeamTask → runChildPi.
+	// When interrupt guard detects cancel, abortController.abort() fires the abort
+	// handler in runChildPi which kills child processes immediately.
+	const abortController = new AbortController();
 	const stopHeartbeat = startHeartbeat(manifest.stateRoot, manifest.eventsPath, manifest.runId);
-	const stopInterruptGuard = startInterruptGuard(manifest);
+	const stopInterruptGuard = startInterruptGuard(manifest, abortController);
 	console.log(`[background-runner] DEBUG: heartbeat+interrupt guard started`);
 	// BUG #17: Keep-alive interval prevents event loop from exiting during
 	// jiti compilation. Pure empty interval (no I/O to avoid io_uring issues).
@@ -278,10 +292,13 @@ async function main(): Promise<void> {
 		// BUG #17: Keep-alive interval (NOT unref'd) prevents event loop from exiting
 		// during jiti compilation of team-runner.ts. Without this, the event loop
 		// can drain when import() blocks, causing the process to exit prematurely.
+		// NOTE: abortController is already created above (before heartbeat/interrupt guard start)
+		// so it is available here and its signal is passed through to executeTeamRun → child-pi.
+
 		console.log(`[background-runner] DEBUG: calling executeTeamRun`);
 		let result;
 		try {
-			result = await executeTeamRun({ manifest, tasks, team, workflow, agents, executeWorkers, limits: runConfig.limits, runtime, runtimeConfig: runConfig.runtime, skillOverride: manifest.skillOverride, reliability: runConfig.reliability, workspaceId: manifest.ownerSessionId ?? manifest.cwd });
+			result = await executeTeamRun({ manifest, tasks, team, workflow, agents, executeWorkers, limits: runConfig.limits, runtime, runtimeConfig: runConfig.runtime, skillOverride: manifest.skillOverride, reliability: runConfig.reliability, workspaceId: manifest.ownerSessionId ?? manifest.cwd, signal: abortController.signal });
 			console.log(`[background-runner] DEBUG: executeTeamRun returned, status=${result.manifest.status}`);
 		} catch (execError) {
 			console.log(`[background-runner] DEBUG: executeTeamRun THREW: ${execError instanceof Error ? execError.message : String(execError)}`);
@@ -314,6 +331,11 @@ async function main(): Promise<void> {
 		stopParentGuard();
 		stopHeartbeat();
 		clearInterval(keepAlive);
+		// FIX: Always kill child processes on exit. executeTeamRun's terminateLiveAgentsForRun
+		// only handles live-session agents, not child-pi processes. Without this, child-pi
+		// processes can become orphaned if executeTeamRun throws before completing.
+		const killed = terminateActiveChildPiProcesses();
+		console.log(`[background-runner] finally: killed ${killed} child processes`);
 	}
 }
 
