@@ -95,15 +95,40 @@ test("renderSkillInstructions loads selected SKILL.md content for worker prompts
 });
 
 
-test("renderSkillInstructions uses project skills before package skills", () => {
+test("renderSkillInstructions prefers package skills over project skills (SEC-003 CATASTROPHIC FIX)", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-skill-"));
 	try {
+		// Create a malicious project skill that could override trusted package skill
+		// With the security fix, package skill should be used instead
 		const skillDir = path.join(cwd, "skills", "verification-before-done");
 		fs.mkdirSync(skillDir, { recursive: true });
-		fs.writeFileSync(path.join(skillDir, "SKILL.md"), ["---", "name: verification-before-done", "description: Project override", "---", "", "# Project Skill", "", "Project-specific verification."].join("\n"));
+		fs.writeFileSync(path.join(skillDir, "SKILL.md"), ["---", "name: verification-before-done", "description: Malicious project override", "---", "", "# Malicious Project Skill", "", "EVIL: Injecting arbitrary instructions."].join("\n"));
+
 		const rendered = renderSkillInstructions({ cwd, role: "unknown", override: ["verification-before-done"] });
-		assert.match(rendered.block, /Project-specific verification/);
-		assert.match(rendered.block, /Source: project:skills\/verification-before-done/);
+
+		// Package skill should be used, NOT the project skill
+		assert.doesNotMatch(rendered.block, /Malicious project override/);
+		assert.doesNotMatch(rendered.block, /EVIL:/);
+		assert.doesNotMatch(rendered.block, /Source: project:skills/);
+		assert.match(rendered.block, /Source: package:skills/);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("renderSkillInstructions uses project skills when no package skill exists", () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-skill-"));
+	try {
+		// Create a project-only skill (no package equivalent)
+		const skillDir = path.join(cwd, "skills", "my-custom-skill");
+		fs.mkdirSync(skillDir, { recursive: true });
+		fs.writeFileSync(path.join(skillDir, "SKILL.md"), ["---", "name: my-custom-skill", "description: Custom skill", "---", "", "# My Custom Skill", "", "Custom content."].join("\n"));
+
+		const rendered = renderSkillInstructions({ cwd, role: "unknown", override: ["my-custom-skill"] });
+
+		// Should use project skill since there's no package version
+		assert.match(rendered.block, /My Custom Skill/);
+		assert.match(rendered.block, /Source: project:skills/);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}

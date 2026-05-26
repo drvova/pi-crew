@@ -91,10 +91,16 @@ export function resolveTaskSkillNames(input: ResolveTaskSkillsInput): string[] {
 	return collectTaskSkillNames(input).slice(0, MAX_SELECTED_SKILLS);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SEC-003 Fix: Reverse skill search order (package first, project second)
+// Prevents malicious project skills from overriding trusted package skills.
+// See: SECURITY-ISSUES.md SEC-003
+// ═══════════════════════════════════════════════════════════════════════════
+
 function candidateSkillDirs(cwd: string): Array<{ root: string; source: "project" | "package" }> {
 	return [
-		{ root: path.resolve(cwd, "skills"), source: "project" },
-		{ root: PACKAGE_SKILLS_DIR, source: "package" },
+		{ root: PACKAGE_SKILLS_DIR, source: "package" },   // ✓ Trusted first
+		{ root: path.resolve(cwd, "skills"), source: "project" },  // ⚠️ Override second
 	];
 }
 

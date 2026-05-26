@@ -2,6 +2,51 @@ import * as path from "node:path";
 import type { TeamRunManifest, TaskPacket, TaskScope, VerificationContract } from "../state/types.ts";
 import type { WorkflowStep } from "../workflows/workflow-config.ts";
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SEC-007 Fix: Workflow Step Task Sanitization
+// Context provided by workers comes from workflow definitions that could
+// be user-controlled. Sanitize task text to prevent injection.
+// See: SECURITY-ISSUES.md SEC-007
+// ═══════════════════════════════════════════════════════════════════════════
+
+
+/**
+ * Sanitize workflow step task text to reduce injection risk.
+ *
+ * The task text is used as a prompt for worker agents. In a multi-tenant
+ * or shared workflow scenario, malicious workflow definitions could
+ * embed injection instructions.
+ *
+ * Sanitization:
+ * - Strip zero-width Unicode characters
+ * - Strip known prompt injection directive patterns
+ * - Strip base64/hex encoded payloads
+ * - Collapse excessive whitespace
+ */
+export function sanitizeTaskText(task: string): string {
+	let sanitized = task;
+
+	// 1. Strip zero-width and invisible Unicode characters
+	sanitized = sanitized.replace(/[\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g, "");
+
+	// 2. Strip known prompt injection directive patterns
+	sanitized = sanitized.replace(
+		/^\s*(?:SYSTEM|INSTRUCTION|IGNORE(?:\s+ALL)?\s+INSTRUCTIONS|OVERRIDE|YOUR\s+ROLE\s+IS|MALICIOUS)\s*:.*$/gim,
+		""
+	);
+
+	// 3. Strip base64/hex encoded command payloads
+	sanitized = sanitized.replace(/\b(?:base64|base32|hex)\s*['":]\s*([A-Za-z0-9+\/=]{16,})/gi, "[encoded-redacted]");
+
+	// 4. Strip embedded instruction patterns in brackets
+	sanitized = sanitized.replace(/\[(?:SYSTEM|INSTRUCTION|OVERRIDE)\s*:[^\]]*\]/gi, "");
+
+	// 5. Collapse multiple blank lines
+	sanitized = sanitized.replace(/\n{3,}/g, "\n\n");
+
+	return sanitized.trim();
+}
+
 export interface BuildTaskPacketInput {
 	manifest: TeamRunManifest;
 	step: WorkflowStep;
@@ -34,8 +79,10 @@ export function buildTaskPacket(input: BuildTaskPacketInput): TaskPacket {
 	const scope = inferTaskScope(input.step);
 	const reads = input.step.reads === false ? [] : input.step.reads ?? [];
 	const scopePath = reads.length === 1 ? reads[0] : reads.length > 1 ? reads.join(", ") : undefined;
+	// SEC-007: Sanitize task text before inserting into task packet
+	const sanitizedTask = sanitizeTaskText(input.step.task);
 	return {
-		objective: input.step.task.replaceAll("{goal}", input.manifest.goal),
+		objective: sanitizedTask.replaceAll("{goal}", input.manifest.goal),
 		scope,
 		scopePath,
 		repo: path.basename(input.manifest.cwd) || input.manifest.cwd,

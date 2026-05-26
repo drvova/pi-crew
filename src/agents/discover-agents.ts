@@ -6,6 +6,215 @@ import { parseCsv, parseFrontmatter } from "../utils/frontmatter.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { packageRoot, projectCrewRoot, userPiRoot } from "../utils/paths.ts";
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SEC-001 Fix: Protected Agent Names Blocklist
+// Prevents privilege escalation via agent shadowing attacks.
+// See: SECURITY-ISSUES.md SEC-001
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEC-005 Fix: Version-based Cache for Atomic Invalidation
+// Uses a global version counter for atomic cache invalidation instead of
+// relying on TTL alone. This eliminates race conditions where concurrent
+// callers might get stale cached snapshots.
+// See: SECURITY-ISSUES.md SEC-005
+// ═══════════════════════════════════════════════════════════════════════════
+
+
+/** Version counter for atomic cache invalidation. Incremented on every mutation. */
+let cacheVersion = 0;
+
+/** Get current cache version. Used for atomic cache stamping. */
+export function getCacheVersion(): number {
+	return cacheVersion;
+}
+
+/**
+ * Increment cache version for atomic invalidation.
+ * All cached entries with versions older than this are considered stale.
+ */
+function incrementCacheVersion(): void {
+	cacheVersion++;
+}
+
+/** Exact match blocklist for protected builtin agent names. */
+const PROTECTED_AGENT_NAMES = new Set([
+	"executor",
+	"test-engineer",
+	"explorer",
+	"planner",
+	"analyst",
+	"critic",
+	"reviewer",
+	"verifier",
+	"writer",
+	"security-reviewer",
+]);
+
+/**
+ * Pattern blocklist for agent names that would likely confuse or deceive
+ * workflows looking for builtin agents.
+ *
+ * Covers:
+ * - Name variations: "executor-v2", "my-executor", "custom-executor"
+ * - Misspellings that could be typo-squatted: "execultor", "explroer"
+ * - Prefix/suffix combinations with protected names
+ */
+const PROTECTED_AGENT_PATTERNS: Array<{ pattern: RegExp; example: string }> = [
+	// Exact variations with delimiters
+	{ pattern: /^executor[-_]?v?[0-9]/i, example: "executor-v2, executor_1" },
+	{ pattern: /^test[-_]?engineer/i, example: "test-engineer-proxy" },
+	{ pattern: /^explorer[-_]/i, example: "explorer-debug" },
+	{ pattern: /^planner[-_]/i, example: "planner-v3" },
+	// Generic prefixes that could impersonate builtins
+	{ pattern: /^(my|custom|new|local)[-_](executor|test[-_]?engineer|explorer|planner)$/i, example: "my-executor" },
+	{ pattern: /^(executor|test[-_]?engineer|explorer|planner)[-_]?(proxy|hook|override)$/i, example: "executor-override" },
+	// Common typosquatting patterns (intentional misspellings)
+	{ pattern: /^exec[au]t[o0]r$/i, example: "execator" },
+	{ pattern: /^expl[o0]rer$/i, example: "explorer" },
+	{ pattern: /^plann[ae]r$/i, example: "plannar" },
+	// Suffixes that indicate override意图
+	{ pattern: /^(executor|test[-_]?engineer|explorer|planner)[-_]?(override|replacement|shadow)$/i, example: "executor-override" },
+];
+
+/**
+ * Check if an agent name matches any protected pattern.
+ * Returns the matched pattern description for error messages.
+ */
+function matchProtectedPattern(name: string): string | null {
+	const key = name.toLowerCase();
+	for (const { pattern, example } of PROTECTED_AGENT_PATTERNS) {
+		if (pattern.test(key)) {
+			return `pattern "${pattern}" (example: ${example})`;
+		}
+	}
+	return null;
+}
+
+/**
+ * Security event types for audit logging.
+ */
+interface SecurityEvent {
+	type: "AGENT_REGISTRATION_BLOCKED" | "PROJECT_AGENT_SHADOW_WARNING";
+	name: string;
+	reason: string;
+	timestamp: number;
+}
+
+/**
+ * Security event log. In production, this should be sent to a security SIEM.
+ */
+const securityEventLog: SecurityEvent[] = [];
+
+/**
+ * Log a security event for audit purposes.
+ * TODO: In production, integrate with project's logging infrastructure
+ *       (e.g., send to SIEM, log aggregator, or security webhook).
+ */
+function logSecurityEvent(event: SecurityEvent): void {
+	securityEventLog.push(event);
+
+	// Console output for development/debugging (redacted in production)
+	const prefix = "\x1b[33m[SECURITY]\x1b[0m"; // Yellow warning
+	console.warn(
+		`${prefix} ${event.type}: agent="${event.name}" reason="${event.reason}" time=${new Date(event.timestamp).toISOString()}`
+	);
+}
+
+/**
+ * Get recent security events (for debugging/testing).
+ */
+export function getSecurityEventLog(): readonly SecurityEvent[] {
+	return securityEventLog;
+}
+
+/**
+ * Clear security event log (for testing).
+ */
+export function clearSecurityEventLog(): void {
+	securityEventLog.length = 0;
+}
+
+/**
+ * Security check: throws if the agent name is protected.
+ *
+ * Checks in order:
+ * 1. Exact match against PROTECTED_AGENT_NAMES
+ * 2. Pattern match against PROTECTED_AGENT_PATTERNS
+ *
+ * Throws with detailed error message on violation.
+ * Logs the event to securityEventLog for audit.
+ */
+function assertAgentNameAllowed(name: string): void {
+	const key = name.toLowerCase();
+
+	// Check 1: Exact match
+	if (PROTECTED_AGENT_NAMES.has(key)) {
+		logSecurityEvent({
+			type: "AGENT_REGISTRATION_BLOCKED",
+			name,
+			reason: `exact_match:${key}`,
+			timestamp: Date.now(),
+		});
+		throw new Error(
+			`SECURITY: Cannot register agent '${name}': protected builtin name. ` +
+			`Dynamic agents cannot shadow builtin agents (executor, explorer, planner, etc.) to prevent privilege escalation.`
+		);
+	}
+
+	// Check 2: Pattern match (custom-executor, my-planner, etc.)
+	const matchedPattern = matchProtectedPattern(key);
+	if (matchedPattern !== null) {
+		logSecurityEvent({
+			type: "AGENT_REGISTRATION_BLOCKED",
+			name,
+			reason: `pattern_match:${matchedPattern}`,
+			timestamp: Date.now(),
+		});
+		throw new Error(
+			`SECURITY: Cannot register agent '${name}': name matches protected pattern (${matchedPattern}). ` +
+			`This pattern is blocked to prevent privilege escalation via similar-named agents.`
+		);
+	}
+}
+
+/**
+ * Check if a project agent name would shadow a builtin agent.
+ * Logs a warning if so, but does NOT block (project agents can be legitimate overrides).
+ *
+ * Called during agent discovery to flag potential security concerns.
+ */
+function checkProjectAgentShadowsBuiltin(name: string): void {
+	const key = name.toLowerCase();
+
+	// Check exact match
+	if (PROTECTED_AGENT_NAMES.has(key)) {
+		logSecurityEvent({
+			type: "PROJECT_AGENT_SHADOW_WARNING",
+			name,
+			reason: "project_shadows_protected_builtin",
+			timestamp: Date.now(),
+		});
+		console.warn(
+			`\x1b[33m[SECURITY WARNING]\x1b[0m Project agent "${name}" shadows a protected builtin. ` +
+			`This agent will be loaded but builtin agents take priority. ` +
+			`If this is intentional, consider using a different name.`
+		);
+		return;
+	}
+
+	// Check pattern match
+	const matchedPattern = matchProtectedPattern(key);
+	if (matchedPattern !== null) {
+		logSecurityEvent({
+			type: "PROJECT_AGENT_SHADOW_WARNING",
+			name,
+			reason: `project_shadows_pattern:${matchedPattern}`,
+			timestamp: Date.now(),
+		});
+	}
+}
+
 export interface AgentDiscoveryResult {
 	builtin: AgentConfig[];
 	user: AgentConfig[];
@@ -28,6 +237,101 @@ function parseContextMode(value: string | undefined): "fresh" | "fork" | undefin
 	return value === "fresh" || value === "fork" ? value : undefined;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SEC-002 Fix: Agent System Prompt Sanitization
+// Prevents prompt injection via malicious agent files.
+// See: SECURITY-ISSUES.md SEC-002
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Trust levels for agent source classification.
+ * Determines how strictly to sanitize the system prompt.
+ */
+type TrustLevel = "builtin" | "user" | "project";
+
+/**
+ * Convert ResourceSource to TrustLevel for sanitization.
+ */
+function sourceToTrustLevel(source: ResourceSource): TrustLevel {
+	switch (source) {
+		case "builtin":
+			return "builtin";
+		case "user":
+			return "user";
+		case "project":
+		return "project";
+		default:
+			return "project";
+	}
+}
+
+/**
+ * Sanitize agent system prompt content to reduce prompt injection risk.
+ *
+ * Uses OWASP Agent Memory Guard-inspired patterns:
+ * - Strip zero-width Unicode (potential bypass vectors)
+ * - Strip HTML/JS comments and script tags
+ * - Strip known prompt injection directives
+ * - Strip encoded payloads (base64, hex)
+ * - Collapse excessive whitespace
+ *
+ * Trust levels affect sanitization strictness:
+ * - builtin: Minimal sanitization (trusted source)
+ * - user: Standard sanitization
+ * - project: Strict sanitization (untrusted source)
+ */
+export function sanitizeAgentSystemPrompt(
+	content: string,
+	source: ResourceSource
+): string {
+	const trustLevel = sourceToTrustLevel(source);
+	let sanitized = content;
+
+	// 1. Strip zero-width and invisible Unicode characters (all trust levels)
+	sanitized = sanitized.replace(/[\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g, "");
+
+	// 2. Strip HTML/JS comments (instruction hiding) — all trust levels
+	sanitized = sanitized.replace(/<!--[\s\S]*?-->|<\/?script[^>]*>/gi, "");
+
+	// 3. Strip known prompt injection directive patterns — user and project
+	if (trustLevel !== "builtin") {
+		// Strip lines that look like system directives
+		sanitized = sanitized.replace(
+			/^\s*(?:SYSTEM|INSTRUCTION|IGNORE(?:\s+ALL)?\s+(?:PREVIOUS|INSTRUCTIONS)?|OVERRIDE|YOUR\s+ROLE\s+IS|MALICIOUS|BACKDOOR)\s*:.*$/gim,
+			""
+		);
+
+		// Strip embedded instruction patterns in brackets
+		sanitized = sanitized.replace(/\[(?:SYSTEM|INSTRUCTION|OVERRIDE|MALICIOUS)\s*:[^\]]*\]/gi, "");
+
+		// Strip base64/hex-encoded command payloads
+		sanitized = sanitized.replace(/\b(base64|base32|hex)\s*['":]\s*([A-Za-z0-9+\/=]{20,})/gi, "[encoded-command-redacted]");
+
+		// Strip eval/exec patterns with encoded content
+		sanitized = sanitized.replace(/\b(eval|exec|spawn|subprocess)\s*\(\s*(?:base64|Buffer\.from)\s*\(/gi, "[suspicious-call-redacted]");
+
+		// Strip markdown that attempts to hide instructions
+		sanitized = sanitized.replace(/```\s*(?:system|instruction|prompt)\n[\s\S]*?```/gi, "");
+	}
+
+	// 4. Project-level strict sanitization
+	if (trustLevel === "project") {
+		// Strip YAML-like assignment patterns that could override behavior
+		sanitized = sanitized.replace(/^\s*(?:role|persona|behavior|directive)\s*[=:].*$/gim, "");
+
+		// Strip potential exfiltration patterns
+		sanitized = sanitized.replace(/\b(write|append)\s+.*(?:secrets?|keys?|token|credential)/gi, "[suspicious-write-redacted]");
+
+		// Strip network exfiltration patterns
+		sanitized = sanitized.replace(/\b(fetch|curl|wget|axios)\s+.*(?:exfil|steal|leak|send)/gi, "[suspicious-network-redacted]");
+	}
+
+	// 5. Collapse multiple blank lines (cleanup after removals)
+	sanitized = sanitized.replace(/\n{3,}/g, "\n\n");
+
+	return sanitized.trim();
+}
+
 function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig | undefined {
 	try {
 		const content = fs.readFileSync(filePath, "utf-8");
@@ -39,12 +343,18 @@ function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig |
 		const avoidWhen = parseCsv(frontmatter.avoidWhen);
 		const cost = parseCost(frontmatter.cost);
 		const category = frontmatter.category?.trim() || undefined;
+
+		// SEC-002: Sanitize system prompt based on source trust level
+		const rawSystemPrompt = body.trim();
+		const systemPrompt = sanitizeAgentSystemPrompt(rawSystemPrompt, source);
+
 		return {
 			name,
 			description,
 			source,
 			filePath,
-			systemPrompt: body.trim(),
+			systemPrompt,
+			// ... rest unchanged
 			model: frontmatter.model === "false" ? undefined : frontmatter.model || undefined,
 			fallbackModels: parseCsv(frontmatter.fallbackModels),
 			thinking: frontmatter.thinking === "false" ? undefined : frontmatter.thinking || undefined,
@@ -70,11 +380,20 @@ function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig |
 
 function readAgentDir(dir: string, source: ResourceSource): AgentConfig[] {
 	if (!fs.existsSync(dir)) return [];
-	return fs.readdirSync(dir)
+	const agents = fs.readdirSync(dir)
 		.filter((entry) => entry.endsWith(".md") && !entry.endsWith(".team.md") && !entry.endsWith(".workflow.md"))
 		.map((entry) => parseAgentFile(path.join(dir, entry), source))
 		.filter((agent): agent is AgentConfig => agent !== undefined)
 		.sort((a, b) => a.name.localeCompare(b.name));
+
+	// SEC-001: Warn about project agents that shadow protected builtins
+	if (source === "project") {
+		for (const agent of agents) {
+			checkProjectAgentShadowsBuiltin(agent.name);
+		}
+	}
+
+	return agents;
 }
 
 function applyAgentOverrides(agents: AgentConfig[], cwd: string, loadedConfig?: LoadedPiTeamsConfig): AgentConfig[] {
@@ -101,22 +420,30 @@ function applyAgentOverrides(agents: AgentConfig[], cwd: string, loadedConfig?: 
 }
 
 // ─── Agent Discovery Cache (Phase 3a) ────────────────────────────────────
-// Caches discoverAgents results by cwd with a short TTL to avoid repeated
-// disk I/O when multiple callers request agents for the same project.
+// SEC-005 Fix: Uses version-based cache for atomic invalidation.
+// ═══════════════════════════════════════════════════════════════════════════
 
 const DISCOVERY_CACHE_TTL_MS = 500;
-const discoveryCache = new Map<string, { result: AgentDiscoveryResult; expiresAt: number }>();
+interface CachedDiscoveryEntry {
+	result: AgentDiscoveryResult;
+	expiresAt: number;
+	cacheVersion: number;  // SEC-005: Version stamp for atomic invalidation
+}
+const discoveryCache = new Map<string, CachedDiscoveryEntry>();
 const DISCOVERY_CACHE_MAX_ENTRIES = 32;
 
 function pruneDiscoveryCache(): void {
 	const now = Date.now();
+	const currentVersion = cacheVersion;
 	for (const [key, entry] of discoveryCache) {
-		if (entry.expiresAt <= now) discoveryCache.delete(key);
+		if (entry.expiresAt <= now || entry.cacheVersion < currentVersion) {
+			discoveryCache.delete(key);
+		}
 	}
 }
 
-/** Invalidate cached discovery result for a given cwd (or all if omitted). */
 export function invalidateAgentDiscoveryCache(cwd?: string): void {
+	incrementCacheVersion();
 	if (cwd) {
 		discoveryCache.delete(cwd);
 	} else {
@@ -126,8 +453,10 @@ export function invalidateAgentDiscoveryCache(cwd?: string): void {
 
 export function discoverAgents(cwd: string): AgentDiscoveryResult {
 	pruneDiscoveryCache();
+	const currentVersion = cacheVersion;
 	const cached = discoveryCache.get(cwd);
-	if (cached && cached.expiresAt > Date.now()) {
+	// SEC-005: Check both TTL expiry AND version stamp
+	if (cached && cached.expiresAt > Date.now() && cached.cacheVersion >= currentVersion) {
 		return cached.result;
 	}
 	const loaded = loadConfig(cwd);
@@ -136,7 +465,8 @@ export function discoverAgents(cwd: string): AgentDiscoveryResult {
 		user: applyAgentOverrides(readAgentDir(path.join(userPiRoot(), "agents"), "user"), cwd, loaded),
 		project: applyAgentOverrides(readAgentDir(path.join(projectCrewRoot(cwd), "agents"), "project"), cwd, loaded),
 	};
-	discoveryCache.set(cwd, { result, expiresAt: Date.now() + DISCOVERY_CACHE_TTL_MS });
+	// SEC-005: Store with current version stamp
+	discoveryCache.set(cwd, { result, expiresAt: Date.now() + DISCOVERY_CACHE_TTL_MS, cacheVersion: currentVersion });
 	while (discoveryCache.size > DISCOVERY_CACHE_MAX_ENTRIES) {
 		const oldest = discoveryCache.keys().next().value;
 		if (oldest !== undefined) discoveryCache.delete(oldest);
@@ -150,13 +480,15 @@ export function discoverAgents(cwd: string): AgentDiscoveryResult {
 
 const dynamicAgents = new Map<string, AgentConfig>();
 
-/** Register a dynamic agent at runtime. Throws if already registered. */
+/** Register a dynamic agent at runtime. Throws if already registered or if name is protected. */
 export function registerDynamicAgent(config: AgentConfig): void {
 	const key = config.name.toLowerCase();
+	// Security check: prevent shadowing of builtin agents (SEC-001)
+	assertAgentNameAllowed(config.name);
 	if (dynamicAgents.has(key)) {
 		throw new Error(`Agent already registered: ${config.name}`);
 	}
-	dynamicAgents.set(key, { ...config, source: config.source ?? "project" });
+	dynamicAgents.set(key, { ...config, source: "dynamic" });  // Always "dynamic" — cannot be spoofed
 	invalidateAgentDiscoveryCache();
 }
 
@@ -183,10 +515,16 @@ export function allAgents(discovery: AgentDiscoveryResult | undefined): AgentCon
 	for (const agent of [...discovery.project, ...discovery.builtin, ...discovery.user]) {
 		byName.set(agent.name.toLowerCase(), agent);
 	}
-	// Dynamic agents (registered at runtime) take highest precedence.
-	// They can override any discovered agent (project/builtin/user).
+	// Dynamic agents only fill gaps — they cannot override builtin/user agents.
+	// SECURITY: Dynamic agents are less trusted (registered at runtime by extensions/hooks).
+	// They are only used if no builtin/user agent with the same name exists.
 	for (const agent of dynamicAgents.values()) {
-		byName.set(agent.name.toLowerCase(), agent);
+		const key = agent.name.toLowerCase();
+		if (!byName.has(key)) {
+			byName.set(key, agent);
+		}
+		// NOTE: If an agent with the same name exists, the dynamic version is ignored.
+		// This prevents privilege escalation via agent shadowing (SEC-001).
 	}
 	return [...byName.values()].filter((agent) => !agent.disabled).sort((a, b) => a.name.localeCompare(b.name));
 }
