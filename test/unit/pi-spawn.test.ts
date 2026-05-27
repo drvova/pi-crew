@@ -28,6 +28,7 @@ test("PI_TEAMS_PI_BIN accepts symlink targets in npm-style lib/node_modules", ()
 	const shimPath = path.join(binDir, process.platform === "win32" ? "pi.cmd" : "pi");
 	try {
 		fs.mkdirSync(libDir, { recursive: true });
+		fs.mkdirSync(binDir, { recursive: true });
 		fs.writeFileSync(targetScript, "console.log('ok');\n", "utf-8");
 		fs.symlinkSync(targetScript, shimPath);
 		process.env.npm_config_prefix = tempPrefix;
