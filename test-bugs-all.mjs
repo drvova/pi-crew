@@ -70,7 +70,7 @@ if (completedIdsFix) {
 // Check dist file
 console.log("\n=== Checking dist/index.mjs ===");
 const distContent = fs.readFileSync("dist/index.mjs", "utf-8");
-const distNeedsAttention = distContent.includes('status === "completed" || t.status === "needs_attention"');
+const distNeedsAttention = distContent.includes('t2.status === "completed" || t2.status === "needs_attention"');
 if (distNeedsAttention) {
     console.log("  ✅ Bug #20 fix is in dist/index.mjs");
 } else {

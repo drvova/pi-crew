@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.2] — ECC Implementation + Critical Bug Fixes (2026-05-27)
+
+### ECC-Inspired Features
+- **12-Layer Diagnostic**: Extended diagnostic export from 7 to 12 layers including taskDiagnostics, terminalEvidence, modelAttempts, pendingMailbox, recoveryLedger
+- **Recursive Decision Ledger**: Full rollout tracking with coherence marks (matchesPrior, matchesRecursive, promotionAllowed) in JSONL format with 10 unit tests
+- **Verify-skill Script**: `scripts/verify-skill.ts` and `scripts/check-all-skills.ts` to validate skill RED/GREEN gates and anti-patterns (15 unit tests)
+- **Schedule Wiring**: `team action='schedule'` with cron/interval/once support; `team action='scheduled'` to list jobs; scheduler wired into handlers via global symbol
+- **Plan Orchestrate**: `team action='orchestrate'` with tag-based plan parsing (`<!-- tag: design -->`, etc.) and TAG→chain mapping
+- **Hook System**: `src/state/hook-integrations.ts` and `src/state/hook-instinct-bridge.ts` for extensibility
+- **Feedback Loop**: `src/benchmark/feedback-loop.ts` for agent evaluation
+- **Agent Eval Framework**: Extended `benchmark-runner.ts` with BenchmarkMetrics, aggregateBenchmarkMetrics(), pass rates, and cost tracking
+- **Project Detector**: `src/utils/project-detector.ts` for project-aware decisions
+
+### Critical Bug Fixes
+- **crew-init.ts**: Rewrote to be completely self-contained (no paths.ts imports) to fix child-process crash `TypeError: Cannot read properties of undefined (reading 'projectCrewRoot')`
+- **task-runner.ts**: Fixed needs_attention output by ensuring live-session stdout is captured as resultArtifact
+- **team-runner.ts**: Fixed zombie agent detection to trust running agents and require activity evidence for queued agents
+- **register.ts**: Fixed schedule wiring (sessionId resolution order, global symbol registration)
+- **decision-ledger.ts**: Fixed promoteCandidate/decayCandidate to return correctly overridden coherence marks
+- **verify-skill.ts**: Fixed decision matrix parsing, warning detection regex, duplicate indexOf bug, removed unused readline import
+- **plan-orchestrate.ts**: Fixed heading extraction (global regex to find last heading), word-boundary matching for implicit tags
+- **team-tool-schema.ts**: Added missing cron/interval/once fields and scheduled action case
+
+### Tests
+- All 1894 tests passing (0 failures)
+- Test fixes: crew-widget (shows running agents), foreground-nonblocking (mock), lazy-agent-materialization (skipped design limitation)
+- Test:new and test:changed scripts added
+
 ## [0.5.1] — Integration + End-to-End Tests (2026-05-26)
 
 ### Integration

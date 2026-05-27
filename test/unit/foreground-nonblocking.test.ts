@@ -1,26 +1,48 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
+import * as os from "os";
 import * as path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
+import { clearRunPromisesForTest } from "../../src/runtime/run-tracker.ts";
 
-test("foreground child-process run returns immediately when scheduler is available", async () => {
+test("foreground run with scheduler waits for completion and returns results", async (t) => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-foreground-nonblocking-"));
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	let scheduled = false;
+	// Use mock child-pi to simulate fast agent completion without real LLM calls
+	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 	try {
-		const result = await handleTeamTool({ action: "run", team: "implementation", goal: "large foreground run" }, {
+		const toolResult = await handleTeamTool({ action: "run", team: "fast-fix", goal: "test" }, {
 			cwd,
-			startForegroundRun: () => { scheduled = true; },
+			startForegroundRun: (runner, runId) => {
+				scheduled = true;
+				// Run the runner to completion (mock agents finish instantly)
+				const p = runner();
+				p.then(() => {}).catch(() => {});
+			},
 		});
-		assert.equal(result.isError, false);
+
+		// Mock runs complete quickly, give a small buffer
+		await new Promise((r) => setTimeout(r, 1000));
+
+		assert.equal(toolResult.isError, false);
 		assert.equal(scheduled, true);
-		assert.match(firstText(result), /continues in this Pi session without blocking/);
-		assert.ok(result.details.runId);
+		const text = firstText(toolResult);
+		// Should NOT contain the old "continues in this Pi session without blocking" text
+		assert.ok(!text.includes("continues in this Pi session without blocking"), `Expected no "continues in this Pi session without blocking" but got: ${text}`);
+		// Should contain actual run completion output
+		assert.match(text, /pi-crew run/, `Expected "pi-crew run" in result but got: ${text}`);
+		assert.ok(toolResult.details.runId, "Expected runId in details");
 	} finally {
+		if (previousMock === undefined) {
+			delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		} else {
+			process.env.PI_TEAMS_MOCK_CHILD_PI = previousMock;
+		}
+		clearRunPromisesForTest();
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });
-

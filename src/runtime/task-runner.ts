@@ -40,6 +40,7 @@ import { executeHook, appendHookEvent } from "../hooks/registry.ts";
 import { createVerificationEvidence } from "./green-contract.ts";
 import { createStartupEvidence } from "./worker-startup.ts";
 import { permissionForRole } from "./role-permission.ts";
+import { crewHooks } from "./crew-hooks.ts";
 import {
 	collectDependencyOutputContext,
 	renderDependencyOutputContext,
@@ -401,6 +402,7 @@ export async function runTeamTask(
 					modelAttempts: [...modelAttempts, pendingAttempt],
 				};
 				tasks = updateTask(tasks, task);
+				crewHooks.emit({ type: "task_started", timestamp: new Date().toISOString(), runId: manifest.runId, taskId: task.id, data: { role: task.role, model: model ?? "default" } });
 				upsertCrewAgent(
 					manifest,
 					recordFromTask(manifest, task, "child-process"),
@@ -808,7 +810,22 @@ export async function runTeamTask(
 			exitCode = live.exitCode;
 			error = live.error;
 			parsedOutput = live.parsedOutput;
-			resultArtifact = live.resultArtifact;
+			// Bug #21 fix: live-session may not produce structured output via submit_result,
+			// leaving finalText empty. Re-write resultArtifact with parsedOutput.finalText
+			// so downstream tasks that depend on this task can read meaningful output.
+			const liveText = cleanResultText(parsedOutput?.finalText);
+			if (liveText) {
+				// Re-write the artifact with the captured stdout — this is the content
+				// downstream tasks will read via task.resultArtifact.path.
+				resultArtifact = writeArtifact(manifest.artifactsRoot, {
+					kind: "result",
+					relativePath: `results/${task.id}.txt`,
+					content: liveText,
+					producer: task.id,
+				});
+			} else {
+				resultArtifact = live.resultArtifact;
+			}
 			logArtifact = live.logArtifact;
 			transcriptArtifact = live.transcriptArtifact;
 		} else {
@@ -855,6 +872,8 @@ export async function runTeamTask(
 					data: {
 						activityState: "needs_attention",
 						reason: "no_yield",
+						// Bug #21 fix: include result path so downstream tasks can read the output
+						resultPath: resultArtifact?.path,
 					},
 				});
 			}
@@ -1004,6 +1023,17 @@ export async function runTeamTask(
 			...(transcriptArtifact ? { transcriptArtifact } : {}),
 		};
 		tasks = updateTask(tasks, task);
+
+		// Emit task completion hooks (100% reliable, fire-and-forget)
+		const hookType = task.status === "completed" ? "task_completed" : task.status === "failed" ? "task_failed" : "task_started";
+		crewHooks.emit({
+			type: hookType,
+			timestamp: task.finishedAt ?? new Date().toISOString(),
+			runId: manifest.runId,
+			taskId: task.id,
+			data: { status: task.status, role: task.role, error: task.error, exitCode: task.exitCode, usage: task.usage },
+		});
+
 		const packetArtifact = writeArtifact(manifest.artifactsRoot, {
 			kind: "metadata",
 			relativePath: `metadata/${task.id}.task-packet.json`,

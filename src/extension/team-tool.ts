@@ -165,7 +165,9 @@ import {
 import { FileCheckpointStore } from "../runtime/checkpoint.ts";
 import { buildTeamOnboarding } from "./team-onboard.ts";
 import { handleParallel } from "./team-tool/parallel-dispatch.ts";
+import { handleSchedule, handleListScheduled } from "./team-tool/handle-schedule.ts";
 import { handlePlan } from "./team-tool/plan.ts";
+import { handleOrchestrate } from "./team-tool/orchestrate.ts";
 import { handleRespond } from "./team-tool/respond.ts";
 import { handleStatus } from "./team-tool/status.ts";
 
@@ -187,10 +189,12 @@ export {
 	handlePrune,
 	handleWorktrees,
 } from "./team-tool/lifecycle-actions.ts";
+export { handleSchedule } from "./team-tool/handle-schedule.ts";
 export { handlePlan } from "./team-tool/plan.ts";
 export { handleStatus } from "./team-tool/status.ts";
 export type { TeamToolDetails } from "./team-tool-types.ts";
 export { handleRun };
+export { handleOrchestrate } from "./team-tool/orchestrate.ts";
 
 export function handleList(
 	params: TeamToolParamsValue,
@@ -1089,6 +1093,8 @@ export async function handleTeamTool(
 			return await handleParallel(params, ctx);
 		case "plan":
 			return handlePlan(params, ctx);
+		case "orchestrate":
+			return handleOrchestrate(params, ctx);
 		case "resume":
 			return handleResume(params, ctx);
 		case "create":
@@ -1147,6 +1153,10 @@ export async function handleTeamTool(
 				return result(`Search failed: ${msg}`, { action: "search", status: "error" }, true);
 			}
 		}
+		case "schedule":
+			return handleSchedule(params, ctx);
+		case "scheduled":
+			return handleListScheduled(params, ctx);
 		case "onboard": {
 			const team = params.team ?? "default";
 			const onboarding = buildTeamOnboarding(team, ctx.cwd);

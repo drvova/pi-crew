@@ -2,11 +2,18 @@
  * Auto-initialize .crew directory structure and .gitignore entries.
  * Called on first team run in a workspace to ensure all required
  * directories and files exist.
+ *
+ * IMPORTANT: This module must be COMPLETELY self-contained with NO dependencies
+ * on other pi-crew modules (especially paths.ts). It is called via dynamic
+ * import from child-process contexts (background runners, subagents) where
+ * module binding can fail. Keep this file minimal and self-contained.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { projectCrewRoot } from "../utils/paths.ts";
 import { updateGitignore } from "./gitignore-manager.ts";
+
+// Re-export updateGitignore for backwards compatibility with tests.
+export { updateGitignore };
 
 /** README content for the .crew directory. */
 const CREW_README = `# .crew — pi-crew Runtime Directory
@@ -38,14 +45,56 @@ team action='cache' action='clear'
 `;
 
 /**
+ * Find the project root by walking up from start directory.
+ * Inline implementation to avoid module dependency on paths.ts.
+ * Matches the logic in src/utils/paths.ts:computeRepoRoot().
+ */
+function findProjectRoot(start: string): string | undefined {
+	const dirMarkers = [".git", ".hg", ".svn"];
+	const fileMarkers = ["package.json", "pyproject.toml", "Cargo.toml", "go.mod"];
+	const root = path.parse(start).root;
+	let current = path.resolve(start);
+	// Walk up to find project root
+	while (current !== root) {
+		for (const marker of dirMarkers) {
+			if (fs.existsSync(path.join(current, marker))) return current;
+		}
+		for (const marker of fileMarkers) {
+			if (fs.existsSync(path.join(current, marker))) return current;
+		}
+		const parent = path.dirname(current);
+		if (parent === current) break;
+		current = parent;
+	}
+	// Check root as fallback
+	if (dirMarkers.some((m) => fs.existsSync(path.join(root, m)))) return root;
+	return undefined;
+}
+
+/**
+ * Compute the crew root directory for a given working directory.
+ * Matches src/utils/paths.ts:projectCrewRoot() logic.
+ */
+function computeCrewRoot(cwd: string): string {
+	const repoRoot = findProjectRoot(cwd) ?? cwd;
+	const crewDir = path.join(repoRoot, ".crew");
+	// Keep existing .crew/ stable even when .pi/ exists for project config.
+	if (fs.existsSync(crewDir)) return crewDir;
+	// Legacy reuse: if .pi/ already exists, namespace under .pi/teams/
+	const piDir = path.join(repoRoot, ".pi");
+	return fs.existsSync(piDir) ? path.join(piDir, "teams") : crewDir;
+}
+
+/**
  * Ensure the .crew directory structure exists with all required subdirectories,
  * placeholder files, README, and .gitignore entries.
  *
- * Uses `projectCrewRoot()` to resolve the correct root (`.crew/` or `.pi/teams/`
- * for legacy projects). Idempotent — safe to call multiple times.
+ * This function is self-contained with NO dependencies on other pi-crew modules.
+ * It uses inline implementations of findProjectRoot and computeCrewRoot to avoid
+ * module binding issues in child-process contexts.
  */
 export async function ensureCrewDirectory(cwd: string): Promise<void> {
-	const crewRoot = projectCrewRoot(cwd);
+	const crewRoot = computeCrewRoot(cwd);
 
 	// 1. Create directory structure
 	const dirs = [
@@ -81,41 +130,10 @@ export async function ensureCrewDirectory(cwd: string): Promise<void> {
 	// 3. Write README.md (always overwrite to keep it current)
 	fs.writeFileSync(path.join(crewRoot, "README.md"), CREW_README, "utf-8");
 
-	// 4. Update .gitignore — resolve project root to place .gitignore correctly
-	// Find the repo root to place .gitignore at the project root (not inside .crew)
-	const repoRoot = findRepoRootForGitignore(cwd);
+	// 4. Update .gitignore at project root
+	const repoRoot = findProjectRoot(cwd);
 	if (repoRoot) {
 		const gitignorePath = path.join(repoRoot, ".gitignore");
 		await updateGitignore(gitignorePath);
 	}
-}
-
-/**
- * Find the appropriate project root for placing the .gitignore.
- * Walks up from cwd to find a directory with project markers.
- */
-function findRepoRootForGitignore(cwd: string): string | undefined {
-	// Use the same project root markers as paths.ts
-	const dirMarkers = [".git", ".pi", ".crew", ".hg", ".svn"];
-	const fileMarkers = [
-		"package.json",
-		"pyproject.toml",
-		"Cargo.toml",
-		"go.mod",
-	];
-	const root = path.parse(cwd).root;
-	let current = path.resolve(cwd);
-	while (current !== root) {
-		for (const marker of dirMarkers) {
-			if (fs.existsSync(path.join(current, marker))) return current;
-		}
-		for (const marker of fileMarkers) {
-			if (fs.existsSync(path.join(current, marker))) return current;
-		}
-		const parent = path.dirname(current);
-		if (parent === current) break;
-		current = parent;
-	}
-	// No project root found — don't create .gitignore
-	return undefined;
 }

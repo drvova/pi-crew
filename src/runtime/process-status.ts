@@ -77,8 +77,21 @@ export function isLikelyOrphanedActiveRun(run: TeamRunManifest, agents: CrewAgen
 }
 
 function hasDurableActiveAgentEvidence(agent: CrewAgentRecord): boolean {
-	if (agent.status !== "running" && agent.status !== "queued") return false;
-	return Boolean(agent.statusPath || agent.eventsPath || agent.outputPath || agent.progress || agent.toolUses || agent.jsonEvents);
+	if (agent.status === "running") {
+		// Running agents are actively executing — trust them.
+		// Activity evidence is only required for queued agents (zombie prevention).
+		return true;
+	}
+	if (agent.status === "queued") {
+		// Queued agents need actual activity evidence to distinguish from zombies:
+		// spawned-but-never-executed agents should not appear as active.
+		return Boolean(
+			(agent.progress && (agent.progress.toolCount > 0 || agent.progress.recentOutput.length > 0)) ||
+			(agent.jsonEvents && agent.jsonEvents > 0) ||
+			(agent.toolUses && agent.toolUses > 0),
+		);
+	}
+	return false;
 }
 
 export function hasStaleAsyncProcess(run: TeamRunManifest, now = Date.now()): boolean {

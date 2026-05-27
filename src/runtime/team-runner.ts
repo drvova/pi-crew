@@ -28,6 +28,7 @@ import { executeWithRetry, DEFAULT_RETRY_POLICY, type RetryPolicy } from "./retr
 import { appendDeadletter } from "./deadletter.ts";
 import type { MetricRegistry } from "../observability/metric-registry.ts";
 import { childCorrelation, withCorrelation } from "../observability/correlation.ts";
+import { crewHooks } from "./crew-hooks.ts";
 import { resolveBatchConcurrency } from "./concurrency.ts";
 import { mapConcurrent } from "./parallel-utils.ts";
 import { permissionForRole } from "./role-permission.ts";
@@ -279,6 +280,10 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 		cleanupUsage();
 		// Terminate live agents for this run — agents are done when the run ends.
 		void terminateLiveAgentsForRun(manifest.runId, "completed", appendEvent, manifest.eventsPath).catch(() => {});
+
+		// Emit run completion hook (100% reliable, fire-and-forget)
+		crewHooks.emit({ type: "run_completed", timestamp: new Date().toISOString(), runId: manifest.runId, data: { status: result.manifest.status, taskCount: result.tasks.length } });
+
 		return result;
 	} catch (error) {
 		// P1: Catch unhandled errors — ensure manifest/tasks/agents are terminal so they don't stay "running" forever.
@@ -310,6 +315,7 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 		}
 		const result = { manifest, tasks };
 		rejectRunPromise(manifest.runId, error instanceof Error ? error : new Error(message));
+		crewHooks.emit({ type: "run_failed", timestamp: new Date().toISOString(), runId: manifest.runId, data: { status: manifest.status, error: message } });
 		cleanupUsage();
 		return result;
 	}

@@ -6,6 +6,7 @@ import type {
 	ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
 import { loadConfig } from "../config/config.ts";
+import { applyCrewSettingsToConfig, loadCrewSettings, saveCrewSettings } from "../runtime/settings-store.ts";
 // 2.7: Lazy-load LiveRunSidebar — only constructed when the user actually opens
 // a live run sidebar overlay. The class pulls in transcript-viewer and other
 // heavy UI modules.
@@ -50,10 +51,6 @@ import { listLiveAgents } from "../runtime/live-agent-manager.ts";
 import { createManifestCache } from "../runtime/manifest-cache.ts";
 import { checkProcessLiveness } from "../runtime/process-status.ts";
 import { CrewScheduler } from "../runtime/scheduler.ts";
-import {
-	applyCrewSettingsToConfig,
-	loadCrewSettings,
-} from "../runtime/settings-store.ts";
 import { appendEvent } from "../state/event-log.ts";
 import { loadRunManifestById, updateRunStatus } from "../state/state-store.ts";
 import type { TeamRunManifest } from "../state/types.ts";
@@ -109,6 +106,7 @@ import {
 } from "./registration/subagent-helpers.ts";
 import { registerSubagentTools } from "./registration/subagent-tools.ts";
 import { registerTeamTool } from "./registration/team-tool.ts";
+import { handleTeamTool } from "./team-tool.ts";
 
 let _cachedOTLPExporter: typeof OTLPExporterType | undefined;
 async function importOTLPExporter(): Promise<typeof OTLPExporterType> {
@@ -916,34 +914,6 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 							});
 						}
 					}
-					// Always send followUp notification regardless of ownerCurrent.
-					// The run completed — the assistant needs to know even if the
-					// originating session generation has changed (compaction, etc.).
-					if (runId) {
-						const loaded = loadRunManifestById(ctx.cwd, runId);
-						const status = loaded?.manifest.status ?? "finished";
-						const teamName = loaded?.manifest.team ?? "unknown";
-						const goalSummary = (loaded?.manifest.goal ?? "").slice(
-							0,
-							100,
-						);
-						try {
-							pi.sendUserMessage(
-								[
-									`pi-crew run ${status}: ${runId} (${teamName})`,
-									`Goal: ${goalSummary}`,
-									status === "completed"
-										? "Review the run results. If the run modified source files, run tests to verify. Summarize what was done."
-										: "The run ended with status: " +
-											status +
-											". Check the run artifacts and take appropriate action.",
-								].join("\n"),
-								{ deliverAs: "followUp" },
-							);
-						} catch {
-							/* non-critical */
-						}
-					}
 					if (ownerCurrent && currentCtx) {
 						const config = loadConfig(currentCtx.cwd).config.ui;
 						updateCrewWidget(
@@ -1325,18 +1295,43 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		applyCrewSettingsToConfig(loadedConfig.config, crewSettings);
 
 		// Start scheduler with event-based executor
+		// Resolve sessionId before the scheduler executor closure captures it.
+		const sessionId =
+			ctx.sessionManager?.getSessionId?.() ??
+			(typeof ctx === "object" && ctx !== null && "sessionId" in ctx
+				? (ctx as Record<string, unknown>).sessionId
+				: undefined);
 		crewScheduler = new CrewScheduler();
 		crewScheduler.start({
 			emit: (event) => {
 				if (cleanedUp) return;
+				pi.events?.emit?.("crew-scheduler", event);
 			},
 			executor: (job) => {
+				let runParams: { action: string; team: string; goal: string };
+				try {
+					runParams = JSON.parse(job.prompt);
+				} catch {
+					runParams = { action: "run", team: "default", goal: job.prompt };
+				}
+				if (runParams.action !== "run") return `scheduled-${job.id}-${Date.now()}`;
+				setImmediate(async () => {
+					try {
+						await handleTeamTool(
+							{ action: "run", team: runParams.team, goal: runParams.goal, async: true },
+							{ cwd: ctx.cwd, sessionId },
+						);
+					} catch (err) {
+						logInternalError("scheduler.execute", err);
+					}
+				});
 				return `scheduled-${job.id}-${Date.now()}`;
 			},
-			finalizer: (_jobId, _agentId) => {
-				// no-op for now; future: launch team run
-			},
+			finalizer: () => {},
 		});
+		// Wire scheduler into handle-schedule.ts so handlers can add/list jobs.
+		// Uses a global symbol so the module doesn't need a direct circular import.
+		(globalThis as Record<symbol | string, unknown>)[Symbol.for("pi-crew:scheduler")] = crewScheduler;
 		// Load scheduled jobs from settings if present
 		if (Array.isArray((crewSettings as any).scheduledJobs)) {
 			for (const job of (crewSettings as any).scheduledJobs) {
@@ -1351,11 +1346,6 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		configureNotifications(ctx);
 		configureObservability(ctx);
 		configureDeliveryCoordinator();
-		const sessionId =
-			ctx.sessionManager?.getSessionId?.() ??
-			(typeof ctx === "object" && ctx !== null && "sessionId" in ctx
-				? (ctx as Record<string, unknown>).sessionId
-				: undefined);
 		if (typeof sessionId === "string" && sessionId)
 			deliveryCoordinator?.activate(sessionId);
 		tryRegisterSessionCleanup(pi, () => {

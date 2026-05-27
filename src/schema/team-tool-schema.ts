@@ -65,6 +65,9 @@ export const TeamToolParams = Type.Object({
 				Type.Literal("cache"),
 				Type.Literal("checkpoint"),
 				Type.Literal("search"),
+				Type.Literal("orchestrate"),
+				Type.Literal("schedule"),
+				Type.Literal("scheduled"),
 			],
 			{ description: "Team action. Defaults to 'list' when omitted." },
 		),
@@ -189,6 +192,18 @@ export const TeamToolParams = Type.Object({
 	replyDeadline: Type.Optional(
 		Type.Integer({ description: "Ms epoch deadline for a reply." }),
 	),
+	planPath: Type.Optional(
+		Type.String({ description: "Path to a markdown plan document for orchestration." }),
+	),
+	cron: Type.Optional(
+		Type.String({ description: "Cron expression for recurring scheduled runs (e.g., '0 9 * * MON')." }),
+	),
+	interval: Type.Optional(
+		Type.Number({ description: "Interval in milliseconds between recurring scheduled runs." }),
+	),
+	once: Type.Optional(
+		Type.Union([Type.String(), Type.Number()], { description: "ISO timestamp or epoch ms for a one-time scheduled run." }),
+	),
 });
 
 export interface TeamToolParamsValue {
@@ -234,7 +249,10 @@ export interface TeamToolParamsValue {
 		| "explain"
 		| "cache"
 		| "checkpoint"
-		| "search";
+		| "search"
+		| "orchestrate"
+		| "schedule"
+		| "scheduled";
 	resource?: "agent" | "team" | "workflow";
 	team?: string;
 	workflow?: string;
@@ -264,4 +282,9 @@ export interface TeamToolParamsValue {
 	replyFrom?: string;
 	/** Ms epoch deadline for a reply. */
 	replyDeadline?: number;
+	/** Path to a markdown plan document for orchestration. */
+	planPath?: string;
+	cron?: string;
+	interval?: number;
+	once?: string | number;
 }

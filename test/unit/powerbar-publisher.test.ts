@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createRunManifest, saveRunManifest, saveRunTasks } from "../../src/state/state-store.ts";
 import { saveCrewAgents } from "../../src/runtime/crew-agent-records.ts";
-import { compactTokens, registerPiCrewPowerbarSegments, updatePiCrewPowerbar } from "../../src/ui/powerbar-publisher.ts";
+import { compactTokens, registerPiCrewPowerbarSegments, resetPowerbarDedupState, updatePiCrewPowerbar } from "../../src/ui/powerbar-publisher.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
 test("powerbar publisher registers and updates active crew segments", () => {
@@ -40,6 +40,7 @@ test("powerbar progress uses task totals and respects model/token visibility", (
 	process.env.PI_TEAMS_HOME = home;
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-powerbar-tasks-"));
 	try {
+		resetPowerbarDedupState();
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		const events: Array<{ event: string; data: unknown }> = [];
 		const bus = { emit: (event: string, data: unknown) => events.push({ event, data }) };

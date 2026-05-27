@@ -10,6 +10,7 @@ import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { summarizeHeartbeats, type HeartbeatSummary } from "../ui/heartbeat-aggregator.ts";
 import type { RunUiSnapshot } from "../ui/snapshot-types.ts";
 import { redactSecrets } from "../utils/redaction.ts";
+import { buildRecoveryLedger, type RecoveryLedgerEntry } from "./recovery-recipes.ts";
 export { redactSecrets } from "../utils/redaction.ts";
 
 export interface DiagnosticReport {
@@ -23,6 +24,17 @@ export interface DiagnosticReport {
 	agents: unknown[];
 	envRedacted: Record<string, string>;
 	metricsSnapshot?: MetricSnapshot[];
+	// Layer 8: task diagnostics
+	taskDiagnostics: Record<string, Record<string, unknown>>;
+	// Layer 9: terminal evidence
+	terminalEvidence: Record<string, TeamTaskState["terminalEvidence"]>;
+	// Layer 10: model attempts and routing
+	modelAttempts: { taskId: string; attempts: TeamTaskState["modelAttempts"]; routing: TeamTaskState["modelRouting"] }[];
+	// Layer 11: pending mailbox
+	pendingMailbox: { taskId: string; pendingSteers: TeamTaskState["pendingSteers"] }[];
+	runMailboxUnread: RunUiSnapshot["mailbox"];
+	// Layer 12: recovery ledger
+	recoveryLedger: RecoveryLedgerEntry[];
 }
 
 const SECRET_KEY_PATTERN = /(token|key|password|secret|credential|auth)/i;
@@ -69,6 +81,24 @@ export async function exportDiagnostic(ctx: Pick<ExtensionContext, "cwd">, runId
 	const safeTimestamp = exportedAt.replace(/[:.]/g, "-");
 	const recentEvents = readEvents(loaded.manifest.eventsPath).slice(-200);
 	const metricsSnapshot = options.registry?.snapshot();
+	const taskDiagnostics: Record<string, Record<string, unknown>> = {};
+	const terminalEvidence: Record<string, TeamTaskState["terminalEvidence"]> = {};
+	const modelAttempts: { taskId: string; attempts: TeamTaskState["modelAttempts"]; routing: TeamTaskState["modelRouting"] }[] = [];
+	const pendingMailbox: { taskId: string; pendingSteers: TeamTaskState["pendingSteers"] }[] = [];
+	for (const task of loaded.tasks) {
+		if (task.diagnostics) taskDiagnostics[task.id] = task.diagnostics;
+		if (task.terminalEvidence) terminalEvidence[task.id] = task.terminalEvidence;
+		if (task.modelAttempts || task.modelRouting) {
+			modelAttempts.push({ taskId: task.id, attempts: task.modelAttempts, routing: task.modelRouting });
+		}
+		if (task.pendingSteers) {
+			pendingMailbox.push({ taskId: task.id, pendingSteers: task.pendingSteers });
+		}
+	}
+	const recoveryLedger = loaded.manifest.policyDecisions
+		? buildRecoveryLedger(loaded.manifest.policyDecisions).entries
+		: [];
+	const snapshot = buildSnapshot(loaded.manifest, loaded.tasks);
 	const report: DiagnosticReport = {
 		...(metricsSnapshot ? { schemaVersion: 2 } : {}),
 		runId,
@@ -76,10 +106,16 @@ export async function exportDiagnostic(ctx: Pick<ExtensionContext, "cwd">, runId
 		manifest: redactSecrets(loaded.manifest) as TeamRunManifest,
 		tasks: redactSecrets(loaded.tasks) as TeamTaskState[],
 		recentEvents: redactSecrets(recentEvents) as TeamEvent[],
-		heartbeat: summarizeHeartbeats(buildSnapshot(loaded.manifest, loaded.tasks)),
+		heartbeat: summarizeHeartbeats(snapshot),
 		agents: redactSecrets(readCrewAgents(loaded.manifest)) as unknown[],
 		envRedacted: envRedacted(),
 		...(metricsSnapshot ? { metricsSnapshot: redactSecrets(metricsSnapshot) as MetricSnapshot[] } : {}),
+		taskDiagnostics,
+		terminalEvidence,
+		modelAttempts,
+		pendingMailbox,
+		runMailboxUnread: snapshot.mailbox,
+		recoveryLedger,
 	};
 	const dir = path.join(loaded.manifest.artifactsRoot, "diagnostic");
 	fs.mkdirSync(dir, { recursive: true });

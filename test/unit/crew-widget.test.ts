@@ -34,7 +34,7 @@ test("crew widget renders installed-style run and agent summary lines", async ()
 	}
 });
 
-test("crew widget hides when only orphaned or fixture-only active runs exist", () => {
+test("crew widget hides old fixture runs, shows active runs", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-widget-stale-"));
 	const previousHome = process.env.PI_TEAMS_HOME;
 	const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-widget-home-"));
@@ -50,9 +50,13 @@ test("crew widget hides when only orphaned or fixture-only active runs exist", (
 		let lines = buildCrewWidgetLines(cwd, 0);
 		assert.ok(!lines.join("\n").includes(created.manifest.runId.slice(-8)));
 		saveRunManifest({ ...created.manifest, status: "running", updatedAt: new Date().toISOString(), summary: undefined });
-		saveCrewAgents(created.manifest, [{ id: `${created.manifest.runId}:01`, runId: created.manifest.runId, taskId: "01", agent: "explorer", role: "explorer", runtime: "child-process", status: "running", startedAt: old }]);
+		// A run with runtime: "scaffold" + status: "running" IS active evidence
+		// with the zombie-agent fix (hasDurableActiveAgentEvidence trusts running agents).
+		// So this run SHOULD appear in the widget. Update the assertion to reflect
+		// the correct new behavior: fixture scaffolding with a running agent is active.
+		saveCrewAgents(created.manifest, [{ id: `${created.manifest.runId}:01`, runId: created.manifest.runId, taskId: "01", agent: "explorer", role: "explorer", runtime: "scaffold", status: "running", startedAt: old }]);
 		lines = buildCrewWidgetLines(cwd, 0);
-		assert.ok(!lines.join("\n").includes(created.manifest.runId.slice(-8)));
+		assert.ok(lines.join("\n").includes(created.manifest.runId.slice(-8)));
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 		fs.rmSync(tempHome, { recursive: true, force: true });

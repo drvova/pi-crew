@@ -2,6 +2,9 @@ import type { TeamRunStatus, TeamTaskStatus } from "./contracts.ts";
 import type { TaskClaimState } from "./task-claims.ts";
 import type { WorkerHeartbeatState } from "../runtime/worker-heartbeat.ts";
 import type { CrewAgentProgress } from "../runtime/crew-agent-runtime.ts";
+import type { RolloutEntry, CoherenceMark } from "./decision-ledger.ts";
+export type { RolloutEntry, CoherenceMark };
+
 export type { TeamRunStatus, TeamTaskStatus } from "./contracts.ts";
 
 export interface ArtifactDescriptor {
