@@ -17,7 +17,6 @@ dist/
 
 # Team run artifacts
 artifacts/
-state/
 vscode-extension/
 .crew/worktrees/
 .crew/worktrees/

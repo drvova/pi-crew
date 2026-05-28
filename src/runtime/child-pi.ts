@@ -117,6 +117,8 @@ export interface ChildPiLifecycleEvent {
 	error?: string;
 	/** Stderr captured at timeout moment (for response_timeout events). */
 	stderr?: string;
+	/** Last N chars of stderr for error context (exit/error events). */
+	stderrExcerpt?: string;
 	/** Timestamp (ISO). */
 	ts: string;
 }
@@ -414,6 +416,36 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			let hardKilled = false;
 			const cleanupErrors: string[] = [];
 			let turnCount = 0;
+			// Track in-flight operations for proper rejection on unexpected exit
+			interface PendingOperation {
+				id: string;
+				type: "prompt" | "steer" | "json_event";
+				startedAt: number;
+			}
+			const pendingOperations = new Map<string, PendingOperation>();
+			let operationIdCounter = 0;
+
+			const startOperation = (type: PendingOperation["type"]): string => {
+				const id = `op-${++operationIdCounter}`;
+				pendingOperations.set(id, { id, type, startedAt: Date.now() });
+				return id;
+			};
+
+			const completeOperation = (id: string): void => {
+				pendingOperations.delete(id);
+			};
+
+			const rejectPendingOperations = (error: Error): void => {
+				pendingOperations.forEach((op, id) => {
+					logInternalError(
+						"child-pi.pending-operation-rejected",
+						error,
+						`opId=${id} type=${op.type} elapsed=${Date.now() - op.startedAt}ms`,
+					);
+				});
+				pendingOperations.clear();
+			};
+
 			let softLimitReached = false;
 			const maxTurns = input.maxTurns;
 			const graceTurns = input.graceTurns;
@@ -450,20 +482,27 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				},
 				onJsonEvent: (event) => {
 					restartNoResponseTimer();
-					// Turn-count-based steering: soft limit steer + hard abort after graceTurns
-					if (event && typeof event === "object" && !Array.isArray(event)) {
-						const obj = event as Record<string, unknown>;
-						if (obj.type === "turn_end") {
-							turnCount += 1;
-							if (maxTurns !== undefined && !softLimitReached && turnCount >= maxTurns) {
-								softLimitReached = true;
-								// Inject steer via stdin to tell child to wrap up
-								child.stdin?.write(JSON.stringify({ type: "steer", message: "You have reached your turn limit. Wrap up immediately — provide your final answer now." }) + "\n");
-							} else if (maxTurns !== undefined && softLimitReached && turnCount >= maxTurns + (graceTurns ?? 5)) {
-								// Hard abort — terminate after grace turns
-								try { child.kill(process.platform === "win32" ? undefined : "SIGTERM"); } catch { /* best-effort */ }
+					const eventOpId = startOperation("json_event");
+					try {
+						// Turn-count-based steering: soft limit steer + hard abort after graceTurns
+						if (event && typeof event === "object" && !Array.isArray(event)) {
+							const obj = event as Record<string, unknown>;
+							if (obj.type === "turn_end") {
+								turnCount += 1;
+								if (maxTurns !== undefined && !softLimitReached && turnCount >= maxTurns) {
+									softLimitReached = true;
+									// Inject steer via stdin to tell child to wrap up
+									child.stdin?.write(JSON.stringify({ type: "steer", message: "You have reached your turn limit. Wrap up immediately — provide your final answer now." }) + "\n");
+								} else if (maxTurns !== undefined && softLimitReached && turnCount >= maxTurns + (graceTurns ?? 5)) {
+									// Hard abort — terminate after grace turns
+									try { child.kill(process.platform === "win32" ? undefined : "SIGTERM"); } catch { /* best-effort */ }
+								}
 							}
 						}
+						completeOperation(eventOpId);
+					} catch (err) {
+						completeOperation(eventOpId);
+						throw err;
 					}
 					input.onJsonEvent?.(event);
 					if (!isFinalAssistantEvent(event) || childExited || settled || finalDrainTimer) return;
@@ -587,20 +626,36 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				stderr = appendBoundedTail(stderr, chunk.toString("utf-8"));
 			});
 			child.on("error", (error) => {
+				// Reject pending operations with process error context
+				const processError = new Error(
+					`Child Pi process error: ${error.message}. Stderr: ${stderr.slice(-500) || "(none)"}`,
+				);
+				rejectPendingOperations(processError);
 				try {
-					input.onLifecycleEvent?.({ type: "spawn_error", pid: child.pid, error: error.message, ts: new Date().toISOString() });
+					input.onLifecycleEvent?.({ type: "spawn_error", pid: child.pid, error: processError.message, ts: new Date().toISOString(), stderrExcerpt: stderr.slice(-500) || undefined });
 				} catch (err) {
 					logInternalError("child-pi.on-lifecycle-event", err, `event=error, pid=${child.pid}`);
 				}
-				settle({ exitCode: null, stdout, stderr, error: error.message });
+				settle({ exitCode: null, stdout, stderr, error: processError.message });
 			});
-			child.on("exit", (code) => {
+			child.on("exit", (code, signal) => {
 				if (child.pid) {
 					activeChildProcesses.delete(child.pid);
 					clearHardKillTimer(child.pid);
 				}
+				// Build comprehensive exit error for unexpected exits
+				const isUnexpectedExit = !childExited && !settled && !responseTimeoutHit && !abortRequested;
+				const exitError = isUnexpectedExit
+					? new Error(
+						`Child Pi process exited unexpectedly (code=${code ?? "null"} signal=${signal ?? "null"}). `
+						+ `Stderr: ${stderr.slice(-1000) || "(none)"}`,
+					)
+					: null;
+				if (exitError) {
+					rejectPendingOperations(exitError);
+				}
 				try {
-					input.onLifecycleEvent?.({ type: "exit", pid: child.pid, exitCode: code, ts: new Date().toISOString() });
+					input.onLifecycleEvent?.({ type: "exit", pid: child.pid, exitCode: code, ts: new Date().toISOString(), error: exitError?.message, stderrExcerpt: isUnexpectedExit ? stderr.slice(-1000) || undefined : undefined });
 				} catch (err) {
 					logInternalError("child-pi.on-lifecycle-event", err, `event=exit, pid=${child.pid}`);
 				}

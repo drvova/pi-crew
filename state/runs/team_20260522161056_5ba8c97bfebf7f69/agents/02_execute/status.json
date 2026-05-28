@@ -1,0 +1,46 @@
+{
+  "id": "team_20260522161056_5ba8c97bfebf7f69:02_execute",
+  "runId": "team_20260522161056_5ba8c97bfebf7f69",
+  "taskId": "02_execute",
+  "agent": "executor",
+  "role": "executor",
+  "runtime": "child-process",
+  "status": "needs_attention",
+  "startedAt": "2026-05-22T16:10:56.180Z",
+  "completedAt": "2026-05-22T16:10:56.210Z",
+  "resultArtifactPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_5ba8c97bfebf7f69/results/02_execute.txt",
+  "transcriptPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_5ba8c97bfebf7f69/transcripts/02_execute.attempt-0.jsonl",
+  "statusPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_5ba8c97bfebf7f69/agents/02_execute/status.json",
+  "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_5ba8c97bfebf7f69/agents/02_execute/events.jsonl",
+  "outputPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_5ba8c97bfebf7f69/agents/02_execute/output.log",
+  "toolUses": 0,
+  "jsonEvents": 2,
+  "model": "minimax/MiniMax-M2.7",
+  "routing": {
+    "requested": "zai/glm-5.1",
+    "resolved": "minimax/MiniMax-M2.7",
+    "fallbackChain": [
+      "minimax/MiniMax-M2.7"
+    ],
+    "reason": "requested model unavailable; selected configured Pi fallback",
+    "usedAttempt": 0
+  },
+  "usage": {
+    "input": 10,
+    "output": 5,
+    "cost": 0.001,
+    "turns": 1
+  },
+  "progress": {
+    "recentTools": [],
+    "recentOutput": [
+      "Mock JSON success for executor"
+    ],
+    "toolCount": 0,
+    "lastActivityAt": "2026-05-22T16:10:56.193Z",
+    "activityState": "needs_attention",
+    "durationMs": 13,
+    "tokens": 15,
+    "turns": 1
+  }
+}

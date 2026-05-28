@@ -1,0 +1,139 @@
+[
+  {
+    "id": "team_20260522161056_3e8b1f471c775b79:01_explore",
+    "runId": "team_20260522161056_3e8b1f471c775b79",
+    "taskId": "01_explore",
+    "agent": "explorer",
+    "role": "explorer",
+    "runtime": "child-process",
+    "status": "needs_attention",
+    "startedAt": "2026-05-22T16:10:56.346Z",
+    "completedAt": "2026-05-22T16:10:56.366Z",
+    "resultArtifactPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/results/01_explore.txt",
+    "transcriptPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/transcripts/01_explore.attempt-0.jsonl",
+    "statusPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/01_explore/status.json",
+    "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/01_explore/events.jsonl",
+    "outputPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/01_explore/output.log",
+    "toolUses": 0,
+    "jsonEvents": 2,
+    "model": "minimax/MiniMax-M2.7",
+    "routing": {
+      "requested": "minimax/MiniMax-M2.7-highspeed",
+      "resolved": "minimax/MiniMax-M2.7",
+      "fallbackChain": [
+        "minimax/MiniMax-M2.7"
+      ],
+      "reason": "requested model unavailable; selected configured Pi fallback",
+      "usedAttempt": 0
+    },
+    "usage": {
+      "input": 10,
+      "output": 5,
+      "cost": 0.001,
+      "turns": 1
+    },
+    "progress": {
+      "recentTools": [],
+      "recentOutput": [
+        "Mock JSON success for explorer"
+      ],
+      "toolCount": 0,
+      "lastActivityAt": "2026-05-22T16:10:56.356Z",
+      "activityState": "needs_attention",
+      "durationMs": 10,
+      "tokens": 15,
+      "turns": 1
+    }
+  },
+  {
+    "id": "team_20260522161056_3e8b1f471c775b79:02_execute",
+    "runId": "team_20260522161056_3e8b1f471c775b79",
+    "taskId": "02_execute",
+    "agent": "executor",
+    "role": "executor",
+    "runtime": "child-process",
+    "status": "needs_attention",
+    "startedAt": "2026-05-22T16:10:56.382Z",
+    "completedAt": "2026-05-22T16:10:56.410Z",
+    "resultArtifactPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/results/02_execute.txt",
+    "transcriptPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/transcripts/02_execute.attempt-0.jsonl",
+    "statusPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/02_execute/status.json",
+    "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/02_execute/events.jsonl",
+    "outputPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/02_execute/output.log",
+    "toolUses": 0,
+    "jsonEvents": 2,
+    "model": "minimax/MiniMax-M2.7",
+    "routing": {
+      "requested": "zai/glm-5.1",
+      "resolved": "minimax/MiniMax-M2.7",
+      "fallbackChain": [
+        "minimax/MiniMax-M2.7"
+      ],
+      "reason": "requested model unavailable; selected configured Pi fallback",
+      "usedAttempt": 0
+    },
+    "usage": {
+      "input": 10,
+      "output": 5,
+      "cost": 0.001,
+      "turns": 1
+    },
+    "progress": {
+      "recentTools": [],
+      "recentOutput": [
+        "Mock JSON success for executor"
+      ],
+      "toolCount": 0,
+      "lastActivityAt": "2026-05-22T16:10:56.396Z",
+      "activityState": "needs_attention",
+      "durationMs": 14,
+      "tokens": 15,
+      "turns": 1
+    }
+  },
+  {
+    "id": "team_20260522161056_3e8b1f471c775b79:03_verify",
+    "runId": "team_20260522161056_3e8b1f471c775b79",
+    "taskId": "03_verify",
+    "agent": "verifier",
+    "role": "verifier",
+    "runtime": "child-process",
+    "status": "needs_attention",
+    "startedAt": "2026-05-22T16:10:56.424Z",
+    "completedAt": "2026-05-22T16:10:56.452Z",
+    "resultArtifactPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/results/03_verify.txt",
+    "transcriptPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/transcripts/03_verify.attempt-0.jsonl",
+    "statusPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/03_verify/status.json",
+    "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/03_verify/events.jsonl",
+    "outputPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161056_3e8b1f471c775b79/agents/03_verify/output.log",
+    "toolUses": 0,
+    "jsonEvents": 2,
+    "model": "minimax/MiniMax-M2.7",
+    "routing": {
+      "requested": "minimax/MiniMax-M2.7",
+      "resolved": "minimax/MiniMax-M2.7",
+      "fallbackChain": [
+        "minimax/MiniMax-M2.7"
+      ],
+      "usedAttempt": 0
+    },
+    "usage": {
+      "input": 10,
+      "output": 5,
+      "cost": 0.001,
+      "turns": 1
+    },
+    "progress": {
+      "recentTools": [],
+      "recentOutput": [
+        "Mock JSON success for verifier"
+      ],
+      "toolCount": 0,
+      "lastActivityAt": "2026-05-22T16:10:56.438Z",
+      "activityState": "needs_attention",
+      "durationMs": 14,
+      "tokens": 15,
+      "turns": 1
+    }
+  }
+]

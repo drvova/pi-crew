@@ -1,0 +1,471 @@
+[
+  {
+    "id": "01_explore",
+    "runId": "team_20260522161056_3e8b1f471c775b79",
+    "stepId": "explore",
+    "role": "explorer",
+    "agent": "explorer",
+    "title": "explore",
+    "status": "completed",
+    "dependsOn": [],
+    "cwd": "/tmp/pi-crew-resume-checkpoint-rSUp0b",
+    "graph": {
+      "taskId": "01_explore",
+      "children": [
+        "02_execute"
+      ],
+      "dependencies": [],
+      "queue": "done"
+    },
+    "taskPacket": {
+      "objective": "Find the likely source of the issue: checkpoint recovery",
+      "scope": "workspace",
+      "repo": "pi-crew-resume-checkpoint-rSUp0b",
+      "branchPolicy": "Use the current checkout; do not create branches unless explicitly requested.",
+      "acceptanceTests": [],
+      "commitPolicy": "Do not commit unless explicitly requested by the user or workflow.",
+      "reportingContract": "Report intended/changed files, verification evidence, blockers, conflict risks, and next recommended action.",
+      "escalationPolicy": "Stop and report if scope is ambiguous, destructive action is needed, permissions are missing, verification cannot be completed, or edits may overlap with another worker/task.",
+      "constraints": [
+        "Stay within the assigned task scope.",
+        "Do not claim completion without verification evidence.",
+        "Use mailbox/API state for coordination when available.",
+        "Do not make overlapping edits to the same file/symbol without explicit leader sequencing or ownership guidance."
+      ],
+      "expectedArtifacts": [
+        "prompt",
+        "result",
+        "verification"
+      ],
+      "verification": {
+        "requiredGreenLevel": "none",
+        "commands": [],
+        "allowManualEvidence": true
+      }
+    },
+    "startedAt": "2026-05-22T16:10:56.346Z",
+    "heartbeat": {
+      "workerId": "01_explore",
+      "lastSeenAt": "2026-05-22T16:10:56.366Z",
+      "alive": false
+    },
+    "agentProgress": {
+      "recentTools": [],
+      "recentOutput": [
+        "Mock JSON success for explorer"
+      ],
+      "toolCount": 0,
+      "lastActivityAt": "2026-05-22T16:10:56.356Z",
+      "activityState": "needs_attention",
+      "durationMs": 10,
+      "tokens": 15,
+      "turns": 1
+    },
+    "lifetimeUsage": {
+      "input": 0,
+      "output": 0,
+      "cacheWrite": 0
+    },
+    "controlReservation": {
+      "reservedAt": "2026-05-22T16:10:56.346Z",
+      "controllerId": "ctrl:01_explore:866db88a-f9f4-45b5-92d9-7a4992fed929",
+      "acceptsControlEvents": true
+    },
+    "checkpoint": {
+      "phase": "artifact-written",
+      "updatedAt": "2026-05-22T16:10:56.479Z",
+      "childPid": 12345
+    },
+    "modelAttempts": [
+      {
+        "model": "minimax/MiniMax-M2.7",
+        "success": true,
+        "exitCode": 0
+      }
+    ],
+    "modelRouting": {
+      "requested": "minimax/MiniMax-M2.7-highspeed",
+      "resolved": "minimax/MiniMax-M2.7",
+      "fallbackChain": [
+        "minimax/MiniMax-M2.7"
+      ],
+      "reason": "requested model unavailable; selected configured Pi fallback",
+      "usedAttempt": 0
+    },
+    "usage": {
+      "input": 10,
+      "output": 5,
+      "cost": 0.001,
+      "turns": 1
+    },
+    "resultArtifact": {
+      "kind": "result",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/results/01_explore.txt",
+      "createdAt": "2026-05-22T16:10:56.360Z",
+      "producer": "01_explore",
+      "sizeBytes": 30,
+      "contentHash": "cbe6a0f431c5631a2f929f60d35edc47463a2d8eaa828c9c899f5da7fc74085c",
+      "retention": "run"
+    },
+    "logArtifact": {
+      "kind": "log",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/logs/01_explore.log",
+      "createdAt": "2026-05-22T16:10:56.361Z",
+      "producer": "01_explore",
+      "sizeBytes": 361,
+      "contentHash": "d558f873dfb4701eeabe2c5f70e16d6f7eb8e85cf517205659443de3c2bc1b5e",
+      "retention": "run"
+    },
+    "transcriptArtifact": {
+      "kind": "log",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/transcripts/01_explore.attempt-0.jsonl",
+      "createdAt": "2026-05-22T16:10:56.362Z",
+      "producer": "01_explore",
+      "sizeBytes": 196,
+      "contentHash": "58260246e0f40cdb4abfc82d2a738d069c655ea8503984e3fc70b4befb671dbe",
+      "retention": "run"
+    },
+    "exitCode": 0,
+    "jsonEvents": 2,
+    "verification": {
+      "requiredGreenLevel": "none",
+      "observedGreenLevel": "none",
+      "satisfied": true,
+      "commands": [],
+      "notes": "child-process worker finished without reporting a verification failure."
+    },
+    "promptArtifact": {
+      "kind": "prompt",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/prompts/01_explore.md",
+      "createdAt": "2026-05-22T16:10:56.350Z",
+      "producer": "01_explore",
+      "sizeBytes": 7489,
+      "contentHash": "386972bc0e1c0c56f3d65ec1c4ddda9d7448bec5ccaf680f44b624ff94957258",
+      "retention": "run"
+    },
+    "terminalEvidence": [
+      {
+        "operation": "worker",
+        "status": "completed",
+        "startedAt": "2026-05-22T16:10:56.352Z",
+        "finishedAt": "2026-05-22T16:10:56.358Z"
+      }
+    ],
+    "finishedAt": "2026-05-22T16:10:56.479Z"
+  },
+  {
+    "id": "02_execute",
+    "runId": "team_20260522161056_3e8b1f471c775b79",
+    "stepId": "execute",
+    "role": "executor",
+    "agent": "executor",
+    "title": "execute",
+    "status": "needs_attention",
+    "dependsOn": [
+      "explore"
+    ],
+    "cwd": "/tmp/pi-crew-resume-checkpoint-rSUp0b",
+    "graph": {
+      "taskId": "02_execute",
+      "parentId": "01_explore",
+      "children": [
+        "03_verify"
+      ],
+      "dependencies": [
+        "01_explore"
+      ],
+      "queue": "done"
+    },
+    "taskPacket": {
+      "objective": "Make the smallest safe fix.",
+      "scope": "workspace",
+      "repo": "pi-crew-resume-checkpoint-rSUp0b",
+      "branchPolicy": "Use the current checkout; do not create branches unless explicitly requested.",
+      "acceptanceTests": [],
+      "commitPolicy": "Do not commit unless explicitly requested by the user or workflow.",
+      "reportingContract": "Report intended/changed files, verification evidence, blockers, conflict risks, and next recommended action.",
+      "escalationPolicy": "Stop and report if scope is ambiguous, destructive action is needed, permissions are missing, verification cannot be completed, or edits may overlap with another worker/task.",
+      "constraints": [
+        "Stay within the assigned task scope.",
+        "Do not claim completion without verification evidence.",
+        "Use mailbox/API state for coordination when available.",
+        "Do not make overlapping edits to the same file/symbol without explicit leader sequencing or ownership guidance."
+      ],
+      "expectedArtifacts": [
+        "prompt",
+        "result",
+        "verification"
+      ],
+      "verification": {
+        "requiredGreenLevel": "none",
+        "commands": [],
+        "allowManualEvidence": true
+      }
+    },
+    "startedAt": "2026-05-22T16:10:56.382Z",
+    "heartbeat": {
+      "workerId": "02_execute",
+      "lastSeenAt": "2026-05-22T16:10:56.410Z",
+      "alive": false
+    },
+    "agentProgress": {
+      "recentTools": [],
+      "recentOutput": [
+        "Mock JSON success for executor"
+      ],
+      "toolCount": 0,
+      "lastActivityAt": "2026-05-22T16:10:56.396Z",
+      "activityState": "needs_attention",
+      "durationMs": 14,
+      "tokens": 15,
+      "turns": 1
+    },
+    "lifetimeUsage": {
+      "input": 0,
+      "output": 0,
+      "cacheWrite": 0
+    },
+    "dependencyContextText": "# Dependency Outputs\n\n## 01_explore (explorer)\nStatus: needs_attention\nResult artifact: /home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/results/01_explore.txt\n\nMock JSON success for explorer\n\nArtifacts produced: prompts/01_explore.md, results/01_explore.txt, metadata/01_explore.inputs.json, metadata/01_explore.coordination-bridge.md, metadata/01_explore.skills.md, metadata/01_explore.task-packet.json, metadata/01_explore.verification.json, metadata/01_explore.startup-evidence.json, metadata/01_explore.permission.json, metadata/01_explore.capabilities.json, metadata/01_explore.prompt-pipeline.json, metadata/01_explore.output-validation.json, shared/01_explore.md, logs/01_explore.log, transcripts/01_explore.attempt-0.jsonl\n\nUsage: 10 input tokens, 5 output tokens, 20ms",
+    "controlReservation": {
+      "reservedAt": "2026-05-22T16:10:56.382Z",
+      "controllerId": "ctrl:02_execute:89766874-0796-483b-8587-cd25c3c204fc",
+      "acceptsControlEvents": true
+    },
+    "checkpoint": {
+      "phase": "artifact-written",
+      "updatedAt": "2026-05-22T16:10:56.406Z"
+    },
+    "modelAttempts": [
+      {
+        "model": "minimax/MiniMax-M2.7",
+        "success": true,
+        "exitCode": 0
+      }
+    ],
+    "modelRouting": {
+      "requested": "zai/glm-5.1",
+      "resolved": "minimax/MiniMax-M2.7",
+      "fallbackChain": [
+        "minimax/MiniMax-M2.7"
+      ],
+      "reason": "requested model unavailable; selected configured Pi fallback",
+      "usedAttempt": 0
+    },
+    "usage": {
+      "input": 10,
+      "output": 5,
+      "cost": 0.001,
+      "turns": 1
+    },
+    "resultArtifact": {
+      "kind": "result",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/results/02_execute.txt",
+      "createdAt": "2026-05-22T16:10:56.403Z",
+      "producer": "02_execute",
+      "sizeBytes": 30,
+      "contentHash": "af822644bc43b8634a89e4041eced3ac41a8fa3ece856c6c0f8c30a0a6edd890",
+      "retention": "run"
+    },
+    "logArtifact": {
+      "kind": "log",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/logs/02_execute.log",
+      "createdAt": "2026-05-22T16:10:56.404Z",
+      "producer": "02_execute",
+      "sizeBytes": 361,
+      "contentHash": "e771058ccfaab6837ca5e806182260af7e3eea8d06af19cb96577df4ef4c8a3f",
+      "retention": "run"
+    },
+    "transcriptArtifact": {
+      "kind": "log",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/transcripts/02_execute.attempt-0.jsonl",
+      "createdAt": "2026-05-22T16:10:56.406Z",
+      "producer": "02_execute",
+      "sizeBytes": 196,
+      "contentHash": "d5e3e83fb0f32116121b8524d169e08b519f7b4d2845bc597b612847cc8c8c0c",
+      "retention": "run"
+    },
+    "finishedAt": "2026-05-22T16:10:56.410Z",
+    "exitCode": 0,
+    "jsonEvents": 2,
+    "verification": {
+      "requiredGreenLevel": "none",
+      "observedGreenLevel": "none",
+      "satisfied": true,
+      "commands": [],
+      "notes": "child-process worker finished without reporting a verification failure."
+    },
+    "promptArtifact": {
+      "kind": "prompt",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/prompts/02_execute.md",
+      "createdAt": "2026-05-22T16:10:56.388Z",
+      "producer": "02_execute",
+      "sizeBytes": 9691,
+      "contentHash": "6b0369bfcd64791b4d04038bf6ac37997ed9ee2418a706e95e4c501fad90bb43",
+      "retention": "run"
+    },
+    "terminalEvidence": [
+      {
+        "operation": "worker",
+        "status": "completed",
+        "startedAt": "2026-05-22T16:10:56.391Z",
+        "finishedAt": "2026-05-22T16:10:56.400Z"
+      }
+    ]
+  },
+  {
+    "id": "03_verify",
+    "runId": "team_20260522161056_3e8b1f471c775b79",
+    "stepId": "verify",
+    "role": "verifier",
+    "agent": "verifier",
+    "title": "verify",
+    "status": "needs_attention",
+    "dependsOn": [
+      "execute"
+    ],
+    "cwd": "/tmp/pi-crew-resume-checkpoint-rSUp0b",
+    "graph": {
+      "taskId": "03_verify",
+      "parentId": "02_execute",
+      "children": [],
+      "dependencies": [
+        "02_execute"
+      ],
+      "queue": "done"
+    },
+    "taskPacket": {
+      "objective": "Verify the fix with available evidence.\nRun tests ONCE (cache to .crew/cache/), read changed files from executor context. Cross-reference test output with the fix. Do NOT re-run tests. Give PASS or FAIL with specific test evidence.",
+      "scope": "workspace",
+      "repo": "pi-crew-resume-checkpoint-rSUp0b",
+      "branchPolicy": "Use the current checkout; do not create branches unless explicitly requested.",
+      "acceptanceTests": [],
+      "commitPolicy": "Do not commit unless explicitly requested by the user or workflow.",
+      "reportingContract": "Report intended/changed files, verification evidence, blockers, conflict risks, and next recommended action.",
+      "escalationPolicy": "Stop and report if scope is ambiguous, destructive action is needed, permissions are missing, verification cannot be completed, or edits may overlap with another worker/task.",
+      "constraints": [
+        "Stay within the assigned task scope.",
+        "Do not claim completion without verification evidence.",
+        "Use mailbox/API state for coordination when available.",
+        "Do not make overlapping edits to the same file/symbol without explicit leader sequencing or ownership guidance."
+      ],
+      "expectedArtifacts": [
+        "prompt",
+        "result",
+        "verification"
+      ],
+      "verification": {
+        "requiredGreenLevel": "targeted",
+        "commands": [],
+        "allowManualEvidence": true
+      }
+    },
+    "startedAt": "2026-05-22T16:10:56.424Z",
+    "heartbeat": {
+      "workerId": "03_verify",
+      "lastSeenAt": "2026-05-22T16:10:56.452Z",
+      "alive": false
+    },
+    "agentProgress": {
+      "recentTools": [],
+      "recentOutput": [
+        "Mock JSON success for verifier"
+      ],
+      "toolCount": 0,
+      "lastActivityAt": "2026-05-22T16:10:56.438Z",
+      "activityState": "needs_attention",
+      "durationMs": 14,
+      "tokens": 15,
+      "turns": 1
+    },
+    "lifetimeUsage": {
+      "input": 0,
+      "output": 0,
+      "cacheWrite": 0
+    },
+    "dependencyContextText": "# Dependency Outputs\n\n## 02_execute (executor)\nStatus: needs_attention\nResult artifact: /home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/results/02_execute.txt\n\nMock JSON success for executor\n\nArtifacts produced: prompts/02_execute.md, results/02_execute.txt, metadata/02_execute.inputs.json, metadata/02_execute.coordination-bridge.md, metadata/02_execute.skills.md, metadata/02_execute.task-packet.json, metadata/02_execute.verification.json, metadata/02_execute.startup-evidence.json, metadata/02_execute.permission.json, metadata/02_execute.capabilities.json, metadata/02_execute.prompt-pipeline.json, metadata/02_execute.output-validation.json, shared/02_execute.md, logs/02_execute.log, transcripts/02_execute.attempt-0.jsonl\n\nUsage: 10 input tokens, 5 output tokens, 28ms",
+    "controlReservation": {
+      "reservedAt": "2026-05-22T16:10:56.424Z",
+      "controllerId": "ctrl:03_verify:bf240df7-cdb0-42a7-91bf-8fd12c49e1ae",
+      "acceptsControlEvents": true
+    },
+    "checkpoint": {
+      "phase": "artifact-written",
+      "updatedAt": "2026-05-22T16:10:56.448Z"
+    },
+    "modelAttempts": [
+      {
+        "model": "minimax/MiniMax-M2.7",
+        "success": true,
+        "exitCode": 0
+      }
+    ],
+    "modelRouting": {
+      "requested": "minimax/MiniMax-M2.7",
+      "resolved": "minimax/MiniMax-M2.7",
+      "fallbackChain": [
+        "minimax/MiniMax-M2.7"
+      ],
+      "usedAttempt": 0
+    },
+    "usage": {
+      "input": 10,
+      "output": 5,
+      "cost": 0.001,
+      "turns": 1
+    },
+    "resultArtifact": {
+      "kind": "result",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/results/03_verify.txt",
+      "createdAt": "2026-05-22T16:10:56.446Z",
+      "producer": "03_verify",
+      "sizeBytes": 30,
+      "contentHash": "c8c34c5890d7a7b622db8c48813372267472961aa63212dfc5058449ea4aa2c6",
+      "retention": "run"
+    },
+    "logArtifact": {
+      "kind": "log",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/logs/03_verify.log",
+      "createdAt": "2026-05-22T16:10:56.446Z",
+      "producer": "03_verify",
+      "sizeBytes": 361,
+      "contentHash": "952ec3d0445e58e3f31403c31c099ebe84a1bc65b440b044fbb2196de2aaff93",
+      "retention": "run"
+    },
+    "transcriptArtifact": {
+      "kind": "log",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/transcripts/03_verify.attempt-0.jsonl",
+      "createdAt": "2026-05-22T16:10:56.448Z",
+      "producer": "03_verify",
+      "sizeBytes": 196,
+      "contentHash": "e844e39cab54167229b7d05183d7b1a059b14f028844835eb4c83e03be860c1f",
+      "retention": "run"
+    },
+    "finishedAt": "2026-05-22T16:10:56.452Z",
+    "exitCode": 0,
+    "jsonEvents": 2,
+    "verification": {
+      "requiredGreenLevel": "targeted",
+      "observedGreenLevel": "targeted",
+      "satisfied": true,
+      "commands": [],
+      "notes": "child-process worker finished without reporting a verification failure."
+    },
+    "promptArtifact": {
+      "kind": "prompt",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161056_3e8b1f471c775b79/prompts/03_verify.md",
+      "createdAt": "2026-05-22T16:10:56.430Z",
+      "producer": "03_verify",
+      "sizeBytes": 8829,
+      "contentHash": "56f71af59f5e6cee72d7b965f9f0bcaf837825a385dec5d6a3153b59248c2372",
+      "retention": "run"
+    },
+    "terminalEvidence": [
+      {
+        "operation": "worker",
+        "status": "completed",
+        "startedAt": "2026-05-22T16:10:56.432Z",
+        "finishedAt": "2026-05-22T16:10:56.443Z"
+      }
+    ]
+  }
+]

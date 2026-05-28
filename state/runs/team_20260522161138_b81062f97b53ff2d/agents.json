@@ -1,0 +1,66 @@
+[
+  {
+    "id": "team_20260522161138_b81062f97b53ff2d:01_explore",
+    "runId": "team_20260522161138_b81062f97b53ff2d",
+    "taskId": "01_explore",
+    "agent": "explorer",
+    "role": "explorer",
+    "runtime": "scaffold",
+    "status": "completed",
+    "startedAt": "2026-05-22T16:11:38.266Z",
+    "completedAt": "2026-05-22T16:11:38.271Z",
+    "resultArtifactPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161138_b81062f97b53ff2d/results/01_explore.md",
+    "statusPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/01_explore/status.json",
+    "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/01_explore/events.jsonl",
+    "outputPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/01_explore/output.log",
+    "toolUses": 0,
+    "progress": {
+      "recentTools": [],
+      "recentOutput": [],
+      "toolCount": 0
+    }
+  },
+  {
+    "id": "team_20260522161138_b81062f97b53ff2d:02_execute",
+    "runId": "team_20260522161138_b81062f97b53ff2d",
+    "taskId": "02_execute",
+    "agent": "executor",
+    "role": "executor",
+    "runtime": "scaffold",
+    "status": "completed",
+    "startedAt": "2026-05-22T16:11:38.283Z",
+    "completedAt": "2026-05-22T16:11:38.291Z",
+    "resultArtifactPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161138_b81062f97b53ff2d/results/02_execute.md",
+    "statusPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/02_execute/status.json",
+    "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/02_execute/events.jsonl",
+    "outputPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/02_execute/output.log",
+    "toolUses": 0,
+    "progress": {
+      "recentTools": [],
+      "recentOutput": [],
+      "toolCount": 0,
+      "activityState": "needs_attention"
+    }
+  },
+  {
+    "id": "team_20260522161138_b81062f97b53ff2d:03_verify",
+    "runId": "team_20260522161138_b81062f97b53ff2d",
+    "taskId": "03_verify",
+    "agent": "verifier",
+    "role": "verifier",
+    "runtime": "scaffold",
+    "status": "completed",
+    "startedAt": "2026-05-22T16:11:38.307Z",
+    "completedAt": "2026-05-22T16:11:38.312Z",
+    "resultArtifactPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522161138_b81062f97b53ff2d/results/03_verify.md",
+    "statusPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/03_verify/status.json",
+    "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/03_verify/events.jsonl",
+    "outputPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522161138_b81062f97b53ff2d/agents/03_verify/output.log",
+    "toolUses": 0,
+    "progress": {
+      "recentTools": [],
+      "recentOutput": [],
+      "toolCount": 0
+    }
+  }
+]

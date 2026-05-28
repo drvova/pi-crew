@@ -95,7 +95,7 @@ test("powerbar mirrors status when no powerbar consumer is registered", () => {
 		saveCrewAgents(created.manifest, [{ id: `${created.manifest.runId}:01`, runId: created.manifest.runId, taskId: "one", agent: "worker", role: "worker", runtime: "child-process", status: "running", startedAt: created.manifest.createdAt, progress: { recentTools: [], recentOutput: [], toolCount: 0, activityState: "active" } }]);
 		updatePiCrewPowerbar(bus, cwd, {}, undefined, undefined, ctx);
 		assert.ok(events.some((item) => item.event === "powerbar:update"));
-		assert.ok(statuses.some((item) => item.key === "pi-crew" && item.text?.includes("crew 1a")));
+		assert.ok(statuses.some((item) => item.key === "pi-crew" && item.text?.includes("1 running")));
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 		fs.rmSync(home, { recursive: true, force: true });

@@ -108,8 +108,26 @@ export function updatePiCrewPowerbar(events: EventBus, cwd: string, config?: Cre
 	const model = config?.showModel === false ? undefined : agents.find((agent) => agent.model)?.model?.split("/").at(-1);
 	const tokenText = config?.showTokens === false || !tokenTotal ? undefined : compactTokens(tokenTotal);
 	const liveRunning = listLiveAgents().filter((a) => a.status === "running").length;
-	const activeText = `crew ${running}a/${waiting}w${liveRunning > 0 ? `/${liveRunning}live` : ""}${notificationBadge(notificationCount)}`;
-	const activeSuffix = [model, tokenText].filter(Boolean).join(" · ") || undefined;
+	// Build crew status: "1 running" or "1 running · 2 queued" for compact display
+	const runningCount = agents.filter((a) => a.status === "running").length;
+	const queuedCount = active.reduce((sum, item) => sum + (item.snapshot ? item.snapshot.progress.queued + (item.snapshot.progress.waiting ?? 0) : item.tasks.reduce((s, t) => s + (t.status === "queued" || t.status === "waiting" ? 1 : 0), 0)), 0);
+	let crewStatus: string;
+	if (runningCount > 0 || queuedCount > 0) {
+		if (runningCount > 0 && queuedCount > 0) {
+			crewStatus = `${runningCount} running · ${queuedCount} queued`;
+		} else if (runningCount > 0) {
+			crewStatus = runningCount === 1 ? "1 running" : `${runningCount} running`;
+		} else {
+			crewStatus = queuedCount === 1 ? "1 queued" : `${queuedCount} queued`;
+		}
+	} else {
+		crewStatus = "idle";
+	}
+	const liveSuffix = liveRunning > 0 ? ` (${liveRunning} live)` : "";
+	const notificationText = notificationBadge(notificationCount);
+	const activeText = `⚙ ${crewStatus}${liveSuffix}${notificationText}`;
+	// Model and tokens as compact suffix: "glm-5.1" or "glm-5.1 · 12k"
+	const activeSuffix = model || tokenText ? [model, tokenText].filter(Boolean).join(" · ") : undefined;
 	const progressSuffix = `${completed}/${total}${tokenText ? ` · ${tokenText}` : ""}`;
 	const activePayload = {
 		id: "pi-crew-active",

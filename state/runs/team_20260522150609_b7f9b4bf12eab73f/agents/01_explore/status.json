@@ -1,0 +1,21 @@
+{
+  "id": "team_20260522150609_b7f9b4bf12eab73f:01_explore",
+  "runId": "team_20260522150609_b7f9b4bf12eab73f",
+  "taskId": "01_explore",
+  "agent": "explorer",
+  "role": "explorer",
+  "runtime": "scaffold",
+  "status": "completed",
+  "startedAt": "2026-05-22T15:06:09.533Z",
+  "completedAt": "2026-05-22T15:06:09.538Z",
+  "resultArtifactPath": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150609_b7f9b4bf12eab73f/results/01_explore.md",
+  "statusPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522150609_b7f9b4bf12eab73f/agents/01_explore/status.json",
+  "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522150609_b7f9b4bf12eab73f/agents/01_explore/events.jsonl",
+  "outputPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522150609_b7f9b4bf12eab73f/agents/01_explore/output.log",
+  "toolUses": 0,
+  "progress": {
+    "recentTools": [],
+    "recentOutput": [],
+    "toolCount": 0
+  }
+}

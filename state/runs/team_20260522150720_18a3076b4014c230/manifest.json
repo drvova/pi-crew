@@ -1,0 +1,444 @@
+{
+  "schemaVersion": 1,
+  "runId": "team_20260522150720_18a3076b4014c230",
+  "team": "fast-fix",
+  "workflow": "fast-fix",
+  "goal": "mailbox replay",
+  "status": "completed",
+  "workspaceMode": "single",
+  "createdAt": "2026-05-22T15:07:20.873Z",
+  "updatedAt": "2026-05-22T15:07:21.085Z",
+  "cwd": "/tmp/pi-crew-mailbox-replay-mWxsbZ",
+  "stateRoot": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522150720_18a3076b4014c230",
+  "artifactsRoot": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230",
+  "tasksPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522150720_18a3076b4014c230/tasks.json",
+  "eventsPath": "/home/bom/.pi/agent/extensions/pi-crew/state/runs/team_20260522150720_18a3076b4014c230/events.jsonl",
+  "artifacts": [
+    {
+      "kind": "prompt",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/goal.md",
+      "createdAt": "2026-05-22T15:07:20.879Z",
+      "producer": "team-tool",
+      "sizeBytes": 15,
+      "contentHash": "57b5c1770eba932b6961ad1e3216dd88f733e5f9a27b397510cbb3fb32eebed5",
+      "retention": "run"
+    },
+    {
+      "kind": "prompt",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/prompts/01_explore.md",
+      "createdAt": "2026-05-22T15:07:21.005Z",
+      "producer": "01_explore",
+      "sizeBytes": 7468,
+      "contentHash": "cc65649d0daf4b0b39a4fe644cc475f4a750827b86f2ea2276aa1dad41f7641c",
+      "retention": "run"
+    },
+    {
+      "kind": "result",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/results/01_explore.md",
+      "createdAt": "2026-05-22T15:07:21.007Z",
+      "producer": "01_explore",
+      "sizeBytes": 179,
+      "contentHash": "70c1b233d4d6d74b1fa046c95dc203047385218ccf4056380cd068fd767b55d9",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.inputs.json",
+      "createdAt": "2026-05-22T15:07:21.006Z",
+      "producer": "01_explore",
+      "sizeBytes": 46,
+      "contentHash": "4220d037ccad16132d4c28359451985b4a2fa51e74ec340212cab8b688b9b5f6",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.coordination-bridge.md",
+      "createdAt": "2026-05-22T15:07:21.007Z",
+      "producer": "01_explore",
+      "sizeBytes": 1118,
+      "contentHash": "2e677e31108158567e7140d7e6e9193baa545889e0305412171c694de850e9f3",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.skills.md",
+      "createdAt": "2026-05-22T15:07:21.007Z",
+      "producer": "01_explore",
+      "sizeBytes": 3840,
+      "contentHash": "948f9c3859e6293e55c200d2ce40bd3b71f60f2d725abd1a5fd58f84a9ffc547",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.task-packet.json",
+      "createdAt": "2026-05-22T15:07:21.008Z",
+      "producer": "01_explore",
+      "sizeBytes": 1185,
+      "contentHash": "cf7bc4587a84554c9ad857e7f6341eae9e10f06196a6a3f046ed1850ba8b73bd",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.verification.json",
+      "createdAt": "2026-05-22T15:07:21.009Z",
+      "producer": "01_explore",
+      "sizeBytes": 181,
+      "contentHash": "d5260d578ab53104f8dc92f06d8e19a162e31b3467dced58b59d67af056610e0",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.startup-evidence.json",
+      "createdAt": "2026-05-22T15:07:21.010Z",
+      "producer": "01_explore",
+      "sizeBytes": 281,
+      "contentHash": "25b8756288a8a1ebbf8630058c21dcab895b094970f76ab4896f435143d681ba",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.permission.json",
+      "createdAt": "2026-05-22T15:07:21.010Z",
+      "producer": "01_explore",
+      "sizeBytes": 58,
+      "contentHash": "d068e91667e545c975984e28d67f9be31819d406340e92fa33ed35edca2e8860",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.capabilities.json",
+      "createdAt": "2026-05-22T15:07:21.011Z",
+      "producer": "01_explore",
+      "sizeBytes": 732,
+      "contentHash": "8bca665f3acbc38041f05117ae606e869cfd5eeae4e7d1c724da71c45d65fe83",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/01_explore.prompt-pipeline.json",
+      "createdAt": "2026-05-22T15:07:21.011Z",
+      "producer": "01_explore",
+      "sizeBytes": 1008,
+      "contentHash": "ef29d08fd25ea45e7a21ceac82e49eef9cd77f2ef0bd2224a3c3274e9b14d70e",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/shared/01_explore.md",
+      "createdAt": "2026-05-22T15:07:21.009Z",
+      "producer": "01_explore",
+      "sizeBytes": 180,
+      "contentHash": "08fe871a05e9c0886bc1aba3594dddcb5202b717c1dd099acf4a282c8ee08606",
+      "retention": "run"
+    },
+    {
+      "kind": "summary",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/batches/01_explore.md",
+      "createdAt": "2026-05-22T15:07:21.022Z",
+      "producer": "team-runner",
+      "sizeBytes": 375,
+      "contentHash": "ba71aa69719d910c6dea57a7411f23937ecbb994fa25bd704387a98e4afa9b5c",
+      "retention": "run"
+    },
+    {
+      "kind": "prompt",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/prompts/02_execute.md",
+      "createdAt": "2026-05-22T15:07:21.033Z",
+      "producer": "02_execute",
+      "sizeBytes": 9669,
+      "contentHash": "a0c3aca8173e07a92ca34a20d858ff7433d85ec372109a924c4a8e7e001338a4",
+      "retention": "run"
+    },
+    {
+      "kind": "result",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/results/02_execute.md",
+      "createdAt": "2026-05-22T15:07:21.034Z",
+      "producer": "02_execute",
+      "sizeBytes": 179,
+      "contentHash": "56d91d0d9d4efcb1d3cc35873295675cc89548577f54f54c0a71e17015832aee",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.inputs.json",
+      "createdAt": "2026-05-22T15:07:21.033Z",
+      "producer": "02_execute",
+      "sizeBytes": 1056,
+      "contentHash": "4d53f7c3ee303d247731b50c172d8f86430f20bfc2611ba778d8377cec268292",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.coordination-bridge.md",
+      "createdAt": "2026-05-22T15:07:21.034Z",
+      "producer": "02_execute",
+      "sizeBytes": 1118,
+      "contentHash": "e776dd9bf7e87ae81b3c3db2cc82714e5e49e2a3a8ce9dac985858aec7dc7e83",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.skills.md",
+      "createdAt": "2026-05-22T15:07:21.034Z",
+      "producer": "02_execute",
+      "sizeBytes": 5586,
+      "contentHash": "6f6158202f87171d1d2c54a3e39b9b51893e69c1236a8952b20466e1fad6903f",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.task-packet.json",
+      "createdAt": "2026-05-22T15:07:21.036Z",
+      "producer": "02_execute",
+      "sizeBytes": 1161,
+      "contentHash": "95d640d52c6fcc8f3cfecea55194f9d6abc8fd808118394a71bfd9a2ad8759d3",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.verification.json",
+      "createdAt": "2026-05-22T15:07:21.037Z",
+      "producer": "02_execute",
+      "sizeBytes": 181,
+      "contentHash": "d5260d578ab53104f8dc92f06d8e19a162e31b3467dced58b59d67af056610e0",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.startup-evidence.json",
+      "createdAt": "2026-05-22T15:07:21.037Z",
+      "producer": "02_execute",
+      "sizeBytes": 280,
+      "contentHash": "e0784be72b4a5c8fa71e1a3837a65846c06e75424c40dc9258f917e6b7fae5f9",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.permission.json",
+      "createdAt": "2026-05-22T15:07:21.038Z",
+      "producer": "02_execute",
+      "sizeBytes": 64,
+      "contentHash": "c4e9f4dd22f2c3696c4e77d6ce0a15c149b43d92dcf94371c5063e1675f3f4ce",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.capabilities.json",
+      "createdAt": "2026-05-22T15:07:21.038Z",
+      "producer": "02_execute",
+      "sizeBytes": 827,
+      "contentHash": "b52f8db7c8becfe6d6ec08a85b7a623d7e665d63ae75e9d327100db782b0673f",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/02_execute.prompt-pipeline.json",
+      "createdAt": "2026-05-22T15:07:21.039Z",
+      "producer": "02_execute",
+      "sizeBytes": 1008,
+      "contentHash": "64a42a1b3c064ca98ea8b6f358639ee22bb49a6d9187a3dd32760f8bad9c831e",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/shared/02_execute.md",
+      "createdAt": "2026-05-22T15:07:21.037Z",
+      "producer": "02_execute",
+      "sizeBytes": 180,
+      "contentHash": "60ee233774c576b86388737c9e40a38743fb0eb60d7334ec4e2e21f03a9a7880",
+      "retention": "run"
+    },
+    {
+      "kind": "summary",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/batches/02_execute.md",
+      "createdAt": "2026-05-22T15:07:21.047Z",
+      "producer": "team-runner",
+      "sizeBytes": 375,
+      "contentHash": "caf64cca5edb7639fb8596a66910d1c174ac5ee96db361164059e68679173b24",
+      "retention": "run"
+    },
+    {
+      "kind": "prompt",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/prompts/03_verify.md",
+      "createdAt": "2026-05-22T15:07:21.057Z",
+      "producer": "03_verify",
+      "sizeBytes": 8807,
+      "contentHash": "8e0689c7e2c9cc3a5310c1fc1e66a6ac6813f2fce39a1dd0f2897e3169fd7819",
+      "retention": "run"
+    },
+    {
+      "kind": "result",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/results/03_verify.md",
+      "createdAt": "2026-05-22T15:07:21.059Z",
+      "producer": "03_verify",
+      "sizeBytes": 178,
+      "contentHash": "83f787b3ec6feee3ac8fa6608e39fdc9fe7c72ddd959dd20e5b62600751b55ca",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.inputs.json",
+      "createdAt": "2026-05-22T15:07:21.058Z",
+      "producer": "03_verify",
+      "sizeBytes": 1056,
+      "contentHash": "c807a4844da09f2938c6eed7d3d549bac32b5087855974d86e6affb7c8c30de1",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.coordination-bridge.md",
+      "createdAt": "2026-05-22T15:07:21.058Z",
+      "producer": "03_verify",
+      "sizeBytes": 1117,
+      "contentHash": "f7e947b766822008879a0312698054f20c77ad3fba7d7018438c6e48b4c70872",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.skills.md",
+      "createdAt": "2026-05-22T15:07:21.058Z",
+      "producer": "03_verify",
+      "sizeBytes": 3852,
+      "contentHash": "e27e2f318ddc15611ac38c14c6d57bf52046df762dfc0f4eb33e6d727b8bfed8",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.task-packet.json",
+      "createdAt": "2026-05-22T15:07:21.059Z",
+      "producer": "03_verify",
+      "sizeBytes": 1370,
+      "contentHash": "a68841ea44c1a3a1026c1de7ee28331873f0c6abc5f5ce83b0bf367831945aa3",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.verification.json",
+      "createdAt": "2026-05-22T15:07:21.059Z",
+      "producer": "03_verify",
+      "sizeBytes": 189,
+      "contentHash": "d8bf6282a61bf77fbff45125246c1169487036a66272f1b78ccba66fa3ef6493",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.startup-evidence.json",
+      "createdAt": "2026-05-22T15:07:21.060Z",
+      "producer": "03_verify",
+      "sizeBytes": 280,
+      "contentHash": "eef0ed96a825ec85e3f5ebf71105a67415e290ab1404e633fc3ad51964f88bbe",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.permission.json",
+      "createdAt": "2026-05-22T15:07:21.061Z",
+      "producer": "03_verify",
+      "sizeBytes": 58,
+      "contentHash": "53f87f9c1502d52ea350de5a15759879c77d7059176fb0bc3fec405c35446dc3",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.capabilities.json",
+      "createdAt": "2026-05-22T15:07:21.061Z",
+      "producer": "03_verify",
+      "sizeBytes": 725,
+      "contentHash": "4da944304943bd55c6aa7d2bef6cd3fdb70089d9652787ad6865976160bc1499",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/03_verify.prompt-pipeline.json",
+      "createdAt": "2026-05-22T15:07:21.061Z",
+      "producer": "03_verify",
+      "sizeBytes": 1001,
+      "contentHash": "5faa663b8a1fe7328450b1a57cd95224e9de4ca4999a53b04088fbdbd29d9ef5",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/shared/03_verify.md",
+      "createdAt": "2026-05-22T15:07:21.060Z",
+      "producer": "03_verify",
+      "sizeBytes": 179,
+      "contentHash": "19a7a5d8959b8453e4ff1fc39aea04f145ab5ab77d7b80bd4ad6a9202ef6f75d",
+      "retention": "run"
+    },
+    {
+      "kind": "summary",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/batches/03_verify.md",
+      "createdAt": "2026-05-22T15:07:21.070Z",
+      "producer": "team-runner",
+      "sizeBytes": 372,
+      "contentHash": "11d11dec848693b8e0979cd7b9f14c5aed81c01fbce7cbc720dc3c7950488bce",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/metadata/branch-freshness.json",
+      "createdAt": "2026-05-22T15:07:21.080Z",
+      "producer": "branch-freshness",
+      "sizeBytes": 294,
+      "contentHash": "53553c601803dd4366da634fa0df940208f6c8736fb6295cc18476b4a23c8de3",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/policy-decisions.json",
+      "createdAt": "2026-05-22T15:07:21.081Z",
+      "producer": "policy-engine",
+      "sizeBytes": 185,
+      "contentHash": "29da5747a92a89f1382ab5153aa32f91f236a608c8287bbad34877f0bdc85b4b",
+      "retention": "run"
+    },
+    {
+      "kind": "metadata",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/recovery-ledger.json",
+      "createdAt": "2026-05-22T15:07:21.081Z",
+      "producer": "recovery-engine",
+      "sizeBytes": 20,
+      "contentHash": "364b37738032a28a72829f4d2192b70bd9353c9ee8dddfc5b70c2785f995d6ac",
+      "retention": "run"
+    },
+    {
+      "kind": "progress",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/progress.md",
+      "createdAt": "2026-05-22T15:07:21.084Z",
+      "producer": "team-runner",
+      "sizeBytes": 721,
+      "contentHash": "993beae893c399478f9ee0970e32b424ca46482af7e4fa2556aa5259a61250bb",
+      "retention": "run"
+    },
+    {
+      "kind": "summary",
+      "path": "/home/bom/.pi/agent/extensions/pi-crew/artifacts/team_20260522150720_18a3076b4014c230/summary.md",
+      "createdAt": "2026-05-22T15:07:21.085Z",
+      "producer": "team-runner",
+      "sizeBytes": 727,
+      "contentHash": "41b2dcaf6b1ed8e95173aea33c47156a6c93b711285248f1be6a2bf6efcdae44",
+      "retention": "run"
+    }
+  ],
+  "summary": "Team workflow scaffold completed without launching child workers.",
+  "runtimeResolution": {
+    "kind": "scaffold",
+    "requestedMode": "scaffold",
+    "safety": "explicit_dry_run",
+    "available": true,
+    "resolvedAt": "2026-05-22T15:07:20.882Z"
+  },
+  "runConfig": {
+    "runtime": {
+      "mode": "scaffold"
+    }
+  },
+  "policyDecisions": [
+    {
+      "action": "closeout",
+      "reason": "run_complete",
+      "message": "All tasks completed and no policy blockers were found.",
+      "createdAt": "2026-05-22T15:07:21.080Z"
+    }
+  ]
+}
