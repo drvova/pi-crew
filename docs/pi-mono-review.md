@@ -179,8 +179,20 @@ pi-mono is actively refactoring toward `AgentHarness` as the primary orchestrato
 |-------|--------|
 | Breaking API changes in pi-mono recent commits | **None** |
 | Changes requiring pi-crew updates | **None** |
-| Opportunities for alignment | 4 (hooks, phases, stream options, BM25) |
-| Development support gaps identified | 4 (phase tracking, hook tests, hook docs, harness awareness) |
+| Opportunities for alignment | 5 (see below) |
+| Development support gaps identified | 4 |
 | Urgent migrations needed | **None** |
+
+## 7. Detailed Opportunity Plans
+
+**See [`docs/pi-mono-opportunities.md`](./pi-mono-opportunities.md) for full implementation details.**
+
+| # | Opportunity | Priority | Effort | Key Impact |
+|---|-------------|----------|--------|-----------|
+| 1 | **BM25 Semantic Reranking** for `team action='recommend'` | HIGH | Medium | Fixes keyword-matching failures for nuanced goals |
+| 2 | **Extended Hook Phases** (`before_turn` / `after_turn`) | MEDIUM | Medium | Enables per-turn observability and early abort |
+| 3 | **Hook Lifecycle Test Suite** | MEDIUM | Small | Coverage for untested hooks (task_result, before_retry, etc.) |
+| 4A | **Task Phase Tracking** | LOW | Small | Richer `team action='status'` output |
+| 4B | **Hook Documentation** (`docs/hooks.md`) | LOW | Small | Developer experience for extension API |
 
 **Conclusion:** pi-crew v0.5.2 is fully compatible with the latest pi-mono. The harness changes are strengthening the foundation that pi-crew relies on. Maintain the current process-per-task architecture; watch for `AgentHarness` stabilization milestones before considering migration.
