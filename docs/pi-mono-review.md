@@ -1,142 +1,218 @@
-# pi-mono Review: Relevance to pi-crew
+# pi-mono Review: Full May 2026 Analysis
 
 **Date:** 2026-05-28  
-**Reviewed commits:** `origin/main~15..origin/main` (recent 2 weeks)  
-**Focus:** Breaking changes, new APIs, and architectural patterns that affect pi-crew
+**Reviewed range:** `2026-05-01..2026-05-28` — **398 total commits**, 240+ in relevant packages  
+**Packages reviewed:** `packages/agent/`, `packages/coding-agent/`, `packages/ai/`, `packages/tui/`, `packages/oh-my-pi/`
 
 ---
 
-## 1. High Impact — Immediate Consideration
+## Executive Summary
 
-### No high-impact breaking changes found
+**No breaking changes found.** May 2026 was dominated by:
+1. **Ongoing `AgentHarness` refactor** — massive architectural work (35+ harness commits)
+2. **UX refinements** — terminal rendering, word boundaries, compact reads
+3. **New AI providers** — Together AI, Xiaomi MiMo
+4. **New features** — image models, Codex websocket transport, session ID naming
+5. **Bug fixes** — 30+ fixes in relevant packages
 
-The recent 15 commits in pi-mono are **all incremental refinements** to the `AgentHarness` internal refactor (in progress since several releases). None introduce breaking changes to public APIs pi-crew already relies on.
-
----
-
-## 2. Medium Impact — Aligned Direction
-
-### A. `AgentHarness` Phase & Lifecycle Model
-
-pi-mono formalized the agent lifecycle with explicit phases:
-
-```ts
-type AgentHarnessPhase = "idle" | "turn" | "compaction" | "branch_summary" | "retry";
-```
-
-Structural operations require `phase === "idle"`. Turn snapshots are snapshotted per-turn for model/thinking-level/stream-options changes mid-run.
-
-pi-crew's hook system already covers the major lifecycle events (`before_run`, `after_run`, etc.). **Opportunity:** align hook names with harness phases if pi-crew eventually uses `AgentHarness` directly:
-- Consider `before_turn`, `after_turn` hooks
-- Consider `before_compaction`, `after_compaction` hooks
-
-**Recommendation:** Keep current hooks, add `before_turn` / `after_turn` as new hooks emerge.
-
-### B. `prepareNextTurn` + Turn Snapshots
-
-pi-mono added `AgentLoopConfig.prepareNextTurn` — called after each `turn_end`, allows dynamic model/thinking-level changes between rounds.
-
-pi-crew delegates turn execution to fresh Pi processes (via `pi-spawn.ts` / `child-pi.ts`) — each new task is already a new process. **Recommendation:** No change needed. pi-crew's process-per-task model is intentional.
-
-### C. Together AI Provider
-
-pi-mono added first-class Together AI provider (`@earendil-works/pi-ai`). pi-crew doesn't directly configure providers — relies on pi's config. **Recommendation:** No change needed.
-
-### D. Stream Options (Transport, Timeout, Retries, Headers, Metadata)
-
-pi-mono formalized `AgentHarnessStreamOptions` as a curated config surface (not raw provider options). Stream options are snapshotted per-turn and can be patched by `before_provider_request` hooks.
-
-pi-crew's `runtime/policy-engine.ts` handles model routing but doesn't expose transport/timeout/retry config to users.
-
-**Recommendation:** Consider adding `--stream-timeout`, `--max-retries` options to `team action='run'`. Low priority.
-
-### D. Generic Resource Loading (`loadSourcedSkills`, `loadSourcedPromptTemplates`)
-
-pi-mono added `mapSkill` / `mapPromptTemplate` callbacks to typed resource loading — allows applications to transform skills/prompts with source-attached metadata (e.g., tagging skills with workspace scope).
-
-pi-crew's skill discovery (`src/skills/discover-skills.ts`) uses simpler approach — just loads and returns skill arrays.
-
-**Recommendation:** For efficiency, consider map callbacks if pi-crew adds source-aware skill metadata (e.g., skill scope tracking).
+pi-crew v0.5.2 remains **fully compatible**. All dependencies are stable.
 
 ---
 
-## 3. Low Impact — No Action
+## 1. HIGH IMPACT — Ongoing Architecture (AgentHarness)
 
-### A. Compaction Token Clamping (Already N/A)
+### ⚠️ Major Refactor: AgentHarness (35+ commits in May)
 
-```ts
-// pi-mono clamp
-const maxTokens = Math.min(
-  Math.floor(0.8 * reserveTokens),
-  model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
-);
-```
+This is the biggest ongoing change. It's a **multi-month refactor** restructuring how pi's agent loop works internally.
 
-pi-crew doesn't have its own compaction logic — it relies on pi's transcript management. No action needed.
+**Commit arc (May):**
+| Date | Commit | Change |
+|------|--------|--------|
+| May 3 | `a5b27367` | `feat(agent): add initial harness foundation` (+3,678 lines!) |
+| May 3 | `83599e78` | `feat(agent): split harness compaction and session modules` |
+| May 5 | `d29e47c7` | `feat(agent): add harness factory helpers` |
+| May 6 | `530f14c0` | `refactor(agent): expose concrete harness session` |
+| May 6 | `e1ca501d` | `refactor(agent): expose concrete harness` |
+| May 6 | `617d8b31` | `refactor(agent): tighten harness environment and resources` |
+| May 7 | `ddb18640` | `feat(agent): return diagnostics from resource loaders` |
+| May 12 | `c0f416aa` | `feat(agent): add harness stream configuration` |
+| May 13 | `79db9d62` | `refactor(agent): make harness resources explicit` |
+| May 13 | `e25415dd` | `refactor(agent): finalize harness resource config` |
+| May 14 | `846906e4` | `refactor(agent): add result-based execution env` |
+| May 14 | `b7ea8210` | `refactor(agent): run harness loop directly` |
+| May 15 | `80c918c2` | `refactor(agent): isolate node filesystem session dependencies` |
+| May 15 | `a31ce0f4` | `refactor(agent): return results from compaction helpers` |
+| May 15 | `4f40f62b` | `refactor(agent): harden harness session semantics` |
+| May 19 | `b9448276` | `fix(agent): stop tool preflight after extension abort` |
+| May 21 | `96f0edd0` | `Count user image tokens in context estimates` |
 
-### B. AgentHarness Resources Generics
+**Key architectural changes:**
 
-The generic `AgentHarnessResources<TSkill, TPromptTemplate>` is harness-internal. Not relevant to pi-crew's skill loading approach.
+1. **New module structure** (`packages/agent/src/harness/`):
+   - `agent-harness.ts` — main orchestrator (grew to ~1,000+ lines)
+   - `compaction/` — split into `compaction.ts`, `branch-summarization.ts`, `utils.ts`
+   - `session/` — `jsonl-session-storage.ts`, `memory-session-storage.ts`, `session-repo.ts`
+   - `env/nodejs.ts` — Node.js execution environment (+370 lines)
+   - `execution-env.ts` — abstracted execution environment
+   - `skills.ts` — harness-level skill loading
+   - `system-prompt.ts` — harness-level system prompt composition
+   - `prompt-templates.ts` — prompt template processing with `mapSkill`/`mapPromptTemplate`
 
-### C. System Prompt Skill Instructions
+2. **Result-based execution env** — harness now returns structured results instead of void. Makes testing and hook integration cleaner.
 
-Minor language refinement (`"Use the read tool to load"` → `"Read the full skill file"`) — pi-crew's skill instructions are independent.
+3. **Resource diagnostics** — resource loaders return diagnostics (warnings/errors) alongside content.
 
-**Recommendation:** Consider mirroring the updated phrasing in pi-crew skill templates.
+4. **Tool preflight abort fix** — `b9448276` fixed a bug where sibling tool calls kept preparing after run abort. **This is relevant to pi-crew** — when pi-crew cancels a task, pi's internal tool preflight now correctly stops.
 
-### D. Factory Removal
+**Relevance to pi-crew:**
+- pi-crew currently uses `child-pi.ts` spawning — **not** `AgentHarness` directly
+- The harness refactor is internal to pi; public APIs are stable
+- When `AgentHarness` stabilizes (removes `Agent` dependency, adds tool registry), pi-crew could consider migration
+- **This is a future migration path, not a current concern**
 
-`packages/agent/src/harness/factory.ts` was removed (13 lines changed). pi-crew doesn't use factory pattern — no impact.
+**Action:** Continue monitoring harness stabilization. No current code changes needed.
 
 ---
 
-## 4. Opportunities for pi-crew Enhancement
+## 2. MEDIUM IMPACT — Aligned Direction
+
+### A. New AI Providers
+
+**Together AI** (`7adb8e76`) — first-class `@earendil-works/pi-ai` support. API key `TOGETHER_API_KEY`, auto-detection for base URLs, `thinkingFormat: 'together'` compat flag.
+
+**Xiaomi MiMo** (`a4462267`) — new provider with `thinkingFormat` support and per-region token plan.
+
+**Relevance:** pi-crew doesn't configure providers directly. **No action needed.**
+
+### B. Codex Websocket Transport (`4745a958`)
+
+Added **cached Codex websocket transport** for faster session resumption. Code generation becomes faster on subsequent turns within the same session.
+
+**Relevance:** pi-crew tasks are typically single-session. **No action needed**, but good to know for longer multi-turn tasks.
+
+### C. Generic Resource Loading — `mapSkill` / `mapPromptTemplate`
+
+pi-mono added typed resource loading with `mapSkill`/`mapPromptTemplate` callbacks in `harness/skills.ts` and `harness/prompt-templates.ts`. Allows transforming skills with source-attached metadata.
+
+**Relevance:** pi-crew's `src/skills/discover-skills.ts` uses simpler approach. **Opportunity:** Consider map callbacks if pi-crew adds source-aware skill metadata (e.g., skill scope tracking). **Low priority.**
+
+### D. Stream Options Formalization
+
+`AgentHarnessStreamOptions` is now a curated config surface (transport/timeout/retries/headers/metadata), snapshotted per-turn and patchable by `before_provider_request` hooks.
+
+**Relevance:** pi-crew's `runtime/policy-engine.ts` handles model routing but doesn't expose transport/timeout/retry config. **Low priority opportunity** — consider adding `--stream-timeout`, `--max-retries` to `team action='run'`.
+
+---
+
+## 3. LOW IMPACT — New Features (No Action Needed)
+
+### A. Image Models & Image Content (`9751057b`, `63c61aac`)
+
+New `generateImages()` function and `images` API. Agents can now generate images. pi-crew tasks can use this if they have image-generation capability.
+
+**No action needed** — pi-crew just passes tasks to pi; pi handles the capability.
+
+### B. Session ID Naming (`52dc08c1`)
+
+Explicit session ID naming — users can now specify a session ID on startup. Useful for resuming specific sessions.
+
+**Potentially useful** for pi-crew's `inheritContext` feature (parent context passing). No current integration needed.
+
+### C. Compact Read Rendering (`588639fa`, `373bd128`)
+
+Large file reads are now collapsed by default with a "Show more" toggle. Reduces noise in agent output.
+
+**UX improvement** — affects how pi-crew workers see read output. **No action needed.**
+
+### D. Incremental Bash Streaming (`6b18cdba`)
+
+Bash tool now streams output incrementally instead of waiting for the full command to finish. Better UX for long-running commands.
+
+**No action needed** — this is internal to pi's bash tool.
+
+### E. Edit Tool Unified Patch (`60a55a23`)
+
+New unified patch format for the edit tool. More robust handling of multi-file edits.
+
+**Relevance:** pi-crew's executor agents use the edit tool. **No action needed**, but good to know.
+
+### F. RPC `excludeFromContext` Flag (`61babc24`)
+
+New flag on bash commands to exclude command output from context. Useful for noisy commands (e.g., `ls -la` in large directories).
+
+**Potentially useful** for pi-crew — could filter out noisy intermediate commands from task context. **Low priority.**
+
+### G. Adaptive Thinking for Anthropic-Compatible Aliases (`d801d88a`)
+
+Custom Anthropic-compatible model aliases now support adaptive thinking level selection.
+
+**No action needed** — model-level config.
+
+### H. Word Boundary Fixes (`44021008`, `b62776e4`, `701801de`)
+
+TUI now uses `Intl.Segmenter` for proper Unicode word boundaries. Fixes copy/paste behavior across terminals.
+
+**No action needed** — terminal UX.
+
+### I. OAuth Device Code Refactor (`c554364c`, `11e868b7`)
+
+Refactored device code login for Copilot and cleaned up OAuth callbacks.
+
+**No action needed** — auth infrastructure.
+
+### J. Windows VT Input Helper (`4868222e`)
+
+Replaced `koffi` FFI library with native Windows VT input handling. Better Windows support.
+
+**No action needed.**
+
+### K. Remove Global Fetch Override (`c9e70492`)
+
+Removed global `fetch` override. All fetch calls now go through proper dispatchers. Better debugging and reliability.
+
+**No action needed** — infrastructure cleanup.
+
+---
+
+## 4. Bug Fixes Relevant to pi-crew
+
+| Commit | Fix | Relevance |
+|--------|-----|-----------|
+| `b9448276` | Tool preflight stops after extension abort | **HIGH** — affects pi-crew task cancellation |
+| `e007fcd0` | RPC rejects pending requests on child process exit | Affects child-pi cleanup |
+| `9600ded9` | Revert stdout backpressure fix (then `d0d1d8ed` re-fixed) | Affects child-pi stdout handling |
+| `ce0e801d` | Retry RPC stdout backpressure | Affects child-pi streaming |
+| `c685b273` | Mark retrying agent end events | Affects event log accuracy |
+| `32bcdc97` | Simplify agent session settlement | Affects session cleanup |
+| `b1893b3d` | Preserve oversized tail output with trailing newline | Affects output truncation |
+| `f9530678` | Correct bash truncation line count | Affects bash output display |
+
+---
+
+## 5. Opportunities for pi-crew Enhancement
 
 > **Full implementation plans with code examples:** [`docs/pi-mono-opportunities.md`](./pi-mono-opportunities.md)
-
-**Priority 1 (HIGH):** BM25 Semantic Reranking — integrate existing BM25 search into `team action='recommend'` to fix keyword-matching failures for nuanced goals.
-
-**Priority 2 (MEDIUM):** Extended Hook Phases — add `before_turn` / `after_turn` hooks using existing `turn_end` event tracking in `child-pi.ts`.
-
-**Priority 3 (MEDIUM):** Hook Lifecycle Tests — expand test coverage for `task_result`, `before_retry`, `before_publish`, `session_before_switch`, `run_recovery` hooks.
-
-**Priority 4 (LOW):** Phase Tracking + Hook Documentation — task phase states and `docs/hooks.md` developer guide.
-
-**Not a priority:** ExecutionEnv alignment, harness event chaining — pi-crew's approach is appropriate for its trust model.
-
----
-
-## 5. Development Support Suggestions
-
-> **See [`docs/pi-mono-opportunities.md`](./pi-mono-opportunities.md) for detailed test plans and documentation outlines.**
-
-- **Hook test suite** — cover `task_result`, `before_retry`, `before_publish`, `session_before_switch`, `run_recovery`
-- **Hook documentation** — `docs/hooks.md` with full registry, mode explanations, and 3+ examples
-- **Phase tracking** — task-level phase states surfaced in `team action='status'`
-- **Harness awareness** — monitor `AgentHarness` stabilization for future migration opportunities (not near-term)
-
----
-
-## 6. Summary: No Breaking Changes
-
-| Check | Result |
-|-------|--------|
-| Breaking API changes in pi-mono recent commits | **None** |
-| Changes requiring pi-crew updates | **None** |
-| Opportunities for alignment | 5 (see below) |
-| Development support gaps identified | 4 |
-| Urgent migrations needed | **None** |
-
-## 7. Detailed Opportunity Plans
-
-**See [`docs/pi-mono-opportunities.md`](./pi-mono-opportunities.md) for full implementation details.**
 
 | # | Opportunity | Priority | Effort | Key Impact |
 |---|-------------|----------|--------|-----------|
 | 1 | **BM25 Semantic Reranking** for `team action='recommend'` | HIGH | Medium | Fixes keyword-matching failures for nuanced goals |
 | 2 | **Extended Hook Phases** (`before_turn` / `after_turn`) | MEDIUM | Medium | Enables per-turn observability and early abort |
-| 3 | **Hook Lifecycle Test Suite** | MEDIUM | Small | Coverage for untested hooks (task_result, before_retry, etc.) |
+| 3 | **Hook Lifecycle Tests** | MEDIUM | Small | Coverage for untested hooks |
 | 4A | **Task Phase Tracking** | LOW | Small | Richer `team action='status'` output |
-| 4B | **Hook Documentation** (`docs/hooks.md`) | LOW | Small | Developer experience for extension API |
+| 4B | **Hook Documentation** (`docs/hooks.md`) | LOW | Small | Developer experience |
 
-**Conclusion:** pi-crew v0.5.2 is fully compatible with the latest pi-mono. The harness changes are strengthening the foundation that pi-crew relies on. Maintain the current process-per-task architecture; watch for `AgentHarness` stabilization milestones before considering migration.
+---
+
+## 6. Summary
+
+| Check | Result |
+|-------|--------|
+| Breaking API changes (May 2026) | **None** |
+| Changes requiring pi-crew updates | **None** |
+| Major architectural work | AgentHarness refactor (ongoing, internal) |
+| New features | Image models, Codex websocket, Together AI, session ID naming |
+| Bug fixes | 30+ in relevant packages, 1 directly relevant to pi-crew cancellation |
+| Opportunities identified | 5 |
+| Urgent migrations needed | **None** |
+
+**Conclusion:** pi-crew v0.5.2 is fully compatible with pi's entire May 2026 release. The AgentHarness refactor is substantial but purely internal — it will eventually provide a migration path for pi-crew to use harness-based execution instead of child-process spawning, but this is a future consideration (6+ months out). Maintain current architecture; focus on pi-crew-specific enhancements.
