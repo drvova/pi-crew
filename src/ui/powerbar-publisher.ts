@@ -108,26 +108,21 @@ export function updatePiCrewPowerbar(events: EventBus, cwd: string, config?: Cre
 	const model = config?.showModel === false ? undefined : agents.find((agent) => agent.model)?.model?.split("/").at(-1);
 	const tokenText = config?.showTokens === false || !tokenTotal ? undefined : compactTokens(tokenTotal);
 	const liveRunning = listLiveAgents().filter((a) => a.status === "running").length;
-	// Build crew status: "1 running" or "1 running · 2 queued" for compact display
+	// Always show consistent status: running count + queued count (unified computation)
 	const runningCount = agents.filter((a) => a.status === "running").length;
 	const queuedCount = active.reduce((sum, item) => sum + (item.snapshot ? item.snapshot.progress.queued + (item.snapshot.progress.waiting ?? 0) : item.tasks.reduce((s, t) => s + (t.status === "queued" || t.status === "waiting" ? 1 : 0), 0)), 0);
-	let crewStatus: string;
-	if (runningCount > 0 || queuedCount > 0) {
-		if (runningCount > 0 && queuedCount > 0) {
-			crewStatus = `${runningCount} running · ${queuedCount} queued`;
-		} else if (runningCount > 0) {
-			crewStatus = runningCount === 1 ? "1 running" : `${runningCount} running`;
-		} else {
-			crewStatus = queuedCount === 1 ? "1 queued" : `${queuedCount} queued`;
-		}
-	} else {
-		crewStatus = "idle";
-	}
+	// Format: "1 running", "2 running · 1 queued", "3 queued", "idle"
+	const runningLabel = runningCount === 1 ? "1 running" : `${runningCount} running`;
+	const queuedLabel = queuedCount === 1 ? "1 queued" : `${queuedCount} queued`;
+	const crewStatus = runningCount > 0 && queuedCount > 0 ? `${runningLabel} · ${queuedLabel}` : runningCount > 0 ? runningLabel : queuedCount > 0 ? queuedLabel : "idle";
 	const liveSuffix = liveRunning > 0 ? ` (${liveRunning} live)` : "";
 	const notificationText = notificationBadge(notificationCount);
+	// Always show: ⚙ {status} {live} {notifications}
 	const activeText = `⚙ ${crewStatus}${liveSuffix}${notificationText}`;
-	// Model and tokens as compact suffix: "glm-5.1" or "glm-5.1 · 12k"
-	const activeSuffix = model || tokenText ? [model, tokenText].filter(Boolean).join(" · ") : undefined;
+	// Always show model + tokens as suffix when available
+	const suffixParts = [model, tokenText].filter(Boolean);
+	const activeSuffix = suffixParts.length > 0 ? suffixParts.join(" · ") : undefined;
+	// Progress always includes token count for consistency
 	const progressSuffix = `${completed}/${total}${tokenText ? ` · ${tokenText}` : ""}`;
 	const activePayload = {
 		id: "pi-crew-active",
