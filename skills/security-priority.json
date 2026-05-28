@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-05-28T06:10:00Z",
+  "source": "source/Anthropic-Cybersecurity-Skills/",
+  "description": "Prioritized security skills for pi-crew security-reviewer role",
+  "priority_skills": [
+    { "id": "detecting-ai-model-prompt-injection-attacks", "priority": "critical", "atlas": ["AML.T0051"], "category": "agent-security" },
+    { "id": "detecting-supply-chain-attacks-in-ci-cd", "priority": "critical", "atlas": ["AML.T0010", "AML.T0104"], "category": "supply-chain" },
+    { "id": "detecting-anomalous-authentication-patterns", "priority": "high", "atlas": ["AML.T0043", "AML.T0018"], "category": "auth" },
+    { "id": "detecting-typosquatting-packages-in-npm-pypi", "priority": "high", "atlas": [], "category": "supply-chain" },
+    { "id": "detecting-path-traversal", "priority": "high", "atlas": [], "category": "code-security" },
+    { "id": "detecting-command-injection", "priority": "high", "atlas": [], "category": "code-security" },
+    { "id": "detecting-sensitive-data-exposure", "priority": "high", "atlas": ["AML.T0067"], "category": "secrets" },
+    { "id": "detecting-context-poisoning-in-agent-loops", "priority": "high", "atlas": ["AML.T0051"], "category": "agent-security" },
+    { "id": "detecting-tool-invocation-abuse", "priority": "medium", "atlas": ["AML.T0051", "AML.T0054"], "category": "agent-security" },
+    { "id": "detecting-malicious-skill-loading", "priority": "medium", "atlas": ["AML.T0062"], "category": "agent-security" },
+    { "id": "detecting-credential-leakage-in-logs", "priority": "medium", "atlas": [], "category": "secrets" },
+    { "id": "detecting-session-fixation", "priority": "medium", "atlas": ["AML.T0018"], "category": "auth" },
+    { "id": "detecting-data-exfiltration-indicators", "priority": "medium", "atlas": ["AML.T0067"], "category": "data-security" },
+    { "id": "detecting-serverless-function-injection", "priority": "medium", "atlas": [], "category": "code-security" },
+    { "id": "detecting-race-condition-vulnerabilities", "priority": "medium", "atlas": ["AML.T0054"], "category": "code-security" },
+    { "id": "detecting-agent-privilege-escalation", "priority": "medium", "atlas": ["AML.T0054"], "category": "agent-security" },
+    { "id": "detecting-malicious-npm-packages", "priority": "low", "atlas": [], "category": "supply-chain" },
+    { "id": "detecting-dependency-confusion-attacks", "priority": "low", "atlas": [], "category": "supply-chain" },
+    { "id": "detecting-token-hijacking", "priority": "low", "atlas": ["AML.T0018"], "category": "auth" },
+    { "id": "detecting-race-condition-in-file-operations", "priority": "low", "atlas": ["AML.T0054"], "category": "code-security" }
+  ]
+}
