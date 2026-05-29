@@ -107,12 +107,17 @@ export function appendEntry(runId: string, entry: RolloutEntry): RolloutEntry {
 	// Get existing entries to compute coherence
 	const ledger = getLedger(runId);
 
-	// Compute coherence marks
+	// Compute coherence and update the last entry directly
+	// No need to call appendEntry first - overrideLastEntry handles everything
 	const coherenceMark = computeCoherence(entry, ledger);
 	const entryWithCoherence: RolloutEntry = {
 		...entry,
 		coherenceMark,
 	};
+
+	// Update the last entry with the new coherence mark
+	const lastIndex = ledger.length - 1;
+	ledger[lastIndex] = entryWithCoherence;
 
 	// Append to JSONL file
 	const line = JSON.stringify(entryWithCoherence) + "\n";
@@ -243,27 +248,51 @@ function overrideLastEntry(runId: string, coherenceMark: import("./types.js").Co
 export function promoteCandidate(runId: string, candidate: string): RolloutEntry {
 	const latestDecision = getLatestDecision(runId);
 
-	const entry: RolloutEntry = {
+	// Get existing entries to compute proper coherence
+	const ledger = getLedger(runId);
+
+	// Create entry without coherence first
+	const entryWithoutCoherence = {
 		rolloutId: `promote-${Date.now()}`,
 		timestamp: new Date().toISOString(),
 		priorWinner: latestDecision?.topCandidates[0],
 		searchSpace: latestDecision?.searchSpace || "unknown",
 		trialCount: (latestDecision?.trialCount || 0) + 1,
 		topCandidates: [candidate],
-		decisionMark: "accept",
-		coherenceMark: {
-			matchesPrior: false,
-			matchesRecursive: false,
-			promotionAllowed: true,
-			reason: "Manual promotion by user",
-		},
+		decisionMark: "accept" as const,
 	};
 
-	// Persist via appendEntry so ledger is consistent.
-	appendEntry(runId, entry);
-	// Override the last entry with the proper coherence mark
-	// This preserves all previous entries while updating the last one
-	return overrideLastEntry(runId, entry.coherenceMark);
+	// Compute coherence (empty ledger = no matches)
+	const coherenceMark = computeCoherence(entryWithoutCoherence as RolloutEntry, ledger);
+
+	// Manual promotion always allows further promotion
+	coherenceMark.promotionAllowed = true;
+	coherenceMark.reason = "Manual promotion - promotion allowed";
+
+	// Create full entry with coherence
+	const entry: RolloutEntry = {
+		...entryWithoutCoherence,
+		coherenceMark,
+	};
+
+	// Update last entry in memory if there are existing entries
+	if (ledger.length > 0) {
+		const lastIndex = ledger.length - 1;
+		ledger[lastIndex] = entry;
+	} else {
+		// No existing entries - just write this one
+		ledger.push(entry);
+	}
+
+	// Rewrite entire ledger to preserve all entries
+	const ledgerPath = getLedgerPath(runId);
+	const dir = dirname(ledgerPath);
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
+	writeFileSync(ledgerPath, ledger.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+
+	return entry;
 }
 
 /**
@@ -272,25 +301,49 @@ export function promoteCandidate(runId: string, candidate: string): RolloutEntry
 export function decayCandidate(runId: string, candidate: string): RolloutEntry {
 	const latestDecision = getLatestDecision(runId);
 
-	const entry: RolloutEntry = {
+	// Get existing entries to compute proper coherence
+	const ledger = getLedger(runId);
+
+	// Create entry without coherence first
+	const entryWithoutCoherence = {
 		rolloutId: `decay-${Date.now()}`,
 		timestamp: new Date().toISOString(),
 		priorWinner: latestDecision?.topCandidates[0],
 		searchSpace: latestDecision?.searchSpace || "unknown",
 		trialCount: (latestDecision?.trialCount || 0) + 1,
 		topCandidates: [candidate],
-		decisionMark: "decay",
-		coherenceMark: {
-			matchesPrior: false,
-			matchesRecursive: false,
-			promotionAllowed: false,
-			reason: "Manual decay by user",
-		},
+		decisionMark: "decay" as const,
 	};
 
-	// Persist via appendEntry so ledger is consistent.
-	appendEntry(runId, entry);
-	// Override the last entry with the proper coherence mark
-	// This preserves all previous entries while updating the last one
-	return overrideLastEntry(runId, entry.coherenceMark);
+	// Compute coherence (empty ledger = no matches)
+	const coherenceMark = computeCoherence(entryWithoutCoherence as RolloutEntry, ledger);
+
+	// Manual decay never allows promotion
+	coherenceMark.promotionAllowed = false;
+	coherenceMark.reason = "Manual decay - promotion not allowed";
+
+	// Create full entry with coherence
+	const entry: RolloutEntry = {
+		...entryWithoutCoherence,
+		coherenceMark,
+	};
+
+	// Update last entry in memory if there are existing entries
+	if (ledger.length > 0) {
+		const lastIndex = ledger.length - 1;
+		ledger[lastIndex] = entry;
+	} else {
+		// No existing entries - just write this one
+		ledger.push(entry);
+	}
+
+	// Rewrite entire ledger to preserve all entries
+	const ledgerPath = getLedgerPath(runId);
+	const dir = dirname(ledgerPath);
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
+	writeFileSync(ledgerPath, ledger.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+
+	return entry;
 }
