@@ -1,4 +1,4 @@
-export type ResourceSource = "builtin" | "user" | "project" | "git";
+export type ResourceSource = "builtin" | "user" | "project" | "git" | "dynamic";
 
 export interface RoutingMetadata {
 	triggers?: string[];

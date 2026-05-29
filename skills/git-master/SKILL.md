@@ -1,7 +1,12 @@
 ---
 name: git-master
-description: "Commit and release hygiene for safe version-control work. Use when preparing commits, releases, version bumps, publishing, or validating package installation. Triggers: commit this, tag release, bump version, publish package, prepare release."
-
+description: "Commit and release hygiene for safe version-control work."
+triggers:
+  - "commit this"
+  - "tag release"
+  - "bump version"
+  - "publish package"
+  - "prepare release"
 ---
 # git-master
 

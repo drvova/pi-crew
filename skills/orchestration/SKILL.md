@@ -1,7 +1,12 @@
 ---
 name: orchestration
-description: "\"Multi-phase orchestration for planners and executors. Use when decomposing complex tasks into parallel phases, dispatching workers, verifying gates, and iterating to closure. Triggers: orchestrate this, coordinate these tasks, run this multi-phase, dispatch workers, coordinate team.\""
-
+description: "Multi-phase orchestration for planners and executors."
+triggers:
+  - "orchestrate this"
+  - "coordinate tasks"
+  - "run this multi-phase"
+  - "dispatch workers"
+  - "coordinate team"
 ---
 # orchestration
 

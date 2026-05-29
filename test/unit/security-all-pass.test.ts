@@ -22,7 +22,7 @@ const protectedNames = ["executor", "test-engineer", "planner", "reviewer"];
 let sec001Pass = true;
 for (const name of protectedNames) {
 	try {
-		registerDynamicAgent({ name, systemPrompt: "test", description: "test", source: "dynamic" as const });
+		registerDynamicAgent({ name, systemPrompt: "test", description: "test", source: "dynamic" as const, filePath: "dynamic://" + name });
 		console.log("  ❌ FAIL: " + name + " should be blocked");
 		sec001Pass = false;
 	} catch {
@@ -67,7 +67,7 @@ console.log("");
 
 // SEC-004: Dynamic agent source
 console.log("🔴 SEC-004: Dynamic Agent Source Attribution");
-registerDynamicAgent({ name: "source-test-agent", systemPrompt: "test", description: "test", source: "dynamic" as const });
+registerDynamicAgent({ name: "source-test-agent", systemPrompt: "test", description: "test", source: "dynamic" as const, filePath: "dynamic://source-test-agent" });
 const discovery4 = discoverAgents(process.cwd());
 const dynamicAgents = allAgents(discovery4);
 const sourceTest = dynamicAgents.find((a) => a.name === "source-test-agent");
@@ -89,7 +89,7 @@ console.log("");
 console.log("🔴 SEC-006: Security Event Logging");
 clearSecurityEventLog();
 try {
-	registerDynamicAgent({ name: "executor", systemPrompt: "test", description: "test", source: "dynamic" as const });
+	registerDynamicAgent({ name: "executor", systemPrompt: "test", description: "test", source: "dynamic" as const, filePath: "dynamic://executor" });
 } catch {
 	/* expected */
 }

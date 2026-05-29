@@ -4,6 +4,8 @@ import { appendEvent } from "../state/event-log.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { checkProcessLiveness, isActiveRunStatus } from "./process-status.ts";
 import { readCrewAgents } from "./crew-agent-records.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { sleepSync } from "../utils/sleep.ts";
 
 export type ForegroundControlRequestType = "interrupt" | "status";
 
@@ -59,24 +61,54 @@ export function readForegroundControlStatus(manifest: TeamRunManifest, tasks: Te
 
 export function writeForegroundInterruptRequest(manifest: TeamRunManifest, reason = "User requested foreground interrupt."): ForegroundControlRequest {
 	const controlPath = foregroundControlPath(manifest);
+	const lockDir = `${controlPath}.lock`;
 	let requests: ForegroundControlRequest[] = [];
-	if (fs.existsSync(controlPath)) {
-		try {
-			const parsed = JSON.parse(fs.readFileSync(controlPath, "utf-8")) as { requests?: ForegroundControlRequest[] };
-			requests = Array.isArray(parsed.requests) ? parsed.requests : [];
-		} catch {
-			requests = [];
+
+	// FIX: Use file locking to prevent race condition in read-modify-write
+	// Previously, concurrent interrupt requests could lose data
+	const acquireLock = (): void => {
+		const timeout = 5000;
+		const start = Date.now();
+		while (true) {
+			try {
+				fs.mkdirSync(lockDir, { recursive: true });
+				break;
+			} catch (err: any) {
+				if (Date.now() - start > timeout) {
+					logInternalError("foreground-control.lock-timeout", err, `controlPath=${controlPath}`);
+					break;
+				}
+				// Brief sleep to avoid CPU spinning
+				sleepSync(10);
+			}
 		}
-	}
-	const request: ForegroundControlRequest = {
-		id: `fg_${Date.now().toString(36)}_${Math.random().toString(16).slice(2, 10)}`,
-		type: "interrupt",
-		createdAt: new Date().toISOString(),
-		reason,
-		acknowledged: false,
 	};
-	fs.mkdirSync(path.dirname(controlPath), { recursive: true });
-	fs.writeFileSync(controlPath, `${JSON.stringify({ requests: [...requests, request] }, null, 2)}\n`, "utf-8");
-	appendEvent(manifest.eventsPath, { type: "foreground.interrupt_requested", runId: manifest.runId, message: reason, data: { requestId: request.id, controlPath } });
-	return request;
+	const releaseLock = (): void => {
+		try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+	};
+
+	acquireLock();
+	try {
+		if (fs.existsSync(controlPath)) {
+			try {
+				const parsed = JSON.parse(fs.readFileSync(controlPath, "utf-8")) as { requests?: ForegroundControlRequest[] };
+				requests = Array.isArray(parsed.requests) ? parsed.requests : [];
+			} catch {
+				requests = [];
+			}
+		}
+		const request: ForegroundControlRequest = {
+			id: `fg_${Date.now().toString(36)}_${Math.random().toString(16).slice(2, 10)}`,
+			type: "interrupt",
+			createdAt: new Date().toISOString(),
+			reason,
+			acknowledged: false,
+		};
+		fs.mkdirSync(path.dirname(controlPath), { recursive: true });
+		fs.writeFileSync(controlPath, `${JSON.stringify({ requests: [...requests, request] }, null, 2)}\n`, "utf-8");
+		appendEvent(manifest.eventsPath, { type: "foreground.interrupt_requested", runId: manifest.runId, message: reason, data: { requestId: request.id, controlPath } });
+		return request;
+	} finally {
+		releaseLock();
+	}
 }

@@ -1,6 +1,12 @@
 ---
 name: ownership-session-security
-description: "Session ownership and authorization workflow. Use when implementing cancel, respond, steer, run ownership, cwd overrides, imported runs, or cross-session actions. Triggers: cancel run, respond to task, cross-session action, ownership verify, session security."
+description: "Session ownership and authorization workflow."
+triggers:
+  - "cancel run"
+  - "respond to task"
+  - "cross-session action"
+  - "ownership verify"
+  - "session security"
 
 ---
 # ownership-session-security

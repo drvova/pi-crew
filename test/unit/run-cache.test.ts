@@ -61,7 +61,7 @@ test("saveRunToCache + getCachedRun: roundtrip", () => {
   assert.equal(cached!.goal, goal);
   assert.equal(cached!.team, team);
   assert.equal(cached!.tasks.length, 1);
-  assert.equal(cached!.tasks[0].taskId, "01_test");
+  assert.equal((cached!.tasks[0] as unknown as { taskId?: string }).taskId, "01_test");
 
   // Cleanup
   clearCache(tmp);

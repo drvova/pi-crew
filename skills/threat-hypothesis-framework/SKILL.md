@@ -1,6 +1,12 @@
 ---
 name: threat-hypothesis-framework
-description: "\"Structured investigation using testable hypotheses. Use when hunting for indicators, investigating suspicious patterns, or conducting proactive security assessments. Triggers: hunt for, investigate, threat hypothesis, test this pattern, find evidence of.\""
+description: "Structured investigation using testable hypotheses."
+triggers:
+  - "hunt for"
+  - "investigate"
+  - "threat hypothesis"
+  - "test this pattern"
+  - "find evidence of"
 
 ---
 # threat-hypothesis-framework

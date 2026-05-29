@@ -4,6 +4,7 @@ import type { WorkerHeartbeatState } from "../runtime/worker-heartbeat.ts";
 import type { CrewAgentProgress } from "../runtime/crew-agent-runtime.ts";
 import type { RolloutEntry, CoherenceMark } from "./decision-ledger.ts";
 export type { RolloutEntry, CoherenceMark };
+export type { CrewAgentProgress };
 
 export type { TeamRunStatus, TeamTaskStatus } from "./contracts.ts";
 
@@ -25,6 +26,7 @@ export interface VerificationCommandResult {
 	cmd: string;
 	status: "passed" | "failed" | "not_run";
 	exitCode?: number | null;
+	durationMs?: number;
 	outputArtifact?: ArtifactDescriptor;
 }
 

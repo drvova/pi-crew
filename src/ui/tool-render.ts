@@ -90,12 +90,12 @@ export function renderTeamToolCall(
 	if (!context.expanded) {
 		const preview = goal.length > 60 ? goal.slice(0, 60) + "…" : goal;
 		return new Text(
-			`${theme.fg("toolTitle", theme.bold("team"))} action=${theme.fg("accent", `'${action}'`)}${team}${theme.fg("dim", preview ? ` "${preview.replace(/\n/g, " ")}"` : "")}`,
+			`${theme.fg("toolTitle", theme.bold("team"))}  action=${theme.fg("accent", `'${action}'`)}${team}${theme.fg("dim", preview ? `  "${preview.replace(/\n/g, " ")}"` : "")}`,
 			0, 0,
 		);
 	}
 	const c = context.lastComponent instanceof Container ? (context.lastComponent.clear(), context.lastComponent) : new Container();
-	c.addChild(new Text(`${theme.fg("toolTitle", theme.bold("team"))} action=${theme.fg("accent", `'${action}'`)}${team}`, 0, 0));
+	c.addChild(new Text(`${theme.fg("toolTitle", theme.bold("team"))}  action=${theme.fg("accent", `'${action}'`)}${team}`, 0, 0));
 	if (goal) { c.addChild(new Spacer(1)); c.addChild(new Text(theme.fg("text", goal), 0, 0)); }
 	return c;
 }
@@ -110,13 +110,13 @@ export function renderAgentToolCall(
 	if (!context.expanded) {
 		const preview = prompt.length > 60 ? prompt.slice(0, 60) + "…" : prompt;
 		return new Text(
-			`${theme.fg("toolTitle", theme.bold("agent"))} ${theme.fg("accent", agentName)}${theme.fg("dim", preview ? ` "${preview.replace(/\n/g, " ")}"` : "")}`,
+			`${theme.fg("toolTitle", theme.bold("agent"))}  ${theme.fg("accent", agentName)}${theme.fg("dim", preview ? `  "${preview.replace(/\n/g, " ")}"` : "")}`,
 			0, 0,
 		);
 	}
 	const c = context.lastComponent instanceof Container ? (context.lastComponent.clear(), context.lastComponent) : new Container();
-	const cwdLabel = args.cwd ? theme.fg("dim", ` (cwd: ${args.cwd})`) : "";
-	c.addChild(new Text(`${theme.fg("toolTitle", theme.bold("agent"))} ${theme.fg("accent", agentName)}${cwdLabel}`, 0, 0));
+	const cwdLabel = args.cwd ? theme.fg("dim", `  (cwd:  ${args.cwd})`) : "";
+	c.addChild(new Text(`${theme.fg("toolTitle", theme.bold("agent"))}  ${theme.fg("accent", agentName)}${cwdLabel}`, 0, 0));
 	if (prompt) { c.addChild(new Spacer(1)); c.addChild(new Text(theme.fg("text", prompt), 0, 0)); }
 	return c;
 }
@@ -153,21 +153,21 @@ export function renderAgentProgress(
 	const stats = `${prog?.toolCount ?? record.toolUses ?? 0} tools · ${formatDuration(durationMs)}`;
 	const modelStr = record.model ? ` (${record.model})` : "";
 	const roleLabel = record.role || record.agent || "agent";
-	addLine(`${icon} ${theme.fg("toolTitle", theme.bold(roleLabel))}${theme.fg("dim", modelStr)} — ${theme.fg("dim", stats)}`);
+	addLine(`${icon}  ${theme.fg("toolTitle", theme.bold(roleLabel))}${theme.fg("dim", modelStr)}  —  ${theme.fg("dim", stats)}`);
 
 	// Current tool (running)
 	if (isRunning && prog?.currentTool) {
 		const toolLabel = formatToolPreview(prog.currentTool, parseArgs(prog.currentToolArgs));
-		addLine(theme.fg("warning", `▸ ${prog.currentTool}: ${toolLabel}`));
+		addLine(theme.fg("warning", `▸  ${prog.currentTool}:  ${toolLabel}`));
 	}
 
 	// Recent tools log
 	if (prog?.recentTools?.length) {
 		for (const tool of prog.recentTools) {
-			const detail = tool.args ? `: ${tool.args}` : "";
+			const detail = tool.args ? `:  ${tool.args}` : "";
 			const line = tool.endedAt
 				? theme.fg("muted", `  ${tool.tool}${detail}`)
-				: theme.fg("warning", `▸ ${tool.tool}${detail}`);
+				: theme.fg("warning", `▸  ${tool.tool}${detail}`);
 			addLine(line);
 		}
 	}
@@ -231,7 +231,7 @@ export function renderTeamToolResult(
 			if ((result as any).runId) parts.push(`runId=${(result as any).runId}`);
 			if ((result as any).error) parts.push(theme.fg("error", `error`));
 			if ((result as any).goal && parts.length === 0) parts.push(theme.fg("dim", truncLine((result as any).goal, 116)));
-			return new Text(parts.join(" "), 0, 0);
+			return new Text(parts.join("  ·  "), 0, 0);
 		}
 		// No details found, fall back to content
 		const text = extractText(result?.content).slice(0, 200);
@@ -253,7 +253,7 @@ export function renderTeamToolResult(
 	if (d.error) parts.push(theme.fg("error", `error=${d.error}`));
 	if (d.goal) parts.push(theme.fg("dim", truncLine(d.goal, 116)));
 	if (parts.length === 0) return new Text(theme.fg("muted", "(no output)"), 0, 0);
-	return new Text(parts.join(" · "), 0, 0);
+	return new Text(parts.join("  ·  "), 0, 0);
 }
 
 /** agent tool result: shows agent output rows with status icons */
@@ -275,9 +275,9 @@ export function renderAgentToolResult(
 				: item.status === "running" ? theme.fg("warning", "⟳")
 				: theme.fg("dim", "○");
 			const label = item.agentId || "agent";
-			c.addChild(new Text(`${icon} ${theme.fg("toolTitle", theme.bold(label))}`, 0, 0));
+			c.addChild(new Text(`${icon}  ${theme.fg("toolTitle", theme.bold(label))}`, 0, 0));
 			if (item.error) {
-				c.addChild(new Text(theme.fg("error", `  Error: ${item.error}`), 0, 0));
+				c.addChild(new Text(theme.fg("error", `  Error:  ${item.error}`), 0, 0));
 			} else if (item.output) {
 				for (const line of item.output.split("\n").slice(0, 5))
 					c.addChild(new Text(theme.fg("dim", `  ${truncLine(line, w - 2)}`), 0, 0));
@@ -293,9 +293,9 @@ export function renderAgentToolResult(
 			: d.status === "running" ? theme.fg("warning", "⟳")
 			: theme.fg("dim", "○");
 		const label = d.agentId;
-		c.addChild(new Text(`${icon} ${theme.fg("toolTitle", theme.bold(label))}`, 0, 0));
+		c.addChild(new Text(`${icon}  ${theme.fg("toolTitle", theme.bold(label))}`, 0, 0));
 		if (d.error) {
-			c.addChild(new Text(theme.fg("error", `  Error: ${d.error}`), 0, 0));
+			c.addChild(new Text(theme.fg("error", `  Error:  ${d.error}`), 0, 0));
 		} else if (d.output) {
 			for (const line of d.output.split("\n").slice(0, 5))
 				c.addChild(new Text(theme.fg("dim", `  ${truncLine(line, w - 2)}`), 0, 0));

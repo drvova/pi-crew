@@ -1,7 +1,12 @@
 ---
 name: context-artifact-hygiene
-description: "Use when constructing worker prompts, reading artifacts/logs, summarizing runs, compacting context, or handing work between agents. Triggers: construct prompt, read artifact, summarize run, compact context, agent handoff."
-
+description: "Use when constructing worker prompts, reading artifacts/logs, summarizing runs, compacting context, or handing work between agents."
+triggers:
+  - "construct prompt"
+  - "read artifact"
+  - "summarize run"
+  - "compact context"
+  - "agent handoff"
 ---
 # context-artifact-hygiene
 

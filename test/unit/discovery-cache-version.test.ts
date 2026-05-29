@@ -25,6 +25,7 @@ test("cacheVersion increments on registerDynamicAgent (SEC-005)", () => {
 			systemPrompt: "test",
 			description: "test",
 			source: "dynamic" as const,
+			filePath: "dynamic://cache-test-agent",
 		});
 		const after = getCacheVersion();
 		assert.ok(after > before, "Cache version should increment after dynamic agent registration");
@@ -41,6 +42,7 @@ test("cacheVersion increments on unregisterDynamicAgent (SEC-005)", () => {
 		systemPrompt: "test",
 		description: "test",
 		source: "dynamic" as const,
+		filePath: "dynamic://cache-unreg-test",
 	});
 	const before = getCacheVersion();
 	try {
@@ -71,6 +73,7 @@ test("registerDynamicAgent invalidates cache (SEC-005)", () => {
 		systemPrompt: "Test agent for cache race testing",
 		description: "test",
 		source: "dynamic",
+		filePath: "dynamic://cache-race-test",
 	});
 
 	const result2 = discoverAgents(CWD);

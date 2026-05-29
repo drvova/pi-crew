@@ -1,6 +1,12 @@
 ---
 name: read-only-explorer
-description: "Read-only exploration and audit workflow. Use for explorer, analyst, reviewer, and source-audit roles that must inspect code without modifying files. Triggers: explore code, audit source, review code, analyze codebase, source audit."
+description: "Read-only exploration and audit workflow."
+triggers:
+  - "explore code"
+  - "audit source"
+  - "review code"
+  - "analyze codebase"
+  - "source audit"
 
 ---
 # read-only-explorer

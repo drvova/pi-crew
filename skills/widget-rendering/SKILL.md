@@ -1,6 +1,12 @@
 ---
 name: widget-rendering
-description: "Pi TUI crew widget data sources, display priority, and rendering performance. Use when debugging empty agents, ghost runs, or widget timing issues. Triggers: empty agent, ghost run, widget timing, display priority, snapshot cache."
+description: "Pi TUI crew widget data sources, display priority, and rendering performance."
+triggers:
+  - "empty agent"
+  - "ghost run"
+  - "widget timing"
+  - "display priority"
+  - "snapshot cache"
 
 ---
 # widget-rendering

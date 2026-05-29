@@ -1,6 +1,12 @@
 ---
 name: resource-discovery-config
-description: "pi-crew resource and configuration discovery workflow. Use when changing agents, teams, workflows, skills, resource hooks, config precedence, or project/user overrides. Triggers: discover agents, find teams, config override, resource discovery, skill loading."
+description: "pi-crew resource and configuration discovery workflow."
+triggers:
+  - "discover agents"
+  - "find teams"
+  - "config override"
+  - "resource discovery"
+  - "skill loading"
 
 ---
 # resource-discovery-config

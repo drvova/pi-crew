@@ -1,7 +1,12 @@
 ---
 name: delegation-patterns
-description: "\"Subagent/team delegation workflow. Use when splitting work across pi-crew teams, direct agents, async background workers, chains, or parallel tasks. Triggers: delegate this, split this task, parallelize, dispatch workers, assign to team, spawn agents.\""
-
+description: "Subagent/team delegation workflow."
+triggers:
+  - "delegate this"
+  - "split this task"
+  - "parallelize"
+  - "dispatch workers"
+  - "assign to team"
 ---
 # delegation-patterns
 

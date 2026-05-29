@@ -127,6 +127,8 @@ function setupUnhandledRejectionGuard(state: { cwd?: string; runId?: string; eve
 }
 
 async function main(): Promise<void> {
+	// FIX: Store logFd so it can be closed on exit to prevent file descriptor leak
+	let logFd: number | undefined;
 	// Redirect console to background.log since stdio is "ignore" in detached mode.
 	// Must be BEFORE any console.log/console.error calls.
 	const _cwd = argValue("--cwd");
@@ -134,13 +136,17 @@ async function main(): Promise<void> {
 	if (_cwd && _runId) {
 		try {
 			const logPath = path.join(_cwd, ".crew/state/runs", _runId, "background.log");
-			const logFd = fs.openSync(logPath, "a");
+			logFd = fs.openSync(logPath, "a");
 			const origWrite = (prefix: string) => (data: any, ...args: any[]) => {
 				const msg = [data, ...args].map(String).join(" ") + "\n";
-				fs.writeSync(logFd, msg);
+				fs.writeSync(logFd!, msg);
 			};
 			console.log = origWrite("OUT");
 			console.error = origWrite("ERR");
+			// FIX: Close logFd on process exit to prevent file descriptor leak
+			process.on("exit", () => {
+				try { if (logFd !== undefined) fs.closeSync(logFd); } catch { /* ignore */ }
+			});
 		} catch { /* best-effort */ }
 	}
 

@@ -219,6 +219,25 @@ export function summarizeLedger(runId: string): string {
 }
 
 /**
+ * Override the coherence mark of the last entry in the ledger.
+ * FIX: This preserves all previous entries while updating just the last one.
+ * Previously this would truncate the entire ledger!
+ */
+function overrideLastEntry(runId: string, coherenceMark: import("./types.js").CoherenceMark): RolloutEntry {
+	const ledger = getLedger(runId);
+	if (ledger.length === 0) {
+		throw new Error(`No ledger entries found for run ${runId}`);
+	}
+	// Update the last entry with the new coherence mark
+	const lastIndex = ledger.length - 1;
+	ledger[lastIndex] = { ...ledger[lastIndex], coherenceMark };
+	// Rewrite entire ledger to preserve all entries
+	const ledgerPath = getLedgerPath(runId);
+	writeFileSync(ledgerPath, ledger.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+	return ledger[lastIndex];
+}
+
+/**
  * Promote a candidate by marking it as accepted with proper coherence.
  */
 export function promoteCandidate(runId: string, candidate: string): RolloutEntry {
@@ -242,18 +261,9 @@ export function promoteCandidate(runId: string, candidate: string): RolloutEntry
 
 	// Persist via appendEntry so ledger is consistent.
 	appendEntry(runId, entry);
-	const manualCoherence: import("./types.js").CoherenceMark = {
-		matchesPrior: false,
-		matchesRecursive: false,
-		promotionAllowed: true,
-		reason: "Manual promotion by user",
-	};
-	// Manually override the last line in the JSONL to reflect the coherent
-	// decision we want, bypassing appendEntry's auto-compute for the returned value.
-	const lastLine = readFileSync(getLedgerPath(runId), "utf-8").trim().split("\n").filter(Boolean).at(-1)!;
-	const overridden: RolloutEntry = { ...JSON.parse(lastLine), coherenceMark: manualCoherence };
-	writeFileSync(getLedgerPath(runId), JSON.stringify(overridden) + "\n", "utf-8");
-	return overridden;
+	// Override the last entry with the proper coherence mark
+	// This preserves all previous entries while updating the last one
+	return overrideLastEntry(runId, entry.coherenceMark);
 }
 
 /**
@@ -280,16 +290,7 @@ export function decayCandidate(runId: string, candidate: string): RolloutEntry {
 
 	// Persist via appendEntry so ledger is consistent.
 	appendEntry(runId, entry);
-	const manualCoherence: import("./types.js").CoherenceMark = {
-		matchesPrior: false,
-		matchesRecursive: false,
-		promotionAllowed: false,
-		reason: "Manual decay by user",
-	};
-	// Manually override the last line in the JSONL to reflect the coherent
-	// decision we want, bypassing appendEntry's auto-compute for the returned value.
-	const lastLine = readFileSync(getLedgerPath(runId), "utf-8").trim().split("\n").filter(Boolean).at(-1)!;
-	const overridden: RolloutEntry = { ...JSON.parse(lastLine), coherenceMark: manualCoherence };
-	writeFileSync(getLedgerPath(runId), JSON.stringify(overridden) + "\n", "utf-8");
-	return overridden;
+	// Override the last entry with the proper coherence mark
+	// This preserves all previous entries while updating the last one
+	return overrideLastEntry(runId, entry.coherenceMark);
 }

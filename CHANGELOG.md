@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.5.3] — Deep Review Fixes + Security Hardening (2026-05-29)
+
+### Security Fixes
+- **C1**: Fixed credential exposure - removed dangerous wildcards `*_API_KEY`, `*_TOKEN`, `*_SECRET` from env allowlist
+- **C2**: Fixed mock mode bypass - now requires `PI_CREW_ALLOW_MOCK=1` alongside `PI_TEAMS_MOCK_CHILD_PI`
+- **C3**: Worktree hooks Windows hardening - safer execution for Git hooks on Windows
+
+### Data Integrity Fixes
+- **C4**: Fixed duplicate `error` key + Promise type mismatch in task-runner.ts
+- **C5**: Fixed decision ledger truncation - `overrideLastEntry()` preserves all entries during promote/decay
+
+### Reliability Fixes
+- **H2**: Race condition in foreground interrupt - added file locking mechanism
+- **H3**: Terminal events now bypass buffer - crash events logged immediately
+- **H5**: File descriptor leak - background runner properly closes log file descriptors
+- **H9**: Stale cache TTL reduced from 5min to 30s
+
+### TypeScript Fixes
+- Fixed 7+ source errors (duplicate error keys, missing properties)
+- Fixed 20+ test errors (type mismatches, missing imports)
+- All files now compile without errors
+
+### Skill System Improvements
+- All 35 skills now have `triggers:` frontmatter field
+- Added Enforcement sections to skills for better gate validation
+- Improved consistency in section naming
+
+### Documentation
+- Added `docs/migration-v0.4-v0.5.md` - comprehensive migration guide
+- Updated `docs/deep-review-report.md` - complete issue tracking
+
+### Dependencies
+- Added `ajv` dependency for JSON schema validation
+
 ## [0.5.2] — ECC Implementation + Critical Bug Fixes (2026-05-27)
 
 ### ECC-Inspired Features

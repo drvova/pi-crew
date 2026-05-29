@@ -1,7 +1,12 @@
 ---
 name: incident-playbook-construction
-description: "\"Build structured incident response playbooks and runbooks. Use when creating response procedures, documenting incident handling, or designing automation for security operations. Triggers: build playbook, create runbook, document procedure, IR automation, SOAR design.\""
-
+description: "Build structured incident response playbooks and runbooks."
+triggers:
+  - "build playbook"
+  - "create runbook"
+  - "document procedure"
+  - "IR automation"
+  - "SOAR design"
 ---
 # incident-playbook-construction
 

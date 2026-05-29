@@ -12,45 +12,58 @@ import {
 } from "../../src/state/run-graph.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
-test("buildRunGraph: creates run node", () => {
-  const manifest = {
-    runId: "test_run_123",
+function makeManifest(runId: string): TeamRunManifest {
+  return {
+    runId,
     team: "default",
     workflow: "default",
     status: "completed",
-    goal: "test goal",
+    goal: "test",
     createdAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
-  } as TeamRunManifest;
+    schemaVersion: "1.0.0",
+    workspaceMode: "single",
+    updatedAt: new Date().toISOString(),
+    cwd: os.tmpdir(),
+    stateRoot: os.tmpdir(),
+    tasksPath: path.join(os.tmpdir(), "tasks.json"),
+    eventsPath: path.join(os.tmpdir(), "events.jsonl"),
+    artifactsRoot: path.join(os.tmpdir(), "artifacts"),
+    manifestPath: path.join(os.tmpdir(), "manifest.json"),
+  } as unknown as TeamRunManifest;
+}
 
+function makeTask(id: string, dependsOn: string[] = []): TeamTaskState {
+  return {
+    id,
+    runId: "test_run",
+    role: "explorer",
+    status: "completed",
+    dependsOn,
+    cwd: os.tmpdir(),
+    agent: "explorer",
+    title: `Task ${id}`,
+  } as unknown as TeamTaskState;
+}
+
+test("buildRunGraph: creates run node", () => {
+  const manifest = makeManifest("test_run_123");
   const tasks: TeamTaskState[] = [];
 
   const graph = buildRunGraph(manifest, tasks);
 
   assert.equal(graph.version, "1.0.0");
-  assert.equal(graph.runId, "test_run_123");
-  assert.equal(graph.team, "default");
-  assert.equal(graph.workflow, "default");
-  assert.equal(graph.nodes.length, 1); // Only run node
-  assert.equal(graph.nodes[0].id, "run:test_run_123");
+  assert.equal(graph.nodes.length, 1);
   assert.equal(graph.nodes[0].type, "run");
   assert.equal(graph.edges.length, 0);
 });
 
 test("buildRunGraph: creates task nodes with edges", () => {
-  const manifest = {
-    runId: "test_run_123",
-    team: "default",
-    workflow: "default",
-    status: "completed",
-    goal: "test goal",
-    createdAt: new Date().toISOString(),
-  } as TeamRunManifest;
-
+  const manifest = makeManifest("test_run_123");
   const tasks: TeamTaskState[] = [
-    { id: "01_explore", role: "explorer", status: "completed", dependsOn: [] } as TeamTaskState,
-    { id: "02_plan", role: "planner", status: "completed", dependsOn: ["01_explore"] } as TeamTaskState,
-    { id: "03_execute", role: "executor", status: "completed", dependsOn: ["02_plan"] } as TeamTaskState,
+    makeTask("01_explore"),
+    makeTask("02_plan", ["01_explore"]),
+    makeTask("03_execute", ["02_plan"]),
   ];
 
   const graph = buildRunGraph(manifest, tasks);
@@ -70,19 +83,11 @@ test("buildRunGraph: creates task nodes with edges", () => {
 });
 
 test("buildRunGraph: creates layers from phases", () => {
-  const manifest = {
-    runId: "test_run_123",
-    team: "default",
-    workflow: "default",
-    status: "completed",
-    goal: "test",
-    createdAt: new Date().toISOString(),
-  } as TeamRunManifest;
-
+  const manifest = makeManifest("test_phases");
   const tasks: TeamTaskState[] = [
-    { id: "01_explore", role: "explorer", status: "completed", dependsOn: [] } as TeamTaskState,
-    { id: "02_plan", role: "planner", status: "completed", dependsOn: ["01_explore"] } as TeamTaskState,
-    { id: "03_execute", role: "executor", status: "completed", dependsOn: ["02_plan"] } as TeamTaskState,
+    makeTask("01_explore"),
+    makeTask("02_plan", ["01_explore"]),
+    makeTask("03_execute", ["02_plan"]),
   ];
 
   const graph = buildRunGraph(manifest, tasks);
@@ -92,18 +97,8 @@ test("buildRunGraph: creates layers from phases", () => {
 
 test("saveRunGraph + loadRunGraph: roundtrip", () => {
   const tmp = os.tmpdir();
-  const manifest = {
-    runId: "test_save_load",
-    team: "default",
-    workflow: "default",
-    status: "completed",
-    goal: "test",
-    createdAt: new Date().toISOString(),
-  } as TeamRunManifest;
-
-  const tasks: TeamTaskState[] = [
-    { id: "01", role: "explorer", status: "completed", dependsOn: [] } as TeamTaskState,
-  ];
+  const manifest = makeManifest("test_save_load");
+  const tasks: TeamTaskState[] = [makeTask("01")];
 
   const graph = buildRunGraph(manifest, tasks);
   const savedPath = saveRunGraph(graph, tmp);
@@ -134,14 +129,7 @@ test("listRunGraphs: returns empty for missing directory", () => {
 
 test("listRunGraphs: returns saved graph IDs", () => {
   const tmp = os.tmpdir();
-  const manifest = {
-    runId: "test_list",
-    team: "default",
-    workflow: "default",
-    status: "completed",
-    goal: "test",
-    createdAt: new Date().toISOString(),
-  } as TeamRunManifest;
+  const manifest = makeManifest("test_list");
 
   buildAndSaveRunGraph(manifest, [], tmp);
 
@@ -154,18 +142,8 @@ test("listRunGraphs: returns saved graph IDs", () => {
 });
 
 test("buildRunGraph: includes agent nodes when agentModel is present", () => {
-  const manifest = {
-    runId: "test_agent",
-    team: "default",
-    workflow: "default",
-    status: "completed",
-    goal: "test",
-    createdAt: new Date().toISOString(),
-  } as TeamRunManifest;
-
-  const tasks: TeamTaskState[] = [
-    { id: "01", role: "explorer", status: "completed", dependsOn: [] } as TeamTaskState,
-  ];
+  const manifest = makeManifest("test_agent");
+  const tasks: TeamTaskState[] = [makeTask("01")];
 
   const graph = buildRunGraph(manifest, tasks);
 

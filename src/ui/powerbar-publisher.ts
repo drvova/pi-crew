@@ -181,6 +181,7 @@ let lastProgressKey: string | undefined;
 let lastStepsKey: string | undefined;
 
 interface PowerbarPayloadShape {
+	id?: string;
 	text?: string;
 	suffix?: string;
 	bar?: number;

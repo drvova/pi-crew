@@ -703,7 +703,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				widgetState,
 				loadConfig(currentCtx.cwd).config.ui,
 			);
-		clearPiCrewPowerbar(pi.events, currentCtx);
+		clearPiCrewPowerbar(pi.events);
 	};
 	const openLiveSidebar = (ctx: ExtensionContext, runId: string): void => {
 		const uiConfig = loadConfig(ctx.cwd).config.ui;
@@ -1084,7 +1084,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			widgetState,
 			currentCtx ? loadConfig(currentCtx.cwd).config.ui : undefined,
 		);
-		clearPiCrewPowerbar(pi.events, currentCtx);
+		clearPiCrewPowerbar(pi.events);
 		disposePowerbarCoalescer();
 		heartbeatWatcher?.dispose();
 		if (autoRepairTimer) {
@@ -1496,8 +1496,17 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				manifests,
 			);
 			// Health notifications: only warn about genuinely running runs
+			// Filter to only current session's runs to prevent cross-session notification leakage
+			const currentSessionGen = sessionGeneration;
+			const currentSessionId = currentCtx ? (currentCtx as unknown as Record<string, unknown>).sessionId as string | undefined : undefined;
+			const sessionManifests = manifests.filter(
+				(run) =>
+					!run.ownerSessionId ||
+					run.ownerSessionId === currentSessionId ||
+					(run as unknown as Record<string, unknown>).ownerSessionGeneration === currentSessionGen,
+			);
 			const now = Date.now();
-			for (const run of manifests) {
+			for (const run of sessionManifests) {
 				if (run.status !== "running") continue;
 				try {
 					const snapshot = snapshotCache.get(run.runId);

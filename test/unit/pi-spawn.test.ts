@@ -16,7 +16,7 @@ test("PI_TEAMS_PI_BIN accepts symlink targets in npm-style lib/node_modules", ()
 	// has environment-specific behavior in GitHub Actions macOS runners where
 	// /var/folders is a symlink to /private/var/folders and the validation
 	// path check may not match the npm_config_prefix.
-	if (process.platform === "darwin" || process.platform === "win32") {
+	if (process.platform === "darwin" || (process.platform as string) === "win32") {
 		return;
 	}
 	const previousBin = process.env.PI_TEAMS_PI_BIN;

@@ -1,7 +1,12 @@
 ---
 name: security-review
-description: "\"Security review patterns with audit and detection authoring. Use when reviewing code security, running compliance audits, building detection rules, or vulnerability assessments. Triggers: security review, vulnerability scan, audit, pen test, build detection rule, compliance check.\""
-
+description: "Security review patterns with audit and detection authoring."
+triggers:
+  - "security review"
+  - "vulnerability scan"
+  - "audit"
+  - "pen test"
+  - "build detection rule"
 ---
 # Security Review Skill
 

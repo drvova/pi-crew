@@ -1,7 +1,12 @@
 ---
 name: multi-perspective-review
-description: "\"Multi-perspective code review with simpler-alternative pass. Use when reviewing a plan, diff, implementation, worker output, release candidate, or external feedback. Triggers: review this, look at this, LGTM check, sanity check, audit this, get a second opinion, check this PR, examine this code.\""
-
+description: "Multi-perspective code review with simpler-alternative pass."
+triggers:
+  - "review this"
+  - "look at this"
+  - "LGTM check"
+  - "sanity check"
+  - "check this PR"
 ---
 # multi-perspective-review
 

@@ -1,6 +1,13 @@
 ---
 name: secure-agent-orchestration-review
-description: "Use when reviewing delegation, skill loading, tool access, worker prompts, artifacts, runtime config, state, ownership, or subprocess execution. Triggers: review delegation, check skill security, audit prompts, security review, orchestration audit."
+description: "Use when reviewing delegation, skill loading, tool access, worker prompts, artifacts, runtime config, state, ownership, or subprocess execution."
+triggers:
+  - "review delegation"
+  - "check skill security"
+  - "audit prompts"
+  - "security review"
+  - "orchestration audit"
+
 
 ---
 # secure-agent-orchestration-review

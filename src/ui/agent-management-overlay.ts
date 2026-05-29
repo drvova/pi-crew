@@ -38,6 +38,8 @@ function sourceIcon(source: ResourceSource): string {
 		case "user": return "👤";
 		case "project": return "📂";
 		case "git": return "🔗";
+		case "dynamic": return "⚡";
+		default: return "❓";
 	}
 }
 
@@ -47,6 +49,8 @@ function sourceLabel(source: ResourceSource): string {
 		case "user": return "user";
 		case "project": return "project";
 		case "git": return "git";
+		case "dynamic": return "dynamic";
+		default: return "unknown";
 	}
 }
 
@@ -61,7 +65,7 @@ export interface AgentOverlayState {
 export function createAgentOverlayState(entries: AgentEntry[], maxVisible = 20): AgentOverlayState {
 	return {
 		entries: entries.sort((a, b) => {
-			const order: Record<ResourceSource, number> = { project: 0, user: 1, git: 2, builtin: 3 };
+			const order: Record<ResourceSource, number> = { project: 0, user: 1, git: 2, builtin: 3, dynamic: 4 };
 			const diff = (order[a.source] ?? 4) - (order[b.source] ?? 4);
 			return diff !== 0 ? diff : a.name.localeCompare(b.name);
 		}),

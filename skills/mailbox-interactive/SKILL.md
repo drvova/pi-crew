@@ -1,7 +1,12 @@
 ---
 name: mailbox-interactive
-description: "Interactive waiting-task and mailbox workflow. Use when implementing or operating respond/nudge/ack/replay/supervisor-contact behavior. Triggers: respond to worker, nudge agent, mailbox message, supervisor contact, waiting task."
-
+description: "Interactive waiting-task and mailbox workflow."
+triggers:
+  - "respond to worker"
+  - "nudge agent"
+  - "mailbox message"
+  - "supervisor contact"
+  - "waiting task"
 ---
 # mailbox-interactive
 

@@ -1,7 +1,12 @@
 ---
 name: runtime-state-reader
-description: Safe read-only navigation of pi-crew run state. Use for inspecting manifests, tasks, events, agents, artifacts, health, and diagnostics without modifying state.
-
+description: Safe read-only navigation of pi-crew run state.
+triggers:
+  - "inspect manifest"
+  - "read tasks"
+  - "trace events"
+  - "examine state"
+  - "diagnostics"
 ---
 # runtime-state-reader
 

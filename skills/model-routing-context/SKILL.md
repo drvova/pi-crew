@@ -1,6 +1,12 @@
 ---
 name: model-routing-context
 description: Model routing, parent context, thinking level, and prompt construction workflow. Use when changing model fallback, child Pi args, inherited context, task prompts, or compact-read behavior.
+triggers:
+  - "change model"
+  - "parent context"
+  - "thinking level"
+  - "task prompts"
+  - "compact read"
 
 ---
 # model-routing-context

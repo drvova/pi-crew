@@ -1,7 +1,12 @@
 ---
 name: workspace-isolation
-description: "\"Workspace isolation boundaries. Use when ensuring agents from workspace A cannot access workspace B, or worktree-based parallel execution. Triggers: workspace isolation, cross-workspace access, escape boundary, worktree safety.\""
-
+description: "Workspace isolation boundaries."
+triggers:
+  - "workspace isolation"
+  - "cross-workspace access"
+  - "escape boundary"
+  - "worktree safety"
+  - "agent isolation"
 ---
 # workspace-isolation
 

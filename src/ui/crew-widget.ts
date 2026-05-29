@@ -23,13 +23,24 @@ import { SUBAGENT_SPINNER_FRAMES, spinnerBucket, spinnerFrame } from "./spinner.
 
 const SPINNER = SUBAGENT_SPINNER_FRAMES;
 const TOOL_LABELS: Record<string, string> = {
-	read: "reading",
+	head: "reading",
 	bash: "running command",
 	edit: "editing",
 	write: "writing",
-	grep: "searching",
+grep: "searching",
 	find: "finding files",
 	ls: "listing",
+};
+
+const TOOL_ICONS: Record<string, string> = {
+	read: "📖",
+	bash: ">",
+	edit: "✏",
+	write: "📝",
+	grep: "🔍",
+	find: "📁",
+	ls: "📋",
+	agent: "🤖",
 };
 const LEGACY_WIDGET_KEY = "pi-crew";
 const WIDGET_KEY = "pi-crew-active";
@@ -90,16 +101,16 @@ function describeLiveActivity(handle: LiveAgentHandle): string {
 	if (act.activeTools.size > 0) {
 		const groups = new Map<string, number>();
 		for (const toolName of act.activeTools.values()) {
-			const label = TOOL_LABELS[toolName] ?? toolName;
-			groups.set(label, (groups.get(label) ?? 0) + 1);
+			groups.set(toolName, (groups.get(toolName) ?? 0) + 1);
 		}
 		const parts: string[] = [];
-		for (const [label, count] of groups) {
+		for (const [toolName, count] of groups) {
+			const icon = TOOL_ICONS[toolName] ?? "?";
+			const label = TOOL_LABELS[toolName] ?? toolName;
 			if (count > 1) {
-				const noun = label === "searching" ? "patterns" : label === "listing" ? "entries" : "files";
-				parts.push(`${label} ${count} ${noun}`);
+				parts.push(`${icon}${count} ${label}s`);
 			} else {
-				parts.push(label);
+				parts.push(`${icon} ${label}`);
 			}
 		}
 		return parts.join(", ") + "…";
@@ -241,14 +252,17 @@ export function activeWidgetRuns(cwd: string, manifestCache?: ManifestCache, sna
 function statusSummary(runs: WidgetRun[]): string {
 	const agents = runs.flatMap((item) => item.agents);
 	const runningAgents = agents.filter((agent) => agent.status === "running").length;
-	const queuedAgents = agents.filter((agent) => agent.status === "queued").length;
-	const waitingAgents = agents.filter((agent) => agent.status === "waiting").length;
+	const queuedAgents = agents.filter((agent) => agent.status === "queued" || agent.status === "waiting").length;
 	const completedAgents = agents.filter((agent) => agent.status === "completed").length;
-	const parts = [`${runningAgents} running`];
-	if (queuedAgents) parts.push(`${queuedAgents} queued`);
-	if (waitingAgents) parts.push(`${waitingAgents} waiting`);
-	if (completedAgents) parts.push(`${completedAgents}/${agents.length} done`);
-	return `Crew: ${parts.join(", ")}`;
+	const totalAgents = agents.length;
+	const totalRuns = runs.length;
+	const model = agents.find((a) => a.model)?.model?.split("/").at(-1);
+	const parts = [`⚙ ${runningAgents}r`];
+	if (queuedAgents > 0) parts.push(`${queuedAgents}q`);
+	if (completedAgents > 0) parts.push(`${completedAgents}/${totalAgents}done`);
+	if (totalRuns > 1) parts.push(`${totalRuns}runs`);
+	if (model) parts.push(model);
+	return parts.join(" · ");
 }
 
 export function notificationBadge(count: number | undefined, env: NodeJS.ProcessEnv = process.env): string {

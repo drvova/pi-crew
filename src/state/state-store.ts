@@ -33,7 +33,7 @@ interface ManifestCacheEntry {
 	cachedAt?: number;
 }
 
-const MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MANIFEST_CACHE_TTL_MS = 30 * 1000; // 30 seconds (FIX: reduced from 5 minutes for faster state updates)
 const manifestCache = new Map<string, ManifestCacheEntry>();
 
 function setManifestCache(stateRoot: string, entry: ManifestCacheEntry): void {

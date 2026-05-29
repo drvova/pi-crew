@@ -1,6 +1,12 @@
 ---
 name: live-agent-lifecycle
-description: "Live agent registration, workspace isolation, termination, and eviction workflow. Use when tracking live agents, debugging ghost agents, or understanding workspace boundaries. Triggers: register agent, terminate agent, evict stale, ghost agent, workspace isolation."
+description: "Live agent registration, workspace isolation, termination, and eviction workflow."
+triggers:
+  - "register agent"
+  - "terminate agent"
+  - "evict stale"
+  - "ghost agent"
+  - "workspace isolation"
 
 ---
 # live-agent-lifecycle

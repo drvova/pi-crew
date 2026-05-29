@@ -1,6 +1,12 @@
 ---
 name: safe-bash
-description: "\"Safe shell-command workflow. Use when executing shell commands, prefer read-only, avoid destructive actions. Triggers: run this command, execute bash, safe bash, avoid rm, destructive command, shell injection.\""
+description: "Safe shell-command workflow."
+triggers:
+  - "run this command"
+  - "execute bash"
+  - "safe bash"
+  - "destructive command"
+  - "shell injection"
 
 ---
 # safe-bash

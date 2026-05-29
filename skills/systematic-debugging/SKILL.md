@@ -1,6 +1,12 @@
 ---
 name: systematic-debugging
-description: "\"Four-phase debugging discipline with refuse gates. Use when encountering a bug, test failure, blocked run, provider error, stale state, crash, or unexpected behavior. Triggers: debug this, investigate, fix this bug, something is broken, crash, error, test failed, it broke, not working, unexpected.\""
+description: "Four-phase debugging discipline with refuse gates."
+triggers:
+  - "debug this"
+  - "investigate"
+  - "fix this bug"
+  - "test failed"
+  - "crash"
 
 ---
 # systematic-debugging

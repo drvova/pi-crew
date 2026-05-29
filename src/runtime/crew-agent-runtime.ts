@@ -7,6 +7,7 @@ export type CrewAgentStatus = "queued" | "running" | "waiting" | "completed" | "
 export interface CrewAgentRecentTool {
 	tool: string;
 	args?: string;
+	startedAt?: string;
 	endedAt: string;
 }
 

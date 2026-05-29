@@ -174,18 +174,24 @@ export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): S
 	// Bug #12 fix: essential env vars (PATH, HOME, etc.) are always preserved so child can find npm/node.
 	const filteredEnv = sanitizeEnvSecrets(env, {
 		allowList: [
-			// Model provider API keys (these are safe to pass — they're meant for API calls)
-			"MINIMAX_*",
-			"OPENAI_*",
-			"ANTHROPIC_*",
-			"GOOGLE_*",
-			"AZURE_*",
-			"AWS_*",
-			"ZEU_*",
-			"ZERODEV_*",
-			"*_API_KEY",
-			"*_TOKEN",
-			"*_SECRET",
+			// Model provider API keys (explicit list — do NOT use wildcards)
+			"MINIMAX_API_KEY",
+			"MINIMAX_GROUP_ID",
+			"OPENAI_API_KEY",
+			"OPENAI_ORG_ID",
+			"ANTHROPIC_API_KEY",
+			"GOOGLE_API_KEY",
+			"GOOGLE_GENERATIVE_LANGUAGE_API_KEY",
+			"AZURE_OPENAI_API_KEY",
+			"AZURE_OPENAI_ENDPOINT",
+			"AWS_ACCESS_KEY_ID",
+			"AWS_SECRET_ACCESS_KEY",
+			"AWS_REGION",
+			"ZEU_API_KEY",
+			"ZERODEV_API_KEY",
+			// SECURITY FIX: Removed dangerous wildcards "*_API_KEY", "*_TOKEN", "*_SECRET"
+			// These patterns would leak ALL secrets matching the pattern to child processes.
+			// Only add specific, intended provider keys above.
 			// Essential non-secret vars for child process to function
 			"PATH",
 			"HOME",
@@ -374,21 +380,29 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 	if (depth.blocked) return { exitCode: 1, stdout: "", stderr: `pi-crew depth guard blocked child worker: depth ${depth.depth} >= max ${depth.maxDepth}` };
 	const mock = process.env.PI_TEAMS_MOCK_CHILD_PI;
 	if (mock) {
+		// SECURITY: Log mock mode activation prominently for audit trail
+		console.warn(`[⚠️ PI_CREW_MOCK_MODE] Mock mode active: ${mock} — NOT running real agents!`);
+		// SECURITY FIX: Require PI_CREW_ALLOW_MOCK alongside PI_TEAMS_MOCK_CHILD_PI
+		const allowMock = process.env.PI_CREW_ALLOW_MOCK === "1" || process.env.PI_CREW_ALLOW_MOCK === "true";
+		if (!allowMock) {
+			console.error(`[🚨 PI_CREW_MOCK_MODE] SECURITY: PI_TEAMS_MOCK_CHILD_PI is set but PI_CREW_ALLOW_MOCK is not "1". Ignoring mock request for safety.`);
+			return { exitCode: 1, stdout: "", stderr: "Mock mode requires PI_CREW_ALLOW_MOCK=1 alongside PI_TEAMS_MOCK_CHILD_PI" };
+		}
 		if (mock === "success") {
-			const stdout = `Mock child Pi success for ${input.agent.name}\n`;
+			const stdout = `[MOCK] Success for ${input.agent.name}\n`;
 			observeStdoutChunk(input, stdout);
 			return { exitCode: 0, stdout, stderr: "" };
 		}
 		if (mock === "json-success" || mock === "adaptive-plan") {
 			const text = mock === "adaptive-plan" && effectiveTask.includes("ADAPTIVE_PLAN_JSON_START")
-				? `Adaptive mock plan\nADAPTIVE_PLAN_JSON_START\n${JSON.stringify({ phases: [{ name: "research", tasks: [{ role: "explorer", task: "Explore adaptive target" }, { role: "analyst", task: "Analyze adaptive target" }, { role: "planner", task: "Plan adaptive target" }] }, { name: "build", tasks: [{ role: "executor", task: "Implement adaptive target" }] }, { name: "check", tasks: [{ role: "reviewer", task: "Review adaptive target" }, { role: "test-engineer", task: "Test adaptive target" }, { role: "writer", task: "Summarize adaptive target" }] }] })}\nADAPTIVE_PLAN_JSON_END`
-				: `Mock JSON success for ${input.agent.name}`;
+				? `[MOCK] Adaptive plan\nADAPTIVE_PLAN_JSON_START\n${JSON.stringify({ phases: [{ name: "research", tasks: [{ role: "explorer", task: "Explore adaptive target" }, { role: "analyst", task: "Analyze adaptive target" }, { role: "planner", task: "Plan adaptive target" }] }, { name: "build", tasks: [{ role: "executor", task: "Implement adaptive target" }] }, { name: "check", tasks: [{ role: "reviewer", task: "Review adaptive target" }, { role: "test-engineer", task: "Test adaptive target" }, { role: "writer", task: "Summarize adaptive target" }] }] })}\nADAPTIVE_PLAN_JSON_END`
+				: `[MOCK] JSON success for ${input.agent.name}`;
 			const stdout = `${JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text }] } })}\n${JSON.stringify({ type: "message_end", usage: { input: 10, output: 5, cost: 0.001, turns: 1 } })}\n`;
 			observeStdoutChunk(input, stdout);
 			return { exitCode: 0, stdout, stderr: "" };
 		}
-		if (mock === "retryable-failure") return { exitCode: 1, stdout: "", stderr: "rate limit: mock failure" };
-		return { exitCode: 1, stdout: "", stderr: `mock failure: ${mock}` };
+		if (mock === "retryable-failure") return { exitCode: 1, stdout: "", stderr: "[MOCK] rate limit: mock failure" };
+		return { exitCode: 1, stdout: "", stderr: `[MOCK] failure: ${mock}` };
 	}
 	const built = buildPiWorkerArgs({ task: effectiveTask, agent: input.agent, model: input.model, sessionEnabled: true, maxDepth: input.maxDepth, skillPaths: input.skillPaths });
 	const spawnSpec = getPiSpawnCommand(built.args);

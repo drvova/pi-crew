@@ -1,6 +1,12 @@
 ---
 name: pi-extension-lifecycle
-description: Pi extension lifecycle and registration patterns. Use when adding or reviewing extension tools, commands, resources, providers, event handlers, session hooks, or context-sensitive Pi API usage.
+description: Pi extension lifecycle and registration patterns.
+triggers:
+  - "add extension"
+  - "register tools"
+  - "session hooks"
+  - "context API"
+  - "extension lifecycle"
 
 ---
 # pi-extension-lifecycle

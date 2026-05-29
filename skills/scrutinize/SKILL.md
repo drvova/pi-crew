@@ -1,6 +1,12 @@
 ---
 name: scrutinize
-description: "\"Outsider-perspective review questioning intent before tracing code. Use when asking: should this even exist?, is there a simpler way?, get a second opinion, before deep code review. Triggers: scrutinize this, question this, is there a better way?, simplify this, overkill?, too complex.\""
+description: "Outsider-perspective review questioning intent before tracing code."
+triggers:
+  - "scrutinize this"
+  - "question this"
+  - "is there a better way"
+  - "simplify this"
+  - "too complex"
 
 ---
 # Scrutinize

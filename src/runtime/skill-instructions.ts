@@ -81,7 +81,8 @@ export function defaultSkillsForRole(role: string): string[] {
 	return DEFAULT_ROLE_SKILLS[role] ?? [];
 }
 
-function collectTaskSkillNames(input: ResolveTaskSkillsInput): string[] {
+function collectTaskSkillNames(input: ResolveTaskSkillsInput | undefined): string[] {
+	if (!input) return [];
 	if (input.override === false) return [];
 	const roleDefaultsDisabled = input.teamRole?.skills === false || input.step?.skills === false;
 	const names = roleDefaultsDisabled ? [] : defaultSkillsForRole(input.role);
@@ -196,7 +197,7 @@ export interface RenderedSkillInstructions {
 	}>;
 }
 
-export function renderSkillInstructions(input: RenderSkillInstructionsInput & { runId?: string } = {}): RenderedSkillInstructions {
+export function renderSkillInstructions(input: RenderSkillInstructionsInput & { runId?: string } = {} as RenderSkillInstructionsInput & { runId?: string }): RenderedSkillInstructions {
 	const allNames = collectTaskSkillNames(input);
 	const names = allNames.slice(0, MAX_SELECTED_SKILLS);
 	const overflowCount = Math.max(0, allNames.length - names.length);

@@ -1,7 +1,12 @@
 ---
 name: hunting-investigation-loop
-description: "\"Active hypothesis-driven investigation and threat hunting. Use when proactively searching for indicators, investigating suspicious patterns, or conducting forensic hunts. Triggers: hunt for, find evidence of, investigate, active search, forensic hunt.\""
-
+description: "Active hypothesis-driven investigation and threat hunting."
+triggers:
+  - "hunt for"
+  - "find evidence of"
+  - "investigate"
+  - "active search"
+  - "forensic hunt"
 ---
 # hunting-investigation-loop
 

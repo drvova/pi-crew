@@ -1,6 +1,13 @@
 ---
 name: state-mutation-locking
-description: "Durable state mutation and locking workflow. Use when changing manifests, tasks, mailbox, claims, events, stale reconciliation, recovery, cancel/respond/resume, or retry logic. Triggers: modify manifest, update tasks, stale reconciliation, cancel run, respond to task."
+description: "Durable state mutation and locking workflow."
+triggers:
+  - "modify manifest"
+  - "update tasks"
+  - "stale reconciliation"
+  - "cancel run"
+  - "respond to task"
+
 
 ---
 # state-mutation-locking

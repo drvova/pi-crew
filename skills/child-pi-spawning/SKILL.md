@@ -1,7 +1,12 @@
 ---
 name: child-pi-spawning
-description: "Child Pi worker spawning, lifecycle callbacks, and failure modes. Use when debugging worker crashes, scaffold mode behavior, or spawn-time failures. Triggers: worker crashed, worker blink, spawn failed, pid not found, child process error."
-
+description: "Child Pi worker spawning, lifecycle callbacks, and failure modes."
+triggers:
+  - "worker crashed"
+  - "worker blink"
+  - "spawn failed"
+  - "pid not found"
+  - "child process error"
 ---
 # child-pi-spawning
 

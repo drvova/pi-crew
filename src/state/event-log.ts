@@ -283,6 +283,12 @@ const bufferedTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const DEFAULT_BUFFER_MS = 20;
 
 export function appendEventBuffered(eventsPath: string, event: AppendTeamEvent, bufferMs = DEFAULT_BUFFER_MS): Promise<TeamEvent> {
+	// FIX: Terminal events must bypass buffer to ensure they're written immediately.
+	// Previously, terminal events like task.failed could be lost on process crash.
+	if (TERMINAL_EVENT_TYPES.has(event.type)) {
+		// For terminal events, write synchronously to ensure durability
+		return Promise.resolve(appendEvent(eventsPath, event));
+	}
 	return new Promise<TeamEvent>((resolve, reject) => {
 		const queue = bufferedQueues.get(eventsPath) ?? [];
 		queue.push({ event, resolve, reject });

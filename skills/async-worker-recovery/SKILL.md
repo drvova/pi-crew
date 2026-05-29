@@ -1,6 +1,12 @@
 ---
 name: async-worker-recovery
 description: Background worker, heartbeat, stale-run, crash-recovery, and deadletter workflow. Use when debugging stuck/dead workers or changing async run reliability.
+triggers:
+  - "worker crashed"
+  - "stale run"
+  - "deadletter"
+  - "heartbeat stale"
+  - "worker stuck"
 
 ---
 # async-worker-recovery

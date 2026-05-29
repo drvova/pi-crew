@@ -128,19 +128,36 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 		return [];
 	}
 	const nodeHook = hookPath.endsWith(".js") || hookPath.endsWith(".cjs") || hookPath.endsWith(".mjs");
-	// On Windows, set shell:true to ensure PATH resolution and .cjs/.bat file associations work.
-	const useShell = process.platform === "win32";
-	const result = spawnSync(nodeHook ? process.execPath : hookPath, nodeHook ? [hookPath] : [], {
-		cwd: worktreePath,
-		encoding: "utf-8",
-		input: JSON.stringify({ version: 1, repoRoot, worktreePath, agentCwd: worktreePath, branch, runId: manifest.runId, taskId: task.id, agent: task.agent }),
-		timeout: cfg.setupHookTimeoutMs ?? 30_000,
-		shell: useShell,
-		env: sanitizeEnvSecrets(process.env, {
-			allowList: ["PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "PI_*"],
-		}),
-		windowsHide: true,
-	});
+	// SECURITY WARNING: On Windows, shell:true allows command injection from hook files.
+	// Hooks from untrusted repositories can execute arbitrary commands.
+	// FIX: Only execute node hooks directly, skip shell scripts on Windows for safety.
+	// Users can still run shell hooks manually if needed.
+	const useShell = process.platform === "win32" && !nodeHook;
+	// For .bat/.cmd files on Windows without node, execute via cmd.exe /c directly
+	const isBatchFile = hookPath.endsWith(".bat") || hookPath.endsWith(".cmd");
+	const result = isBatchFile
+		? spawnSync("cmd.exe", ["/c", hookPath], {
+			cwd: worktreePath,
+			encoding: "utf-8",
+			input: JSON.stringify({ version: 1, repoRoot, worktreePath, agentCwd: worktreePath, branch, runId: manifest.runId, taskId: task.id, agent: task.agent }),
+			timeout: cfg.setupHookTimeoutMs ?? 30_000,
+			shell: false,  // cmd.exe /c handles batch files safely
+			env: sanitizeEnvSecrets(process.env, {
+				allowList: ["PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "PI_*"],
+			}),
+			windowsHide: true,
+		})
+		: spawnSync(nodeHook ? process.execPath : hookPath, nodeHook ? [hookPath] : [], {
+			cwd: worktreePath,
+			encoding: "utf-8",
+			input: JSON.stringify({ version: 1, repoRoot, worktreePath, agentCwd: worktreePath, branch, runId: manifest.runId, taskId: task.id, agent: task.agent }),
+			timeout: cfg.setupHookTimeoutMs ?? 30_000,
+			shell: useShell,
+			env: sanitizeEnvSecrets(process.env, {
+				allowList: ["PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "PI_*"],
+			}),
+			windowsHide: true,
+		});
 	if (result.error) throw new Error(`worktree setup hook failed: ${result.error.message}`);
 	if (result.status !== 0) throw new Error(`worktree setup hook failed with exit code ${result.status}: ${result.stderr || result.stdout || "no output"}`);
 	const trimmed = result.stdout.trim();

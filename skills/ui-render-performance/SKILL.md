@@ -1,7 +1,12 @@
 ---
 name: ui-render-performance
-description: "Non-blocking Pi TUI render workflow. Use when changing widgets, powerbar/statusbar segments, dashboard panes, overlays, snapshot caches, or live UI refresh behavior. Triggers: widget render, dashboard pane, overlay update, snapshot cache, UI refresh."
-
+description: "Non-blocking Pi TUI render workflow."
+triggers:
+  - "widget render"
+  - "dashboard pane"
+  - "overlay update"
+  - "snapshot cache"
+  - "UI refresh"
 ---
 # ui-render-performance
 

@@ -1,7 +1,12 @@
 ---
 name: artifact-analysis-loop
-description: "\"Systematic artifact examination for code, files, and binaries. Use when analyzing suspicious files, reverse engineering code patterns, or conducting forensic investigation of specific artifacts. Triggers: analyze this artifact, examine file, dissect sample, malware analysis, forensic investigation.\""
-
+description: "Systematic artifact examination for code, files, and binaries."
+triggers:
+  - "analyze this artifact"
+  - "examine file"
+  - "dissect sample"
+  - "malware analysis"
+  - "forensic investigation"
 ---
 # artifact-analysis-loop
 

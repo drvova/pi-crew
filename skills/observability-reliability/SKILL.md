@@ -1,7 +1,12 @@
 ---
 name: observability-reliability
-description: "Metrics, diagnostics, correlation, retry, deadletter, and recovery evidence workflow. Use when adding reliability features or investigating failures. Triggers: add metrics, diagnose failure, retry logic, deadletter, recovery evidence."
-
+description: "Metrics, diagnostics, correlation, retry, deadletter, and recovery evidence workflow."
+triggers:
+  - "add metrics"
+  - "diagnose failure"
+  - "retry logic"
+  - "deadletter"
+  - "recovery evidence"
 ---
 # observability-reliability
 

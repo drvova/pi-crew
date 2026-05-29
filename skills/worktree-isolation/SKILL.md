@@ -1,7 +1,12 @@
 ---
 name: worktree-isolation
-description: "Conflict-safe git worktree workflow. Use when running parallel implementation workers, isolating risky edits, or cleaning up task worktrees. Triggers: create worktree, parallel workers, isolate edits, cleanup worktree, branch freshness."
-
+description: "Conflict-safe git worktree workflow."
+triggers:
+  - "create worktree"
+  - "parallel workers"
+  - "isolate edits"
+  - "cleanup worktree"
+  - "branch freshness"
 ---
 # worktree-isolation
 

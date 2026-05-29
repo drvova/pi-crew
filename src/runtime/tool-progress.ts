@@ -150,12 +150,18 @@ export interface ToolProgressDisplay {
  * Format tool progress for display
  */
 export function formatToolProgress(progress: CrewAgentProgress, maxContextTokens = 128000): ToolProgressDisplay {
-	const recentTools = progress.recentTools.map((t) => ({
+	const recentTools: Array<{
+		tool: string;
+		args?: string;
+		startedAt?: string;
+		endedAt?: string;
+		status: "running" | "done" | "error";
+	}> = progress.recentTools.map((t) => ({
 		tool: t.tool,
 		args: t.args,
 		startedAt: t.startedAt,
 		endedAt: t.endedAt,
-		status: t.endedAt ? "done" : "running" as const,
+		status: t.endedAt ? ("done" as const) : ("running" as const),
 	}));
 
 	// If there's a currentTool but no endedAt, it's still running
@@ -167,7 +173,8 @@ export function formatToolProgress(progress: CrewAgentProgress, maxContextTokens
 			tool: progress.currentTool,
 			args: progress.currentToolArgs,
 			startedAt: progress.currentToolStartedAt,
-			status: "running",
+			endedAt: undefined as string | undefined,
+			status: "running" as const,
 		});
 	}
 

@@ -1,6 +1,12 @@
 ---
 name: requirements-to-task-packet
-description: "Use when a goal, issue, roadmap item, review finding, or user request must become actionable worker tasks. Triggers: convert requirements, create task packet, decompose goal, write task, spec to implementation."
+description: "Use when a goal, issue, roadmap item, review finding, or user request must become actionable worker tasks."
+triggers:
+  - "convert requirements"
+  - "create task packet"
+  - "decompose goal"
+  - "write task"
+  - "spec to implementation"
 
 ---
 # requirements-to-task-packet

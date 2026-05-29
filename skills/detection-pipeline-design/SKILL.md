@@ -1,7 +1,12 @@
 ---
 name: detection-pipeline-design
-description: "\"Design data pipelines for security monitoring and threat intelligence. Use when building enrichment pipelines, designing detection workflows, or setting up automated security monitoring. Triggers: build pipeline, design detection, setup monitoring, enrich data.\""
-
+description: "Design data pipelines for security monitoring and threat intelligence."
+triggers:
+  - "build pipeline"
+  - "design detection"
+  - "setup monitoring"
+  - "enrich data"
+  - "threat intelligence"
 ---
 # detection-pipeline-design
 
