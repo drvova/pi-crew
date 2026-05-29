@@ -117,9 +117,15 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
 	}
 }
 
-function evictOldestSequenceCacheEntry(): void {
-	const first = sequenceCache.keys().next().value;
-	if (first !== undefined) sequenceCache.delete(first);
+function evictOldestSequenceCacheEntries(): void {
+	// Batch evict oldest 50% of entries when cache is full
+	const toEvict = Math.ceil(MAX_SEQUENCE_CACHE_ENTRIES / 2);
+	let evicted = 0;
+	for (const key of sequenceCache.keys()) {
+		if (evicted >= toEvict) break;
+		sequenceCache.delete(key);
+		evicted++;
+	}
 }
 
 export function sequencePath(eventsPath: string): string {
@@ -276,7 +282,7 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 		try {
 			const stat = fs.statSync(eventsPath);
 			if (sequenceCache.size >= MAX_SEQUENCE_CACHE_ENTRIES) {
-				evictOldestSequenceCacheEntry();
+				evictOldestSequenceCacheEntries();
 			}
 			sequenceCache.set(eventsPath, { size: stat.size, mtimeMs: stat.mtimeMs, seq });
 			persistSequence(eventsPath, seq);
@@ -365,7 +371,7 @@ function appendEventInsideLock(eventsPath: string, event: AppendTeamEvent): Team
 	try {
 		const stat = fs.statSync(eventsPath);
 		if (sequenceCache.size >= MAX_SEQUENCE_CACHE_ENTRIES) {
-			evictOldestSequenceCacheEntry();
+			evictOldestSequenceCacheEntries();
 		}
 		sequenceCache.set(eventsPath, { size: stat.size, mtimeMs: stat.mtimeMs, seq });
 		persistSequence(eventsPath, seq);
