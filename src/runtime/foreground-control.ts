@@ -62,22 +62,60 @@ export function readForegroundControlStatus(manifest: TeamRunManifest, tasks: Te
 export function writeForegroundInterruptRequest(manifest: TeamRunManifest, reason = "User requested foreground interrupt."): ForegroundControlRequest {
 	const controlPath = foregroundControlPath(manifest);
 	const lockDir = `${controlPath}.lock`;
+	const pidFile = path.join(lockDir, "pid");
 	let requests: ForegroundControlRequest[] = [];
 
 	// FIX: Use file locking to prevent race condition in read-modify-write
-	// Previously, concurrent interrupt requests could lose data
+	// Added stale lock detection similar to event-log.ts
 	const acquireLock = (): void => {
 		const timeout = 5000;
+		const staleMs = 10000;
 		const start = Date.now();
 		while (true) {
 			try {
 				fs.mkdirSync(lockDir, { recursive: true });
+				try { fs.writeFileSync(pidFile, String(process.pid), "utf-8"); } catch { /* best-effort */ }
 				break;
-			} catch (err: any) {
+			} catch {
 				if (Date.now() - start > timeout) {
+					// Check if lock is stale before giving up
+					try {
+						const raw = fs.readFileSync(pidFile, "utf-8").trim();
+						const ownerPid = Number.parseInt(raw, 10);
+						if (!Number.isNaN(ownerPid) && ownerPid !== process.pid) {
+							let alive = false;
+							try { process.kill(ownerPid, 0); alive = true; } catch { /* dead */ }
+							if (!alive) {
+								// Lock is stale — clear it and retry
+								fs.rmSync(lockDir, { recursive: true, force: true });
+								continue;
+							}
+							// Lock held by live process — throw
+							const err = new Error(`Foreground control lock timeout for ${controlPath}`);
+							logInternalError("foreground-control.lock-timeout", err, `controlPath=${controlPath}`);
+							throw err;
+						}
+					} catch { /* no pid file — continue to throw */ }
+					const err = new Error(`Foreground control lock timeout for ${controlPath}`);
 					logInternalError("foreground-control.lock-timeout", err, `controlPath=${controlPath}`);
-					break;
+					throw err;
 				}
+				// Stale detection: if the owning process is dead, remove the stale lock
+				try {
+					const raw = fs.readFileSync(pidFile, "utf-8").trim();
+					const ownerPid = Number.parseInt(raw, 10);
+					if (!Number.isNaN(ownerPid) && ownerPid !== process.pid) {
+						let alive = false;
+						try { process.kill(ownerPid, 0); alive = true; } catch { /* dead */ }
+						if (!alive) {
+							const stat = fs.statSync(lockDir);
+							if (Date.now() - stat.mtimeMs > staleMs) {
+								fs.rmSync(lockDir, { recursive: true, force: true });
+								continue;
+							}
+						}
+					}
+				} catch { /* no pid file — fall through to sleep */ }
 				// Brief sleep to avoid CPU spinning
 				sleepSync(10);
 			}
