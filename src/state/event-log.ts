@@ -71,7 +71,7 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
 	const lockDir = `${eventsPath}.lock`;
 	const pidFile = path.join(lockDir, "pid");
 	const start = Date.now();
-	const timeout = 500; // Reduced from 5000ms — prefer appendEventAsync for latency-sensitive callers
+	const timeout = 30000; // 30s timeout — prefer appendEventAsync() for latency-sensitive callers
 	const staleMs = 10000;
 	let acquired = false;
 	while (true) {
@@ -82,8 +82,10 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
 			break;
 		} catch {
 			if (Date.now() - start > timeout) {
-				logInternalError("event-log.lock-timeout", new Error(`Event log lock timeout for ${eventsPath}`), `lockDir=${lockDir}`);
-				break;
+				// Throw instead of continuing without lock — prevents data corruption
+				const err = new Error(`Event log lock timeout for ${eventsPath}`);
+				logInternalError("event-log.lock-timeout", err, `lockDir=${lockDir}`);
+				throw err;
 			}
 			// Stale detection: if the owning process is dead, remove the stale lock.
 			try {
