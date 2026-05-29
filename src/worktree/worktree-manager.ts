@@ -128,13 +128,15 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 		return [];
 	}
 	const nodeHook = hookPath.endsWith(".js") || hookPath.endsWith(".cjs") || hookPath.endsWith(".mjs");
-	// SECURITY WARNING: On Windows, shell:true allows command injection from hook files.
-	// Hooks from untrusted repositories can execute arbitrary commands.
-	// FIX: Only execute node hooks directly, skip shell scripts on Windows for safety.
-	// Users can still run shell hooks manually if needed.
-	const useShell = process.platform === "win32" && !nodeHook;
-	// For .bat/.cmd files on Windows without node, execute via cmd.exe /c directly
+	// For .bat/.cmd files on Windows, execute via cmd.exe /c directly
 	const isBatchFile = hookPath.endsWith(".bat") || hookPath.endsWith(".cmd");
+	// SECURITY: Never use shell:true — prevents command injection from untrusted hooks.
+	// Non-node, non-batch hooks on Windows will fail to execute rather than
+	// running through a shell that could interpret malicious filenames.
+	const useShell = false;
+	if (process.platform === "win32" && !nodeHook && !isBatchFile) {
+		logInternalError("worktree.setupHook.windowsNoShell", new Error("Non-node, non-batch hook skipped on Windows (shell:true disabled for security)"), `hook=${hookPath}`);
+	}
 	const result = isBatchFile
 		? spawnSync("cmd.exe", ["/c", hookPath], {
 			cwd: worktreePath,

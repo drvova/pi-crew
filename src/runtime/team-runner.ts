@@ -6,7 +6,7 @@ import type { CrewRuntimeKind } from "./crew-agent-runtime.ts";
 import { resolveTaskRuntimeKind } from "./runtime-policy.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
 import { executeHook, appendHookEvent } from "../hooks/registry.ts";
-import { appendEvent, appendEventFireAndForget } from "../state/event-log.ts";
+import { appendEvent, appendEventAsync, appendEventFireAndForget } from "../state/event-log.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
 import type { ArtifactDescriptor, PolicyDecision, TeamRunManifest, TaskAttemptState, TeamTaskState } from "../state/types.ts";
 import { loadRunManifestById, saveRunManifest, saveRunManifestAsync, saveRunTasksAsync, updateRunStatus } from "../state/state-store.ts";
@@ -395,7 +395,7 @@ async function executeTeamRunCore(
 				return base;
 			});
 			await saveRunTasksAsync(manifest, tasks);
-			for (const taskId of cancelledTaskIds) appendEvent(manifest.eventsPath, { type: "task.cancelled", runId: manifest.runId, taskId, message, data: { reason: cancelReason.code } });
+			for (const taskId of cancelledTaskIds) await appendEventAsync(manifest.eventsPath, { type: "task.cancelled", runId: manifest.runId, taskId, message, data: { reason: cancelReason.code } });
 			manifest = updateRunStatus(manifest, "cancelled", message, { data: { reason: cancelReason.code, cancelledTaskIds } });
 			return { manifest, tasks };
 		}
@@ -429,7 +429,7 @@ async function executeTeamRunCore(
 			};
 			const preconditions = validatePhasePreconditions(wfMachine, wfContext);
 			if (!preconditions.ready) {
-				appendEvent(manifest.eventsPath, { type: "workflow.preconditions", runId: manifest.runId, message: `Workflow phase '${wfMachine.phases[wfMachine.currentPhaseIndex]?.name}' is missing inputs: ${preconditions.blocking.join(", ")}`, data: { phaseIndex: wfMachine.currentPhaseIndex, phaseName: wfMachine.phases[wfMachine.currentPhaseIndex]?.name, blocking: preconditions.blocking } });
+				await appendEventAsync(manifest.eventsPath, { type: "workflow.preconditions", runId: manifest.runId, message: `Workflow phase '${wfMachine.phases[wfMachine.currentPhaseIndex]?.name}' is missing inputs: ${preconditions.blocking.join(", ")}`, data: { phaseIndex: wfMachine.currentPhaseIndex, phaseName: wfMachine.phases[wfMachine.currentPhaseIndex]?.name, blocking: preconditions.blocking } });
 			} else {
 				// Advance the machine past completed phases.
 				while (wfMachine.currentPhaseIndex < wfMachine.phases.length && wfMachine.phases[wfMachine.currentPhaseIndex]?.status === "completed") {
@@ -441,7 +441,7 @@ async function executeTeamRunCore(
 		const readyRoles = effectiveReady.map((taskId) => tasks.find((task) => task.id === taskId)?.role).filter((role): role is string => Boolean(role));
 		const concurrency = resolveBatchConcurrency({ workflowName: workflow.name, workflowMaxConcurrency: workflow.maxConcurrency, teamMaxConcurrency: input.team.maxConcurrency, limitMaxConcurrentWorkers: input.limits?.maxConcurrentWorkers, allowUnboundedConcurrency: input.limits?.allowUnboundedConcurrency, readyCount: effectiveReady.length, workspaceMode: manifest.workspaceMode, readyRoles });
 		if (concurrency.reason.includes(";unbounded:")) {
-			appendEvent(manifest.eventsPath, { type: "limits.unbounded", runId: manifest.runId, message: "Unbounded worker concurrency was explicitly enabled for this run.", data: { concurrencyReason: concurrency.reason, maxConcurrent: concurrency.maxConcurrent } });
+			await appendEventAsync(manifest.eventsPath, { type: "limits.unbounded", runId: manifest.runId, message: "Unbounded worker concurrency was explicitly enabled for this run.", data: { concurrencyReason: concurrency.reason, maxConcurrent: concurrency.maxConcurrent } });
 		}
 		const approvalPending = isPlanApprovalPending(manifest);
 		const readyIds = approvalPending ? effectiveReady : effectiveReady.slice(0, concurrency.selectedCount);
@@ -474,7 +474,7 @@ async function executeTeamRunCore(
 		}
 		const batchTasks = readyBatch.filter((task) => tasks.find((t) => t.id === task.id && t.status !== "skipped"));
 		if (batchTasks.length > 1) {
-			appendEvent(manifest.eventsPath, { type: "task.parallel_start", runId: manifest.runId, message: `Launching ${batchTasks.length} tasks in PARALLEL (concurrency=${concurrency.selectedCount}): ${batchTasks.map((t) => `${t.role}(${t.id})`).join(", ")}`, data: { taskIds: batchTasks.map((t) => t.id), roles: batchTasks.map((t) => t.role), concurrency: concurrency.selectedCount } });
+			await appendEventAsync(manifest.eventsPath, { type: "task.parallel_start", runId: manifest.runId, message: `Launching ${batchTasks.length} tasks in PARALLEL (concurrency=${concurrency.selectedCount}): ${batchTasks.map((t) => `${t.role}(${t.id})`).join(", ")}`, data: { taskIds: batchTasks.map((t) => t.id), roles: batchTasks.map((t) => t.role), concurrency: concurrency.selectedCount } });
 		}
 		const results = await mapConcurrent(
 			batchTasks,
@@ -519,7 +519,7 @@ async function executeTeamRunCore(
 						attemptId: (attempt) => `${manifest.runId}:${task.id}:attempt-${attempt}`,
 						onAttemptFailed: (attempt, error, delayMs, info) => {
 							lastAttemptId = info.attemptId;
-							appendEvent(manifest.eventsPath, { type: "crew.task.retry_attempt", runId: manifest.runId, taskId: task.id, message: error.message, data: { attempt, attemptId: info.attemptId, delayMs }, metadata: { attemptId: info.attemptId } });
+							appendEventAsync(manifest.eventsPath, { type: "crew.task.retry_attempt", runId: manifest.runId, taskId: task.id, message: error.message, data: { attempt, attemptId: info.attemptId, delayMs }, metadata: { attemptId: info.attemptId } }).catch(() => {});
 							input.metricRegistry?.histogram("crew.task.retry_delay_ms", "Retry backoff delay, milliseconds").observe({ runId: manifest.runId, taskId: task.id }, delayMs);
 						},
 						onRetryGivenUp: (attempts, error, info) => {
@@ -536,7 +536,7 @@ async function executeTeamRunCore(
 						const freshManifest = fresh?.manifest ?? manifest;
 						const freshTasks = fresh?.tasks ?? tasks;
 						const cancelledTasks = freshTasks.map((item) => item.id === task.id && (item.status === "queued" || item.status === "running") ? { ...item, status: "cancelled" as const, finishedAt: new Date().toISOString(), error: `${reason.message} (${reason.code})` } : item);
-						appendEvent(freshManifest.eventsPath, { type: "task.cancelled", runId: freshManifest.runId, taskId: task.id, message: reason.message, data: { reason, phase: "retry" }, metadata: lastAttemptId ? { attemptId: lastAttemptId } : undefined });
+						appendEventAsync(freshManifest.eventsPath, { type: "task.cancelled", runId: freshManifest.runId, taskId: task.id, message: reason.message, data: { reason, phase: "retry" }, metadata: lastAttemptId ? { attemptId: lastAttemptId } : undefined }).catch(() => {});
 						return { manifest: updateRunStatus(freshManifest, "cancelled", reason.message), tasks: cancelledTasks };
 					}
 					if (lastFailed) return lastFailed;
@@ -586,10 +586,10 @@ async function executeTeamRunCore(
 				const transition = transitionPhase(wfMachine, pi, phaseStatus, wfContext);
 				wfMachine = transition.machine;
 				if (transition.guardResult && !transition.guardResult.allowed) {
-					appendEvent(manifest.eventsPath, { type: "workflow.phase_guard_blocked", runId: manifest.runId, message: `Workflow phase '${phase.name}' guard blocked: ${transition.guardResult.reason ?? "unknown"}`, data: { phaseIndex: pi, phaseName: phase.name, reason: transition.guardResult.reason } });
+					await appendEventAsync(manifest.eventsPath, { type: "workflow.phase_guard_blocked", runId: manifest.runId, message: `Workflow phase '${phase.name}' guard blocked: ${transition.guardResult.reason ?? "unknown"}`, data: { phaseIndex: pi, phaseName: phase.name, reason: transition.guardResult.reason } });
 					break;
 				}
-				appendEvent(manifest.eventsPath, { type: phaseStatus === "failed" ? "workflow.phase_failed" : "workflow.phase_completed", runId: manifest.runId, message: `Workflow phase '${phase.name}' ${phaseStatus}.`, data: { phaseIndex: pi, phaseStatus } });
+				await appendEventAsync(manifest.eventsPath, { type: phaseStatus === "failed" ? "workflow.phase_failed" : "workflow.phase_completed", runId: manifest.runId, message: `Workflow phase '${phase.name}' ${phaseStatus}.`, data: { phaseIndex: pi, phaseStatus } });
 			}
 			wfMachine = { ...wfMachine, currentPhaseIndex: pi + 1 };
 		}
@@ -603,7 +603,7 @@ async function executeTeamRunCore(
 			await saveRunTasksAsync(manifest, tasks);
 			saveCrewAgents(manifest, recordsForMaterializedTasks(manifest, tasks, runtimeKind));
 			await saveRunManifestAsync(manifest);
-			appendEvent(manifest.eventsPath, { type: "run.cancelled", runId: manifest.runId, message, data: { reason, phase: "task-batch", cancelledResultRunId: cancelledResult?.manifest.runId } });
+			await appendEventAsync(manifest.eventsPath, { type: "run.cancelled", runId: manifest.runId, message, data: { reason, phase: "task-batch", cancelledResultRunId: cancelledResult?.manifest.runId } });
 			return { manifest, tasks };
 		}
 		queueIndex = buildTaskGraphIndex(tasks);
@@ -651,7 +651,7 @@ async function executeTeamRunCore(
 	const effectivenessDecision = effectivenessPolicyDecision(effectiveness);
 	if (effectivenessDecision) {
 		manifest = { ...manifest, policyDecisions: [...(manifest.policyDecisions ?? []), effectivenessDecision], updatedAt: new Date().toISOString() };
-		appendEvent(manifest.eventsPath, { type: "run.effectiveness", runId: manifest.runId, message: effectivenessDecision.message, data: { effectiveness, policyDecision: effectivenessDecision } });
+		await appendEventAsync(manifest.eventsPath, { type: "run.effectiveness", runId: manifest.runId, message: effectivenessDecision.message, data: { effectiveness, policyDecision: effectivenessDecision } });
 	}
 	const blockingDecision = manifest.policyDecisions?.find((item) => item.action === "block" || item.action === "escalate");
 	if (failed) {

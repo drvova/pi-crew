@@ -11,7 +11,7 @@ import type {
 } from "../state/types.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
-import { appendEvent, appendEventFireAndForget } from "../state/event-log.ts";
+import { appendEvent, appendEventAsync, appendEventFireAndForget } from "../state/event-log.ts";
 import { saveRunManifest } from "../state/state-store.ts";
 import { createTaskClaim } from "../state/task-claims.ts";
 import {
@@ -214,7 +214,7 @@ export async function runTeamTask(
 				"started",
 			));
 		upsertCrewAgent(manifest, recordFromTask(manifest, task, runtimeKind));
-		appendEvent(manifest.eventsPath, {
+		await appendEventAsync(manifest.eventsPath, {
 			type: "task.started",
 			runId: manifest.runId,
 			taskId: task.id,
@@ -452,7 +452,7 @@ export async function runTeamTask(
 						}
 					},
 					onLifecycleEvent: (event: ChildPiLifecycleEvent) => {
-						appendEvent(manifest.eventsPath, {
+						void appendEventAsync(manifest.eventsPath, {
 							type: `worker.${event.type}` as const,
 							runId: manifest.runId,
 							taskId: task.id,
@@ -598,7 +598,7 @@ export async function runTeamTask(
 							attemptStartedAt.toISOString(),
 						),
 					);
-					appendEvent(manifest.eventsPath, {
+					await appendEventAsync(manifest.eventsPath, {
 						type: "worker.cancelled",
 						runId: manifest.runId,
 						taskId: task.id,
@@ -871,7 +871,7 @@ export async function runTeamTask(
 				}
 			} else if (!error) {
 				noYield = true;
-				appendEvent(manifest.eventsPath, {
+				await appendEventAsync(manifest.eventsPath, {
 					type: "task.needs_attention",
 					runId: manifest.runId,
 					taskId: task.id,
@@ -977,7 +977,7 @@ export async function runTeamTask(
 			if (outputText) {
 				outputValidation = validateWorkerOutput(task.role, outputText);
 				if (!outputValidation.valid) {
-					appendEvent(manifest.eventsPath, {
+					await appendEventAsync(manifest.eventsPath, {
 						type: "task.output_validation",
 						runId: manifest.runId,
 						taskId: task.id,
@@ -1191,7 +1191,7 @@ export async function runTeamTask(
 			cwd: manifest.cwd,
 		});
 		appendHookEvent(manifest, hookReport);
-		appendEvent(manifest.eventsPath, {
+		await appendEventAsync(manifest.eventsPath, {
 			type: error ? "task.failed" : noYield ? "task.needs_attention" : "task.completed",
 			runId: manifest.runId,
 			taskId: task.id,

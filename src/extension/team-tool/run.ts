@@ -22,7 +22,7 @@ async function executeTeamRun(...args: Parameters<typeof ExecuteTeamRunFn>): Pro
 	return _cachedExecuteTeamRun(...args);
 }
 import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
-import { appendEvent, readEvents } from "../../state/event-log.ts";
+import { appendEvent, appendEventAsync, readEvents } from "../../state/event-log.ts";
 import { resolveCrewRuntime, runtimeResolutionState } from "../../runtime/runtime-resolver.ts";
 import { normalizeSkillOverride } from "../../runtime/skill-instructions.ts";
 import { expandParallelResearchWorkflow } from "../../runtime/parallel-research.ts";
@@ -67,7 +67,7 @@ function scheduleBackgroundEarlyExitGuard(cwd: string, runId: string, pid: numbe
 		const tail = tailFile(logPath);
 		const message = `Background runner exited within 3s; see background.log${tail ? `\n${tail}` : ""}`;
 		const failed = updateRunStatus(loaded.manifest, "failed", "Background runner exited within 3s; see background.log");
-		appendEvent(failed.eventsPath, { type: "async.failed", runId: failed.runId, message, data: { pid, detail: liveness.detail } });
+		void appendEventAsync(failed.eventsPath, { type: "async.failed", runId: failed.runId, message, data: { pid, detail: liveness.detail } });
 	}, 3000);
 	timer.unref();
 }
@@ -140,7 +140,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	const runtimeResolution = runtimeResolutionState(runtime);
 	const executionManifest = { ...updatedManifest, runtimeResolution, runConfig: executedConfig, updatedAt: new Date().toISOString() };
 	atomicWriteJson(paths.manifestPath, executionManifest);
-	appendEvent(executionManifest.eventsPath, { type: "runtime.resolved", runId: executionManifest.runId, message: `Runtime resolved: ${runtime.kind} safety=${runtime.safety}`, data: { runtimeResolution } });
+	appendEventAsync(executionManifest.eventsPath, { type: "runtime.resolved", runId: executionManifest.runId, message: `Runtime resolved: ${runtime.kind} safety=${runtime.safety}`, data: { runtimeResolution } }).catch(() => {});
 	const runAsync = params.async ?? executedConfig.asyncByDefault ?? false;
 	let effectiveRuntime = runtime;
 	if (runAsync && runtime.kind === "live-session") {
@@ -150,13 +150,13 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	const effectiveManifest = effectiveRuntime !== runtime ? { ...executionManifest, runtimeResolution: effectiveRuntimeResolution, updatedAt: new Date().toISOString() } : executionManifest;
 	if (effectiveRuntime !== runtime) {
 		atomicWriteJson(paths.manifestPath, effectiveManifest);
-		appendEvent(effectiveManifest.eventsPath, { type: "runtime.resolved", runId: effectiveManifest.runId, message: `Runtime overridden: child-process (async fallback from live-session)`, data: { runtimeResolution: effectiveRuntimeResolution } });
+		appendEventAsync(effectiveManifest.eventsPath, { type: "runtime.resolved", runId: effectiveManifest.runId, message: `Runtime overridden: child-process (async fallback from live-session)`, data: { runtimeResolution: effectiveRuntimeResolution } }).catch(() => {});
 	}
 	if (runAsync) {
 		if (effectiveRuntime.safety === "blocked") {
 			const runningManifest = updateRunStatus(effectiveManifest, "running", "Checking worker runtime availability.");
 			const blocked = updateRunStatus(runningManifest, "blocked", effectiveRuntime.reason ?? "Child worker execution is disabled; refusing to create no-op scaffold subagents.");
-			appendEvent(blocked.eventsPath, { type: "run.blocked", runId: blocked.runId, message: blocked.summary, data: { runtime: effectiveRuntime, runtimeResolution: effectiveRuntimeResolution, async: true, diagnostics: { requestedMode: effectiveRuntime.requestedMode, workersDisabled: executedConfig.executeWorkers === false, envCrew: process.env.PI_CREW_EXECUTE_WORKERS, envTeams: process.env.PI_TEAMS_EXECUTE_WORKERS } } });
+			void appendEventAsync(blocked.eventsPath, { type: "run.blocked", runId: blocked.runId, message: blocked.summary, data: { runtime: effectiveRuntime, runtimeResolution: effectiveRuntimeResolution, async: true, diagnostics: { requestedMode: effectiveRuntime.requestedMode, workersDisabled: executedConfig.executeWorkers === false, envCrew: process.env.PI_CREW_EXECUTE_WORKERS, envTeams: process.env.PI_TEAMS_EXECUTE_WORKERS } } });
 			unregisterActiveRun(blocked.runId);
 			return result([
 				`Blocked pi-crew run ${blocked.runId}: real subagent workers are disabled.`,
@@ -169,7 +169,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		const spawned = await spawnBackgroundTeamRun(effectiveManifest);
 		const asyncManifest = { ...effectiveManifest, async: { pid: spawned.pid, logPath: spawned.logPath, spawnedAt: new Date().toISOString() } };
 		atomicWriteJson(paths.manifestPath, asyncManifest);
-		appendEvent(effectiveManifest.eventsPath, { type: "async.spawned", runId: effectiveManifest.runId, data: { pid: spawned.pid, logPath: spawned.logPath } });
+		void appendEventAsync(effectiveManifest.eventsPath, { type: "async.spawned", runId: effectiveManifest.runId, data: { pid: spawned.pid, logPath: spawned.logPath } });
 		scheduleBackgroundEarlyExitGuard(ctx.cwd, effectiveManifest.runId, spawned.pid, spawned.logPath);
 		// Wait for the async run to complete and return actual results.
 		try {
@@ -280,7 +280,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	if (runtime.safety === "blocked") {
 		const runningManifest = updateRunStatus(executionManifest, "running", "Checking worker runtime availability.");
 		const blocked = updateRunStatus(runningManifest, "blocked", runtime.reason ?? "Child worker execution is disabled; refusing to create no-op scaffold subagents.");
-		appendEvent(blocked.eventsPath, { type: "run.blocked", runId: blocked.runId, message: blocked.summary, data: { runtime, runtimeResolution, diagnostics: { requestedMode: runtime.requestedMode, workersDisabled: executedConfig.executeWorkers === false, envCrew: process.env.PI_CREW_EXECUTE_WORKERS, envTeams: process.env.PI_TEAMS_EXECUTE_WORKERS } } });
+		void appendEventAsync(blocked.eventsPath, { type: "run.blocked", runId: blocked.runId, message: blocked.summary, data: { runtime, runtimeResolution, diagnostics: { requestedMode: runtime.requestedMode, workersDisabled: executedConfig.executeWorkers === false, envCrew: process.env.PI_CREW_EXECUTE_WORKERS, envTeams: process.env.PI_TEAMS_EXECUTE_WORKERS } } });
 		unregisterActiveRun(blocked.runId);
 		return result([
 			`Blocked pi-crew run ${blocked.runId}: real subagent workers are disabled.`,

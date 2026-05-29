@@ -104,3 +104,43 @@ test("assertCleanLeader throws when repo has uncommitted changes", () => {
 	// Cleanup
 	fs.rmSync(repo, { recursive: true, force: true });
 });
+
+test("setupHook never uses shell:true regardless of platform (C3 security fix)", async () => {
+	// Regression guard: verify the source code never sets useShell to a truthy value.
+	// Since ESM module exports are frozen and cannot be mocked at runtime,
+	// we verify the security invariant by inspecting the source directly.
+	const source = fs.readFileSync(
+		path.resolve(import.meta.dirname, "../../src/worktree/worktree-manager.ts"),
+		"utf-8",
+	);
+
+	// Verify useShell is hardcoded to false
+	const useShellMatch = source.match(/const useShell\s*=\s*([^;]+);/);
+	assert.ok(useShellMatch, "Could not find 'const useShell = ...' in worktree-manager.ts");
+	assert.equal(useShellMatch![1].trim(), "false",
+		`Expected useShell to be hardcoded to 'false', but got: '${useShellMatch![1].trim()}'`);
+
+	// Verify the old vulnerable pattern is gone from the useShell assignment
+	const vulnerablePattern = /const\s+useShell\s*=\s*process\.platform\s*===\s*["']win32["']\s*&&\s*!nodeHook/;
+	assert.ok(!vulnerablePattern.test(source),
+		"Old vulnerable pattern 'const useShell = process.platform === 'win32' && !nodeHook' still present in source");
+
+	// Extract the runSetupHook function section for further checks
+	const hookSection = source.substring(source.indexOf("function runSetupHook"));
+
+	// Verify shell:true is not used as an actual option value in spawn calls
+	// Strip comment lines and string literals mentioning shell:true to avoid false positives
+	const codeOnly = hookSection.split("\n")
+		.filter((line) => !line.trim().startsWith("//"))
+		.join("\n");
+	const codeNoStrings = codeOnly.replace(/"[^"]*shell:true[^"]*"/g, '""');
+	const shellTrueInCode = /shell:\s*true/.test(codeNoStrings);
+	assert.ok(!shellTrueInCode, "Found 'shell: true' as an actual option value in runSetupHook — security vulnerability present");
+
+	// Verify .bat/.cmd path still uses cmd.exe /c
+	assert.ok(hookSection.includes('"cmd.exe"'), ".bat/.cmd handling via cmd.exe is preserved");
+	assert.ok(hookSection.includes('shell: false'), "Batch file spawn uses shell: false");
+
+	// Verify node hook handling is preserved
+	assert.ok(hookSection.includes("process.execPath"), "Node hook handling via process.execPath is preserved");
+});

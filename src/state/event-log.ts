@@ -63,12 +63,15 @@ let appendCounter = 0;
 
 /** Simple cross-process lock for an eventsPath to prevent JSONL interleave on concurrent append.
  *  Detects stale locks by checking the owner PID written inside the lock directory.
+ *
+ *  @deprecated Prefer `appendEventAsync()` for callers in async contexts. The sync lock
+ *  uses `sleepSync` which blocks the event loop and prevents AbortSignal handlers from firing.
  */
 export function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
 	const lockDir = `${eventsPath}.lock`;
 	const pidFile = path.join(lockDir, "pid");
 	const start = Date.now();
-	const timeout = 5000;
+	const timeout = 500; // Reduced from 5000ms — prefer appendEventAsync for latency-sensitive callers
 	const staleMs = 10000;
 	let acquired = false;
 	while (true) {
@@ -174,8 +177,114 @@ export function computeEventFingerprint(event: Pick<TeamEvent, "type" | "runId" 
 	return createHash("sha256").update(JSON.stringify({ type: event.type, runId: event.runId, taskId: event.taskId, data: event.data ?? null })).digest("hex").slice(0, 16);
 }
 
+/**
+ * @deprecated Prefer `appendEventAsync()` in async contexts. The sync lock uses
+ * `sleepSync` which blocks the Node.js event loop, preventing AbortSignal handlers
+ * from firing and degrading live-agent responsiveness.
+ */
 export function appendEvent(eventsPath: string, event: AppendTeamEvent): TeamEvent {
 	return withEventLogLockSync(eventsPath, () => appendEventInsideLock(eventsPath, event));
+}
+
+// --- Async write queue (non-blocking alternative to withEventLogLockSync) ---
+const asyncQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * Append an event to the event log using non-blocking async I/O.
+ *
+ * Uses a per-eventsPath promise-chain queue to ensure sequential writes without
+ * blocking the Node.js event loop. This allows AbortSignal handlers and other
+ * async operations to proceed while events are being persisted.
+ *
+ * For callers that are already in an async context (team-runner, task-runner,
+ * foreground-control, etc.), prefer this over the sync `appendEvent()`.
+ */
+export async function appendEventAsync(eventsPath: string, event: AppendTeamEvent): Promise<TeamEvent> {
+	const queueKey = eventsPath;
+	const prev = asyncQueues.get(queueKey) ?? Promise.resolve();
+	const next = prev.then(async (): Promise<TeamEvent> => {
+		// Ensure directory exists
+		await fs.promises.mkdir(path.dirname(eventsPath), { recursive: true });
+
+		// Build metadata (same logic as appendEventInsideLock)
+		const baseMetadata = event.metadata;
+		let metadata: TeamEventMetadata = {
+			seq: baseMetadata?.seq ?? nextSequence(eventsPath),
+			provenance: baseMetadata?.provenance ?? "team_runner",
+			...(baseMetadata?.parentEventId ? { parentEventId: baseMetadata.parentEventId } : {}),
+			...(baseMetadata?.attemptId ? { attemptId: baseMetadata.attemptId } : {}),
+			...(baseMetadata?.branchId ? { branchId: baseMetadata.branchId } : {}),
+			...(baseMetadata?.causationId ? { causationId: baseMetadata.causationId } : {}),
+			...(baseMetadata?.correlationId ? { correlationId: baseMetadata.correlationId } : {}),
+			...(baseMetadata?.sessionIdentity ? { sessionIdentity: baseMetadata.sessionIdentity } : {}),
+			...(baseMetadata?.ownership ? { ownership: baseMetadata.ownership } : {}),
+			...(baseMetadata?.nudgeId ? { nudgeId: baseMetadata.nudgeId } : {}),
+			...(baseMetadata?.confidence ? { confidence: baseMetadata.confidence } : {}),
+		};
+		const fullEvent: TeamEvent = {
+			time: new Date().toISOString(),
+			...event,
+			metadata,
+		};
+		if (baseMetadata?.fingerprint || TERMINAL_EVENT_TYPES.has(fullEvent.type)) {
+			metadata = { ...metadata, fingerprint: baseMetadata?.fingerprint ?? computeEventFingerprint(fullEvent) };
+			fullEvent.metadata = metadata;
+		}
+
+		// Overflow handling: same logic as sync path
+		const isTerminal = TERMINAL_EVENT_TYPES.has(fullEvent.type);
+		let skippedDueToSize = false;
+		if (!isTerminal && fs.existsSync(eventsPath)) {
+			const stat = fs.statSync(eventsPath);
+			if (stat.size > MAX_EVENTS_BYTES) {
+				try {
+					compactEventLog(eventsPath);
+				} catch (error) {
+					logInternalError("event-log.immediate-compact", error, `eventsPath=${eventsPath}`);
+				}
+				if (fs.existsSync(eventsPath)) {
+					const afterCompact = fs.statSync(eventsPath);
+					if (afterCompact.size > MAX_EVENTS_BYTES) {
+						rotateEventLog(eventsPath);
+					}
+				}
+			}
+		}
+		try {
+			if (fs.existsSync(eventsPath) && fs.statSync(eventsPath).size > MAX_EVENTS_BYTES) {
+				logInternalError("event-log.size-limit", new Error(`events file ${eventsPath} exceeds ${MAX_EVENTS_BYTES} bytes after compaction`), `eventsPath=${eventsPath}`);
+				skippedDueToSize = true;
+			}
+		} catch (error) {
+			logInternalError("event-log.size-check", error, `eventsPath=${eventsPath}`);
+		}
+
+		if (!skippedDueToSize) {
+			const line = JSON.stringify(redactSecrets(fullEvent)) + "\n";
+			await fs.promises.appendFile(eventsPath, line, { encoding: "utf-8" });
+		}
+
+		appendCounter++;
+		if (appendCounter % 100 === 0 && needsRotation(eventsPath)) {
+			try { compactEventLog(eventsPath); } catch (error) { logInternalError("event-log.rotation", error, `eventsPath=${eventsPath}`); }
+		}
+		try { emitFromTeamEvent(fullEvent); } catch (error) { logInternalError("event-log.emit", error); }
+
+		const seq = fullEvent.metadata?.seq ?? 0;
+		try {
+			const stat = fs.statSync(eventsPath);
+			if (sequenceCache.size >= MAX_SEQUENCE_CACHE_ENTRIES) {
+				evictOldestSequenceCacheEntry();
+			}
+			sequenceCache.set(eventsPath, { size: stat.size, mtimeMs: stat.mtimeMs, seq });
+			persistSequence(eventsPath, seq);
+		} catch (error) {
+			logInternalError("event-log.persist-sequence", error, `eventsPath=${eventsPath}`);
+		}
+		return fullEvent;
+	});
+	asyncQueues.set(queueKey, next.catch(() => {}));
+	return next;
 }
 
 /**
@@ -331,12 +440,13 @@ export function flushEventLogBuffer(): void {
 }
 
 /**
- * 2.2 caller-migration helper — schedule a buffered append but do not return
- * the resulting Promise. Use only for events whose return value is ignored
- * (high-frequency `task.progress`). Errors are logged via logInternalError.
+ * Schedule an async event append without waiting for the result.
+ * Uses the non-blocking async queue to avoid blocking the event loop.
+ * Use only for events whose return value is ignored (high-frequency `task.progress`).
+ * Errors are logged via logInternalError.
  */
-export function appendEventFireAndForget(eventsPath: string, event: AppendTeamEvent, bufferMs = DEFAULT_BUFFER_MS): void {
-	appendEventBuffered(eventsPath, event, bufferMs).catch((error) => logInternalError("event-log.fire-and-forget", error, eventsPath));
+export function appendEventFireAndForget(eventsPath: string, event: AppendTeamEvent, _bufferMs = DEFAULT_BUFFER_MS): void {
+	appendEventAsync(eventsPath, event).catch((error) => logInternalError("event-log.fire-and-forget", error, eventsPath));
 }
 
 // Auto-flush on process exit so buffered events do not silently leak.
