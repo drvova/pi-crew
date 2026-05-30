@@ -404,5 +404,6 @@ export class NoHandoffsError extends Error {
 export function createAnchorManager(options?: AnchorManagerOptions): AnchorManager {
 	return new AnchorManager(options);
 }
+
 // Re-export HandoffSummary for consumers
-export { type HandoffSummary } from "./handoff-manager.ts";
+export type { HandoffSummary } from "./handoff-manager.ts";
