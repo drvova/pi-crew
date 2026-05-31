@@ -108,9 +108,9 @@ export async function ensureCrewDirectory(cwd: string): Promise<void> {
 	];
 
 	for (const dir of dirs) {
-		if (!fs.existsSync(dir)) {
-			fs.mkdirSync(dir, { recursive: true });
-		}
+		// Use mkdirSync directly with recursive:true to avoid TOCTOU race.
+		// This is atomic and doesn't require existsSync check.
+		fs.mkdirSync(dir, { recursive: true });
 	}
 
 	// 2. Create .gitkeep placeholders in directories that should be tracked

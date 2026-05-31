@@ -1,4 +1,4 @@
-import { SECRET_KEY_PATTERN } from "./redaction.ts";
+import { isSecretKey } from "./redaction.ts";
 
 export interface SanitizeEnvOptions {
 	/** Allow-list of env var names to preserve. Supports trailing glob, e.g. `"PI_*"`. */
@@ -8,14 +8,17 @@ export interface SanitizeEnvOptions {
 /**
  * Strip env vars whose keys look like secrets before passing to child processes.
  *
- * Default mode (no allowList): deny-list using SECRET_KEY_PATTERN.
+ * Default mode (no allowList): deny-list using isSecretKey.
  * When allowList is provided, only keys matching the allow-list are preserved.
  */
 export function sanitizeEnvSecrets(env: NodeJS.ProcessEnv, options?: SanitizeEnvOptions): Record<string, string> {
 	const filtered: Record<string, string> = {};
 	if (options?.allowList && options.allowList.length > 0) {
 		const matchers = options.allowList.map((p) => {
-			if (p.endsWith("*")) return (k: string) => k.startsWith(p.slice(0, -1));
+			if (p.endsWith("*")) {
+				const prefix = p.slice(0, -1);
+				return (k: string) => k.startsWith(prefix) && k.length > prefix.length;
+			}
 			return (k: string) => k === p;
 		});
 		for (const [key, value] of Object.entries(env)) {
@@ -24,7 +27,7 @@ export function sanitizeEnvSecrets(env: NodeJS.ProcessEnv, options?: SanitizeEnv
 		return filtered;
 	}
 	for (const [key, value] of Object.entries(env)) {
-		if (value !== undefined && !SECRET_KEY_PATTERN.test(key)) filtered[key] = value;
+		if (value !== undefined && !isSecretKey(key)) filtered[key] = value;
 	}
 	return filtered;
 }

@@ -46,17 +46,17 @@ export class BM25Search<T extends SearchDocument> {
   }
 
   /**
-   * Compute document frequency for a query term using substring matching,
-   * consistent with the regex-based tf computation in search().
+   * Compute document frequency for a query term using indexOf for better performance.
+   * Uses linear-time substring matching instead of regex to avoid ReDoS.
    */
   private df(term: string): number {
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(escaped, "g");
+    const termLower = term.toLowerCase();
     let count = 0;
     for (const doc of this.documents) {
       for (const field of Object.keys(this.fieldWeights)) {
         const text = (doc.fields[field] ?? "").toLowerCase();
-        if (re.test(text)) {
+        // Use indexOf for linear-time substring search
+        if (text.includes(termLower)) {
           count++;
           break;
         }
@@ -81,11 +81,19 @@ export class BM25Search<T extends SearchDocument> {
         let fieldScore = 0;
 
         for (const term of queryTerms) {
-          const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const tf = (textLower.match(new RegExp(escaped, "g")) ?? []).length;
+          // Use indexOf for linear-time substring counting instead of regex
+          const termLower = term.toLowerCase();
+          let tf = 0;
+          let pos = 0;
+          while ((pos = textLower.indexOf(termLower, pos)) !== -1) {
+            tf++;
+            pos += termLower.length;
+            // Cap tf to prevent runaway on repeated patterns
+            if (tf > 100) break;
+          }
           if (tf === 0) continue;
 
-          const df = this.df(term);
+          const df = this.df(termLower);
           if (df === 0) continue;
 
           const idf = Math.log((this.N - df + 0.5) / (df + 0.5) + 1);

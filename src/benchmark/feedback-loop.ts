@@ -12,12 +12,17 @@ export interface FeedbackLoopStats {
 
 export class FeedbackLoop {
 	private runs: RunMetrics[] = [];
+	private static readonly MAX_RUNS = 1000;
 
 	/**
 	 * Record a run's metrics for learning.
 	 */
 	recordRun(metrics: RunMetrics): void {
 		this.runs.push(metrics);
+		// Trim to MAX_RUNS to prevent unbounded memory growth
+		if (this.runs.length > FeedbackLoop.MAX_RUNS) {
+			this.runs = this.runs.slice(-FeedbackLoop.MAX_RUNS);
+		}
 	}
 
 	/**

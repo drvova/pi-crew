@@ -36,10 +36,38 @@ export interface BenchmarkResult {
  * Validate command against allowlist to prevent shell injection.
  * Only allows specific safe commands with arguments.
  */
+/**
+ * Validate command against allowlist to prevent shell injection.
+ * Uses comprehensive shell metacharacter blocking similar to safe-bash.ts.
+ */
 function validateCommand(command: string): void {
+  // Basic allowlist - must start with allowed command
   const allowlist = /^(pytest|grep|npm test|npx) /;
   if (!allowlist.test(command)) {
     throw new Error(`Command not allowed: ${command}. Only pytest, grep, npm test, npx allowed.`);
+  }
+  
+  // Block shell metacharacters after command name
+  const afterCommand = command.substring(command.indexOf(" ") + 1);
+  
+  // Block dangerous shell metacharacters
+  const dangerousPatterns = [
+    /[;&|`$(){}[\]<>\\]/,                    // Shell metacharacters
+    /\$\([^)]*\)/,                            // Command substitution $(...)
+    /`[^`]*`/,                                // Backtick command substitution
+    /\|/,                                     // Pipe
+    /&&/,                                     // And
+    /\|\|/,                                   // Or
+    />>/,                                     // Append redirect
+    /2>&1/,                                   // stderr redirect
+    />/,                                      // Output redirect
+    /</,                                      // Input redirect
+  ];
+  
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(afterCommand)) {
+      throw new Error(`Shell metacharacters not allowed in command arguments`);
+    }
   }
 }
 
