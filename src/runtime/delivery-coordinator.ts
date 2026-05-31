@@ -102,9 +102,11 @@ export class DeliveryCoordinator {
 
 	flushQueuedResults(): void {
 		if (!this.active || this.pending.length === 0) return;
-		// H7: Set flushing BEFORE splice to prevent re-entrancy
+		// HIGH-16/ MEDIUM-16: Set flushing BEFORE splice to prevent re-entrancy
 		if (this.flushing) return;
 		this.flushing = true;
+		// Note: this.flushing is now set, so concurrent calls will exit early due to the check above
+		// This serves as a simple lock to prevent race conditions
 		const batch = this.pending.splice(0);
 		try {
 			const retryLater: PendingDelivery[] = [];

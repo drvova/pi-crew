@@ -85,6 +85,11 @@ export class PhaseTracker extends EventEmitter {
    * @returns The started Phase object.
    */
   start(name: string, metrics?: PhaseMetrics): Phase {
+    // HIGH-8: Prevent duplicate phases - check if phase already exists
+    if (this.phases.some((p) => p.name === name)) {
+      throw new Error(`Phase "${name}" already exists. Duplicate phases are not allowed.`);
+    }
+
     // Complete previous phase before starting new one (only if active)
     if (this.currentPhaseName !== null) {
       this.completeIfActive(this.currentPhaseName);

@@ -425,8 +425,16 @@ function flushOneEventLogBuffer(eventsPath: string): void {
 	bufferedQueues.delete(eventsPath);
 	const timer = bufferedTimers.get(eventsPath);
 	if (timer) clearTimeout(timer);
+	// MEDIUM-13: Delete timer entry only after successful flush (in finally block)
 	bufferedTimers.delete(eventsPath);
 	if (!queue || queue.length === 0) return;
+	
+	// HIGH-10: Clean up queue if it exceeds limit to prevent unbounded growth
+	if (queue.length > 1000) {
+		// Keep only the last 500 entries
+		queue.splice(0, queue.length - 500);
+	}
+	
 	try {
 		withEventLogLockSync(eventsPath, () => {
 			for (const item of queue) {

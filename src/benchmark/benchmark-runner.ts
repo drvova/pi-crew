@@ -33,6 +33,17 @@ export interface BenchmarkResult {
 }
 
 /**
+ * Validate command against allowlist to prevent shell injection.
+ * Only allows specific safe commands with arguments.
+ */
+function validateCommand(command: string): void {
+  const allowlist = /^(pytest|grep|npm test|npx) /;
+  if (!allowlist.test(command)) {
+    throw new Error(`Command not allowed: ${command}. Only pytest, grep, npm test, npx allowed.`);
+  }
+}
+
+/**
  * Run a single benchmark task with tiered judges.
  * Tier 1: pytest (fast, deterministic)
  * Tier 2: grep pattern matching
@@ -49,6 +60,8 @@ export async function runBenchmark(task: BenchmarkTask): Promise<BenchmarkResult
 			let output: string | undefined;
 
 			if (judge.type === "pytest" && judge.command) {
+				// Validate command before execution
+				validateCommand(judge.command);
 				// Tier 1: pytest - fast deterministic check
 				output = execSync(judge.command, {
 					timeout: 5000,
@@ -58,6 +71,8 @@ export async function runBenchmark(task: BenchmarkTask): Promise<BenchmarkResult
 				// Look for pytest summary line with passed count
 				passed = output.includes("passed");
 			} else if (judge.type === "grep" && judge.pattern && judge.command) {
+				// Validate command before execution
+				validateCommand(judge.command);
 				// Tier 2: grep pattern matching
 				output = execSync(judge.command, {
 					timeout: 5000,
@@ -66,6 +81,8 @@ export async function runBenchmark(task: BenchmarkTask): Promise<BenchmarkResult
 				});
 				passed = output.includes(judge.pattern);
 			} else if (judge.type === "command" && judge.command) {
+				// Validate command before execution
+				validateCommand(judge.command);
 				// Tier 3: command execution
 				output = execSync(judge.command, {
 					timeout: 10000,

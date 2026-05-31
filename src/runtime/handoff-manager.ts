@@ -205,6 +205,7 @@ export class HandoffManager {
 	/**
 	 * Clean up stale pending handoffs that have exceeded the timeout.
 	 * H1: Prevents memory leak by removing old entries.
+	 * FIX: Iterate over entries() instead of mutating Map during iteration.
 	 */
 	private cleanupStaleHandoffs(): void {
 		if (this.disposed) return;
@@ -213,11 +214,16 @@ export class HandoffManager {
 		const timeout = this.options.handoffTimeoutMs ?? DEFAULT_HANDOVER_TIMEOUT_MS;
 		const cutoff = now - timeout;
 
+		// Collect keys to delete to avoid mutation during iteration
+		const toDelete: string[] = [];
 		for (const [sessionId, timestamp] of this.handoffTimestamps.entries()) {
 			if (timestamp < cutoff) {
-				this.pendingHandoffs.delete(sessionId);
-				this.handoffTimestamps.delete(sessionId);
+				toDelete.push(sessionId);
 			}
+		}
+		for (const sessionId of toDelete) {
+			this.pendingHandoffs.delete(sessionId);
+			this.handoffTimestamps.delete(sessionId);
 		}
 
 		// Also enforce max handoffs limit
@@ -225,8 +231,9 @@ export class HandoffManager {
 			// Remove oldest entries
 			const sortedEntries = [...this.handoffTimestamps.entries()]
 				.sort((a, b) => a[1] - b[1]);
-			const toRemove = sortedEntries.slice(0, sortedEntries.length - MAX_PENDING_HANDOFFS);
-			for (const [sessionId] of toRemove) {
+			const removeCount = sortedEntries.length - MAX_PENDING_HANDOFFS;
+			for (let i = 0; i < removeCount; i++) {
+				const sessionId = sortedEntries[i][0];
 				this.pendingHandoffs.delete(sessionId);
 				this.handoffTimestamps.delete(sessionId);
 			}

@@ -353,6 +353,7 @@ export class HiddenHandoffService {
 
 	/**
 	 * C7: Check if recipient is rate limited.
+	 * Also cleans up empty recipient entries to prevent unbounded Map growth.
 	 */
 	private isRateLimited(recipient: string): boolean {
 		const now = Date.now();
@@ -362,6 +363,13 @@ export class HiddenHandoffService {
 		const recentTimestamps = timestamps.filter(
 			(t) => now - t < this.RATE_LIMIT_WINDOW_MS,
 		);
+
+		// HIGH-11: If no recent timestamps, remove the empty key to prevent unbounded growth
+		if (recentTimestamps.length === 0) {
+			this.sendTimestamps.delete(recipient);
+		} else {
+			this.sendTimestamps.set(recipient, recentTimestamps);
+		}
 
 		return recentTimestamps.length >= this.RATE_LIMIT_MAX_SENDS;
 	}
@@ -374,9 +382,9 @@ export class HiddenHandoffService {
 		const timestamps = this.sendTimestamps.get(recipient) ?? [];
 		timestamps.push(now);
 
-		// Keep only recent timestamps (last 5 minutes)
+		// MEDIUM-14: Use RATE_LIMIT_WINDOW_MS consistently for both filter and record
 		const recentTimestamps = timestamps.filter(
-			(t) => now - t < 300000,
+			(t) => now - t < this.RATE_LIMIT_WINDOW_MS,
 		);
 
 		this.sendTimestamps.set(recipient, recentTimestamps);

@@ -34,10 +34,19 @@ export interface ExecutionPlan {
  * - Each subsequent wave contains tasks whose dependencies are all in earlier waves.
  * - If all tasks have empty `dependsOn`, they all go into wave 0 (backward compatible).
  * - If a cycle is detected, `hasCycle` is true and `cycleNodes` lists the involved IDs.
+ * 
+ * @throws Error if a task depends on itself (self-dependency).
  */
 export function buildExecutionPlan(tasks: TaskNode[]): ExecutionPlan {
 	if (tasks.length === 0) {
 		return { waves: [], hasCycle: false };
+	}
+
+	// HIGH-9: Detect self-dependency
+	for (const task of tasks) {
+		if (task.dependsOn.includes(task.id)) {
+			throw new Error(`Task "${task.id}" has self-dependency (depends on itself)`);
+		}
 	}
 
 	const idSet = new Set<string>(tasks.map((t) => t.id));
@@ -108,7 +117,8 @@ export function buildExecutionPlan(tasks: TaskNode[]): ExecutionPlan {
  */
 function buildWave(tasks: TaskNode[], ids: string[], index: number): ExecutionWave {
 	const taskMap = new Map(tasks.map((t) => [t.id, t]));
-	const waveTasks = ids.map((id) => taskMap.get(id)!).filter(Boolean);
+	// MEDIUM-12: Filter out undefined values instead of using non-null assertion
+	const waveTasks = ids.map((id) => taskMap.get(id)).filter(Boolean) as TaskNode[];
 
 	let label: string | undefined;
 	if (waveTasks.length > 0 && waveTasks.every((t) => t.phase !== undefined)) {

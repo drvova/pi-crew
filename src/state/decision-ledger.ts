@@ -45,19 +45,19 @@ function computeCoherence(entry: RolloutEntry, ledger: RolloutEntry[]): Coherenc
 		entry.decisionMark === previousEntry.decisionMark ||
 		Boolean(entry.priorWinner && entry.topCandidates.includes(entry.priorWinner));
 
-	// Check last 3 entries for recursive pattern
-	const recentEntries = ledger.slice(-3);
+	// Check last 10 entries for recursive pattern
+	const recentEntries = ledger.slice(-10);
 	const recentDecisions = recentEntries.map((e) => e.decisionMark);
 	const currentDecision = entry.decisionMark;
 
 	const recursiveMatches = recentDecisions.filter((d) => d === currentDecision).length;
-	const matchesRecursive = recursiveMatches >= 2;
+	const matchesRecursive = recursiveMatches >= Math.ceil(recentDecisions.length / 2); // At least half match
 
 	const promotionAllowed = matchesPrior || matchesRecursive;
 
 	let reason: string;
 	if (matchesPrior && matchesRecursive) {
-		reason = `Matches prior winner and recursive pattern (${recursiveMatches}/3 recent decisions)`;
+		reason = `Matches prior winner and recursive pattern (${recursiveMatches}/${recentDecisions.length} recent decisions)`;
 	} else if (matchesPrior) {
 		reason = `Matches prior winner decision`;
 	} else if (matchesRecursive) {
@@ -274,14 +274,8 @@ export function promoteCandidate(runId: string, candidate: string): RolloutEntry
 		coherenceMark,
 	};
 
-	// Update last entry in memory if there are existing entries
-	if (ledger.length > 0) {
-		const lastIndex = ledger.length - 1;
-		ledger[lastIndex] = entry;
-	} else {
-		// No existing entries - just write this one
-		ledger.push(entry);
-	}
+	// Always push new entry (append-only pattern)
+	ledger.push(entry);
 
 	// Rewrite entire ledger atomically to preserve all entries
 	const ledgerPath = getLedgerPath(runId);
@@ -327,14 +321,8 @@ export function decayCandidate(runId: string, candidate: string): RolloutEntry {
 		coherenceMark,
 	};
 
-	// Update last entry in memory if there are existing entries
-	if (ledger.length > 0) {
-		const lastIndex = ledger.length - 1;
-		ledger[lastIndex] = entry;
-	} else {
-		// No existing entries - just write this one
-		ledger.push(entry);
-	}
+	// Always push new entry (append-only pattern)
+	ledger.push(entry);
 
 	// Rewrite entire ledger to preserve all entries
 	const ledgerPath = getLedgerPath(runId);

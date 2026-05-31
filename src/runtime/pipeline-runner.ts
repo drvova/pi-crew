@@ -232,13 +232,20 @@ export class PipelineRunner {
 
 	/**
 	 * Execute a single stage, handling fan-out for array inputs.
+	 * Uses depth parameter to prevent stack overflow from deep recursion.
 	 */
 	private async executeStageInternal(
 		stage: PipelineStage,
 		inputs: unknown,
 		stageContext: PipelineContext,
 		callback: (stage: PipelineStage, inputs: unknown, stageContext: PipelineContext) => Promise<unknown>,
+		depth: number = 0,
 	): Promise<unknown[]> {
+		// CRITICAL-6: Prevent stack overflow from deep recursion
+		if (depth > 50) {
+			throw new Error(`Pipeline recursion depth limit exceeded (${depth}). Possible circular stage dependency.`);
+		}
+
 		const fanOut = stage.fanOut ?? true;
 		const maxConcurrency = stage.maxConcurrency ?? this.defaultMaxConcurrency;
 
@@ -263,7 +270,7 @@ export class PipelineRunner {
 					const result = await this.executeStageInternal(stage, task.item, {
 						...stageContext,
 						stageName: task.name,
-					}, callback);
+					}, callback, depth + 1);
 					return result;
 				},
 			);

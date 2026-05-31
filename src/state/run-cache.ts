@@ -31,6 +31,7 @@ export function computeRunCacheKey(goal: string, team: string, workflow: string,
     .update(normalized)
     .update(team)
     .update(workflow)
+    .update(_cwd)
     .digest("hex")
     .slice(0, 16);
 }
@@ -109,14 +110,18 @@ export function saveRunToCache(
   const entryPath = path.join(dir, `${cacheKey}.json`);
   fs.writeFileSync(entryPath, JSON.stringify(entry), "utf-8");
 
-  // Update index
+  // Update index with atomic write: write to temp file then rename
   const indexPath = path.join(dir, "index.json");
   const index: CacheIndex = fs.existsSync(indexPath)
     ? JSON.parse(fs.readFileSync(indexPath, "utf-8"))
     : {};
 
   index[cacheKey] = entryPath;
-  fs.writeFileSync(indexPath, JSON.stringify(index), "utf-8");
+  
+  // Atomic write: write to temp file first, then rename
+  const tempPath = path.join(dir, "index.json.tmp");
+  fs.writeFileSync(tempPath, JSON.stringify(index), "utf-8");
+  fs.renameSync(tempPath, indexPath);
 }
 
 /**
