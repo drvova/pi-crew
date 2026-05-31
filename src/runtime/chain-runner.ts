@@ -101,6 +101,9 @@ export class ChainRunner {
 	/** Maximum number of chain history entries to prevent memory leaks */
 	private static readonly MAX_CHAIN_HISTORY_SIZE = 100;
 
+	/** Maximum size per handoff entry to prevent memory issues from large artifacts */
+	private static readonly MAX_HANDOFF_ENTRY_SIZE = 5000; // bytes per entry
+
 	constructor(
 		private taskRunner: ChainTaskRunner,
 		private handoffManager: HandoffManager,
@@ -431,15 +434,21 @@ export class ChainRunner {
 		// Limit history size to prevent memory leak (H2)
 		const limitedHandoffs = handoffs.slice(-ChainRunner.MAX_CHAIN_HISTORY_SIZE);
 
+		// Limit per-entry size to prevent memory issues from large artifacts
+		const filteredHandoffs = limitedHandoffs.filter(h => {
+			const size = JSON.stringify(h).length;
+			return size <= ChainRunner.MAX_HANDOFF_ENTRY_SIZE;
+		});
+
 		return {
 			...context,
-			__chainHistory: limitedHandoffs.map(h => ({
+			__chainHistory: filteredHandoffs.map(h => ({
 				step: h.taskId,
 				outcome: h.outcome,
-				filesCreated: h.filesCreated,
-				filesModified: h.filesModified,
-				decisions: h.decisions,
-				nextSteps: h.nextSteps,
+				filesCreated: h.filesCreated?.slice(0, 50), // Limit array size
+				filesModified: h.filesModified?.slice(0, 50), // Limit array size
+				decisions: h.decisions?.slice(0, 20), // Limit array size
+				nextSteps: h.nextSteps?.slice(0, 20), // Limit array size
 			})),
 		};
 	}

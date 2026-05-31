@@ -73,6 +73,7 @@ export class TeamBudgetTracker extends EventEmitter {
   private warningEmitted = false;
   private exhaustedEmitted = false;
   private abortController: AbortController | null = null;
+  private abortInterval: NodeJS.Timeout | null = null;
 
   /**
    * Create a new budget tracker.
@@ -210,6 +211,12 @@ export class TeamBudgetTracker extends EventEmitter {
       return controller.signal;
     }
 
+    // Clear any existing interval before creating new one
+    if (this.abortInterval) {
+      clearInterval(this.abortInterval);
+      this.abortInterval = null;
+    }
+
     // Create controller and set up threshold check
     this.abortController = new AbortController();
 
@@ -220,36 +227,27 @@ export class TeamBudgetTracker extends EventEmitter {
     // The actual abort happens once exhausted() first returns true
     const signal = this.abortController.signal;
 
-    // Track the interval ID for cleanup
-    let checkInterval: NodeJS.Timeout | null = null;
-
-    // Set up interval check (cleared on abort)
-    checkInterval = setInterval(() => {
+    // Set up interval check and store the ID for cleanup
+    this.abortInterval = setInterval(() => {
       if (tracker.exhausted() && !signal.aborted) {
         tracker.abortController!.abort(
           new Error(`Budget exhausted: ${tracker.spent()}/${tracker.total}`),
         );
-        if (checkInterval) {
-          clearInterval(checkInterval);
-          checkInterval = null;
+        if (tracker.abortInterval) {
+          clearInterval(tracker.abortInterval);
+          tracker.abortInterval = null;
         }
       }
     }, 1000);
 
-    // Clear interval when signal is already aborted
-    if (signal.aborted && checkInterval) {
-      clearInterval(checkInterval);
-      checkInterval = null;
-    } else {
-      // Clean up interval when abort fires
-      const cleanup = (): void => {
-        if (checkInterval) {
-          clearInterval(checkInterval);
-          checkInterval = null;
-        }
-      };
-      signal.addEventListener("abort", cleanup, { once: true });
-    }
+    // Clean up interval when signal is aborted
+    const cleanup = (): void => {
+      if (tracker.abortInterval) {
+        clearInterval(tracker.abortInterval);
+        tracker.abortInterval = null;
+      }
+    };
+    signal.addEventListener("abort", cleanup, { once: true });
 
     return signal;
   }

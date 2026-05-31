@@ -194,6 +194,9 @@ export class HandoffManager {
 	 * H1: Prevents memory leak by clearing old entries.
 	 */
 	private startCleanupTimer(): void {
+		if (this.disposed) {
+			return;
+		}
 		if (this.cleanupTimer) {
 			return;
 		}

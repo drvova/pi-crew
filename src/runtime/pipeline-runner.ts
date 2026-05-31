@@ -254,6 +254,9 @@ export class PipelineRunner {
 		// the result of a previous stage that returned a single value.
 		const shouldFanOut = fanOut && Array.isArray(inputs) && inputs.length > 1;
 
+		// Increment depth for non-fan-out path
+		const nextDepth = depth + 1;
+
 		if (shouldFanOut) {
 			const tasks = (inputs as unknown[]).map((item, index) => ({
 				item,
@@ -270,7 +273,7 @@ export class PipelineRunner {
 					const result = await this.executeStageInternal(stage, task.item, {
 						...stageContext,
 						stageName: task.name,
-					}, callback, depth + 1);
+					}, callback, nextDepth);
 					return result;
 				},
 			);

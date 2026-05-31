@@ -70,6 +70,7 @@ export interface TaskRunnerLike {
  */
 export class RetryRunner {
 	private _disposed = false;
+	private _handoffs: HandoffSummary[] = [];
 
 	constructor(
 		private taskRunner: TaskRunnerLike,
@@ -96,9 +97,7 @@ export class RetryRunner {
 	 * Useful when you want to reset state without disposing.
 	 */
 	clearHandoffs(): void {
-		// This method is available for external callers who want to clear state
-		// The internal handoffs array is local to runWithRetry, so this is a no-op
-		// but provides API consistency with other managers
+		this._handoffs = [];
 	}
 
 	/**
@@ -139,6 +138,9 @@ export class RetryRunner {
 		const handoffs: HandoffSummary[] = [];
 		const startTime = Date.now();
 		const maxHandoffs = this.getMaxHandoffs(config);
+
+		// Clear previous handoffs at start of each retry run
+		this._handoffs = [];
 
 
 		for (let attempt = 1; attempt <= config.maxAttempts; attempt++) {

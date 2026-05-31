@@ -106,8 +106,13 @@ export class CrewScheduler {
 	private disarm(id: string): void {
 		const t = this.timers.get(id);
 		if (t) {
-			clearInterval(t as ReturnType<typeof setInterval>);
-			clearTimeout(t as ReturnType<typeof setTimeout>);
+			// Branch on timer type to use correct clear function
+			const job = this.jobs.get(id);
+			if (job?.scheduleType === "once") {
+				clearTimeout(t as ReturnType<typeof setTimeout>);
+			} else {
+				clearInterval(t as ReturnType<typeof setInterval>);
+			}
 			this.timers.delete(id);
 		}
 	}

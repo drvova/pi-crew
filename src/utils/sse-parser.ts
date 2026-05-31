@@ -8,6 +8,9 @@ export interface ServerSentEvent {
 /** L1: Maximum number of raw lines before discarding an oversized event. */
 const MAX_EVENT_LINES = 1000;
 
+/** L2: Maximum data size per line to prevent unbounded memory usage. */
+const MAX_DATA_SIZE = 100000; // 100KB per line
+
 /** Read newline-delimited lines from a text ReadableStream, buffering partial chunks. */
 async function* readLines(
 	stream: ReadableStream<string>,
@@ -97,11 +100,17 @@ export async function* readSseEvents(
 
 		currentRaw.push(line);
 
-		// L1: Guard against unbounded memory growth
+		// L1: Guard against unbounded memory growth (line count)
 		if (currentRaw.length > MAX_EVENT_LINES) {
 			const evt = flush();
 			if (evt) yield evt;
 			continue;
+		}
+
+		// L2: Guard against unbounded memory growth (data size per line)
+		if (value.length > MAX_DATA_SIZE) {
+			// Truncate oversized data to prevent memory issues
+			value = value.slice(0, MAX_DATA_SIZE);
 		}
 
 		if (field === "event") {

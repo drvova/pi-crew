@@ -19,13 +19,22 @@ type CrewEventListener = (event: CrewEvent) => void;
 
 class EventBus {
   private listeners = new Map<CrewEventType, Set<CrewEventListener>>();
-  private static instance?: EventBus;
+  private static _instance?: EventBus;
 
   static getInstance(): EventBus {
-    if (!EventBus.instance) {
-      EventBus.instance = new EventBus();
+    if (!EventBus._instance) {
+      EventBus._instance = new EventBus();
     }
-    return EventBus.instance;
+    return EventBus._instance;
+  }
+
+  /**
+   * Dispose of the EventBus instance and clear all listeners.
+   * Resets the singleton so a new instance can be created.
+   */
+  dispose(): void {
+    this.listeners.clear();
+    EventBus._instance = undefined;
   }
 
   emit(event: CrewEvent): void {
