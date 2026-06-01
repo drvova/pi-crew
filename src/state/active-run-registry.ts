@@ -10,6 +10,9 @@ import { sharedScanCache } from "../utils/scan-cache.ts";
 import { sleepSync } from "../utils/sleep.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 
+/** Magic bytes prefix for binary registry to prevent deserialization of hostile files. */
+const BINARY_MAGIC = Buffer.from("PICREW2BIN", "utf-8");
+
 export interface ActiveRunRegistryEntry {
 	runId: string;
 	cwd: string;
@@ -111,7 +114,11 @@ export function readActiveRunRegistry(maxEntries = DEFAULT_CACHE.manifestMaxEntr
 	// corrupt; this lets a 2-release migration co-exist with old readers.
 	try {
 		const buf = fs.readFileSync(registryBinaryPath());
-		parsed = deserialize(buf);
+		// Security: verify magic bytes before deserializing to prevent RCE from hostile files
+		if (buf.length < BINARY_MAGIC.length || !buf.slice(0, BINARY_MAGIC.length).equals(BINARY_MAGIC)) {
+			throw new Error("Invalid binary registry: missing magic bytes");
+		}
+		parsed = deserialize(buf.slice(BINARY_MAGIC.length));
 	} catch {
 		try {
 			parsed = JSON.parse(fs.readFileSync(registryPath(), "utf-8"));
@@ -135,7 +142,7 @@ function writeEntries(entries: ActiveRunRegistryEntry[]): void {
 	atomicWriteJson(registryPath(), trimmed);
 	try {
 		const tempBin = `${registryBinaryPath()}.${process.pid}.${Date.now()}.tmp`;
-		fs.writeFileSync(tempBin, serialize(trimmed));
+		fs.writeFileSync(tempBin, Buffer.concat([BINARY_MAGIC, serialize(trimmed)]));
 		fs.renameSync(tempBin, registryBinaryPath());
 	} catch (error) {
 		logInternalError("active-run-registry.binary-write", error);

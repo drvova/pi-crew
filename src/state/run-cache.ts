@@ -3,6 +3,8 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import { projectCrewRoot } from "../utils/paths.ts";
 import type { TeamTaskState } from "./types.ts";
+import { atomicWriteFile } from "./atomic-write.ts";
+import { withFileLockSync } from "./locks.ts";
 
 const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -62,12 +64,15 @@ export function getCachedRun(cwd: string, cacheKey: string): CacheEntry | null {
     const entry = JSON.parse(fs.readFileSync(entryPath, "utf-8")) as CacheEntry;
 
     if (Date.now() > entry.expiresAt) {
-      // Remove expired entry
-      try {
-        fs.unlinkSync(entryPath);
-      } catch { /* ignore */ }
-      delete index[cacheKey];
-      fs.writeFileSync(indexPath, JSON.stringify(index), "utf-8");
+      // Remove expired entry — use lock + atomic write to prevent index corruption
+      withFileLockSync(indexPath, () => {
+        try {
+          fs.unlinkSync(entryPath);
+        } catch { /* ignore */ }
+        const updatedIndex = JSON.parse(fs.readFileSync(indexPath, "utf-8")) as CacheIndex;
+        delete updatedIndex[cacheKey];
+        atomicWriteFile(indexPath, JSON.stringify(updatedIndex));
+      });
       return null;
     }
 
