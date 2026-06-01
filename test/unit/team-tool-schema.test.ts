@@ -41,3 +41,25 @@ test("schema accepts action: retry", () => {
 	const ok = Value.Check(TeamToolParams, { action: "retry", runId: "r1" });
 	assert.strictEqual(ok, true);
 });
+
+test("schema accepts action: invalidate", () => {
+	// FIX: Previously "invalidate" was in TS interface but missing from TypeBox schema,
+	// causing silent failure with -32602 at the JSON-RPC layer.
+	const ok = Value.Check(TeamToolParams, { action: "invalidate", runId: "r1" });
+	assert.strictEqual(ok, true);
+});
+
+test("schema accepts action: anchor", () => {
+	const ok = Value.Check(TeamToolParams, { action: "anchor", anchor: "test" });
+	assert.strictEqual(ok, true);
+});
+
+test("schema accepts action: auto-summarize", () => {
+	const ok = Value.Check(TeamToolParams, { action: "auto-summarize" });
+	assert.strictEqual(ok, true);
+});
+
+test("schema accepts action: auto_boomerang", () => {
+	const ok = Value.Check(TeamToolParams, { action: "auto_boomerang" });
+	assert.strictEqual(ok, true);
+});

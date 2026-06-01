@@ -58,6 +58,7 @@ export const TeamToolParams = Type.Object({
 				Type.Literal("api"),
 				Type.Literal("settings"),
 				Type.Literal("steer"),
+				Type.Literal("invalidate"),
 				Type.Literal("health"),
 				Type.Literal("graph"),
 				Type.Literal("onboard"),

@@ -1051,13 +1051,28 @@ function parseOtlpConfig(value: unknown): CrewOtlpConfig | undefined {
 	if (rawHeaders)
 		for (const [key, entry] of Object.entries(rawHeaders)) {
 			if (typeof entry !== "string") continue;
-			// Prevent prototype pollution via __proto__ / constructor / prototype keys.
+			// Prevent prototype pollution via dangerous Object.prototype keys.
+			// Case-insensitive check to catch __Proto__, CONSTRUCTOR, etc.
+			const lowerKey = key.toLowerCase();
 			if (
-				key === "__proto__" ||
-				key === "constructor" ||
-				key === "prototype"
+				lowerKey === "__proto__" ||
+				lowerKey === "constructor" ||
+				lowerKey === "prototype" ||
+				lowerKey === "hasownproperty" ||
+				lowerKey === "tostring" ||
+				lowerKey === "valueof" ||
+				lowerKey === "isprototypeof" ||
+				lowerKey === "propertyisenumerable" ||
+				lowerKey === "tolocalestring" ||
+				lowerKey === "__definegetter__" ||
+				lowerKey === "__definesetter__" ||
+				lowerKey === "__lookupgetter__" ||
+				lowerKey === "__lookupsetter__"
 			)
 				continue;
+			// Validate key format: must start with letter, then alphanumeric/hyphen/underscore.
+			// Blocks CRLF, NUL, spaces, shell metacharacters in header keys.
+			if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,127}$/.test(key)) continue;
 			headers[key] = entry;
 		}
 	const otlp: CrewOtlpConfig = {

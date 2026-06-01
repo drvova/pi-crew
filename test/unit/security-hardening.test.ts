@@ -115,3 +115,94 @@ test("project config cannot override sensitive user trust-boundary settings", ()
 		fs.rmSync(root, { recursive: true, force: true });
 	}
 });
+
+// FIX: OTLP header key validation
+// Previously, only header values were validated for \r\n\x00 injection;
+// header keys were not checked, allowing CRLF or shell metacharacters.
+test("OTLP headers block prototype pollution attempts", () => {
+	const previousHome = process.env.PI_TEAMS_HOME;
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-otlp-pollution-"));
+	const home = path.join(root, "home");
+	const cwd = path.join(root, "project");
+	fs.mkdirSync(home, { recursive: true });
+	fs.mkdirSync(cwd, { recursive: true });
+	try {
+		process.env.PI_TEAMS_HOME = home;
+		fs.mkdirSync(path.dirname(configPath()), { recursive: true });
+		fs.writeFileSync(
+			configPath(),
+			JSON.stringify({
+				otlp: {
+					endpoint: "https://collector.example.com",
+					headers: {
+						"__proto__": "polluted",
+						"constructor": "polluted",
+						"hasOwnProperty": "polluted",
+						"toString": "polluted",
+						"valueOf": "polluted",
+						"X-Legit-Header": "value",
+					},
+				},
+			}),
+			"utf-8",
+		);
+
+		const loaded = loadConfig(cwd);
+		const headers = loaded.config.otlp?.headers as Record<string, string> | undefined;
+		const has = (key: string) => Object.prototype.hasOwnProperty.call(headers ?? {}, key);
+		// Dangerous keys should be stripped
+		assert.equal(has("__proto__"), false);
+		assert.equal(has("constructor"), false);
+		assert.equal(has("hasOwnProperty"), false);
+		assert.equal(has("toString"), false);
+		// Legitimate keys should pass
+		assert.equal(headers?.["X-Legit-Header"], "value");
+		// Verify the legitimate key is the only one
+		assert.equal(Object.keys(headers ?? {}).length, 1);
+	} finally {
+		if (previousHome === undefined) delete process.env.PI_TEAMS_HOME;
+		else process.env.PI_TEAMS_HOME = previousHome;
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("OTLP headers block malformed key formats", () => {
+	const previousHome = process.env.PI_TEAMS_HOME;
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-otlp-malformed-"));
+	const home = path.join(root, "home");
+	const cwd = path.join(root, "project");
+	fs.mkdirSync(home, { recursive: true });
+	fs.mkdirSync(cwd, { recursive: true });
+	try {
+		process.env.PI_TEAMS_HOME = home;
+		fs.mkdirSync(path.dirname(configPath()), { recursive: true });
+		fs.writeFileSync(
+			configPath(),
+			JSON.stringify({
+				otlp: {
+					endpoint: "https://collector.example.com",
+					headers: {
+						"X-Inject\r\n": "value",
+						"X Space": "value",
+						"X.Slash.Path": "value",
+						"1-Start-With-Digit": "value",
+						"X-Valid": "value",
+					},
+				},
+			}),
+			"utf-8",
+		);
+
+		const loaded = loadConfig(cwd);
+		// Only valid key should pass
+		assert.equal(loaded.config.otlp?.headers?.["X-Valid"], "value");
+		assert.equal(loaded.config.otlp?.headers?.["X-Inject\r\n"], undefined);
+		assert.equal(loaded.config.otlp?.headers?.["X Space"], undefined);
+		assert.equal(loaded.config.otlp?.headers?.["X.Slash.Path"], undefined);
+		assert.equal(loaded.config.otlp?.headers?.["1-Start-With-Digit"], undefined);
+	} finally {
+		if (previousHome === undefined) delete process.env.PI_TEAMS_HOME;
+		else process.env.PI_TEAMS_HOME = previousHome;
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
