@@ -274,8 +274,9 @@ export function createSafeBash(options: SafeBashOptions = {}) {
  * These can be used in allowPatterns for specific use cases
  */
 export const COMMON_SAFE_PATTERNS = {
-	// Safe rm with specific paths - uses simple contains check
-	safeRm: /rm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)?((?![\/~])\/)?(tmp|cache|node_modules|dist|build)\//,
+	// FIX: Stricter regex — target must be exactly tmp/, cache/, node_modules/, dist/, or build/
+	// (with optional ./ prefix). Rejects path traversal (./../../../other) and absolute paths.
+	safeRm: /rm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)?(?:\.\/)?(?:tmp|cache|node_modules|dist|build)\/[a-zA-Z0-9._/-]+$/,
 	// Safe git operations
 	safeGit: /\bgit\s+(clone|pull|push|commit|add|status|diff|log|branch|checkout|merge|rebase)/,
 	// Safe npm/yarn/pnpm

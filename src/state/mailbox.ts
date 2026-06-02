@@ -6,6 +6,7 @@ import { redactSecrets } from "../utils/redaction.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { atomicWriteFile } from "./atomic-write.ts";
 import { withEventLogLockSync } from "./event-log.ts";
+import { DEFAULT_MAILBOX } from "../config/defaults.ts";
 
 export type MailboxDirection = "inbox" | "outbox";
 export type MailboxMessageStatus = "queued" | "delivered" | "acknowledged";
@@ -228,7 +229,7 @@ function safeReadMailboxFile(filePath: string, direction: MailboxDirection): Mai
  * primary file. Readers continue to see all messages because
  * `safeReadMailboxFile` walks both the primary file and any archives.
  */
-const MAILBOX_ARCHIVE_THRESHOLD_BYTES = 10 * 1024 * 1024;
+const MAILBOX_ARCHIVE_THRESHOLD_BYTES = DEFAULT_MAILBOX.perFileThresholdBytes;
 function rotateMailboxFileIfNeeded(filePath: string, thresholdBytes = MAILBOX_ARCHIVE_THRESHOLD_BYTES): boolean {
 	try {
 		if (!fs.existsSync(filePath)) return false;
@@ -238,10 +239,33 @@ function rotateMailboxFileIfNeeded(filePath: string, thresholdBytes = MAILBOX_AR
 		const archivePath = `${filePath}.${ts}.archive.jsonl`;
 		fs.renameSync(filePath, archivePath);
 		fs.writeFileSync(filePath, "", "utf-8");
+		// FIX: Prune old archives so total per-direction count stays bounded.
+		pruneOldMailboxArchives(filePath);
 		return true;
 	} catch (error) {
 		logInternalError("mailbox.rotate", error, filePath);
 		return false;
+	}
+}
+
+/**
+ * Keep at most `DEFAULT_MAILBOX.maxArchivesPerDirection` archive files per
+ * mailbox. Older archives are deleted. Prevents unbounded growth on long runs.
+ */
+function pruneOldMailboxArchives(mailboxFilePath: string): void {
+	try {
+		const dir = path.dirname(mailboxFilePath);
+		const base = path.basename(mailboxFilePath);
+		const archives = fs
+			.readdirSync(dir)
+			.filter((f) => f.startsWith(base) && f.includes(".archive.jsonl"))
+			.sort(); // Chronological (ISO timestamp in filename)
+		const excess = archives.length - DEFAULT_MAILBOX.maxArchivesPerDirection;
+		for (let i = 0; i < excess; i += 1) {
+			fs.rmSync(path.join(dir, archives[i]), { force: true });
+		}
+	} catch (error) {
+		logInternalError("mailbox.prune", error, mailboxFilePath);
 	}
 }
 

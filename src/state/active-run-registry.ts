@@ -135,7 +135,16 @@ export function readActiveRunRegistry(maxEntries = DEFAULT_CACHE.manifestMaxEntr
 }
 
 function writeEntries(entries: ActiveRunRegistryEntry[]): void {
-	const trimmed = entries.slice(0, DEFAULT_CACHE.manifestMaxEntries);
+	const max = DEFAULT_CACHE.manifestMaxEntries;
+	// FIX: Emit warning when entries overflow the cap, instead of silent drop.
+	if (entries.length > max) {
+		logInternalError(
+			"active-run-registry.overflow",
+			new Error(`${entries.length - max} entries dropped (cap=${max})`),
+			JSON.stringify({ dropped: entries.length - max, total: entries.length, cap: max }),
+		);
+	}
+	const trimmed = entries.slice(0, max);
 	fs.mkdirSync(path.dirname(registryPath()), { recursive: true });
 	// 2.4 — dual-ship: write both formats. Readers prefer binary; legacy
 	// readers (other tools / older releases) keep using the JSON file.

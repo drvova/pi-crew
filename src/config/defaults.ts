@@ -91,6 +91,11 @@ export const DEFAULT_CACHE = {
 	manifestMaxEntries: 64,
 };
 
+export const DEFAULT_MAILBOX = {
+	perFileThresholdBytes: 10 * 1024 * 1024, // 10MB per mailbox file
+	maxArchivesPerDirection: 10, // Keep at most 10 archives per direction per run
+};
+
 export const DEFAULT_SUBAGENT = {
 	stuckBlockedNotifyMs: 5 * 60_000,
 };

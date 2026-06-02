@@ -205,6 +205,20 @@ export async function runTeamTask(
 			input.taskRuntimeOverride ??
 			input.runtimeKind ??
 			(input.executeWorkers ? "child-process" : "scaffold");
+		// FIX: Check signal before persisting state — if cancelled, skip the write.
+		if (input.signal?.aborted) {
+			const cancelReason = cancellationReasonFromSignal(input.signal);
+			const cancelledTask: TeamTaskState = {
+				...task,
+				status: "cancelled",
+				error: `${cancelReason.code}: ${cancelReason.message}`,
+				finishedAt: new Date().toISOString(),
+			};
+			return {
+				manifest: input.manifest,
+				tasks: updateTask(tasks, cancelledTask),
+			};
+		}
 		tasks = persistSingleTaskUpdate(manifest, tasks, task);
 		if (runtimeKind === "child-process")
 			({ task, tasks } = checkpointTask(
