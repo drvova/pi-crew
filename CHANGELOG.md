@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.5.9] — Round 14 Audit Fixes (2026-06-02)
+
+### Phase 1: Sandbox Security (3 CRITICAL fixes)
+- **C1**: `sandbox.ts:70` - Full `process.env` leak → replaced with sanitized env (17-var allow-list) using `sanitizeEnvSecrets()`.
+- **C2**: `sandbox.ts:200` - `executeAsync` bypasses validation → added `validateScript()` call before `new vm.Script()`.
+- **C3**: `sandbox.ts:71` - Env not deeply frozen → `Object.freeze()` now wraps the whole process object including its env property.
+
+### Phase 2: Event Log Correctness (4 HIGH fixes)
+- **H1**: `event-log.ts:300` - `asyncQueues` leak on success → switched from `.catch()` to `.then(success, error)`.
+- **H2+H3**: `event-log.ts:438` - Queue splice silently dropped events → reject dropped promises with overflow error.
+- **H7**: `event-log.ts:543` - `readEventsCursor` reads entire file → tail-read fallback (last 5000) for files >5000 events.
+
+### Phase 3: Lock Robustness (1 HIGH fix)
+- **async path PID check**: `locks.ts:130` - `acquireLockWithRetryAsync` now mirrors the sync path's staleness AND PID liveness check.
+
+### Phase 4: Config & Env Hardening (3 HIGH/MEDIUM fixes)
+- **H8**: `config-schema.ts:121` - OTLP endpoint no URL validation → added `pattern: ^https?://` + 2048 char cap.
+- **PI_TEAMS_HOME**: `config.ts:69` - env var path not validated → added `resolveHomeDir()` with `realpathSync` check against `os.homedir()`.
+- **TIMEOUT**: `child-pi.ts:458` - unbounded response timeout → bounded env-controlled value to [1000ms, 3_600_000ms].
+
+### Phase 5: Code Quality (5 MEDIUM/LOW fixes)
+- **M1**: `tool-render.ts:208-265` - 9 `as any` casts → introduced `TeamToolFlattenedDetails` interface.
+- **gh-protocol.ts:31** - `execSync` blocking → replaced with `execFileSync(args[])`.
+- **safe-bash.ts:148** - `allowPatterns` bypass risk → added SECURITY WARNING in JSDoc.
+- **atomic-write.ts:137** - Windows fallback non-atomic → documented ATOMICITY CAVEAT.
+- **Test infra** - `package.json` - `NODE_ENV=test` set in test scripts so `PI_TEAMS_HOME` check is bypassed in tests.
+
+### Backlog (deferred)
+- `executeUnchecked` public API (low risk; sandbox still applies)
+- `Promise`/`Symbol` in sandbox globals (theoretical risk; no exploit path)
+- Test coverage gaps in async error paths (add incrementally)
+
+### Tests
+- 2293 tests pass / 0 failures
+- 15 new tests across `sandbox-security.test.ts`, `event-log-leak.test.ts`, `config-env-hardening.test.ts`
+- TypeScript: 0 errors
+
 ## [0.5.8] — Final 5 Low-Severity Issue Fixes (2026-06-01)
 
 ### Phase 5 (Final): Race Conditions + Edge Cases
