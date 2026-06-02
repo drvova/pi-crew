@@ -6,6 +6,7 @@ import { redactSecrets } from "../utils/redaction.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { atomicWriteFile } from "./atomic-write.ts";
 import { withEventLogLockSync } from "./event-log.ts";
+import { withFileLockSync } from "./locks.ts";
 import { DEFAULT_MAILBOX } from "../config/defaults.ts";
 
 export type MailboxDirection = "inbox" | "outbox";
@@ -419,29 +420,34 @@ export function updateMailboxMessageReply(manifest: TeamRunManifest, originalMes
 
 	for (const { filePath, direction } of filesToSearch) {
 		if (!fs.existsSync(filePath)) continue;
-		const lines = fs.readFileSync(filePath, "utf-8").split(/\r?\n/).filter(Boolean);
-		let found = false;
-		const updatedLines: string[] = [];
-		for (const line of lines) {
-			try {
-				const parsed = JSON.parse(line) as unknown;
-				const msg = parseMailboxMessage(parsed, direction);
-				if (msg && msg.id === originalMessageId) {
-					msg.repliedAt = new Date().toISOString();
-					msg.replyContent = replyContent;
-					updatedLines.push(JSON.stringify(redactSecrets(msg)));
-					found = true;
-				} else {
+		// FIX: Wrap read-modify-write in withFileLockSync to prevent concurrent
+		// updates from clobbering each other (each reply rewrites the whole file).
+		const found = withFileLockSync(filePath, () => {
+			const lines = fs.readFileSync(filePath, "utf-8").split(/\r?\n/).filter(Boolean);
+			let localFound = false;
+			const updatedLines: string[] = [];
+			for (const line of lines) {
+				try {
+					const parsed = JSON.parse(line) as unknown;
+					const msg = parseMailboxMessage(parsed, direction);
+					if (msg && msg.id === originalMessageId) {
+						msg.repliedAt = new Date().toISOString();
+						msg.replyContent = replyContent;
+						updatedLines.push(JSON.stringify(redactSecrets(msg)));
+						localFound = true;
+					} else {
+						updatedLines.push(line);
+					}
+				} catch {
 					updatedLines.push(line);
 				}
-			} catch {
-				updatedLines.push(line);
 			}
-		}
-		if (found) {
-			atomicWriteFile(filePath, `${updatedLines.join("\n")}\n`);
-			return;
-		}
+			if (localFound) {
+				atomicWriteFile(filePath, `${updatedLines.join("\n")}\n`);
+			}
+			return localFound;
+		});
+		if (found) return;
 	}
 	// Not finding the original is non-fatal; the reply is still delivered.
 }
@@ -464,26 +470,31 @@ export function validateMailbox(manifest: TeamRunManifest, options: { repair?: b
 	for (const direction of ["inbox", "outbox"] as const) {
 		if (options.signal?.aborted) break;
 		const filePath = mailboxFile(manifest, direction);
-		const lines = fs.readFileSync(filePath, "utf-8").split(/\r?\n/).filter(Boolean);
-		const validLines: string[] = [];
-		for (let i = 0; i < lines.length; i += 1) {
-			if (options.signal?.aborted) break;
-			const line = lines[i];
-			if (!line) continue;
-			try {
-				const parsed = JSON.parse(line) as unknown;
-				const message = parseMailboxMessage(parsed, direction);
-				if (!message) throw new Error("invalid message schema");
-				validLines.push(JSON.stringify(redactSecrets(message)));
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				issues.push({ level: "error", path: filePath, message });
+		// FIX: Wrap read + optional repair in withFileLockSync so concurrent appends
+		// don't race with the read-modify-write. Mailbox files are capped at 10MB
+		// (MAILBOX_ARCHIVE_THRESHOLD_BYTES), so the per-call memory is bounded.
+		withFileLockSync(filePath, () => {
+			const lines = fs.readFileSync(filePath, "utf-8").split(/\r?\n/).filter(Boolean);
+			const validLines: string[] = [];
+			for (let i = 0; i < lines.length; i += 1) {
+				if (options.signal?.aborted) break;
+				const line = lines[i];
+				if (!line) continue;
+				try {
+					const parsed = JSON.parse(line) as unknown;
+					const message = parseMailboxMessage(parsed, direction);
+					if (!message) throw new Error("invalid message schema");
+					validLines.push(JSON.stringify(redactSecrets(message)));
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					issues.push({ level: "error", path: filePath, message });
+				}
 			}
-		}
-		if (options.repair && validLines.length !== lines.length) {
-			atomicWriteFile(filePath, `${validLines.join("\n")}${validLines.length ? "\n" : ""}`);
-			repaired.push(filePath);
-		}
+			if (options.repair && validLines.length !== lines.length) {
+				atomicWriteFile(filePath, `${validLines.join("\n")}${validLines.length ? "\n" : ""}`);
+				repaired.push(filePath);
+			}
+		});
 	}
 	const delivery = readDeliveryState(manifest);
 	const allMessages = readMailbox(manifest);

@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.8] — Final 5 Low-Severity Issue Fixes (2026-06-01)
+
+### Phase 5 (Final): Race Conditions + Edge Cases
+
+- **Issue #12: `acquireLockWithRetry` race** (Low) — `src/state/locks.ts`: added `isLockHolderAlive()` check. Now uses BOTH staleness AND PID liveness: fresh + alive holder = fail, else = safe to clear. Prevents stealing a lock from a still-running process whose PID was recently reused.
+
+- **Issue #13: `loadRunManifestById` TOCTOU** (Low) — `src/state/state-store.ts`: retry-on-stat-mismatch approach. Re-stat and re-read in a loop (up to 3 attempts) until size/mtime are stable across stat and read. Catches torn writes without depending on `withFileLockSync`.
+
+- **Issue #14: `cleanupOldArtifacts` N stat calls** (Low) — `src/state/artifact-store.ts`: use `Dirent.isDirectory()` from `readdirSync({ withFileTypes: true })` to avoid `statSync` for type info. `statSync` now only for mtime.
+
+- **Issue #15: `validateMailbox` concurrent access** (Low) — `src/state/mailbox.ts`: wrap read + optional repair in `withFileLockSync`.
+
+- **Issue #16: `updateMailboxMessageReply` concurrent rewrite** (Low) — `src/state/mailbox.ts`: wrap read-modify-write in `withFileLockSync`.
+
+### Bug fix in `withFileLockSync`
+
+- `src/state/locks.ts`: use separate `.lock` sidecar instead of the file path itself. Previously `withFileLockSync(path)` used `path` as the lock file, colliding with append/read operations on the same path.
+
+### Tests
+
+- 2282 tests pass / 0 failures (`npm test`).
+
 ## [0.5.7] — 11 Issue Fixes Across 5 Phases (2026-06-01)
 
 ### Phase 1: Schema/Type Fixes

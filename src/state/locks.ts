@@ -40,6 +40,25 @@ function isLockStale(filePath: string, staleMs: number): boolean {
 	}
 }
 
+function isLockHolderAlive(filePath: string): boolean {
+	try {
+		const raw = fs.readFileSync(filePath, "utf-8");
+		const parsed = JSON.parse(raw) as { pid?: unknown };
+		const pid = typeof parsed.pid === "number" ? parsed.pid : undefined;
+		if (pid === undefined) return true; // Unknown holder — assume alive to be safe
+		try {
+			process.kill(pid, 0);
+			return true; // Signal 0 succeeded — process is alive
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			// EPERM: process exists but we don't have permission to signal it
+			return code === "EPERM";
+		}
+	} catch {
+		return true; // Can't read — assume alive to be safe
+	}
+}
+
 function writeLockFile(filePath: string): void {
 	const fd = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o644);
 	try {
@@ -62,11 +81,17 @@ function acquireLockWithRetry(filePath: string, staleMs: number): void {
 			if (Date.now() > deadline) {
 				throw new Error(`Run '${path.basename(filePath)}' is locked by another operation.`);
 			}
-			// If lock is not stale, fail fast (sync should not wait for active locks)
-			if (!isLockStale(filePath, staleMs)) {
+			// FIX: Use both staleness AND PID liveness to decide if we can steal
+			// a lock. Previously only staleness was checked, so a process whose
+			// PID was recently reused by another process could have its lock
+			// stolen even while still active. Now: fresh+alive = fail, else = clear.
+			const isStale = isLockStale(filePath, staleMs);
+			const isHolderAlive = isLockHolderAlive(filePath);
+			if (!isStale && isHolderAlive) {
+				// Lock is fresh AND holder is alive — fail fast
 				throw new Error(`Run '${path.basename(filePath)}' is locked by another operation.`);
 			}
-			// Lock is stale — try to clear it, but don't bail on rmSync error — let loop retry
+			// Lock is stale OR holder is dead — safe to clear
 			try {
 				fs.rmSync(filePath, { force: true });
 			} catch { /* race — let loop retry */ }
@@ -118,14 +143,19 @@ async function acquireLockWithRetryAsync(filePath: string, staleMs: number): Pro
  * Uses the same O_EXCL atomic create strategy as run locks.
  */
 export function withFileLockSync<T>(filePath: string, fn: () => T, options: RunLockOptions = {}): T {
+	// FIX: Use a separate .lock sidecar so the lock file doesn't collide with
+	// the file being protected. Previously withFileLockSync used the file path
+	// itself as the lock, which meant any operation on the same file (read,
+	// append, or even the lock acquisition itself) would race with the lock.
+	const lockFile = `${filePath}.lock`;
 	const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
-	fs.mkdirSync(path.dirname(filePath), { recursive: true });
-	acquireLockWithRetry(filePath, staleMs);
+	fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+	acquireLockWithRetry(lockFile, staleMs);
 	try {
 		return fn();
 	} finally {
 		try {
-			fs.rmSync(filePath, { force: true });
+			fs.rmSync(lockFile, { force: true });
 		} catch {
 			// Best-effort lock cleanup.
 		}
