@@ -16,6 +16,9 @@ export class Semaphore {
 	#max: number;
 	#current = 0;
 	#queue: Array<() => void> = [];
+	// FIX (Round 15): Cap the waiter queue to prevent unbounded memory growth
+	// if the semaphore is held for a long period and many tasks accumulate.
+	static readonly MAX_QUEUE = 10_000;
 
 	constructor(max: number) {
 		this.#max = Math.max(1, max);
@@ -25,6 +28,14 @@ export class Semaphore {
 		if (this.#current < this.#max) {
 			this.#current++;
 			return;
+		}
+		// FIX (Round 15): Reject when the waiter queue is full. The previous
+		// implementation let #queue grow without bound, risking memory
+		// exhaustion under sustained high concurrency with slow releases.
+		if (this.#queue.length >= Semaphore.MAX_QUEUE) {
+			throw new Error(
+				`Semaphore queue full: ${this.#queue.length} waiters (max ${Semaphore.MAX_QUEUE}); cannot acquire slot`,
+			);
 		}
 		const { promise, resolve } = (() => {
 			let res: () => void;

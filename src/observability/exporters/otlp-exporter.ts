@@ -8,6 +8,13 @@ import type { MetricExporter } from "./adapter.ts";
 
 const gzipAsync = promisify(gzip);
 
+// FIX (Round 15): Cap the number of snapshots per push to prevent OOM when
+// the metric registry has grown large. The OTLP HTTP spec allows many metrics
+// in one payload, but a single push > 10_000 metrics would balloon the
+// request body (gzipped or not) and likely exceed the collector's request
+// size limit.
+const MAX_SNAPSHOTS_PER_PUSH = 5_000;
+
 export interface OTLPExporterOptions {
 	endpoint: string;
 	headers?: Record<string, string>;
@@ -57,6 +64,9 @@ export function convertToOTLP(snapshots: MetricSnapshot[]): unknown {
 export class OTLPExporter implements MetricExporter {
 	name = "otlp";
 	private timer?: ReturnType<typeof setInterval>;
+	// FIX (Round 15): Track in-flight pushes so a slow network cannot cause
+	// the setInterval to overlap and pile up concurrent requests.
+	private inFlight: Promise<void> | null = null;
 	private readonly opts: OTLPExporterOptions;
 	private readonly registry: MetricRegistry;
 
@@ -67,12 +77,27 @@ export class OTLPExporter implements MetricExporter {
 
 	start(): void {
 		this.dispose();
-		this.timer = setInterval(() => { void this.push(this.registry.snapshot()); }, this.opts.intervalMs ?? 60_000);
+		this.timer = setInterval(() => {
+			// Skip if a previous push is still running; the next tick will retry.
+			if (this.inFlight) return;
+			const snap = this.registry.snapshot();
+			this.inFlight = this.push(snap).finally(() => { this.inFlight = null; });
+		}, this.opts.intervalMs ?? 60_000);
 		this.timer.unref();
 	}
 
 	async push(snapshots: MetricSnapshot[]): Promise<void> {
 		try {
+			// FIX (Round 15): Cap snapshots to a safe size to avoid OOM and
+			// oversized HTTP payloads. Log a warning if we are truncating.
+			let toSend = snapshots;
+			if (snapshots.length > MAX_SNAPSHOTS_PER_PUSH) {
+				logInternalError(
+					"otlp-export-cap",
+					new Error(`Snapshot count ${snapshots.length} exceeds cap ${MAX_SNAPSHOTS_PER_PUSH}; truncating`),
+				);
+				toSend = snapshots.slice(0, MAX_SNAPSHOTS_PER_PUSH);
+			}
 			const timeoutMs = this.opts.timeoutMs ?? 10_000;
 			const controller = new AbortController();
 			const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -80,7 +105,7 @@ export class OTLPExporter implements MetricExporter {
 				// 4.2: gzip body. OTLP HTTP exporters of every flavour accept
 				// `content-encoding: gzip`; collectors expect uncompressed JSON
 				// otherwise. Saves bandwidth on metric-heavy runs (often 3-5x).
-				const json = JSON.stringify(convertToOTLP(snapshots));
+				const json = JSON.stringify(convertToOTLP(toSend));
 				const body = await gzipAsync(Buffer.from(json));
 				const response = await fetch(this.opts.endpoint, {
 					method: "POST",

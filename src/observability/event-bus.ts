@@ -1,3 +1,4 @@
+import { logInternalError } from "../utils/internal-error.ts";
 import type { AgentProgress } from "../runtime/progress-tracker.ts";
 
 export type CrewEventType =
@@ -44,7 +45,11 @@ class EventBus {
         try {
           listener(event);
         } catch (e) {
-          console.error("[EventBus] Listener error:", e);
+          // FIX (Round 15, L1): Use logInternalError for consistency with
+          // the rest of the codebase. Previously console.error may not be
+          // visible in all environments (e.g. JSON-RPC mode, redirected
+          // stderr).
+          logInternalError("event-bus.listener", e, `type=${event.type} runId=${event.runId}`);
         }
       }
     }

@@ -63,6 +63,12 @@ export interface LiveAgentHandle {
 }
 
 const liveAgents = new Map<string, LiveAgentHandle>();
+// FIX (Round 15): Cap the number of tracked live agents to prevent unbounded
+// growth if a caller spawns agents but fails to unregister them. When the
+// cap is reached, the oldest completed agent is evicted first; if no
+// completed agents are present, the oldest running one is evicted (with a
+// warning) to keep memory bounded.
+const MAX_LIVE_AGENTS = 5_000;
 
 /**
  * List all live agents for a specific workspace.
@@ -100,6 +106,22 @@ export function registerLiveAgent(input: Omit<LiveAgentHandle, "createdAt" | "up
 			modelName: undefined,
 		},
 	};
+	// FIX (Round 15): Enforce the live-agent cap before adding. Prefer to
+	// evict the oldest completed agent (already finished, so caller no
+	// longer needs it). If none exist, evict the oldest running one with
+	// a warning so memory stays bounded.
+	if (liveAgents.size >= MAX_LIVE_AGENTS) {
+		const completed = [...liveAgents.entries()].find(([, h]) => h.activity.completedAtMs > 0);
+		if (completed) {
+			liveAgents.delete(completed[0]);
+		} else {
+			const oldestKey = liveAgents.keys().next().value;
+			if (oldestKey !== undefined) {
+				logInternalError("live-agent-manager.cap", new Error(`liveAgents at cap ${MAX_LIVE_AGENTS}; evicting oldest ${oldestKey}`));
+				liveAgents.delete(oldestKey);
+			}
+		}
+	}
 	liveAgents.set(input.agentId, handle);
 	try { if (eventLogFn && eventsPath) eventLogFn(eventsPath, { type: "live_agent.registered", runId: input.runId, taskId: input.taskId, message: `Live agent registered: ${input.agent} (${input.role})`, data: { agentId: input.agentId, role: input.role, agent: input.agent, workspaceId: input.workspaceId } }); } catch { /* non-critical */ }
 	if (handle.pendingSteers.length && typeof handle.session.steer === "function") {
