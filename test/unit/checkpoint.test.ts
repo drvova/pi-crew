@@ -186,3 +186,100 @@ test("formatAllCheckpoints: handles empty", () => {
   const formatted = formatAllCheckpoints("nonexistent_run");
   assert.ok(formatted.includes("No checkpoints found"));
 });
+
+test("saveCheckpoint: rejects path-traversal runId", () => {
+  assert.throws(
+    () => saveCheckpoint("../../../etc/passwd", "01", 1, "ctx", "progress", "agent"),
+    /Invalid runId/,
+  );
+});
+
+test("saveCheckpoint: rejects path-traversal taskId", () => {
+  assert.throws(
+    () => saveCheckpoint("valid_run", "../../../etc/passwd", 1, "ctx", "progress", "agent"),
+    /Invalid taskId/,
+  );
+});
+
+test("saveCheckpoint: rejects runId with slash", () => {
+  assert.throws(
+    () => saveCheckpoint("foo/bar", "01", 1, "ctx", "progress", "agent"),
+    /Invalid runId/,
+  );
+});
+
+test("saveCheckpoint: rejects runId with backslash", () => {
+  assert.throws(
+    () => saveCheckpoint("foo\\bar", "01", 1, "ctx", "progress", "agent"),
+    /Invalid runId/,
+  );
+});
+
+test("loadCheckpoint: rejects path-traversal runId", () => {
+  assert.throws(
+    () => loadCheckpoint("../etc/passwd", "01"),
+    /Invalid runId/,
+  );
+});
+
+test("loadCheckpoint: rejects path-traversal taskId", () => {
+  assert.throws(
+    () => loadCheckpoint("valid_run", "../etc/passwd"),
+    /Invalid taskId/,
+  );
+});
+
+test("clearCheckpoint: rejects path-traversal IDs", () => {
+  assert.throws(
+    () => clearCheckpoint("../etc/passwd", "01"),
+    /Invalid runId/,
+  );
+  assert.throws(
+    () => clearCheckpoint("valid", "../etc/passwd"),
+    /Invalid taskId/,
+  );
+});
+
+test("hasCheckpoint: rejects path-traversal IDs", () => {
+  assert.throws(
+    () => hasCheckpoint("../etc/passwd", "01"),
+    /Invalid runId/,
+  );
+  assert.throws(
+    () => hasCheckpoint("valid", "../etc/passwd"),
+    /Invalid taskId/,
+  );
+});
+
+test("listCheckpoints: rejects path-traversal runId", () => {
+  assert.throws(
+    () => listCheckpoints("../etc/passwd"),
+    /Invalid runId/,
+  );
+});
+
+test("FileCheckpointStore.save: rejects path-traversal taskId", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "checkpoint-test-"));
+  try {
+    const store = new FileCheckpointStore(dir);
+    assert.throws(
+      () => store.save({ runId: "r1", taskId: "../etc/passwd", step: 1, context: "", progress: "", savedAt: 1, agentId: "a" }),
+      /Invalid taskId/,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("FileCheckpointStore.load: rejects path-traversal taskId", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "checkpoint-test-"));
+  try {
+    const store = new FileCheckpointStore(dir);
+    assert.throws(
+      () => store.load("r1", "../etc/passwd"),
+      /Invalid taskId/,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

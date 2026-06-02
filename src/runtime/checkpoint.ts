@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { assertSafePathId } from "../utils/safe-paths.ts";
 
 export interface Checkpoint {
   runId: string;
@@ -51,12 +52,18 @@ export class FileCheckpointStore implements CheckpointStore {
   }
 
   save(checkpoint: Checkpoint): void {
+    // Validate taskId to prevent path traversal: the taskId is used to
+    // build a file path under this.checkpointDir(). Without validation, a
+    // malicious or buggy taskId like "../../../etc/passwd" could escape
+    // the checkpoints directory.
+    assertSafePathId("taskId", checkpoint.taskId);
     this.ensureDir();
     const p = this.checkpointPath(checkpoint.taskId);
     fs.writeFileSync(p, JSON.stringify(checkpoint, null, 2), "utf-8");
   }
 
   load(runId: string, taskId: string): Checkpoint | null {
+    assertSafePathId("taskId", taskId);
     const p = this.checkpointPath(taskId);
     if (!fs.existsSync(p)) return null;
 
@@ -71,6 +78,7 @@ export class FileCheckpointStore implements CheckpointStore {
   }
 
   delete(runId: string, taskId: string): void {
+    assertSafePathId("taskId", taskId);
     const p = this.checkpointPath(taskId);
     if (fs.existsSync(p)) {
       try {
@@ -139,6 +147,10 @@ export function saveCheckpoint(
   agentId: string,
   agentModel?: string,
 ): void {
+  // Validate both runId and taskId to prevent path traversal: these are
+  // used to build the file path under .crew/state/runs/<runId>/checkpoints/<taskId>.json.
+  assertSafePathId("runId", runId);
+  assertSafePathId("taskId", taskId);
   const checkpoint: Checkpoint = {
     runId,
     taskId,
@@ -160,6 +172,8 @@ export function saveCheckpoint(
  * Load a checkpoint for resuming.
  */
 export function loadCheckpoint(runId: string, taskId: string): Checkpoint | null {
+  assertSafePathId("runId", runId);
+  assertSafePathId("taskId", taskId);
   const stateRoot = path.join(process.cwd(), ".crew/state/runs", runId);
   const store = getCheckpointStore(stateRoot);
   return store.load(runId, taskId);
@@ -169,6 +183,8 @@ export function loadCheckpoint(runId: string, taskId: string): Checkpoint | null
  * Delete a checkpoint after successful completion.
  */
 export function clearCheckpoint(runId: string, taskId: string): void {
+  assertSafePathId("runId", runId);
+  assertSafePathId("taskId", taskId);
   const stateRoot = path.join(process.cwd(), ".crew/state/runs", runId);
   const store = getCheckpointStore(stateRoot);
   store.delete(runId, taskId);
@@ -178,6 +194,8 @@ export function clearCheckpoint(runId: string, taskId: string): void {
  * Check if a checkpoint exists for a task.
  */
 export function hasCheckpoint(runId: string, taskId: string): boolean {
+  assertSafePathId("runId", runId);
+  assertSafePathId("taskId", taskId);
   const stateRoot = path.join(process.cwd(), ".crew/state/runs", runId);
   const store = getCheckpointStore(stateRoot);
   return store.hasCheckpoint(runId, taskId);
@@ -187,6 +205,7 @@ export function hasCheckpoint(runId: string, taskId: string): boolean {
  * List all checkpoints for a run.
  */
 export function listCheckpoints(runId: string): Checkpoint[] {
+  assertSafePathId("runId", runId);
   const stateRoot = path.join(process.cwd(), ".crew/state/runs", runId);
   const store = getCheckpointStore(stateRoot);
   return store.list(runId);
