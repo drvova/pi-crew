@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.5.20] — Verification Sweep: 7 Fixes (2026-06-03)
+
+### Highlights
+- **Correctness bug fixed**: `enforceLabelCap` could silently evict actively-used metric entries
+- `Date` removed from forbidden globals (was blocking legitimate workflow scripts)
+- `scheduledJobs` properly typed in `CrewSettings` interface
+- 3 new tests for metric MRU eviction behavior
+
+### Fixes
+
+#### Correctness
+- `Counter.inc()` and `Gauge.set()` now delete-then-set to move keys to MRU position
+- Previously, `enforceLabelCap` could evict an entry that was just updated
+
+#### Consistency
+- Removed `Date` from `FORBIDDEN_GLOBALS` in `DynamicScriptRunner`
+- `Date` is not dangerous — was causing false positives for `myDate`, `updateDate`, etc.
+- `DynamicScriptRunner` and `WorkflowSandbox` now consistent
+
+#### Type Safety
+- Added `scheduledJobs?: unknown[]` to `CrewSettings` interface
+- Removed `as any` cast in `register.ts` (now uses `as ScheduledJob`)
+
+#### Code Quality
+- Removed dead `reason` variable in `settings-store.ts`
+- Added trailing newline to `event-bus.ts` (POSIX compliance)
+- Added 3 tests for Counter/Gauge MRU eviction behavior
+
+### Stats
+- Test suite: 2658+ pass + 1 skip, 0 fail
+- TypeScript: 0 errors
+- Security: All 7 SEC-* issues confirmed still fixed
+
 ## [0.5.19] — Final Sweep: 8 MEDIUM/LOW Fixes + 2 Test Fixes (2026-06-03)
 
 ### Highlights
