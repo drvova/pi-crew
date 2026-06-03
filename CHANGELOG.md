@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.5.18] — Final Review Fixes (2026-06-03)
+
+### Highlights
+- **4 HIGH issues fixed** from comprehensive final review of entire codebase
+- CI now properly fails when tests fail (`npm test` exits non-zero)
+- Sandbox prototype freeze scoped to VM context (no host process impact)
+- Safe-bash extension delegates to core module (eliminated ReDoS regression)
+- Shell injection eliminated in project-detector (`execSync` → `execFileSync`)
+
+### Fixes
+
+#### HIGH: CI exit code
+- `tsx --test` always exits 0 even with failing tests — masked regressions in CI
+- Added `scripts/test-runner.mjs` wrapper that parses test output and exits 1 on failures
+- Updated `test:unit` and `test:integration` npm scripts
+
+#### HIGH: Sandbox prototype freeze scope
+- `Object.freeze(Object.prototype)` in `WorkflowSandbox` constructor affected entire Node.js process
+- Moved freeze inside VM context via `vm.runInContext()` — only freezes when sandbox is created, skipped in `NODE_ENV=test`
+- Context object itself frozen (process-safe, only freezes our record)
+
+#### HIGH: Shell injection risk in project-detector
+- `execSync("git remote get-url origin")` passed through `/bin/sh -c` — any interpolated variable would be vulnerable
+- Replaced with `execFileSync("git", ["remote", "get-url", "origin"])` — no shell interpretation
+
+#### HIGH: ReDoS regression in safe-bash-extension
+- Extension duplicated outdated regex patterns with O(n²) backtracking
+- Refactored to import `isDangerous()` from `safe-bash.ts` (linear-time scanner)
+- Eliminated code divergence between core and extension modules
+
+### Stats
+- Test suite: 2698 pass + 1 skip, 0 fail
+- TypeScript: 0 errors
+- Files changed: 5
+- Security issues fixed: 4 HIGH
+
 ## [0.5.17] — Security Hardening + ECC Patterns + Skill Review (2026-06-03)
 
 ### Highlights
