@@ -2,7 +2,7 @@
 
 **Author:** pi-crew team  
 **Date:** 2026-06-01  
-**Version:** 0.5.5
+**Version:** 0.5.5 *(covers v0.4→v0.5 migration; later v0.5.x versions are drop-in replacements)*
 
 ---
 

@@ -16,7 +16,7 @@ Maps pi-crew behavior to proof. Every row must have real validation evidence.
 
 | Story | Contract | Unit | Integration | CI | Status | Evidence |
 |-------|----------|------|-------------|-----|--------|----------|
-| Core team run | `docs/product/team-run.md` | yes | yes | yes 3/3 | implemented | 1655 tests pass (268 unit + 14 integration files) |
+| Core team run | `docs/product/team-run.md` | yes | yes | yes 3/3 | implemented | 2703 tests pass (133 suites) |
 | Child process runner | `docs/product/child-process.md` | yes | yes | yes 3/3 | implemented | child-pi-pool.test.ts, child-pi-timeout.test.ts, mock-child-run.test.ts |
 | Async runner | `docs/product/async-runner.md` | yes | yes | yes 3/3 | implemented | async-runner.test.ts, async-restart-recovery.test.ts |
 | Live session | `docs/product/live-session.md` | yes | no | yes 3/3 | implemented | live-session-context.test.ts, live-session-runtime.test.ts |

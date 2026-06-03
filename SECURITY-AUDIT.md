@@ -3,7 +3,7 @@
 **Document Version:** 1.0  
 **Date:** 2026-05-25  
 **Auditor:** Security Reviewer  
-**Scope:** pi-crew v0.3.8  
+**Scope:** pi-crew v0.3.8 (original audit) — findings verified fixed through v0.5.22  
 
 ---
 

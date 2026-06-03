@@ -1,7 +1,7 @@
 # Security Issues Report — pi-crew
 
-**Document version:** 2.0  
-**Date:** 2026-06-01 (updated for v0.5.5)  
+**Document version:** 3.0  
+**Date:** 2026-06-03 (updated for v0.5.22)  
 **Original Date:** 2026-05-25  
 **Related Issues:** GitHub Issue #16  
 **Severity classification:** Per [OWASP Agent Security](https://github.com/OWASP/www-project-agent-security-for-llm-applications) and [AgentThreatBench](https://github.com/vgudur-dev/AgentThreatBench)
@@ -10,13 +10,18 @@
 
 ## Executive Summary
 
-pi-crew contains **4 high/critical severity vulnerabilities** in its agent discovery and dynamic registration system. These vulnerabilities allow an attacker with write access to a project directory (or the ability to call `registerDynamicAgent`) to:
+pi-crew v0.5.22 has undergone **38 rounds of security review**. All known vulnerabilities have been fixed:
 
-1. Inject arbitrary instructions into worker LLM prompts
-2. Escalate privileges by shadowing builtin agents
-3. Bypass security tooling via misleading source attribution
+| Round | Version | Issues Fixed | Severity |
+|-------|---------|-------------|----------|
+| 1-19 | v0.5.5–v0.5.14 | SEC-001 – SEC-007 | CRITICAL → MEDIUM |
+| 20-33 | v0.5.15–v0.5.17 | ReDoS, prototype pollution, path traversal, env leaks | CRITICAL + HIGH |
+| 34-36 | v0.5.18–v0.5.19 | CI exit code, sandbox scope, shell injection, ReDoS regression | HIGH + MEDIUM |
+| 37-38 | v0.5.20–v0.5.22 | Safe-bash bypass, bounded reads, frozen config | HIGH + MEDIUM |
 
-**No production deployment should use pi-crew with untrusted project files until these are fixed.**
+**Total: 3 CRITICAL + 6 HIGH + 3 MEDIUM security issues resolved.**
+
+**Original advisory (SEC-001 – SEC-004) is preserved below for reference.**
 
 ---
 

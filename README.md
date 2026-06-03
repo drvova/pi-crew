@@ -9,18 +9,22 @@ npm: pi-crew
 repo: https://github.com/baphuongna/pi-crew
 ```
 
-**v0.5.15**: See [CHANGELOG.md](CHANGELOG.md).
+**v0.5.22**: See [CHANGELOG.md](CHANGELOG.md).
 
-### Security highlights (v0.5.5)
+### Security highlights (v0.5.22)
 
 - **ReDoS-free secret redaction** — linear-time scanning in `redaction.ts`; no catastrophic backtracking
 - **v8.deserialize hardened** — `BINARY_MAGIC` header guards on registry binaries prevent untrusted-file RCE
 - **Cache lock protection** — `withFileLockSync` and atomic writes across `run-cache.ts` and `state-store.ts`
-- **Shell injection prevented** — shell-metacharacter blocking in `benchmark-runner.ts`
+- **Shell injection prevented** — `execFileSync` with array args everywhere (no shell-interpreted strings)
+- **Safe-bash line-continuation hardening** — `$\n(evil)` command substitution bypass blocked
+- **Sandbox prototype isolation** — `Object.freeze` scoped to VM context (not host process)
+- **Path traversal mitigated** — `resolveContainedPath`/`resolveRealContainedPath` across all file ops
 - **TOCTOU-free file ops** — atomic `mkdirSync` in `crew-init.ts`; `realpath`-based path validation
-- **Memory leaks capped** — `MAX_HANDOFFS_PER_ANCHOR=100`, `MAX_DELIVERY_MESSAGES=10000`, `MAX_RUNS=1000`
+- **Memory leaks capped** — Maps, Sets, arrays bounded with eviction across all modules
 - **Inline secret detection** — `token=`, `api_key=`, `password=` patterns redacted at event/mailbox boundaries
-- **Subagent log scrubbing** — pre-aborted signal logging no longer dumps unredacted params
+- **CI exit code enforced** — `test-runner.mjs` wrapper ensures non-zero exit on failures
+- **38 audit rounds, 160+ issues fixed** — 3 CRITICAL + 6 HIGH + 3 MEDIUM security issues resolved
 
 See [SECURITY-ISSUES.md](SECURITY-ISSUES.md) for the full list (SEC-001 – SEC-007 all marked fixed).
 

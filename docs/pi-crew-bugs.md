@@ -1,6 +1,7 @@
 # Historical Bug Reports (v0.2.x)
 
-> **Current version: v0.5.2** — See [CHANGELOG.md](../CHANGELOG.md) for all bug fixes.
+> **Current version: v0.5.22** — See [CHANGELOG.md](../CHANGELOG.md) for all bug fixes.
+> This page tracks historical bugs from v0.2.x. All listed bugs are fixed.
 
 ---
 

@@ -1,7 +1,7 @@
 # pi-crew Deep Review Report
 
 **Project:** pi-crew  
-**Version:** v0.5.2  
+**Version:** v0.5.2 *(historical — current version is v0.5.22)*  
 **Review Date:** 2026-05-28  
 **Updated:** 2026-05-29  
 **Reviewers:** Security Reviewer, Code Reviewer, Documentation Reviewer
