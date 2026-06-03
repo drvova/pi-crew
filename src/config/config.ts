@@ -520,8 +520,14 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 function parseWithSchema<T extends TSchema>(
 	schema: T,
 	value: unknown,
+	context?: string,
 ): Static<T> | undefined {
-	if (!Value.Check(schema, value)) return undefined;
+	if (!Value.Check(schema, value)) {
+		if (context) {
+			logInternalError("config.parseWithSchema", undefined, `${context}: schema validation failed`);
+		}
+		return undefined;
+	}
 	return Value.Decode(schema, value);
 }
 

@@ -1278,3 +1278,8 @@ export function installCrewGlobalRegistry(): void {
 		listDynamicAgents,
 	});
 }
+
+/** Remove the global CrewRegistry singleton. Call during session cleanup. */
+export function uninstallCrewGlobalRegistry(): void {
+	delete (globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY];
+}

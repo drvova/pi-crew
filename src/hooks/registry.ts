@@ -30,6 +30,9 @@ export async function executeHook(name: HookName, ctx: HookContext): Promise<Hoo
 	// SECURITY: If ctx contains a workspaceId, filter hooks to only those scoped to
 	// this workspace. This prevents globally-registered hooks from operating on runs
 	// they weren't designed for.
+	// SECURITY: Hooks without workspaceId match ALL workspaces. This is intentional
+	// for globally-applicable hooks (e.g., logging, metrics). For multi-tenant
+	// environments, all hooks should set workspaceId to prevent cross-workspace access.
 	const scopedHooks = hooks.filter((h) => !h.workspaceId || h.workspaceId === ctx.workspaceId);
 	if (scopedHooks.length === 0) return { hookName: name, outcome: "allow", durationMs: 0 };
 	const start = Date.now();

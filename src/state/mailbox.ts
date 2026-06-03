@@ -327,6 +327,18 @@ function writeDeliveryState(manifest: TeamRunManifest, state: MailboxDeliverySta
 	atomicWriteFile(deliveryFile(manifest, true), `${JSON.stringify(redactSecrets(state), null, 2)}\n`);
 }
 
+/**
+ * Append a message to a run's or task's mailbox.
+ *
+ * SECURITY NOTE: The `from` field is caller-declared — there is no cryptographic
+ * sender authentication. This is acceptable because `appendMailboxMessage` is an
+ * internal API only callable from within the pi-crew process (no external input).
+ * All callers (handleSteer, handleRespond, handleFollowUp) derive `from` from
+ * authenticated context (session role, task assignment).
+ *
+ * If pi-crew ever exposes mailbox writes to external/untrusted input, sender
+ * authentication (HMAC or session key) must be added.
+ */
 export function appendMailboxMessage(manifest: TeamRunManifest, message: Omit<MailboxMessage, "id" | "runId" | "createdAt" | "status"> & { id?: string; status?: MailboxMessageStatus }): MailboxMessage {
 	if (message.taskId) ensureTaskMailbox(manifest, message.taskId);
 	else ensureRunMailbox(manifest);

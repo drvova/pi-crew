@@ -1,4 +1,14 @@
-export const DEFAULT_CHILD_PI = {
+export const DEFAULT_CHILD_PI: Readonly<{
+	postExitStdioGuardMs: number;
+	finalDrainMs: number;
+	hardKillMs: number;
+	responseTimeoutMs: number;
+	maxCaptureBytes: number;
+	maxAssistantTextChars: number;
+	maxToolResultChars: number;
+	maxToolInputChars: number;
+	maxCompactContentChars: number;
+}> = {
 	postExitStdioGuardMs: 3000,
 	finalDrainMs: 5000,
 	hardKillMs: 3000,

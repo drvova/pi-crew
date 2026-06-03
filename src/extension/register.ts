@@ -20,6 +20,7 @@ import { registerAutonomousPolicy } from "./autonomous-policy.ts";
 import { registerCleanupHandler } from "./crew-cleanup.ts";
 import type { ScheduledJob } from "../runtime/scheduler.ts";
 import { clearHooks } from "../hooks/registry.ts";
+import { uninstallCrewGlobalRegistry } from "./team-tool.ts";
 import { notifyActiveRuns } from "./session-summary.ts";
 
 let _cachedLiveRunSidebar: typeof LiveRunSidebarType | undefined;
@@ -1112,6 +1113,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		metricRegistry = undefined;
 		deliveryCoordinator?.dispose();
 		clearHooks();
+		uninstallCrewGlobalRegistry();
 		overflowTracker?.dispose();
 		deliveryCoordinator = undefined;
 		overflowTracker = undefined;
