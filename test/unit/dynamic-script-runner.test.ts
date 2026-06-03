@@ -16,11 +16,10 @@ test("DynamicScriptRunner validates safe code", () => {
 	assert.equal(result.errors.length, 0);
 });
 
-test("DynamicScriptRunner rejects code with forbidden globals", () => {
+test("DynamicScriptRunner allows Date (not dangerous)", () => {
 	const runner = new DynamicScriptRunner();
 	const result = runner.validate("Date.now()");
-	assert.equal(result.valid, false);
-	assert.ok(result.errors.some((e) => e.type === "forbidden_global"));
+	assert.equal(result.valid, true);
 });
 
 test("DynamicScriptRunner rejects Math.random", () => {
@@ -208,7 +207,7 @@ test("DynamicScriptRunner includes validation in execution result", () => {
 
 test("DynamicScriptRunner returns validation errors in execution result", () => {
 	const runner = new DynamicScriptRunner();
-	const result = runner.execute("Date.now()");
+	const result = runner.execute("eval('1 + 1')");
 	assert.equal(result.success, false);
 	assert.ok(result.error);
 	assert.ok(result.validation.errors.length > 0);
@@ -216,8 +215,8 @@ test("DynamicScriptRunner returns validation errors in execution result", () => 
 
 test("DynamicScriptRunner executeUnchecked bypasses validation", () => {
 	const runner = new DynamicScriptRunner();
-	// executeUnchecked should still run even though the code uses Date
-	const result = __test_executeUnchecked(runner, "Date.now()");
+	// executeUnchecked bypasses validation, even for dangerous code
+	const result = __test_executeUnchecked(runner, "eval('1 + 1')");
 	// Note: executeUnchecked doesn't validate, so it should succeed
 	// (the sandbox still restricts execution, but validation is skipped)
 	assert.equal(result.success, true);
@@ -228,8 +227,8 @@ test("DynamicScriptRunner getForbiddenGlobals returns list", () => {
 	const globals = runner.getForbiddenGlobals();
 	assert.ok(Array.isArray(globals));
 	assert.ok(globals.length > 0);
-	assert.ok(globals.includes("Date"));
 	assert.ok(globals.includes("Math.random"));
+	assert.ok(!globals.includes("Date"), "Date should not be forbidden");
 });
 
 test("createScriptRunner factory function", () => {

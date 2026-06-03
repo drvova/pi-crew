@@ -18,6 +18,7 @@ import {
 } from "./async-notifier.ts";
 import { registerAutonomousPolicy } from "./autonomous-policy.ts";
 import { registerCleanupHandler } from "./crew-cleanup.ts";
+import type { ScheduledJob } from "../runtime/scheduler.ts";
 import { clearHooks } from "../hooks/registry.ts";
 import { notifyActiveRuns } from "./session-summary.ts";
 
@@ -1339,10 +1340,10 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		// Uses a global symbol so the module doesn't need a direct circular import.
 		(globalThis as Record<symbol | string, unknown>)[Symbol.for("pi-crew:scheduler")] = crewScheduler;
 		// Load scheduled jobs from settings if present
-		if (Array.isArray((crewSettings as any).scheduledJobs)) {
-			for (const job of (crewSettings as any).scheduledJobs) {
+		if (Array.isArray(crewSettings.scheduledJobs)) {
+			for (const job of crewSettings.scheduledJobs) {
 				try {
-					crewScheduler.add(job);
+					crewScheduler.add(job as ScheduledJob);
 				} catch {
 					/* skip invalid */
 				}

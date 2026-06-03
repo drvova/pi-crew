@@ -79,6 +79,9 @@ export class Counter extends Metric {
 		if (!Number.isFinite(delta) || delta < 0) return;
 		const key = labelKey(labels);
 		const current = this.values.get(key) ?? { labels: normalizeLabels(labels), value: 0 };
+		// Delete before set to move key to end of insertion order (MRU).
+		// Without this, enforceLabelCap could evict an actively-used entry.
+		this.values.delete(key);
 		this.values.set(key, { labels: current.labels, value: current.value + delta });
 		enforceLabelCap(this.values, this.name);
 	}
@@ -97,7 +100,10 @@ export class Gauge extends Metric {
 
 	set(labels: MetricLabels = {}, value: number): void {
 		if (!Number.isFinite(value)) return;
-		this.values.set(labelKey(labels), { labels: normalizeLabels(labels), value });
+		const key = labelKey(labels);
+		// Delete before set to move key to end of insertion order (MRU).
+		this.values.delete(key);
+		this.values.set(key, { labels: normalizeLabels(labels), value });
 		enforceLabelCap(this.values, this.name);
 	}
 

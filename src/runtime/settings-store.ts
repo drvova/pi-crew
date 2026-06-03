@@ -11,6 +11,8 @@ export interface CrewSettings {
 	defaultJoinMode?: JoinMode;
 	schedulingEnabled?: boolean;
 	notifierIntervalMs?: number;
+	/** Scheduled jobs loaded from settings — opaque, passed to crewScheduler */
+	scheduledJobs?: unknown[];
 }
 
 const MAX_CONCURRENT_CEILING = 1024;
@@ -71,7 +73,6 @@ function readSettingsFile(filePath: string): CrewSettings {
 	try {
 		return sanitizeSettings(JSON.parse(fs.readFileSync(filePath, "utf-8")));
 	} catch (err) {
-		const reason = err instanceof Error ? err.message : String(err);
 		logInternalError("settings-store.read", err, `Ignoring malformed settings at ${filePath}`);
 		return {};
 	}

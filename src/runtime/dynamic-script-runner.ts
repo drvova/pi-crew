@@ -7,7 +7,6 @@ import { WorkflowSandbox, type SandboxOptions } from "./sandbox.ts";
  * These are checked during AST validation before execution.
  */
 export const FORBIDDEN_GLOBALS = [
-	"Date",
 	"Math.random",
 	"require",
 	"import",

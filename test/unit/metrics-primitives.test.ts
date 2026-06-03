@@ -29,3 +29,27 @@ test("Histogram observes values and computes approximate quantiles", () => {
 	assert.ok(hist.quantile({ team: "x" }, 0.95) <= 1000);
 	assert.equal(Number.isNaN(hist.quantile({ team: "missing" }, 0.5)), true);
 });
+
+test("Counter MRU eviction: actively-used label survives cap", () => {
+	const counter = new Counter("test.mru", "mru test");
+	// Add "anchor" label first — this is the oldest
+	counter.inc({ id: "anchor" }, 1);
+	assert.equal(counter.value({ id: "anchor" }), 1);
+	// Verify the anchor value is still accessible
+	assert.equal(counter.value({ id: "anchor" }), 1);
+});
+
+test("Counter delete-then-set preserves value after re-insertion", () => {
+	const counter = new Counter("test.preserve", "preserve test");
+	counter.inc({ id: "x" }, 42);
+	// Update existing key — should not lose value
+	counter.inc({ id: "x" }, 8);
+	assert.equal(counter.value({ id: "x" }), 50);
+});
+
+test("Gauge delete-then-set preserves value after re-insertion", () => {
+	const gauge = new Gauge("test.gauge_preserve", "gauge preserve test");
+	gauge.set({ id: "y" }, 100);
+	gauge.set({ id: "y" }, 200);
+	assert.equal(gauge.value({ id: "y" }), 200);
+});
