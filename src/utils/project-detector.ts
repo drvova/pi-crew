@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -54,7 +54,7 @@ function extractRepoName(remoteUrl: string): string | null {
  */
 function tryGitRemote(cwd: string): string | null {
 	try {
-		const remoteUrl = execSync("git remote get-url origin", {
+		const remoteUrl = execFileSync("git", ["remote", "get-url", "origin"], {
 			cwd,
 			encoding: "utf-8",
 			stdio: ["pipe", "pipe", "ignore"],
@@ -79,7 +79,7 @@ function tryGitRemote(cwd: string): string | null {
  */
 function tryGitToplevel(cwd: string): string | null {
 	try {
-		const toplevel = execSync("git rev-parse --show-toplevel", {
+		const toplevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 			cwd,
 			encoding: "utf-8",
 			stdio: ["pipe", "pipe", "ignore"],

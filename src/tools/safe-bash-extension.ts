@@ -1,7 +1,10 @@
 /**
  * Safe Bash Extension for pi-crew
- * Wraps the built-in bash tool with dangerous command blocking
- * 
+ * Wraps the built-in bash tool with dangerous command blocking.
+ *
+ * Delegates pattern matching to the core `safe-bash.ts` module which uses
+ * linear-time string scanning (no ReDoS-vulnerable regex).
+ *
  * Usage:
  * 1. Enable in config: { "tools": { "bash": { "safeMode": true } } }
  * 2. Or use via agent config: { "extensions": ["path/to/safe-bash-extension.ts"] }
@@ -11,51 +14,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createBashTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-
-// Dangerous command patterns to block
-const DANGEROUS_PATTERNS = [
-	// rm -rf on root or home
-	/\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)?(-[a-zA-Z]*r[a-zA-Z]*\s+)?(\/|~\/?\s|~\/?\b)/,
-	/\brm\s+(-[a-zA-Z]*r[a-zA-Z]*\s+)?(-[a-zA-Z]*f[a-zA-Z]*\s+)?(\/|~\/?\s|~\/?\b)/,
-	// Privilege escalation
-	/\bsudo\b/,
-	/\bsu\s+root\b/,
-	// Filesystem destruction
-	/\bmkfs\b/,
-	/\bdd\s+if=/,
-	// Fork bomb
-	/:\(\)\s*\{\s*:\|:&\s*\}\s*;:/,
-	// Device writing
-	/>\s*\/dev\/[sh]d[a-z]/,
-	/\bchmod\s+(-[a-zA-Z]+\s+)?777\s+\//,
-	/\bchown\s+(-[a-zA-Z]+\s+)?root/,
-	// Pipe to shell (download and execute)
-	/\bcurl\s.*\|\s*(ba)?sh/i,
-	/\bwget\s.*\|\s*(ba)?sh/i,
-	// System shutdown/reboot
-	/\bshutdown\b/,
-	/\breboot\b/,
-	/\binit\s+0\b/,
-	// Kill critical processes
-	/\bkill\s+-9\s+1\b/,
-	/\bkillall\b/,
-	// Encoded commands
-	/\|\s*base64\s+-d/,
-	// Network to shell
-	/\bbash\s+-i\s+>\s*\&/,
-	// /etc/passwd manipulation
-	/\becho\s+.*>\s*\/etc\/passwd/,
-];
-
-function isDangerous(command: string): string | null {
-	const normalized = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
-	for (const pattern of DANGEROUS_PATTERNS) {
-		if (pattern.test(normalized)) {
-			return `Command blocked: matches dangerous pattern \`${pattern}\``;
-		}
-	}
-	return null;
-}
+import { isDangerous } from "./safe-bash.ts";
 
 export default function safeBashExtension(pi: ExtensionAPI): void {
 	const cwd = process.cwd();
