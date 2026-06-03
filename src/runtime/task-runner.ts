@@ -156,7 +156,7 @@ export async function runTeamTask(
 	let streamBridge: ReturnType<typeof registerStreamBridge> | undefined;
 	try {
 		streamBridge = registerStreamBridge(manifest.runId);
-		const workspace = prepareTaskWorkspace(manifest, input.task);
+		const workspace = prepareTaskWorkspace(manifest, input.task, input.step.seedPaths);
 		const worktree =
 			workspace.worktreePath && workspace.branch
 				? {

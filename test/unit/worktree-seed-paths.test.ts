@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { normalizeSeedPaths, overlaySeedPaths } from "../../src/worktree/worktree-manager.ts";
+import type { WorkflowStep } from "../../src/workflows/workflow-config.ts";
 
 describe("normalizeSeedPaths", () => {
 	const repoRoot = "/fake/repo";
@@ -110,5 +111,38 @@ describe("overlaySeedPaths", () => {
 			fs.readFileSync(path.join(worktreePath, "config.json"), "utf8"),
 			'{"v": 2}',
 		);
+	});
+});
+
+describe("per-step seedPaths merging", () => {
+	it("merges global + step seedPaths without duplicates", () => {
+		const global = ["shared.txt", "config.json"];
+		const step: WorkflowStep[] = [
+			{ id: "s1", role: "executor", task: "do it", seedPaths: ["step-file.txt", "config.json"] },
+		];
+		const merged = normalizeSeedPaths([...global, ...(step[0].seedPaths ?? [])], "/fake/repo");
+		assert.deepEqual(merged, ["shared.txt", "config.json", "step-file.txt"]);
+	});
+
+	it("works with step-level only (no global)", () => {
+		const step: WorkflowStep[] = [
+			{ id: "s1", role: "executor", task: "do it", seedPaths: ["step-only.txt"] },
+		];
+		const merged = normalizeSeedPaths([...(step[0].seedPaths ?? [])], "/fake/repo");
+		assert.deepEqual(merged, ["step-only.txt"]);
+	});
+
+	it("works with global only (no step seedPaths)", () => {
+		const global = ["shared.txt"];
+		const step: WorkflowStep[] = [
+			{ id: "s1", role: "executor", task: "do it" },
+		];
+		const merged = normalizeSeedPaths([...global, ...(step[0].seedPaths ?? [])], "/fake/repo");
+		assert.deepEqual(merged, ["shared.txt"]);
+	});
+
+	it("both empty yields empty", () => {
+		const merged = normalizeSeedPaths([], "/fake/repo");
+		assert.deepEqual(merged, []);
 	});
 });

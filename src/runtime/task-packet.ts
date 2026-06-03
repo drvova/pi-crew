@@ -150,6 +150,108 @@ export const HANDOFF_TEMPLATE = [
 	"<!-- Any remaining issues or next steps -->",
 ].join("\n");
 
+export interface ParsedHandoff {
+	summary: string[];
+	filesChanged: string[];
+	tests: string[];
+	followups: string[];
+}
+
+/**
+ * Extract text between a ### heading and the next ### heading or end of text.
+ */
+function extractSection(content: string, heading: string): string {
+	const lines = content.split("\n");
+	const headingMarker = `### ${heading}`;
+	const startIndex = lines.findIndex((line) => line.trim() === headingMarker);
+	if (startIndex === -1) return "";
+
+	const collected: string[] = [];
+	for (let i = startIndex + 1; i < lines.length; i++) {
+		const trimmed = lines[i].trim();
+		if (trimmed.startsWith("### ") || trimmed.startsWith("## ")) break;
+		// Stop at paragraph text (non-bullet, non-comment, non-empty) that follows
+		// a blank line — signals end of subsection content.
+		if (
+			trimmed.length > 0 &&
+			!trimmed.startsWith("- ") &&
+			!trimmed.startsWith("<!--") &&
+			i > startIndex + 1 &&
+			lines[i - 1].trim() === "" &&
+			collected.some((l) => l.trim().length > 0)
+		) {
+			break;
+		}
+		collected.push(lines[i]);
+	}
+
+	return collected.join("\n").trim();
+}
+
+/**
+ * Parse bullet list items from a section, stripping leading "- " and backtick wrapping.
+ */
+function parseBullets(section: string): string[] {
+	if (!section) return [];
+	return section
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line.startsWith("- "))
+		.map((line) => {
+			let item = line.replace(/^- /, "").trim();
+			// Strip surrounding backticks
+			if (item.startsWith("`") && item.endsWith("`") && item.length >= 2) {
+				item = item.slice(1, -1);
+			}
+			return item;
+		});
+}
+
+/**
+ * Parse a handoff section that may contain bullets AND free-text paragraphs.
+ * Returns all non-empty lines as individual items (bullets get their marker stripped).
+ */
+function parseMixedContent(section: string): string[] {
+	if (!section) return [];
+	return section
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0 && !line.startsWith("<!--")) // skip HTML comments
+		.map((line) => {
+			if (line.startsWith("- ")) return line.slice(2).trim();
+			return line;
+		})
+		.map((item) => {
+			// Strip surrounding backticks
+			if (item.startsWith("`") && item.endsWith("`") && item.length >= 2) {
+				return item.slice(1, -1);
+			}
+			return item;
+		});
+}
+
+/**
+ * Parse structured handoff data from agent output text.
+ * Looks for the "## Handoff" heading and extracts subsections.
+ * Returns empty arrays for sections not found.
+ */
+export function parseHandoffFromOutput(output: string): ParsedHandoff {
+	if (!output || typeof output !== "string") {
+		return { summary: [], filesChanged: [], tests: [], followups: [] };
+	}
+
+	// Find the handoff section — look for ## Handoff
+	const handoffIndex = output.indexOf("## Handoff");
+	const content = handoffIndex >= 0 ? output.slice(handoffIndex) : output;
+
+	return {
+		summary: parseMixedContent(extractSection(content, "Summary")),
+		filesChanged: parseMixedContent(extractSection(content, "Files Changed")),
+		tests: parseMixedContent(extractSection(content, "Tests / Verification")),
+		followups: parseMixedContent(extractSection(content, "Follow-ups")),
+	};
+}
+
 export function renderTaskPacket(packet: TaskPacket): string {
 	return [
 		"# Task Packet",

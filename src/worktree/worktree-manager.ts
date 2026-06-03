@@ -258,7 +258,7 @@ export function overlaySeedPaths(repoRoot: string, worktreePath: string, seedPat
 	}
 }
 
-export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskState): PreparedTaskWorkspace {
+export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskState, stepSeedPaths?: string[]): PreparedTaskWorkspace {
 	if (manifest.workspaceMode !== "worktree") return { cwd: task.cwd };
 	const repoRoot = findGitRoot(manifest.cwd);
 	const loadedConfig = loadConfig(manifest.cwd);
@@ -277,10 +277,11 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		if (currentBranch !== branch) {
 			throw new Error(`Existing worktree branch mismatch at ${worktreePath}: expected '${branch}', got '${currentBranch}'.`);
 		}
-		// Overlay seed paths from config (reused worktree)
-		const reusedSeedPaths = loadedConfig.config.worktree?.seedPaths;
-		if (reusedSeedPaths && reusedSeedPaths.length > 0) {
-			overlaySeedPaths(repoRoot, worktreePath, reusedSeedPaths);
+		// Overlay seed paths from config + step-level seedPaths (reused worktree)
+		const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
+		const mergedReused = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
+		if (mergedReused.length > 0) {
+			overlaySeedPaths(repoRoot, worktreePath, mergedReused);
 		}
 		return { cwd: worktreePath, worktreePath, branch, reused: true };
 	}
@@ -304,10 +305,11 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 	}
 	const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
 	const nodeModulesLinked = loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
-	// Overlay seed paths from config
-	const seedPaths = loadedConfig.config.worktree?.seedPaths;
-	if (seedPaths && seedPaths.length > 0) {
-		overlaySeedPaths(repoRoot, worktreePath, seedPaths);
+	// Overlay seed paths from config + step-level seedPaths
+	const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
+	const merged = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
+	if (merged.length > 0) {
+		overlaySeedPaths(repoRoot, worktreePath, merged);
 	}
 	return { cwd: worktreePath, worktreePath, branch, reused: false, nodeModulesLinked, syntheticPaths };
 }

@@ -14,6 +14,9 @@ export interface WorkflowStep {
 	progress?: boolean;
 	worktree?: boolean;
 	verify?: boolean;
+	/** Per-step files to overlay into the worktree (in addition to global worktree.seedPaths).
+	 * Useful when only certain steps need access to local drafts or scripts. */
+	seedPaths?: string[];
 }
 
 export interface WorkflowConfig {
