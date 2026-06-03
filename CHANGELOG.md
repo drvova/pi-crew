@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.5.19] — Final Sweep: 8 MEDIUM/LOW Fixes + 2 Test Fixes (2026-06-03)
+
+### Highlights
+- **All remaining issues fixed** — 4-agent review sweep found 0 CRITICAL/HIGH
+- 2 pre-existing test failures fixed (env isolation)
+- Memory bounds added to security log and metrics primitives
+- Defensive path validation in streaming/sidechain output
+- Production cleanup now clears hooks
+
+### Fixes
+
+#### MEDIUM: Memory bounds
+- `securityEventLog` in `discover-agents.ts` capped at 1,000 entries (was unbounded)
+- `Counter`/`Gauge`/`Histogram` Maps in `metrics-primitives.ts` capped at 10,000 label combinations
+
+#### LOW: Code quality
+- `console.warn` → `logInternalError` in `settings-store.ts` and `discover-agents.ts`
+- `crewEventBus` dead code documented (retained for future use)
+- `clearHooks()` called in production cleanup path (`register.ts`)
+- `assertSafePathId` added to `streaming-output.ts` and `sidechain-output.ts`
+
+#### Test fixes
+- `adaptive-implementation.test.ts`: replaced `restoreEnv` with `delete` to prevent leaked `PI_CREW_ROLE`
+- `subagent-tools-integration.test.ts`: added env isolation to first test case
+
+### Stats
+- Test suite: 2688 pass + 1 skip, 0 fail
+- TypeScript: 0 errors
+- Files changed: 9
+
 ## [0.5.18] — Final Review Fixes (2026-06-03)
 
 ### Highlights
