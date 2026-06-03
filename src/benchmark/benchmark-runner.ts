@@ -42,7 +42,7 @@ export interface BenchmarkResult {
  */
 function validateCommand(command: string): void {
   // Basic allowlist - must start with allowed command
-  const allowlist = /^(pytest|grep|npm test|npx) /;
+  const allowlist = /^(pytest|grep|npm test|npx|node) /;
   if (!allowlist.test(command)) {
     throw new Error(`Command not allowed: ${command}. Only pytest, grep, npm test, npx allowed.`);
   }

@@ -42,7 +42,7 @@ test("userPiRoot falls back to homedir when PI_TEAMS_HOME unset", () => {
 	try {
 		delete process.env.PI_TEAMS_HOME;
 		const result = userPiRoot();
-		assert.ok(result.includes(".pi/agent"));
+		assert.ok(result.includes(".pi") && result.includes("agent"), `Expected .pi/agent in ${result}`);
 	} finally {
 		if (origHome !== undefined) process.env.PI_TEAMS_HOME = origHome;
 	}

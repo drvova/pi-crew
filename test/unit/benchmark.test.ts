@@ -143,8 +143,8 @@ test("runBenchmarkSuite runs all tasks without taskTypes filter", async () => {
 
 test("runBenchmarkSuite computes total counts", async () => {
 	const tasks: BenchmarkTask[] = [
-		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "npx --help", description: "A" }] },
-		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "npx --help", description: "B" }] },
+		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "node --help", description: "A" }] },
+		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "node --help", description: "B" }] },
 	];
 	const suite = await runBenchmarkSuite(tasks);
 	assert.equal(suite.totalFailed, 0);
