@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isSafePathId } from "../utils/safe-paths.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 
 export interface StreamingOutputHandle {
@@ -9,6 +10,7 @@ export interface StreamingOutputHandle {
 }
 
 export function createStreamingOutput(manifest: TeamRunManifest, taskId: string): StreamingOutputHandle {
+	if (!isSafePathId(taskId)) throw new Error(`Invalid taskId: ${taskId}`);
 	const outputDir = path.join(manifest.artifactsRoot, "streaming");
 	fs.mkdirSync(outputDir, { recursive: true });
 	const outputPath = path.join(outputDir, `${taskId}.md`);
@@ -37,6 +39,7 @@ export function createStreamingOutput(manifest: TeamRunManifest, taskId: string)
 }
 
 export function readStreamingOutput(manifest: TeamRunManifest, taskId: string): string {
+	if (!isSafePathId(taskId)) return "";
 	const outputPath = path.join(manifest.artifactsRoot, "streaming", `${taskId}.md`);
 	if (!fs.existsSync(outputPath)) return "";
 	try {

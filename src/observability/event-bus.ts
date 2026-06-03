@@ -71,4 +71,12 @@ class EventBus {
   }
 }
 
+/**
+ * Global event bus for crew lifecycle events.
+ *
+ * NOTE: Currently only emits — no production subscribers yet.
+ * The `runEventBus` (from `ui/run-event-bus.ts`) is the active event system.
+ * This bus is retained for future observability/SIEM integration.
+ * See also: progress-tracker.ts which emits agent:progress events.
+ */
 export const crewEventBus = EventBus.getInstance();

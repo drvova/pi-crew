@@ -102,6 +102,10 @@ test("conflict-safe crew_agent aliases still register when generic Agent name is
 });
 
 test("registered Agent tool stamps background subagents with owner session generation", async () => {
+	const previousCrewRole = process.env.PI_CREW_ROLE;
+	const previousTeamsRole = process.env.PI_TEAMS_ROLE;
+	delete process.env.PI_CREW_ROLE;
+	delete process.env.PI_TEAMS_ROLE;
 	const fake = createFakePi();
 	let captured: SubagentSpawnOptions | undefined;
 	const manager = {
@@ -125,6 +129,10 @@ test("registered Agent tool stamps background subagents with owner session gener
 	const result = await fake.tools.get("Agent").execute("call-owner", { prompt: "Explore", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, fakeCtx(process.cwd()) as never);
 	assert.match(firstText(result), /Agent ID: agent_owner_generation/);
 	assert.equal(captured?.ownerSessionGeneration, 42);
+	if (previousCrewRole === undefined) delete process.env.PI_CREW_ROLE;
+	else process.env.PI_CREW_ROLE = previousCrewRole;
+	if (previousTeamsRole === undefined) delete process.env.PI_TEAMS_ROLE;
+	else process.env.PI_TEAMS_ROLE = previousTeamsRole;
 });
 
 test("registered Agent tool can run a background subagent and join its result", async () => {

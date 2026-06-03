@@ -103,7 +103,9 @@ interface SecurityEvent {
 
 /**
  * Security event log. In production, this should be sent to a security SIEM.
+ * Bounded at MAX_SECURITY_LOG_ENTRIES to prevent unbounded memory growth.
  */
+const MAX_SECURITY_LOG_ENTRIES = 1000;
 const securityEventLog: SecurityEvent[] = [];
 
 /**
@@ -113,11 +115,16 @@ const securityEventLog: SecurityEvent[] = [];
  */
 function logSecurityEvent(event: SecurityEvent): void {
 	securityEventLog.push(event);
+	// Evict oldest entries when cap exceeded
+	while (securityEventLog.length > MAX_SECURITY_LOG_ENTRIES) {
+		securityEventLog.shift();
+	}
 
-	// Console output for development/debugging (redacted in production)
-	const prefix = "\x1b[33m[SECURITY]\x1b[0m"; // Yellow warning
-	console.warn(
-		`${prefix} ${event.type}: agent="${event.name}" reason="${event.reason}" time=${new Date(event.timestamp).toISOString()}`
+	// Log security events via structured logger
+	logInternalError(
+		`security.${event.type}`,
+		undefined,
+		`agent="${event.name}" reason="${event.reason}"`,
 	);
 }
 
@@ -195,10 +202,10 @@ function checkProjectAgentShadowsBuiltin(name: string): void {
 			reason: "project_shadows_protected_builtin",
 			timestamp: Date.now(),
 		});
-		console.warn(
-			`\x1b[33m[SECURITY WARNING]\x1b[0m Project agent "${name}" shadows a protected builtin. ` +
-			`This agent will be loaded but builtin agents take priority. ` +
-			`If this is intentional, consider using a different name.`
+		logInternalError(
+			`security.agent_shadow_warning`,
+			undefined,
+			`Project agent "${name}" shadows a protected builtin. Builtin agents take priority.`,
 		);
 		return;
 	}

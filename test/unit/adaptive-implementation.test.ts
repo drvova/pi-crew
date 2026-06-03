@@ -159,7 +159,7 @@ test("requirePlanApproval blocks mutating adaptive tasks until approved", async 
 		process.env.PI_CREW_ROLE = "planner";
 		const deniedApproval = await handleTeamTool({ action: "api", runId: manifest.runId, config: { operation: "approve-plan" } }, { cwd });
 		assert.equal(deniedApproval.isError, true);
-		restoreEnv("PI_CREW_ROLE", previousRole);
+		delete process.env.PI_CREW_ROLE;
 		const approval = await handleTeamTool({ action: "api", runId: manifest.runId, config: { operation: "approve-plan" } }, { cwd });
 		assert.equal(approval.isError, false);
 		const lateCancel = await handleTeamTool({ action: "api", runId: manifest.runId, config: { operation: "cancel-plan" } }, { cwd });

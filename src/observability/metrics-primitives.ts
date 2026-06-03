@@ -36,6 +36,16 @@ interface StoredHistogram {
 
 export const DEFAULT_HISTOGRAM_BUCKETS = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
 
+/** Maximum number of unique label combinations per metric. */
+const MAX_LABEL_COMBINATIONS = 10_000;
+
+function enforceLabelCap(map: Map<string, unknown>, metricName: string): void {
+	while (map.size > MAX_LABEL_COMBINATIONS) {
+		const firstKey = map.keys().next().value;
+		if (firstKey !== undefined) map.delete(firstKey);
+	}
+}
+
 function normalizeLabels(labels: MetricLabels = {}): MetricLabels {
 	const normalized: MetricLabels = {};
 	for (const [key, value] of Object.entries(labels).sort(([left], [right]) => left.localeCompare(right))) normalized[key] = value;
@@ -70,6 +80,7 @@ export class Counter extends Metric {
 		const key = labelKey(labels);
 		const current = this.values.get(key) ?? { labels: normalizeLabels(labels), value: 0 };
 		this.values.set(key, { labels: current.labels, value: current.value + delta });
+		enforceLabelCap(this.values, this.name);
 	}
 
 	value(labels: MetricLabels = {}): number {
@@ -87,6 +98,7 @@ export class Gauge extends Metric {
 	set(labels: MetricLabels = {}, value: number): void {
 		if (!Number.isFinite(value)) return;
 		this.values.set(labelKey(labels), { labels: normalizeLabels(labels), value });
+		enforceLabelCap(this.values, this.name);
 	}
 
 	add(labels: MetricLabels = {}, delta: number): void {
@@ -123,6 +135,7 @@ export class Histogram extends Metric {
 		current.sum += value;
 		current.count += 1;
 		if (!existing) this.observations.set(key, current);
+		enforceLabelCap(this.observations, this.name);
 	}
 
 	quantile(labels: MetricLabels = {}, q: number): number {

@@ -18,6 +18,7 @@ import {
 } from "./async-notifier.ts";
 import { registerAutonomousPolicy } from "./autonomous-policy.ts";
 import { registerCleanupHandler } from "./crew-cleanup.ts";
+import { clearHooks } from "../hooks/registry.ts";
 import { notifyActiveRuns } from "./session-summary.ts";
 
 let _cachedLiveRunSidebar: typeof LiveRunSidebarType | undefined;
@@ -1109,6 +1110,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		otlpExporter = undefined;
 		metricRegistry = undefined;
 		deliveryCoordinator?.dispose();
+		clearHooks();
 		overflowTracker?.dispose();
 		deliveryCoordinator = undefined;
 		overflowTracker = undefined;

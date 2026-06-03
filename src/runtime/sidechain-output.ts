@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isSafePathId } from "../utils/safe-paths.ts";
 import { redactSecrets } from "../utils/redaction.ts";
 
 export interface SidechainEntry {
@@ -17,6 +18,7 @@ export function writeSidechainEntry(filePath: string, entry: Omit<SidechainEntry
 }
 
 export function sidechainOutputPath(stateRoot: string, taskId: string): string {
+	if (!isSafePathId(taskId)) throw new Error(`Invalid taskId: ${taskId}`);
 	return path.join(stateRoot, "agents", taskId, "sidechain.output.jsonl");
 }
 

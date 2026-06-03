@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { homedir } from "node:os";
+import { logInternalError } from "../utils/internal-error.ts";
 import type { JoinMode } from "./group-join.ts";
 
 export interface CrewSettings {
@@ -71,7 +72,7 @@ function readSettingsFile(filePath: string): CrewSettings {
 		return sanitizeSettings(JSON.parse(fs.readFileSync(filePath, "utf-8")));
 	} catch (err) {
 		const reason = err instanceof Error ? err.message : String(err);
-		console.warn(`[pi-crew] Ignoring malformed settings at ${filePath}: ${reason}`);
+		logInternalError("settings-store.read", err, `Ignoring malformed settings at ${filePath}`);
 		return {};
 	}
 }
