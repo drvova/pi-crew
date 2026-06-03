@@ -81,6 +81,41 @@ test("extractAdaptivePlanJson: returns undefined when no JSON found", () => {
 	assert.equal(extractAdaptivePlanJson("just plain text"), undefined);
 });
 
+test("extractAdaptivePlanJson: strips code fences inside START/END markers", () => {
+	const text = `ADAPTIVE_PLAN_JSON_START
+\`\`\`json
+{"phases":[]}
+\`\`\`
+ADAPTIVE_PLAN_JSON_END`;
+	const json = extractAdaptivePlanJson(text);
+	assert.ok(json, "should extract content");
+	assert.doesNotThrow(() => JSON.parse(json!), `should be valid JSON, got: ${json}`);
+	const parsed = JSON.parse(json!);
+	assert.ok(Array.isArray(parsed.phases));
+});
+
+test("extractAdaptivePlanJson: strips code fence without json hint inside markers", () => {
+	const text = `ADAPTIVE_PLAN_JSON_START
+\`\`\`
+{"phases":[{"name":"p1","tasks":[]}]}
+\`\`\`
+ADAPTIVE_PLAN_JSON_END`;
+	const json = extractAdaptivePlanJson(text);
+	assert.ok(json);
+	const parsed = JSON.parse(json!);
+	assert.equal(parsed.phases[0].name, "p1");
+});
+
+test("extractAdaptivePlanJson: works without markers when no END present", () => {
+	const text = `ADAPTIVE_PLAN_JSON_START
+\`\`\`json
+{"phases":[]}
+\`\`\``;
+	const json = extractAdaptivePlanJson(text);
+	assert.ok(json, "should extract via fallback path");
+	assert.doesNotThrow(() => JSON.parse(json!), `should be valid JSON, got: ${json}`);
+});
+
 // ─── parseAdaptivePlan ─────────────────────────────────────────────────────
 
 test("parseAdaptivePlan: parses valid single-phase plan", () => {

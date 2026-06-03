@@ -44,11 +44,27 @@ export function slug(value: string): string {
 	return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "task";
 }
 
+/** Strip surrounding markdown code fences if present. */
+function stripCodeFence(raw: string): string {
+	let s = raw.trim();
+	// Remove opening fence: ```json or ```
+	if (s.startsWith("```")) {
+		const firstNewline = s.indexOf("\n");
+		if (firstNewline >= 0) s = s.slice(firstNewline + 1);
+		else s = s.slice(3); // edge case: ``` alone on one line
+	}
+	// Remove closing fence
+	if (s.endsWith("```")) {
+		s = s.slice(0, -3);
+	}
+	return s.trim();
+}
+
 export function extractAdaptivePlanJson(text: string): string | undefined {
 	const markerMatch = text.match(/ADAPTIVE_PLAN_JSON_START\s*([\s\S]*?)\s*ADAPTIVE_PLAN_JSON_END/);
-	if (markerMatch?.[1]) return markerMatch[1];
+	if (markerMatch?.[1]) return stripCodeFence(markerMatch[1]);
 	const startIndex = text.indexOf("ADAPTIVE_PLAN_JSON_START");
-	if (startIndex >= 0) return text.slice(startIndex + "ADAPTIVE_PLAN_JSON_START".length).trim();
+	if (startIndex >= 0) return stripCodeFence(text.slice(startIndex + "ADAPTIVE_PLAN_JSON_START".length));
 	const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
 	return fencedMatch?.[1];
 }
