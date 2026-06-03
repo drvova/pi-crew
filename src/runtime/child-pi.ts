@@ -415,20 +415,16 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 	if (depth.blocked) return { exitCode: 1, stdout: "", stderr: `pi-crew depth guard blocked child worker: depth ${depth.depth} >= max ${depth.maxDepth}` };
 	const mock = process.env.PI_TEAMS_MOCK_CHILD_PI;
 	if (mock) {
-		// SECURITY: Mock mode only available in test environment to prevent
-		// malicious setup hooks from activating it in production.
-		if (process.env.NODE_ENV !== "test") {
-			console.error(`[🚨 PI_CREW_MOCK_MODE] SECURITY: PI_TEAMS_MOCK_CHILD_PI is set but NODE_ENV is not "test". Ignoring mock request for safety.`);
-			return { exitCode: 1, stdout: "", stderr: "Mock mode requires NODE_ENV=test" };
-		}
-		// SECURITY: Log mock mode activation prominently for audit trail
-		console.warn(`[⚠️ PI_CREW_MOCK_MODE] Mock mode active: ${mock} — NOT running real agents!`);
-		// SECURITY FIX: Require PI_CREW_ALLOW_MOCK alongside PI_TEAMS_MOCK_CHILD_PI
+		// SECURITY: Require explicit PI_CREW_ALLOW_MOCK=1 to activate mock mode.
+		// PI_CREW_ALLOW_MOCK must be set in the parent process env (not by child hooks)
+		// since sanitizeEnvSecrets only passes PI_CREW_* vars from the parent.
+		// Setup hooks cannot inject PI_CREW_ALLOW_MOCK into the parent's env.
 		const allowMock = process.env.PI_CREW_ALLOW_MOCK === "1" || process.env.PI_CREW_ALLOW_MOCK === "true";
 		if (!allowMock) {
-			console.error(`[🚨 PI_CREW_MOCK_MODE] SECURITY: PI_TEAMS_MOCK_CHILD_PI is set but PI_CREW_ALLOW_MOCK is not "1". Ignoring mock request for safety.`);
-			return { exitCode: 1, stdout: "", stderr: "Mock mode requires PI_CREW_ALLOW_MOCK=1 alongside PI_TEAMS_MOCK_CHILD_PI" };
+			return { exitCode: 1, stdout: "", stderr: "Mock mode requires PI_CREW_ALLOW_MOCK=1" };
 		}
+		// SECURITY: Log mock mode activation prominently for audit trail
+		console.warn(`Mock mode active: ${mock} — NOT running real agents!`);
 		if (mock === "success") {
 			const stdout = `[MOCK] Success for ${input.agent.name}\n`;
 			observeStdoutChunk(input, stdout);
