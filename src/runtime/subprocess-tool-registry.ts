@@ -61,7 +61,7 @@ class SubprocessToolRegistryImpl implements SubprocessToolRegistry {
 
 export const subprocessToolRegistry: SubprocessToolRegistry = new SubprocessToolRegistryImpl();
 
-/** H3: Reset the global singleton registry (for test isolation). */
-export function resetSubprocessToolRegistry(): void {
+/** @internal Reset the global singleton registry (for test isolation). */
+function resetSubprocessToolRegistry(): void {
 	subprocessToolRegistry.clear();
 }

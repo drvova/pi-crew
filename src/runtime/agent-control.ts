@@ -69,7 +69,8 @@ export function applyAttentionState(manifest: TeamRunManifest, agent: CrewAgentR
 	return updated;
 }
 
-export function applyLongRunningCheck(
+/** @internal */
+function applyLongRunningCheck(
 	manifest: TeamRunManifest,
 	agent: CrewAgentRecord,
 	config: CrewControlConfig,
@@ -105,7 +106,8 @@ export function applyLongRunningCheck(
 	return updated;
 }
 
-export function trackConsecutiveToolFailure(
+/** @internal */
+function trackConsecutiveToolFailure(
 	manifest: TeamRunManifest,
 	agent: CrewAgentRecord,
 	toolName: string,
@@ -140,7 +142,8 @@ export function trackConsecutiveToolFailure(
 	return updated;
 }
 
-export function resetConsecutiveToolFailures(
+/** @internal */
+function resetConsecutiveToolFailures(
 	manifest: TeamRunManifest,
 	agent: CrewAgentRecord,
 ): void {

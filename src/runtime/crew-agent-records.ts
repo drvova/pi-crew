@@ -249,8 +249,8 @@ export function writeCrewAgentStatusCoalesced(manifest: TeamRunManifest, record:
 	atomicWriteJsonCoalesced(agentStatusPath(manifest, record.taskId), redactSecrets(record), AGENT_COALESCE_MS);
 }
 
-/** Flush all coalesced agent writes synchronously. Hook into cleanup paths. */
-export function flushPendingAgentWrites(): void {
+/** @internal Flush all coalesced agent writes synchronously. Hook into cleanup paths. */
+function flushPendingAgentWrites(): void {
 	flushPendingAtomicWrites();
 }
 
@@ -353,7 +353,8 @@ export interface CrewAgentEventCursorOptions {
 	limit?: number;
 }
 
-export function readCrewAgentEvents(manifest: TeamRunManifest, taskId: string): unknown[] {
+/** @internal Convenience wrapper around readCrewAgentEventsCursor. */
+function readCrewAgentEvents(manifest: TeamRunManifest, taskId: string): unknown[] {
 	return readCrewAgentEventsCursor(manifest, taskId).events;
 }
 

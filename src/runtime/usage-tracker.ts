@@ -16,7 +16,8 @@ export function addUsage(into: LifetimeUsage, delta: { input?: number; output?: 
 	if (typeof delta.cacheWrite === "number") into.cacheWrite += delta.cacheWrite;
 }
 
-export function lifetimeUsageFromState(state: UsageState | undefined): LifetimeUsage {
+/** @internal */
+function lifetimeUsageFromState(state: UsageState | undefined): LifetimeUsage {
 	if (!state) return emptyLifetimeUsage();
 	return {
 		input: state.input ?? 0,
@@ -59,7 +60,8 @@ export const getTaskUsage = getTrackedTaskUsage;
 export const getRunUsage = getTrackedTaskUsage;
 export const clearAllTaskUsage = clearAllTrackedTaskUsage;
 
-export function aggregateTrackedUsageForRun(manifest: TeamRunManifest, tasks: TeamTaskState[]): UsageState {
+/** @internal */
+function aggregateTrackedUsageForRun(manifest: TeamRunManifest, tasks: TeamTaskState[]): UsageState {
 	const total = emptyLifetimeUsage();
 	for (const task of tasks) {
 		const tracked = getTrackedTaskUsage(task.id);

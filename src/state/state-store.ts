@@ -208,7 +208,8 @@ export function saveRunTasks(manifest: TeamRunManifest, tasks: TeamTaskState[]):
  * intended use case. Single-update + read-update loops (e.g.
  * persistSingleTaskUpdate) should keep using saveRunTasks.
  */
-export function saveRunTasksCoalesced(manifest: TeamRunManifest, tasks: TeamTaskState[]): void {
+/** @internal */
+function saveRunTasksCoalesced(manifest: TeamRunManifest, tasks: TeamTaskState[]): void {
 	atomicWriteJsonCoalesced(manifest.tasksPath, tasks);
 	invalidateRunCache(manifest.stateRoot);
 }
@@ -226,7 +227,8 @@ export async function saveRunTasksAsync(manifest: TeamRunManifest, tasks: TeamTa
  * This is acceptable because crash recovery detects and repairs
  * inconsistent state on next session start.
  */
-export async function saveManifestAndTasksAtomic(manifest: TeamRunManifest, tasks: TeamTaskState[]): Promise<void> {
+/** @internal */
+async function saveManifestAndTasksAtomic(manifest: TeamRunManifest, tasks: TeamTaskState[]): Promise<void> {
 	await withRunLock(manifest, async () => {
 		await Promise.all([
 			atomicWriteJsonAsync(path.join(manifest.stateRoot, "manifest.json"), manifest),

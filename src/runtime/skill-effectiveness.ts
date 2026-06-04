@@ -374,7 +374,8 @@ export function getWeightedSkillsForRole(
  * Filter skills by confidence threshold.
  * Skills below threshold are marked as "suggest" only.
  */
-export function filterSkillsByConfidence(
+/** @internal */
+function filterSkillsByConfidence(
 	skillIds: string[],
 	runId: string,
 	threshold: keyof typeof CONFIDENCE_THRESHOLDS = "MODERATE",
@@ -431,7 +432,8 @@ export function registerSkillEffectivenessHooks(): void {
 /**
  * Generate a skill effectiveness report for a run.
  */
-export function generateSkillEffectivenessReport(
+/** @internal */
+function generateSkillEffectivenessReport(
 	runId: string,
 	skillIds: string[],
 ): string {
