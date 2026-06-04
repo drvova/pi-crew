@@ -8,6 +8,78 @@ import type { MetricExporter } from "./adapter.ts";
 
 const gzipAsync = promisify(gzip);
 
+/**
+ * SSRF protection: validate that an OTLP endpoint URL does not target
+ * private/reserved networks or dangerous protocols.
+ * Rejects: localhost, loopback, private IPs, link-local, cloud metadata,
+ * IPv6 private, file:// and javascript:// protocols.
+ * Only http:// and https:// to public hostnames are allowed.
+ */
+export function validateEndpoint(endpoint: string): void {
+	let url: URL;
+	try {
+		url = new URL(endpoint);
+	} catch {
+		throw new Error(`Invalid OTLP endpoint URL: ${endpoint}`);
+	}
+
+	// Only allow http and https protocols
+	if (url.protocol !== "http:" && url.protocol !== "https:") {
+		throw new Error(
+			`OTLP endpoint must use http:// or https:// protocol, got: ${url.protocol}`,
+		);
+	}
+
+	const hostname = url.hostname.toLowerCase();
+
+	// Reject known localhost names
+	if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+		throw new Error(`OTLP endpoint must not target localhost: ${endpoint}`);
+	}
+
+	// Reject IPv6 loopback and private
+	if (hostname.startsWith("[")) {
+		const bare = hostname.replace(/^\[|\]$/g, "");
+		if (bare === "::1") {
+			throw new Error(`OTLP endpoint must not target loopback address: ${endpoint}`);
+		}
+		if (bare.toLowerCase().startsWith("fd") || bare.toLowerCase().startsWith("fc")) {
+			throw new Error(`OTLP endpoint must not target private IPv6 address: ${endpoint}`);
+		}
+	}
+
+	// Reject IPv4 private/reserved ranges
+	// Match plain IPv4 addresses (not hostnames that look like IPs)
+	const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+	if (ipv4Match) {
+		const octets = [Number(ipv4Match[1]), Number(ipv4Match[2]), Number(ipv4Match[3]), Number(ipv4Match[4])];
+		// 127.x.x.x - loopback
+		if (octets[0] === 127) {
+			throw new Error(`OTLP endpoint must not target loopback address: ${endpoint}`);
+		}
+		// 10.x.x.x - private class A
+		if (octets[0] === 10) {
+			throw new Error(`OTLP endpoint must not target private network (10.0.0.0/8): ${endpoint}`);
+		}
+		// 172.16.x.x - 172.31.x.x - private class B
+		if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) {
+			throw new Error(`OTLP endpoint must not target private network (172.16.0.0/12): ${endpoint}`);
+		}
+		// 192.168.x.x - private class C
+		if (octets[0] === 192 && octets[1] === 168) {
+			throw new Error(`OTLP endpoint must not target private network (192.168.0.0/16): ${endpoint}`);
+		}
+		// 169.254.x.x - link-local / cloud metadata
+		if (octets[0] === 169 && octets[1] === 254) {
+			throw new Error(`OTLP endpoint must not target link-local/metadata endpoint (169.254.0.0/16): ${endpoint}`);
+		}
+		// 0.x.x.x - this network
+		if (octets[0] === 0) {
+			throw new Error(`OTLP endpoint must not target this-network address (0.0.0.0/8): ${endpoint}`);
+		}
+	}
+}
+
 // FIX (Round 15): Cap the number of snapshots per push to prevent OOM when
 // the metric registry has grown large. The OTLP HTTP spec allows many metrics
 // in one payload, but a single push > 10_000 metrics would balloon the
@@ -71,6 +143,7 @@ export class OTLPExporter implements MetricExporter {
 	private readonly registry: MetricRegistry;
 
 	constructor(opts: OTLPExporterOptions, registry: MetricRegistry) {
+		validateEndpoint(opts.endpoint);
 		this.opts = opts;
 		this.registry = registry;
 	}

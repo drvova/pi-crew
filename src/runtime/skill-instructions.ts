@@ -244,7 +244,10 @@ export function renderSkillInstructions(input: RenderSkillInstructionsInput & { 
 		const confidenceNote = weighted ? ` [Confidence: ${(weighted.confidence * 100).toFixed(0)}% — ${weighted.threshold}]` : "";
 
 		const header = [`## ${safeName}`, description ? `Description: ${description}${confidenceNote}` : undefined, `Source: ${source}`].filter(Boolean).join("\n");
-		const section = `${header}\n\n${compactSkillContent(loaded.content)}`;
+		const rawContent = compactSkillContent(loaded.content);
+		// Wrap skill content with provenance markers to help LLMs distinguish skill instructions
+		const wrappedContent = `<!-- skill: ${safeName} -->\n${rawContent}\n<!-- end-skill: ${safeName} -->`;
+		const section = `${header}\n\n${wrappedContent}`;
 		if (!pushSection(section)) omittedCount += 1;
 	}
 	if (omittedCount > 0) {

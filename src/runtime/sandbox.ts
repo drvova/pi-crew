@@ -44,6 +44,28 @@ const ALLOWED_IDENTIFIERS = new Set([
 
 Object.freeze(FORBIDDEN_PATTERNS);
 
+/**
+ * SECURITY (HIGH #3 fix): Normalize source code before forbidden-pattern checks
+ * to prevent unicode-escape bypasses.
+ *
+ * Attackers can write `import\u0028"fs"\u0029` which compiles as
+ * `import("fs")` but does not match the regex `/import\s*\(/`.
+ *
+ * This function:
+ * 1. Strips null bytes (used to split keywords across boundaries)
+ * 2. Decodes \uXXXX escape sequences so regexes see the actual characters
+ */
+export function normalizeCodeForValidation(code: string): string {
+	// Strip null bytes
+	let normalized = code.replace(/\0/g, "");
+	// Decode common unicode escapes: \u0028 → (
+	normalized = normalized.replace(
+		/\\u([0-9a-fA-F]{4})/g,
+		(_, hex) => String.fromCharCode(Number.parseInt(hex, 16)),
+	);
+	return normalized;
+}
+
 export interface SandboxOptions {
 	timeout?: number;
 	globals?: Record<string, unknown>;
@@ -204,15 +226,17 @@ export class WorkflowSandbox {
 	 * ensure compilation is safe.
 	 */
 	private validateScript(code: string): void {
+		// SECURITY (HIGH #3 fix): Normalize unicode escapes before pattern matching
+		const normalized = normalizeCodeForValidation(code);
 		// Check for ESM/module patterns
 		for (const pattern of FORBIDDEN_PATTERNS) {
-			if (pattern.test(code)) {
+			if (pattern.test(normalized)) {
 				throw new Error(`Forbidden pattern detected: ${pattern.source}`);
 			}
 		}
 
 		// Check for import.meta specifically (C4)
-		if (/import\.meta/.test(code)) {
+		if (/import\.meta/.test(normalized)) {
 			throw new Error("import.meta is not allowed in sandboxed code");
 		}
 

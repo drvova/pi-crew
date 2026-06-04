@@ -59,6 +59,36 @@ function isAllowedRpcOperation(operation: string): boolean {
 	return RPC_ALLOWED_OPERATIONS.has(operation);
 }
 
+// SECURITY (HIGH #4 fix): In-memory rate limiter for RPC run requests.
+// Prevents any extension from spawning unlimited child processes.
+const RPC_RATE_LIMIT_MAX = 5; // Max 5 RPC run requests...
+const RPC_RATE_LIMIT_WINDOW_MS = 60_000; // ...per 60 seconds
+const rpcRunTimestamps: number[] = [];
+
+function checkRpcRateLimit(): { allowed: boolean; retryAfterMs?: number } {
+	const now = Date.now();
+	// Evict entries older than the window
+	const cutoff = now - RPC_RATE_LIMIT_WINDOW_MS;
+	while (rpcRunTimestamps.length > 0 && rpcRunTimestamps[0] < cutoff) {
+		rpcRunTimestamps.shift();
+	}
+	if (rpcRunTimestamps.length >= RPC_RATE_LIMIT_MAX) {
+		const oldestInWindow = rpcRunTimestamps[0];
+		const retryAfterMs = oldestInWindow + RPC_RATE_LIMIT_WINDOW_MS - now;
+		return { allowed: false, retryAfterMs: Math.max(retryAfterMs, 1000) };
+	}
+	return { allowed: true };
+}
+
+function recordRpcRun(): void {
+	rpcRunTimestamps.push(Date.now());
+}
+
+/** Reset the RPC rate limiter. Used primarily for testing. */
+export function resetRpcRateLimit(): void {
+	rpcRunTimestamps.length = 0;
+}
+
 function isAllowedRpcRunParams(params: TeamToolParamsValue): { ok: boolean; error?: string } {
 	// SECURITY: Require explicit intent for any RPC-initiated run creation.
 	// This prevents malicious extensions from spawning child Pi processes silently.
@@ -90,6 +120,16 @@ export function registerPiCrewRpc(events: EventBusLike | undefined, getCtx: () =
 		on(events, "pi-crew:rpc:run", async (raw) => {
 			const id = requestId(raw);
 			try {
+				// SECURITY (HIGH #4 fix): Rate limit RPC run requests
+				const rateLimit = checkRpcRateLimit();
+				if (!rateLimit.allowed) {
+					reply(events, "pi-crew:rpc:run", id, {
+						success: false,
+						error: `RPC run rate limit exceeded. Max ${RPC_RATE_LIMIT_MAX} requests per ${RPC_RATE_LIMIT_WINDOW_MS / 1000}s. Retry after ${Math.ceil((rateLimit.retryAfterMs ?? 60000) / 1000)}s.`,
+					});
+					return;
+				}
+				recordRpcRun();
 				const ctx = getCtx();
 				if (!ctx) throw new Error("No active pi-crew session context.");
 				// Validate payload: only allow known fields from TeamToolParamsValue

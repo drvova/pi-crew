@@ -11,6 +11,9 @@ export function assertSafePathId(kind: string, value: string): string {
 }
 
 export function resolveContainedPath(baseDir: string, targetPath: string): string {
+	if (targetPath.includes('\0')) {
+		throw new Error(`Security: path contains null byte`);
+	}
 	const base = path.resolve(baseDir);
 	const resolved = path.isAbsolute(targetPath) ? path.resolve(targetPath) : path.resolve(base, targetPath);
 	const relative = path.relative(base, resolved);
@@ -41,6 +44,9 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 }
 
 export function resolveContainedRelativePath(baseDir: string, relativePath: string, kind = "path"): string {
+	if (relativePath.includes('\0')) {
+		throw new Error(`Security: path contains null byte: ${kind}`);
+	}
 	const normalized = relativePath.replaceAll("\\", "/").replace(/^\.\/+/, "");
 	if (!normalized || normalized.split("/").some((segment) => segment === "..") || path.isAbsolute(normalized)) throw new Error(`Invalid ${kind}: ${relativePath}`);
 	return resolveContainedPath(baseDir, path.resolve(baseDir, normalized));

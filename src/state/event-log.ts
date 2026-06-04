@@ -80,7 +80,11 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
 	const lockDir = `${eventsPath}.lock`;
 	const pidFile = path.join(lockDir, "pid");
 	const start = Date.now();
-	const timeout = 120000; // 120s timeout for slow CI environments
+	// SECURITY (HIGH #2 fix): Reduced from 120s to 5s to prevent blocking the
+	// event loop indefinitely. 500 retries × 10ms = 5s max. After timeout, we
+	// throw a clear error instead of blocking forever. This ensures AbortSignal
+	// handlers, SIGTERM, and graceful shutdown can fire within seconds.
+	const timeout = 5000;
 	const staleMs = 10000;
 	let acquired = false;
 	while (true) {
@@ -91,10 +95,12 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
 			break;
 		} catch {
 			if (Date.now() - start > timeout) {
-				// Log error and continue without lock — lock is held by live process.
-				// Stale detection will clean up dead locks on next attempt.
-				logInternalError("event-log.lock-timeout", new Error(`Event log lock timeout for ${eventsPath}`), `lockDir=${lockDir}`);
-				break;
+				// SECURITY (HIGH #2 fix): Throw instead of continuing without lock.
+				// Previously this logged and broke out of the loop, executing the
+				// operation without lock protection. Now we throw so callers can retry.
+				throw new Error(
+					`Event log lock timeout for ${eventsPath}: could not acquire lock within ${timeout}ms`,
+				);
 			}
 			// Stale detection: if the owning process is dead, remove the stale lock.
 			try {

@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 import { assertRunBundle } from "./run-bundle-schema.ts";
 import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
@@ -42,6 +43,21 @@ export function importRunBundle(cwd: string, bundlePath: string, scope: "project
 	if (!isContained) throw new Error(`Import path must be within project directory or crew root: ${resolvedPath}`);
 	const raw = JSON.parse(fs.readFileSync(resolvedPath, "utf-8")) as unknown;
 	assertRunBundle(raw);
+
+	// Integrity check: verify SHA-256 hash if present in manifest
+	const bundleJson = fs.readFileSync(resolvedPath, "utf-8");
+	const parsedForHash = JSON.parse(bundleJson) as { manifest?: { sha256?: string } };
+	if (parsedForHash.manifest?.sha256) {
+		const expectedHash = parsedForHash.manifest.sha256;
+		// Recompute hash by stringifying the bundle without the sha256 field
+		const { sha256: _sha256, ...manifestWithoutHash } = parsedForHash.manifest as Record<string, unknown> & { sha256?: string };
+		const bundleForHash = { ...parsedForHash, manifest: manifestWithoutHash };
+		const recomputedHash = crypto.createHash("sha256").update(JSON.stringify(bundleForHash)).digest("hex");
+		if (recomputedHash !== expectedHash) {
+			throw new Error(`Integrity check failed: SHA-256 mismatch. Expected ${expectedHash}, got ${recomputedHash}`);
+		}
+	}
+
 	const runId = assertSafePathId("runId", raw.manifest.runId);
 	const importedAt = new Date().toISOString();
 

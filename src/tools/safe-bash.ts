@@ -172,8 +172,13 @@ export function isDangerous(command: string, options: SafeBashOptions = {}): str
 		}
 	}
 
-	// Normalize: remove line continuations, collapse whitespace
-	const normalized = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
+	// Normalize: strip ANSI escapes and control chars, remove line continuations, collapse whitespace
+	const normalized = command
+		.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')  // strip ANSI escapes
+		.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')  // strip control chars
+		.replace(/\\\n/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
 
 	// Check allow patterns first (overrides)
 	for (const pattern of allowPatterns) {

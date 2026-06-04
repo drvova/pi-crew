@@ -82,6 +82,7 @@ export function buildTaskPacket(input: BuildTaskPacketInput): TaskPacket {
 	const scopePath = reads.length === 1 ? reads[0] : reads.length > 1 ? reads.join(", ") : undefined;
 	// SEC-007: Sanitize task text before inserting into task packet
 	const sanitizedTask = sanitizeTaskText(input.step.task);
+	const sanitizedGoal = sanitizeTaskText(input.manifest.goal);
 
 	// Generate a deterministic hash-based task ID for traceability and logging.
 	// Uses goal + step ID + run ID as content parts.
@@ -93,7 +94,7 @@ export function buildTaskPacket(input: BuildTaskPacketInput): TaskPacket {
 	]);
 
 	return {
-		objective: sanitizedTask.replaceAll("{goal}", input.manifest.goal),
+		objective: sanitizedTask.replaceAll("{goal}", sanitizedGoal),
 		scope,
 		scopePath,
 		repo: path.basename(input.manifest.cwd) || input.manifest.cwd,

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as crypto from "node:crypto";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
 import { readEvents, type TeamEvent } from "../state/event-log.ts";
@@ -37,6 +38,9 @@ export function exportRunBundle(manifest: TeamRunManifest, tasks: TeamTaskState[
 		events: safeEvents as TeamEvent[],
 		artifactPaths: safeManifest.artifacts.map((artifact) => artifact.path),
 	};
+	// Compute SHA-256 integrity hash of the bundle and store in manifest
+	const sha256 = crypto.createHash("sha256").update(JSON.stringify(bundle)).digest("hex");
+	(bundle.manifest as unknown as Record<string, unknown>).sha256 = sha256;
 	const json = writeArtifact(manifest.artifactsRoot, {
 		kind: "metadata",
 		relativePath: "export/run-export.json",

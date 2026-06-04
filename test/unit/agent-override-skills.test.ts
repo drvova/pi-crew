@@ -50,14 +50,18 @@ describe("AgentOverrideConfig skills field", () => {
 });
 
 function withIsolatedGlobalConfig<T>(fn: () => T): T {
-	const previous = process.env.PI_TEAMS_HOME;
+	const previousHome = process.env.PI_TEAMS_HOME;
+	const previousSkipCheck = process.env.PI_CREW_SKIP_HOME_CHECK;
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-home-"));
 	process.env.PI_TEAMS_HOME = home;
+	process.env.PI_CREW_SKIP_HOME_CHECK = "1";
 	try {
 		return fn();
 	} finally {
-		if (previous === undefined) delete process.env.PI_TEAMS_HOME;
-		else process.env.PI_TEAMS_HOME = previous;
+		if (previousHome === undefined) delete process.env.PI_TEAMS_HOME;
+		else process.env.PI_TEAMS_HOME = previousHome;
+		if (previousSkipCheck === undefined) delete process.env.PI_CREW_SKIP_HOME_CHECK;
+		else process.env.PI_CREW_SKIP_HOME_CHECK = previousSkipCheck;
 		fs.rmSync(home, { recursive: true, force: true });
 	}
 }
