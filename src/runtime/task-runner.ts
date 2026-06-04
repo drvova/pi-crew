@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { AgentConfig } from "../agents/agent-config.ts";
 import type { CrewLimitsConfig, CrewRuntimeConfig } from "../config/config.ts";
 import type {
@@ -272,6 +273,11 @@ export async function runTeamTask(
 		if (input.step.preStepScript) {
 			const scriptTimeout = input.step.preStepTimeout ?? 30_000;
 			const scriptArgs = input.step.preStepArgs ?? [];
+			// SECURITY: Validate preStepScript path is contained within cwd
+			const resolved = path.resolve(manifest.cwd, input.step.preStepScript);
+			if (!resolved.startsWith(path.resolve(manifest.cwd) + path.sep) && resolved !== path.resolve(manifest.cwd)) {
+				throw new Error(`Security: preStepScript path escapes working directory: ${input.step.preStepScript}`);
+			}
 			try {
 				const { execFileSync } = await import("node:child_process");
 				preStepOutput = execFileSync(input.step.preStepScript, scriptArgs, {
@@ -526,6 +532,9 @@ export async function runTeamTask(
 							collectedJsonEvents.push(
 								event as Record<string, unknown>,
 							);
+							if (collectedJsonEvents.length > 1000) {
+								collectedJsonEvents.splice(0, collectedJsonEvents.length - 1000);
+							}
 						// Accumulate lifetime usage via message_end events (survives compaction)
 						if (event && typeof event === "object" && (event as Record<string, unknown>).type === "message_end") {
 							const msg = (event as Record<string, unknown>).message as Record<string, unknown> | undefined;

@@ -1,5 +1,19 @@
 import { effectiveAutonomousConfig, parseConfig, type PiTeamsAutonomousConfig, type PiTeamsConfig } from "../../config/config.ts";
 
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/** Recursively strip dangerous prototype-pollution keys from all levels of an object. */
+export function sanitizeObject<T>(obj: T): T {
+	if (obj === null || obj === undefined || typeof obj !== "object") return obj;
+	if (Array.isArray(obj)) return obj.map((item) => sanitizeObject(item)) as T;
+	const safe: Record<string, unknown> = {};
+	for (const key of Object.keys(obj as Record<string, unknown>)) {
+		if (DANGEROUS_KEYS.has(key)) continue;
+		safe[key] = sanitizeObject((obj as Record<string, unknown>)[key]);
+	}
+	return safe as T;
+}
+
 export function autonomousPatchFromConfig(config: unknown): PiTeamsAutonomousConfig {
 	const rootPatch = parseConfig(config).autonomous;
 	if (rootPatch) return rootPatch;
@@ -11,7 +25,7 @@ export function configPatchFromConfig(config: unknown): PiTeamsConfig {
 }
 
 export function effectiveRunConfig(base: PiTeamsConfig, rawOverride: unknown): PiTeamsConfig {
-	const patch = parseConfig(rawOverride);
+	const patch = sanitizeObject(parseConfig(rawOverride));
 	return {
 		...base,
 		...patch,

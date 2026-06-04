@@ -32,6 +32,8 @@ function requestId(raw: unknown): string | undefined {
 
 function reply(events: EventBusLike, channel: string, id: string | undefined, payload: RpcReply): void {
 	if (!id) return;
+	// SECURITY: Validate requestId format to prevent channel injection.
+	if (!/^[a-zA-Z0-9_-]+$/.test(id)) return;
 	events.emit(`${channel}:reply:${id}`, payload);
 }
 
@@ -112,6 +114,12 @@ function on(events: EventBusLike, channel: string, handler: (raw: unknown) => vo
 	const unsub = events.on(channel, handler);
 	return typeof unsub === "function" ? unsub : () => {};
 }
+
+// SECURITY TRUST BOUNDARY: RPC channels (pi-crew:rpc:run, pi-crew:rpc:status,
+// pi-crew:rpc:live-control) are accessible to any extension on the shared event
+// bus. Mitigations applied: rate limiting (RPC_RATE_LIMIT_MAX), explicit intent
+// requirement for runs, operation allowlist for live-control reads, and cwd
+// containment validation. A full fix requires event-bus-level origin signing.
 
 export function registerPiCrewRpc(events: EventBusLike | undefined, getCtx: () => ExtensionContext | undefined): PiCrewRpcHandle | undefined {
 	if (!events) return undefined;

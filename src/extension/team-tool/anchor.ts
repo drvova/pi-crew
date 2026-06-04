@@ -40,9 +40,13 @@ export function handleAnchorSet(
 	const cfg = params.config ?? {};
 
 	// Parse context from config
+	const POLLUTED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 	const context: Record<string, unknown> = {};
 	if (cfg.context && typeof cfg.context === "object") {
-		Object.assign(context, cfg.context as Record<string, unknown>);
+		const raw = cfg.context as Record<string, unknown>;
+		for (const [k, v] of Object.entries(raw)) {
+			if (!POLLUTED_KEYS.has(k)) context[k] = v;
+		}
 	}
 	if (cfg.key) {
 		// Single key shorthand

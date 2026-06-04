@@ -424,7 +424,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			return { exitCode: 1, stdout: "", stderr: "Mock mode requires PI_CREW_ALLOW_MOCK=1" };
 		}
 		// SECURITY: Log mock mode activation prominently for audit trail
-		console.warn(`Mock mode active: ${mock} — NOT running real agents!`);
+		logInternalError("child-pi.mock", new Error(`Mock mode active: ${mock}`), "NOT running real agents");
 		if (mock === "success") {
 			const stdout = `[MOCK] Success for ${input.agent.name}\n`;
 			observeStdoutChunk(input, stdout);

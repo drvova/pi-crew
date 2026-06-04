@@ -25,9 +25,14 @@ import type { PiTeamsToolResult } from "../tool-result.ts";
 import { locateRunCwd } from "../team-tool.ts";
 import { configRecord, result, type TeamContext } from "./context.ts";
 
-function globMatch(value: string, pattern: string): boolean {
-	const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\?/g, "\\?").replace(/\*/g, ".*");
-	return new RegExp(`^${escaped}$`).test(value);
+export function globMatch(value: string, pattern: string): boolean {
+	// Prevent ReDoS: reject excessively long patterns
+	if (pattern.length > 200) return false;
+	const regex = pattern
+		.replace(/[.+^${}()|[\]\\]/g, "\\$&")  // escape regex special chars
+		.replace(/\*/g, "[^/]*")  // * matches non-slash characters only
+		.replace(/\?/g, "[^/]");  // ? matches single non-slash
+	return new RegExp(`^${regex}$`).test(value);
 }
 
 function safeReadContainedFile(baseDir: string, filePath: string | undefined): string | undefined {
@@ -364,7 +369,7 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 				const updatedTask = claimTask(task, owner);
 				const tasks = loaded.tasks.map((item) => item.id === task.id ? updatedTask : item);
 				saveRunTasks(loaded.manifest, tasks);
-				appendEvent(loaded.manifest.eventsPath, { type: "task.claimed", runId: loaded.manifest.runId, taskId: task.id, data: { owner, token: updatedTask.claim?.token, leasedUntil: updatedTask.claim?.leasedUntil } });
+				appendEvent(loaded.manifest.eventsPath, { type: "task.claimed", runId: loaded.manifest.runId, taskId: task.id, data: { owner, token: "[REDACTED]", leasedUntil: updatedTask.claim?.leasedUntil } });
 				return result(JSON.stringify(updatedTask.claim, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
 			});
 		} catch (error) {

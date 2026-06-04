@@ -65,7 +65,12 @@ const DANGEROUS_SHELL_PATTERNS = /(?:;|&&|\|\||\$\(|`|\$\{|\b(eval|exec)\b|>|>>|
  * Allows: pipes (|), redirection of stderr (2>&1), and basic npm/cargo/npx commands.
  */
 function validateGateCommand(command: string): void {
-	const normalized = command.replace(/\\\n/g, " ").trim();
+	const normalized = command
+		.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')  // ANSI escape sequences
+		.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')  // control chars
+		.replace(/\\\n/g, ' ')  // escaped newlines
+		.replace(/\s+/g, ' ')  // collapse whitespace
+		.trim();
 	if (DANGEROUS_SHELL_PATTERNS.test(normalized)) {
 		throw new Error(
 			`Security: verification gate command rejected (dangerous shell pattern): ${command}`,

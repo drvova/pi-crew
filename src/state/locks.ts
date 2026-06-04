@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { TeamRunManifest } from "./types.ts";
 import { DEFAULT_LOCKS } from "../config/defaults.ts";
 import { sleepSync } from "../utils/sleep.ts";
@@ -103,9 +103,16 @@ function readLockToken(filePath: string): string | undefined {
  *
  * With token matching, A's release is a no-op for B's lock.
  */
+function timingSafeTokenMatch(a: string, b: string): boolean {
+	const bufA = Buffer.from(String(a));
+	const bufB = Buffer.from(String(b));
+	if (bufA.length !== bufB.length) return false;
+	return timingSafeEqual(bufA, bufB);
+}
+
 function releaseLock(filePath: string, token: string): void {
 	const stored = readLockToken(filePath);
-	if (stored === undefined || stored === token) {
+	if (stored === undefined || timingSafeTokenMatch(stored, token)) {
 		try {
 			fs.rmSync(filePath, { force: true });
 		} catch {

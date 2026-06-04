@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { TeamTaskState } from "./types.ts";
 
 export interface TaskClaimState {
@@ -18,8 +18,15 @@ export function isTaskClaimExpired(claim: TaskClaimState | undefined, now = new 
 	return Number.isFinite(parsed) ? parsed <= now.getTime() : true;
 }
 
+export function timingSafeTokenMatch(a: string, b: string): boolean {
+	const bufA = Buffer.from(String(a));
+	const bufB = Buffer.from(String(b));
+	if (bufA.length !== bufB.length) return false;
+	return timingSafeEqual(bufA, bufB);
+}
+
 export function canUseTaskClaim(task: Pick<TeamTaskState, "claim">, owner: string, token: string, now = new Date()): boolean {
-	return task.claim?.owner === owner && task.claim.token === token && !isTaskClaimExpired(task.claim, now);
+	return task.claim?.owner === owner && timingSafeTokenMatch(task.claim.token, token) && !isTaskClaimExpired(task.claim, now);
 }
 
 export function claimTask<T extends TeamTaskState>(task: T, owner: string, leaseMs?: number, now = new Date()): T {

@@ -35,6 +35,14 @@ export async function executeHook(name: HookName, ctx: HookContext): Promise<Hoo
 	// environments, all hooks should set workspaceId to prevent cross-workspace access.
 	const scopedHooks = hooks.filter((h) => !h.workspaceId || h.workspaceId === ctx.workspaceId);
 	if (scopedHooks.length === 0) return { hookName: name, outcome: "allow", durationMs: 0 };
+	const POLLUTED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+	function sanitizeMergeData(data: Record<string, unknown>): Record<string, unknown> {
+		const clean: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(data)) {
+			if (!POLLUTED_KEYS.has(k)) clean[k] = v;
+		}
+		return clean;
+	}
 	const start = Date.now();
 	const diagnostics: string[] = [];
 	let capturedModifications: Record<string, unknown> | undefined;
@@ -45,7 +53,7 @@ export async function executeHook(name: HookName, ctx: HookContext): Promise<Hoo
 					return { hookName: name, outcome: "block", durationMs: Date.now() - start, reason: result.reason };
 				}
 			if (result.outcome === "modify" && result.data) {
-				Object.assign(ctx, result.data);
+				Object.assign(ctx, sanitizeMergeData(result.data));
 				capturedModifications = { ...result.data };
 			}
 		} catch (error) {
