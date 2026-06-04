@@ -80,7 +80,8 @@ crewHooks.register("run_completed", async (event) => {
 /**
  * Get instinct-based recommendations.
  */
-export async function getInstinctRecommendations() {
+/** @internal */
+async function getInstinctRecommendations() {
 	try {
 		const store = await getStore();
 		return store.getInstincts().filter((i: { confidence: number }) => i.confidence >= 0.6);

@@ -81,7 +81,8 @@ export function listLiveAgentsByWorkspace(workspaceId: string): LiveAgentHandle[
 /**
  * List only active agents (running/queued/waiting) for a specific workspace.
  */
-export function listActiveLiveAgentsByWorkspace(workspaceId: string): LiveAgentHandle[] {
+/** @internal */
+function listActiveLiveAgentsByWorkspace(workspaceId: string): LiveAgentHandle[] {
 	return listActiveLiveAgents().filter((a) => a.workspaceId === workspaceId);
 }
 
@@ -150,7 +151,8 @@ function safeDisposeLiveSession(handle: LiveAgentHandle): void {
 	}
 }
 
-export function removeLiveAgentHandle(agentId: string): LiveAgentHandle | undefined {
+/** @internal */
+function removeLiveAgentHandle(agentId: string): LiveAgentHandle | undefined {
 	const handle = liveAgents.get(agentId);
 	if (!handle) return undefined;
 	liveAgents.delete(agentId);
@@ -406,7 +408,8 @@ export function broadcastIrcMessage(fromAgentId: string, message: IrcMessage): s
 }
 
 /** Phase 7: Get pending IRC messages for an agent (and clear them). */
-export function drainIrcMessages(agentIdOrTaskId: string): IrcMessage[] {
+/** @internal */
+function drainIrcMessages(agentIdOrTaskId: string): IrcMessage[] {
 	const handle = getLiveAgent(agentIdOrTaskId);
 	if (!handle) return [];
 	const messages = [...handle.pendingMessages];

@@ -51,7 +51,8 @@ export function renderIrcPeerRoster(selfId: string, peers: Array<{ agentId: stri
 /**
  * Build the IRC system prompt section for a live-session worker.
  */
-export function buildIrcSystemSection(selfId: string, peers: Array<{ agentId: string; status: string }>): string {
+/** @internal */
+function buildIrcSystemSection(selfId: string, peers: Array<{ agentId: string; status: string }>): string {
 	const roster = renderIrcPeerRoster(selfId, peers);
 	return [
 		"## Inter-Agent Communication",
@@ -66,7 +67,8 @@ export function buildIrcSystemSection(selfId: string, peers: Array<{ agentId: st
  * Route an IRC message to the appropriate agent(s).
  * Returns the list of agent IDs that received the message.
  */
-export function routeIrcMessage(
+/** @internal */
+function routeIrcMessage(
 	message: IrcSendMessage,
 	selfId: string,
 	routing: {

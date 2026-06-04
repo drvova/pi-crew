@@ -337,7 +337,8 @@ export function computeGreenLevelFromResults(
  * Create a verification gate report artifact.
  * Formatted for human review per ECC verification-loop pattern.
  */
-export function createVerificationGateReport(
+/** @internal */
+function createVerificationGateReport(
 	taskId: string,
 	contract: VerificationContract,
 	results: VerificationCommandResult[],

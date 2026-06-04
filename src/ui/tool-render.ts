@@ -45,7 +45,8 @@ export function formatDuration(ms: number): string {
 	return s > 0 ? `${m}m${s}s` : `${m}m`;
 }
 
-export function formatContextUsage(tokens: number, contextWindow: number | undefined): string {
+/** @internal */
+function formatContextUsage(tokens: number, contextWindow: number | undefined): string {
 	if (!contextWindow) return `${formatTokens(tokens)} ctx`;
 	const pct = (tokens / contextWindow) * 100;
 	const maxStr = contextWindow >= 1_000_000 ? `${(contextWindow / 1_000_000).toFixed(1)}M` : `${Math.round(contextWindow / 1000)}k`;

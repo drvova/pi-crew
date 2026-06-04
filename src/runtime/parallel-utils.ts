@@ -63,7 +63,8 @@ export async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: 
  * On abort: returns partial results (may contain undefined entries).
  * On error: throws immediately (fail-fast) and cancels remaining work.
  */
-export async function mapConcurrentWithSignal<T, R>(
+/** @internal */
+async function mapConcurrentWithSignal<T, R>(
 	items: T[],
 	limit: number,
 	fn: (item: T, i: number, signal: AbortSignal) => Promise<R>,

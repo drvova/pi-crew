@@ -28,7 +28,8 @@ export const TEAM_TASK_STATUS_TRANSITIONS: Readonly<Record<TeamTaskStatus, reado
 	needs_attention: ["queued", "running"],
 };
 
-export const TEAM_EVENT_TYPES = [
+/** @internal */
+const TEAM_EVENT_TYPES = [
 	"run.created",
 	"run.queued",
 	"run.planning",

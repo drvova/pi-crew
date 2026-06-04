@@ -88,7 +88,8 @@ export interface ParallelResult<R> {
  *
  * Adapted from oh-my-pi's `mapWithConcurrencyLimit`.
  */
-export async function mapWithFailFast<T, R>(
+/** @internal */
+async function mapWithFailFast<T, R>(
 	items: T[],
 	concurrency: number,
 	fn: (item: T, index: number, signal: AbortSignal) => Promise<R>,

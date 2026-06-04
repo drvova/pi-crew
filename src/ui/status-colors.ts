@@ -47,7 +47,8 @@ export function iconForStatus(status: RunStatus, options?: { runningGlyph?: stri
 	}
 }
 
-export function colorForActivity(activityState: string | undefined): CrewThemeColor {
+/** @internal */
+function colorForActivity(activityState: string | undefined): CrewThemeColor {
 	if (activityState === "needs_attention") return "warning";
 	if (activityState === "stale") return "error";
 	return "dim";

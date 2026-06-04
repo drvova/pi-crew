@@ -22,7 +22,8 @@ function buildCliTheme(theme: CrewTheme): Record<string, (text: string) => strin
 	};
 }
 
-export function detectLanguageFromPath(filePath: string): string | undefined {
+/** @internal */
+function detectLanguageFromPath(filePath: string): string | undefined {
 	const ext = filePath.split(".").pop()?.toLowerCase();
 	if (!ext) return undefined;
 	return languageMap[ext];

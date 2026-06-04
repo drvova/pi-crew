@@ -2,7 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { FSWatcher, WatchListener } from "node:fs";
 
-export const FS_WATCH_RETRY_DELAY_MS = 5000;
+/** @internal */
+const FS_WATCH_RETRY_DELAY_MS = 5000;
 
 export function closeWatcher(watcher: FSWatcher | null | undefined): void {
 	if (!watcher) {
@@ -85,4 +86,5 @@ export function watchCrewState(
 }
 
 // Re-export path helper so callers don't pull node:path just for join.
-export const joinPath = path.join;
+/** @internal */
+const joinPath = path.join;

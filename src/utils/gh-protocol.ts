@@ -473,7 +473,8 @@ export function resolveGitHubUrl(parsed: Parsed, scheme: "issue" | "pr", cwd: st
  * Resolve a raw `issue://` or `pr://` URL string.
  * Convenience wrapper combining parse + resolve.
  */
-export function resolveGitHubProtocol(raw: string, scheme: "issue" | "pr", cwd: string): GhResult<unknown> {
+/** @internal */
+function resolveGitHubProtocol(raw: string, scheme: "issue" | "pr", cwd: string): GhResult<unknown> {
 	const parsed = parseGitHubUrl(raw, scheme);
 	return resolveGitHubUrl(parsed, scheme, cwd);
 }
