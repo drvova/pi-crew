@@ -3,10 +3,17 @@
  * Called on first team run in a workspace to ensure all required
  * directories and files exist.
  *
- * IMPORTANT: This module must be COMPLETELY self-contained with NO dependencies
- * on other pi-crew modules (especially paths.ts). It is called via dynamic
- * import from child-process contexts (background runners, subagents) where
- * module binding can fail. Keep this file minimal and self-contained.
+ * IMPORTANT: This module is dynamically `import()`'d from concurrent child
+ * Pi subprocesses (3+ parallel subagents). Under load, the `path` namespace
+ * binding can intermittently arrive as `undefined` in jiti's ESM/CJS interop
+ * layer. We therefore use the inline helpers `parseRoot`, `safeJoin`,
+ * `safeDirname`, and `safeResolve` so that critical path operations do not
+ * depend on the `path` namespace binding.
+ *
+ * The `node:path` import is retained as a *fallback* (only used when the
+ * binding is healthy). Don't add new dependencies on other pi-crew modules.
+ *
+ * See: https://github.com/baphuongna/pi-crew/issues/28
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -71,7 +78,10 @@ function parseRoot(start: string): string {
 		const rest = start.slice(2);
 		const firstSep = Math.max(rest.indexOf("\\"), rest.indexOf("/"));
 		if (firstSep === -1) return start;
-		const secondSep = Math.max(rest.indexOf("\\", firstSep + 1), rest.indexOf("/", firstSep + 1));
+		const secondSep = Math.max(
+			rest.indexOf("\\", firstSep + 1),
+			rest.indexOf("/", firstSep + 1),
+		);
 		if (secondSep === -1) return start;
 		// secondSep is an index into `rest`; add 2 to map back to `start`.
 		return start.slice(0, 2 + secondSep);
@@ -98,10 +108,25 @@ function safeJoin(...parts: string[]): string {
 	// Don't delegate to `path.join` because POSIX/Windows disagree on which
 	// separator is the path separator, and the dynamic-import context (issue
 	// #28) may have a partially-initialized `path` namespace.
-	const sep = parts.some((p) => p.includes("\\")) ? "\\" : "/";
-	// Collapse runs of the separator (e.g. "a//b" -> "a/b", "a\\b" -> "a\\b").
-	const pattern = sep === "\\" ? /\\{2,}/g : /\/+/g;
-	return parts.filter(Boolean).join(sep).replace(pattern, sep);
+	const filtered = parts.filter(Boolean);
+	if (filtered.length === 0) return "";
+	const sep = filtered.some((p) => p.includes("\\")) ? "\\" : "/";
+	const joined = filtered.join(sep);
+	// Collapse runs of the separator, but preserve a leading UNC double-separator
+	// ("\\\\server\\share" stays as-is, not "\\server\\share"). F-1 in the
+	// post-fix review.
+	if (sep === "\\") {
+		const leading = joined.startsWith("\\\\")
+			? "\\\\"
+			: joined[0] === "\\"
+				? "\\"
+				: "";
+		const body = joined.slice(leading.length);
+		return leading + body.replace(/\\{2,}/g, "\\");
+	}
+	const leading = joined.startsWith("/") ? "/" : "";
+	const body = joined.slice(leading.length);
+	return leading + body.replace(/\/{2,}/g, "/");
 }
 
 function safeDirname(p: string): string {
@@ -126,7 +151,12 @@ function safeResolve(p: string): string {
 
 function findProjectRoot(start: string): string | undefined {
 	const dirMarkers = [".git", ".hg", ".svn"];
-	const fileMarkers = ["package.json", "pyproject.toml", "Cargo.toml", "go.mod"];
+	const fileMarkers = [
+		"package.json",
+		"pyproject.toml",
+		"Cargo.toml",
+		"go.mod",
+	];
 	// Use `parseRoot` (inlined above) to avoid `path.parse` for the critical
 	// termination root — fixes the jiti namespace race in issue #28.
 	const root = parseRoot(start);
@@ -216,9 +246,10 @@ export async function ensureCrewDirectory(cwd: string): Promise<void> {
 }
 
 // Exported only for regression tests of issue #28.
-// NOT part of the public API — the underscore prefix is a hint to bundlers
-// and linters that these should not be used by application code.
-export const __test_internals = {
+// NOT part of the public API — the `__test__` prefix follows the project
+// convention used in atomic-write.ts, state-store.ts, team-runner.ts, etc.
+// See F-4 in the post-fix review for the convention rationale.
+export const __test__internals = {
 	parseRoot,
 	safeJoin,
 	safeDirname,
