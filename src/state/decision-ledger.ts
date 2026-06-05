@@ -121,6 +121,7 @@ export function initLedger(runId: string): void {
  * FIX: Uses atomic write to prevent partial writes on crash.
  */
 export function appendEntry(runId: string, entry: RolloutEntry): RolloutEntry {
+	assertSafePathId("runId", runId);
 	// Ensure directory exists
 	const ledgerPath = getLedgerPath(runId);
 	const dir = dirname(ledgerPath);
@@ -175,6 +176,7 @@ export function getLedger(runId: string): RolloutEntry[] {
  * Get the most recent entry from the decision ledger.
  */
 export function getLatestDecision(runId: string): RolloutEntry | null {
+	assertSafePathId("runId", runId);
 	const ledger = getLedger(runId);
 	if (ledger.length === 0) {
 		return null;
@@ -186,6 +188,7 @@ export function getLatestDecision(runId: string): RolloutEntry | null {
  * Generate a human-readable markdown summary of the ledger.
  */
 export function summarizeLedger(runId: string): string {
+	assertSafePathId("runId", runId);
 	const ledger = getLedger(runId);
 
 	if (ledger.length === 0) {
@@ -265,25 +268,8 @@ export function summarizeLedger(runId: string): string {
  * FIX: This preserves all previous entries while updating just the last one.
  * Previously this would truncate the entire ledger!
  */
-function overrideLastEntry(
-	runId: string,
-	coherenceMark: import("./types.js").CoherenceMark,
-): RolloutEntry {
-	const ledger = getLedger(runId);
-	if (ledger.length === 0) {
-		throw new Error(`No ledger entries found for run ${runId}`);
-	}
-	// Update the last entry with the new coherence mark
-	const lastIndex = ledger.length - 1;
-	ledger[lastIndex] = { ...ledger[lastIndex], coherenceMark };
-	// Rewrite entire ledger to preserve all entries
-	const ledgerPath = getLedgerPath(runId);
-	atomicWriteFile(
-		ledgerPath,
-		ledger.map((e) => JSON.stringify(e)).join("\n") + "\n",
-	);
-	return ledger[lastIndex];
-}
+// NOTE: overrideLastEntry was dead code (never called). Removed in post-v0.6.2 review.
+// If needed in the future, re-implement with assertSafePathId guard.
 
 /**
  * Promote a candidate by marking it as accepted with proper coherence.

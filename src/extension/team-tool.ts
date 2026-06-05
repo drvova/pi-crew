@@ -33,6 +33,7 @@ import type {
 	TeamTaskState,
 } from "../state/types.ts";
 import { allTeams, discoverTeams } from "../teams/discover-teams.ts";
+import { assertSafePathId } from "../utils/safe-paths.ts";
 import {
 	allWorkflows,
 	discoverWorkflows,
@@ -99,10 +100,31 @@ async function handleRun(
 	return _cachedHandleRun(...args);
 }
 
+import { FileCheckpointStore } from "../runtime/checkpoint.ts";
 import { waitForRun } from "../runtime/run-tracker.ts";
 import { normalizeSkillOverride } from "../runtime/skill-instructions.ts";
+import {
+	computeRunCacheKey,
+	getCachedRun,
+	getCacheStats,
+} from "../state/run-cache.ts";
+import { listRunGraphs, loadRunGraph } from "../state/run-graph.ts";
 import { searchAgents, searchTeams } from "../utils/bm25-search.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
+import { buildTeamOnboarding } from "./team-onboard.ts";
+import {
+	handleAnchorAccumulate,
+	handleAnchorClear,
+	handleAnchorSet,
+	handleAnchorStatus,
+} from "./team-tool/anchor.ts";
+import {
+	createAutoSummarizeService,
+	handleAutoSummarizeConfig,
+	handleAutoSummarizeOff,
+	handleAutoSummarizeOn,
+	handleAutoSummarizeStatus,
+} from "./team-tool/auto-summarize.ts";
 import {
 	type CacheControlDeps,
 	invalidateSnapshot,
@@ -110,6 +132,10 @@ import {
 import { handleCancel, handleRetry } from "./team-tool/cancel.ts";
 import { handleDoctor } from "./team-tool/doctor.ts";
 import { handleExplain } from "./team-tool/explain.ts";
+import {
+	handleListScheduled,
+	handleSchedule,
+} from "./team-tool/handle-schedule.ts";
 import { handleHealthMonitor } from "./team-tool/health-monitor.ts";
 import {
 	handleArtifacts,
@@ -125,30 +151,17 @@ import {
 	handlePrune,
 	handleWorktrees,
 } from "./team-tool/lifecycle-actions.ts";
-import {
-	getCachedRun,
-	computeRunCacheKey,
-	getCacheStats,
-} from "../state/run-cache.ts";
-import {
-	loadRunGraph,
-	listRunGraphs,
-} from "../state/run-graph.ts";
-import { FileCheckpointStore } from "../runtime/checkpoint.ts";
-import { buildTeamOnboarding } from "./team-onboard.ts";
-import { handleParallel } from "./team-tool/parallel-dispatch.ts";
-import { handleSchedule, handleListScheduled } from "./team-tool/handle-schedule.ts";
-import { handlePlan } from "./team-tool/plan.ts";
 import { handleOrchestrate } from "./team-tool/orchestrate.ts";
+import { handleParallel } from "./team-tool/parallel-dispatch.ts";
+import { handlePlan } from "./team-tool/plan.ts";
 import { handleRespond } from "./team-tool/respond.ts";
 import { handleStatus } from "./team-tool/status.ts";
-import { handleAnchorSet, handleAnchorClear, handleAnchorStatus, handleAnchorAccumulate } from "./team-tool/anchor.ts";
-import { handleAutoSummarizeOn, handleAutoSummarizeOff, handleAutoSummarizeStatus, handleAutoSummarizeConfig, createAutoSummarizeService } from "./team-tool/auto-summarize.ts";
 
 export { handleApi } from "./team-tool/api.ts";
 export { handleRetry } from "./team-tool/cancel.ts";
 export type { TeamContext } from "./team-tool/context.ts";
 export { handleDoctor } from "./team-tool/doctor.ts";
+export { handleSchedule } from "./team-tool/handle-schedule.ts";
 export {
 	handleArtifacts,
 	handleEvents,
@@ -163,12 +176,11 @@ export {
 	handlePrune,
 	handleWorktrees,
 } from "./team-tool/lifecycle-actions.ts";
-export { handleSchedule } from "./team-tool/handle-schedule.ts";
+export { handleOrchestrate } from "./team-tool/orchestrate.ts";
 export { handlePlan } from "./team-tool/plan.ts";
 export { handleStatus } from "./team-tool/status.ts";
 export type { TeamToolDetails } from "./team-tool-types.ts";
 export { handleRun };
-export { handleOrchestrate } from "./team-tool/orchestrate.ts";
 
 export function handleList(
 	params: TeamToolParamsValue,
@@ -689,12 +701,14 @@ export function handleSteer(
 			true,
 		);
 	if (!task.pendingSteers) task.pendingSteers = [];
-		// HIGH-04: Cap pendingSteers array to prevent unbounded memory growth
-		const MAX_PENDING_STEERS = 100;
-		if (task.pendingSteers.length >= MAX_PENDING_STEERS) {
-			task.pendingSteers = task.pendingSteers.slice(-(MAX_PENDING_STEERS - 1));
-		}
-		task.pendingSteers.push(message);
+	// HIGH-04: Cap pendingSteers array to prevent unbounded memory growth
+	const MAX_PENDING_STEERS = 100;
+	if (task.pendingSteers.length >= MAX_PENDING_STEERS) {
+		task.pendingSteers = task.pendingSteers.slice(
+			-(MAX_PENDING_STEERS - 1),
+		);
+	}
+	task.pendingSteers.push(message);
 	saveRunTasks(loaded.manifest, loaded.tasks);
 	appendEvent(loaded.manifest.eventsPath, {
 		type: "task.steer_queued",
@@ -752,7 +766,10 @@ function handleInvalidate(
  * Locate the CWD where a run's state is stored.
  * Tries ctx.cwd first, then scans immediate child directories for .crew/state/runs/<runId>.
  */
-export function locateRunCwd(runId: string, baseCwd: string): string | undefined {
+export function locateRunCwd(
+	runId: string,
+	baseCwd: string,
+): string | undefined {
 	// Fast path: run is in the current CWD
 	if (loadRunManifestById(baseCwd, runId)) return baseCwd;
 
@@ -1090,23 +1107,32 @@ export async function handleTeamTool(
 			return handleWait(params, ctx);
 		case "graph": {
 			if (params.runId) {
+				assertSafePathId("runId", params.runId);
 				const graph = loadRunGraph(ctx.cwd, params.runId);
 				return result(
-					graph ? JSON.stringify(graph, null, 2) : "No graph found for this run.",
+					graph
+						? JSON.stringify(graph, null, 2)
+						: "No graph found for this run.",
 					{ action: "graph", status: graph ? "ok" : "error" },
 					!graph,
 				);
 			}
 			const graphs = listRunGraphs(ctx.cwd);
 			return result(
-				graphs.length ? `Available graphs:\n${graphs.join("\n")}` : "No graphs available.",
+				graphs.length
+					? `Available graphs:\n${graphs.join("\n")}`
+					: "No graphs available.",
 				{ action: "graph", status: "ok" },
 			);
 		}
 		case "search": {
 			const query = params.goal ?? params.task ?? "";
 			if (!query) {
-				return result("Search requires goal or task query.", { action: "search", status: "error" }, true);
+				return result(
+					"Search requires goal or task query.",
+					{ action: "search", status: "error" },
+					true,
+				);
 			}
 			try {
 				const [agentResults, teamResults] = await Promise.all([
@@ -1117,19 +1143,30 @@ export async function handleTeamTool(
 				if (teamResults.length) {
 					lines.push("## Teams");
 					for (const r of teamResults) {
-						lines.push(`- [${r.team.name}] score=${r.score.toFixed(2)}: ${r.team.description ?? "(no description)"}`);
+						lines.push(
+							`- [${r.team.name}] score=${r.score.toFixed(2)}: ${r.team.description ?? "(no description)"}`,
+						);
 					}
 				}
 				if (agentResults.length) {
 					lines.push("## Agents");
 					for (const r of agentResults) {
-						lines.push(`- [${r.agent.name}] score=${r.score.toFixed(2)}: ${r.agent.description ?? "(no description)"}`);
+						lines.push(
+							`- [${r.agent.name}] score=${r.score.toFixed(2)}: ${r.agent.description ?? "(no description)"}`,
+						);
 					}
 				}
-				return result(lines.length ? lines.join("\n") : "No results found.", { action: "search", status: "ok" });
+				return result(
+					lines.length ? lines.join("\n") : "No results found.",
+					{ action: "search", status: "ok" },
+				);
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
-				return result(`Search failed: ${msg}`, { action: "search", status: "error" }, true);
+				return result(
+					`Search failed: ${msg}`,
+					{ action: "search", status: "error" },
+					true,
+				);
 			}
 		}
 		case "schedule":
@@ -1137,7 +1174,10 @@ export async function handleTeamTool(
 		case "scheduled":
 			return handleListScheduled(params, ctx);
 		case "anchor": {
-			const subAction = typeof params.config?.subAction === "string" ? params.config.subAction : "status";
+			const subAction =
+				typeof params.config?.subAction === "string"
+					? params.config.subAction
+					: "status";
 			switch (subAction) {
 				case "set":
 					return handleAnchorSet(params, ctx);
@@ -1151,7 +1191,12 @@ export async function handleTeamTool(
 		}
 		case "auto-summarize":
 		case "auto_boomerang": {
-			const subAction = typeof params.config?.subAction === "string" ? params.config.subAction : ((params.action as string) === "auto_boomerang" ? "toggle" : "status");
+			const subAction =
+				typeof params.config?.subAction === "string"
+					? params.config.subAction
+					: (params.action as string) === "auto_boomerang"
+						? "toggle"
+						: "status";
 			switch (subAction) {
 				case "on":
 					return handleAutoSummarizeOn(params, ctx);
@@ -1178,7 +1223,14 @@ export async function handleTeamTool(
 		}
 		case "explain": {
 			const explainResult = handleExplain(params, ctx.cwd);
-			return result(explainResult.text, { action: "explain", status: explainResult.isError ? "error" : "ok" }, explainResult.isError);
+			return result(
+				explainResult.text,
+				{
+					action: "explain",
+					status: explainResult.isError ? "error" : "ok",
+				},
+				explainResult.isError,
+			);
 		}
 		case "cache": {
 			if (params.goal) {
@@ -1192,10 +1244,24 @@ export async function handleTeamTool(
 				if (cached) {
 					return result(
 						`Cached run found (${new Date(cached.cachedAt).toISOString()}): runId=${cached.runId}, status=${cached.status}, ${cached.tasks.length} tasks`,
-						{ action: "cache", status: "ok", data: { cacheKey: key, cacheHit: true, runId: cached.runId, status: cached.status, taskCount: cached.tasks.length } },
+						{
+							action: "cache",
+							status: "ok",
+							data: {
+								cacheKey: key,
+								cacheHit: true,
+								runId: cached.runId,
+								status: cached.status,
+								taskCount: cached.tasks.length,
+							},
+						},
 					);
 				}
-				return result(`No cached result for key: ${key}`, { action: "cache", status: "ok", data: { cacheKey: key, cacheHit: false } });
+				return result(`No cached result for key: ${key}`, {
+					action: "cache",
+					status: "ok",
+					data: { cacheKey: key, cacheHit: false },
+				});
 			}
 			const stats = getCacheStats(ctx.cwd);
 			return result(
@@ -1205,13 +1271,28 @@ export async function handleTeamTool(
 		}
 		case "checkpoint": {
 			if (!params.runId || !params.taskId) {
-				return result("Checkpoint requires runId and taskId.", { action: "checkpoint", status: "error" }, true);
+				return result(
+					"Checkpoint requires runId and taskId.",
+					{ action: "checkpoint", status: "error" },
+					true,
+				);
 			}
-			const stateRoot = path.join(projectCrewRoot(ctx.cwd), "state", "runs", params.runId);
+			assertSafePathId("runId", params.runId);
+			assertSafePathId("taskId", params.taskId);
+			const stateRoot = path.join(
+				projectCrewRoot(ctx.cwd),
+				"state",
+				"runs",
+				params.runId,
+			);
 			const store = new FileCheckpointStore(stateRoot);
 			const checkpoint = store.load(params.runId, params.taskId);
 			if (!checkpoint) {
-				return result("No checkpoint found.", { action: "checkpoint", status: "error" }, true);
+				return result(
+					"No checkpoint found.",
+					{ action: "checkpoint", status: "error" },
+					true,
+				);
 			}
 			return result(
 				`Checkpoint: step=${checkpoint.step}, progress=${checkpoint.progress}, savedAt=${new Date(checkpoint.savedAt).toISOString()}`,

@@ -381,3 +381,56 @@ test("decision-ledger: recursive pattern detection works", () => {
 
 	cleanupRun(runId);
 });
+
+test("appendEntry does NOT create directories for path-traversal runId (side-effect freedom)", () => {
+	const runId = "../../../tmp/pwned-side-effect-test";
+	const entry = {
+		rolloutId: "r1",
+		timestamp: new Date().toISOString(),
+		searchSpace: "test",
+		trialCount: 0,
+		topCandidates: [],
+		decisionMark: "accept" as const,
+		coherenceMark: {
+			matchesPrior: false,
+			matchesRecursive: false,
+			promotionAllowed: true,
+			reason: "test",
+		},
+	} as unknown as RolloutEntry;
+
+	// The path-traversal runId should throw BEFORE any mkdirSync
+	assert.throws(() => appendEntry(runId, entry), /Invalid runId/);
+
+	// Verify no directory was created outside the crew root
+	const outsidePath = join(
+		// Walk up from cwd: ../../../tmp/pwned-side-effect-test
+		// resolves relative to projectCrewRoot(), so check for unexpected dirs
+		"tmp",
+		"pwned-side-effect-test",
+	);
+	assert.ok(
+		!existsSync(outsidePath),
+		`Directory ${outsidePath} should NOT exist (side-effect leak)`,
+	);
+});
+
+test("getLatestDecision rejects path-traversal runId (direct guard)", () => {
+	for (const bad of ["../escape", "..", "."]) {
+		assert.throws(
+			() => getLatestDecision(bad),
+			/Invalid runId/,
+			`getLatestDecision("${bad}") should throw`,
+		);
+	}
+});
+
+test("summarizeLedger rejects path-traversal runId (direct guard)", () => {
+	for (const bad of ["../escape", "..", "."]) {
+		assert.throws(
+			() => summarizeLedger(bad),
+			/Invalid runId/,
+			`summarizeLedger("${bad}") should throw`,
+		);
+	}
+});

@@ -1,8 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadRunManifestById } from "./state-store.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
+import { assertSafePathId } from "../utils/safe-paths.ts";
 import { atomicWriteJson, readJsonFile } from "./atomic-write.ts";
+import { loadRunManifestById } from "./state-store.ts";
 
 /**
  * Run metrics snapshot captured after a run completes (or on demand).
@@ -28,6 +29,7 @@ function metricsDir(cwd: string): string {
 }
 
 function metricsFilePath(cwd: string, runId: string): string {
+	assertSafePathId("runId", runId);
 	return path.join(metricsDir(cwd), `${runId}.json`);
 }
 
@@ -35,7 +37,11 @@ function metricsFilePath(cwd: string, runId: string): string {
  * Collect metrics for a run by reading its manifest, tasks, and event log.
  * Returns undefined if the run cannot be loaded.
  */
-export function collectRunMetrics(cwd: string, runId: string): RunMetrics | undefined {
+export function collectRunMetrics(
+	cwd: string,
+	runId: string,
+): RunMetrics | undefined {
+	assertSafePathId("runId", runId);
 	const result = loadRunManifestById(cwd, runId);
 	if (!result) return undefined;
 
@@ -63,11 +69,17 @@ export function collectRunMetrics(cwd: string, runId: string): RunMetrics | unde
 	// Duration: from run createdAt to updatedAt (manifest timestamps), or 0 if unavailable.
 	const createdAt = new Date(manifest.createdAt).getTime();
 	const updatedAt = new Date(manifest.updatedAt).getTime();
-	const durationMs = isNaN(createdAt) || isNaN(updatedAt) ? 0 : Math.max(0, updatedAt - createdAt);
+	const durationMs =
+		isNaN(createdAt) || isNaN(updatedAt)
+			? 0
+			: Math.max(0, updatedAt - createdAt);
 
 	// Consistency score: proportion of tasks that completed successfully among all non-skipped tasks.
 	const nonSkippedTasks = tasks.filter((t) => t.status !== "skipped");
-	const consistencyScore = nonSkippedTasks.length > 0 ? completedCount / nonSkippedTasks.length : 1.0;
+	const consistencyScore =
+		nonSkippedTasks.length > 0
+			? completedCount / nonSkippedTasks.length
+			: 1.0;
 
 	return {
 		runId,
@@ -96,7 +108,10 @@ export function saveRunMetrics(cwd: string, metrics: RunMetrics): void {
  * Load a previously saved metrics snapshot.
  * Returns undefined if the file does not exist or cannot be parsed.
  */
-export function loadRunMetrics(cwd: string, runId: string): RunMetrics | undefined {
+export function loadRunMetrics(
+	cwd: string,
+	runId: string,
+): RunMetrics | undefined {
 	return readJsonFile<RunMetrics>(metricsFilePath(cwd, runId));
 }
 
@@ -125,7 +140,8 @@ export function getRunMetricsSummary(cwd: string, limit = 25): RunMetrics[] {
 
 	// Sort newest first (by timestamp, then runId as tiebreaker).
 	metrics.sort((a, b) => {
-		const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+		const diff =
+			new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
 		if (diff !== 0) return diff;
 		return b.runId.localeCompare(a.runId);
 	});

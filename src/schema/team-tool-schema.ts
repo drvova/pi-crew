@@ -114,7 +114,10 @@ export const TeamToolParams = Type.Object({
 		}),
 	),
 	runId: Type.Optional(
-		Type.String({ description: "Run ID for status, cancel, or resume." }),
+		Type.String({
+			description: "Run ID for status, cancel, or resume.",
+			pattern: "^[A-Za-z0-9_-]+$",
+		}),
 	),
 	taskId: Type.Optional(
 		Type.String({ description: "Task ID for respond action." }),
@@ -197,39 +200,54 @@ export const TeamToolParams = Type.Object({
 		Type.Integer({ description: "Ms epoch deadline for a reply." }),
 	),
 	planPath: Type.Optional(
-		Type.String({ description: "Path to a markdown plan document for orchestration." }),
+		Type.String({
+			description: "Path to a markdown plan document for orchestration.",
+		}),
 	),
 	cron: Type.Optional(
-		Type.String({ description: "Cron expression for recurring scheduled runs (e.g., '0 9 * * MON')." }),
+		Type.String({
+			description:
+				"Cron expression for recurring scheduled runs (e.g., '0 9 * * MON').",
+		}),
 	),
 	interval: Type.Optional(
-		Type.Number({ description: "Interval in milliseconds between recurring scheduled runs." }),
+		Type.Number({
+			description:
+				"Interval in milliseconds between recurring scheduled runs.",
+		}),
 	),
 	once: Type.Optional(
-		Type.Union([Type.String(), Type.Number()], { description: "ISO timestamp or epoch ms for a one-time scheduled run." }),
+		Type.Union([Type.String(), Type.Number()], {
+			description:
+				"ISO timestamp or epoch ms for a one-time scheduled run.",
+		}),
 	),
 	excludeContextBash: Type.Optional(
 		Type.Boolean({
-			description: "Mark certain bash commands as excludeFromContext to reduce context tokens (default: false).",
+			description:
+				"Mark certain bash commands as excludeFromContext to reduce context tokens (default: false).",
 		}),
 	),
 	// Budget tracking options
 	budgetTotal: Type.Optional(
 		Type.Number({
-			description: "Total token budget for the run. When set, enables budget tracking with default 80% warning and 95% abort thresholds.",
+			description:
+				"Total token budget for the run. When set, enables budget tracking with default 80% warning and 95% abort thresholds.",
 			minimum: 1,
 		}),
 	),
 	budgetWarning: Type.Optional(
 		Type.Number({
-			description: "Budget warning threshold as a fraction (0-1). Default: 0.8 (80%). Emits warning event when this threshold is crossed.",
+			description:
+				"Budget warning threshold as a fraction (0-1). Default: 0.8 (80%). Emits warning event when this threshold is crossed.",
 			minimum: 0,
 			maximum: 1,
 		}),
 	),
 	budgetAbort: Type.Optional(
 		Type.Number({
-			description: "Budget abort threshold as a fraction (0-1). Default: 0.95 (95%). Aborts further execution when this threshold is crossed.",
+			description:
+				"Budget abort threshold as a fraction (0-1). Default: 0.95 (95%). Aborts further execution when this threshold is crossed.",
 			minimum: 0,
 			maximum: 1,
 		}),
