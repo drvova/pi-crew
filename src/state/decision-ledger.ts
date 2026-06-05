@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
+import { projectCrewRoot } from "../utils/paths.ts";
 import { atomicWriteFile } from "./atomic-write.ts";
 
 export interface CoherenceMark {
@@ -24,16 +25,27 @@ export interface RolloutEntry {
  * Get the ledger file path for a given run ID.
  * SECURITY: Accept stateRoot param to use it for path computation
  * instead of hardcoded path, ensuring stateRoot containment.
+ * Uses projectCrewRoot() to honour the `.pi/teams/` fallback for `.pi`-based
+ * projects (see issue #29).
  */
-function getLedgerPath(runId: string, stateRoot?: string): string {
-	const base = stateRoot ?? `.crew/state/runs/${runId}`;
+function getLedgerPath(
+	runId: string,
+	stateRoot?: string,
+	cwd?: string,
+): string {
+	const base =
+		stateRoot ??
+		join(projectCrewRoot(cwd ?? process.cwd()), "state", "runs", runId);
 	return `${base}/decision-ledger.jsonl`;
 }
 
 /**
  * Compute coherence marks based on existing ledger entries.
  */
-function computeCoherence(entry: RolloutEntry, ledger: RolloutEntry[]): CoherenceMark {
+function computeCoherence(
+	entry: RolloutEntry,
+	ledger: RolloutEntry[],
+): CoherenceMark {
 	if (ledger.length === 0) {
 		return {
 			matchesPrior: false,
@@ -46,15 +58,21 @@ function computeCoherence(entry: RolloutEntry, ledger: RolloutEntry[]): Coherenc
 	const previousEntry = ledger[ledger.length - 1];
 	const matchesPrior: boolean =
 		entry.decisionMark === previousEntry.decisionMark ||
-		Boolean(entry.priorWinner && entry.topCandidates.includes(entry.priorWinner));
+		Boolean(
+			entry.priorWinner &&
+				entry.topCandidates.includes(entry.priorWinner),
+		);
 
 	// Check last 10 entries for recursive pattern
 	const recentEntries = ledger.slice(-10);
 	const recentDecisions = recentEntries.map((e) => e.decisionMark);
 	const currentDecision = entry.decisionMark;
 
-	const recursiveMatches = recentDecisions.filter((d) => d === currentDecision).length;
-	const matchesRecursive = recursiveMatches >= Math.ceil(recentDecisions.length / 2); // At least half match
+	const recursiveMatches = recentDecisions.filter(
+		(d) => d === currentDecision,
+	).length;
+	const matchesRecursive =
+		recursiveMatches >= Math.ceil(recentDecisions.length / 2); // At least half match
 
 	const promotionAllowed = matchesPrior || matchesRecursive;
 
@@ -121,7 +139,10 @@ export function appendEntry(runId: string, entry: RolloutEntry): RolloutEntry {
 	// Append to JSONL file using atomic write to prevent corruption
 	// Use the already-loaded ledger content (no double-read)
 	const line = JSON.stringify(entryWithCoherence) + "\n";
-	const existingContent = ledger.length > 0 ? ledger.map((e) => JSON.stringify(e)).join("\n") + "\n" : "";
+	const existingContent =
+		ledger.length > 0
+			? ledger.map((e) => JSON.stringify(e)).join("\n") + "\n"
+			: "";
 	atomicWriteFile(ledgerPath, existingContent + line);
 	return entryWithCoherence;
 }
@@ -191,12 +212,20 @@ export function summarizeLedger(runId: string): string {
 			lines.push(`- **Prior Winner**: ${entry.priorWinner}`);
 		}
 
-		lines.push(`- **Top Candidates**: ${entry.topCandidates.join(", ") || "(none)"}`);
+		lines.push(
+			`- **Top Candidates**: ${entry.topCandidates.join(", ") || "(none)"}`,
+		);
 		lines.push("");
 		lines.push("#### Coherence");
-		lines.push(`- **Matches Prior**: ${entry.coherenceMark.matchesPrior ? "✓" : "✗"}`);
-		lines.push(`- **Matches Recursive**: ${entry.coherenceMark.matchesRecursive ? "✓" : "✗"}`);
-		lines.push(`- **Promotion Allowed**: ${entry.coherenceMark.promotionAllowed ? "✓" : "✗"}`);
+		lines.push(
+			`- **Matches Prior**: ${entry.coherenceMark.matchesPrior ? "✓" : "✗"}`,
+		);
+		lines.push(
+			`- **Matches Recursive**: ${entry.coherenceMark.matchesRecursive ? "✓" : "✗"}`,
+		);
+		lines.push(
+			`- **Promotion Allowed**: ${entry.coherenceMark.promotionAllowed ? "✓" : "✗"}`,
+		);
 		lines.push(`- **Reason**: ${entry.coherenceMark.reason}`);
 		lines.push("");
 	}
@@ -218,8 +247,12 @@ export function summarizeLedger(runId: string): string {
 	lines.push(`| Decay    | ${decayCount} |`);
 	lines.push("");
 
-	const promotedCount = ledger.filter((e) => e.coherenceMark.promotionAllowed).length;
-	lines.push(`**Promotion Rate**: ${promotedCount}/${ledger.length} (${((promotedCount / ledger.length) * 100).toFixed(1)}%)`);
+	const promotedCount = ledger.filter(
+		(e) => e.coherenceMark.promotionAllowed,
+	).length;
+	lines.push(
+		`**Promotion Rate**: ${promotedCount}/${ledger.length} (${((promotedCount / ledger.length) * 100).toFixed(1)}%)`,
+	);
 
 	return lines.join("\n");
 }
@@ -229,7 +262,10 @@ export function summarizeLedger(runId: string): string {
  * FIX: This preserves all previous entries while updating just the last one.
  * Previously this would truncate the entire ledger!
  */
-function overrideLastEntry(runId: string, coherenceMark: import("./types.js").CoherenceMark): RolloutEntry {
+function overrideLastEntry(
+	runId: string,
+	coherenceMark: import("./types.js").CoherenceMark,
+): RolloutEntry {
 	const ledger = getLedger(runId);
 	if (ledger.length === 0) {
 		throw new Error(`No ledger entries found for run ${runId}`);
@@ -239,14 +275,20 @@ function overrideLastEntry(runId: string, coherenceMark: import("./types.js").Co
 	ledger[lastIndex] = { ...ledger[lastIndex], coherenceMark };
 	// Rewrite entire ledger to preserve all entries
 	const ledgerPath = getLedgerPath(runId);
-	atomicWriteFile(ledgerPath, ledger.map((e) => JSON.stringify(e)).join("\n") + "\n");
+	atomicWriteFile(
+		ledgerPath,
+		ledger.map((e) => JSON.stringify(e)).join("\n") + "\n",
+	);
 	return ledger[lastIndex];
 }
 
 /**
  * Promote a candidate by marking it as accepted with proper coherence.
  */
-export function promoteCandidate(runId: string, candidate: string): RolloutEntry {
+export function promoteCandidate(
+	runId: string,
+	candidate: string,
+): RolloutEntry {
 	const latestDecision = getLatestDecision(runId);
 
 	// Get existing entries to compute proper coherence
@@ -264,7 +306,10 @@ export function promoteCandidate(runId: string, candidate: string): RolloutEntry
 	};
 
 	// Compute coherence (empty ledger = no matches)
-	const coherenceMark = computeCoherence(entryWithoutCoherence as RolloutEntry, ledger);
+	const coherenceMark = computeCoherence(
+		entryWithoutCoherence as RolloutEntry,
+		ledger,
+	);
 
 	// Manual promotion always allows further promotion
 	coherenceMark.promotionAllowed = true;
@@ -285,7 +330,10 @@ export function promoteCandidate(runId: string, candidate: string): RolloutEntry
 	if (!existsSync(dir)) {
 		mkdirSync(dir, { recursive: true });
 	}
-	atomicWriteFile(ledgerPath, ledger.map((e) => JSON.stringify(e)).join("\n") + "\n");
+	atomicWriteFile(
+		ledgerPath,
+		ledger.map((e) => JSON.stringify(e)).join("\n") + "\n",
+	);
 
 	return entry;
 }
@@ -311,7 +359,10 @@ export function decayCandidate(runId: string, candidate: string): RolloutEntry {
 	};
 
 	// Compute coherence (empty ledger = no matches)
-	const coherenceMark = computeCoherence(entryWithoutCoherence as RolloutEntry, ledger);
+	const coherenceMark = computeCoherence(
+		entryWithoutCoherence as RolloutEntry,
+		ledger,
+	);
 
 	// Manual decay never allows promotion
 	coherenceMark.promotionAllowed = false;
@@ -332,7 +383,10 @@ export function decayCandidate(runId: string, candidate: string): RolloutEntry {
 	if (!existsSync(dir)) {
 		mkdirSync(dir, { recursive: true });
 	}
-	atomicWriteFile(ledgerPath, ledger.map((e) => JSON.stringify(e)).join("\n") + "\n");
+	atomicWriteFile(
+		ledgerPath,
+		ledger.map((e) => JSON.stringify(e)).join("\n") + "\n",
+	);
 
 	return entry;
 }

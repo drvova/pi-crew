@@ -1,25 +1,28 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	computeInitialConfidence,
-	adjustConfidence,
-	applyDecay,
-	confidenceToBehavior,
-	confidenceToThreshold,
-	recordSkillActivation,
-	getSkillActivations,
-	computeSkillMetrics,
-	evaluatePromotionGate,
-	CONFIDENCE_THRESHOLDS,
-	CONFIDENCE_ADJUSTMENTS,
-} from "../../src/runtime/skill-effectiveness.ts";
+import test from "node:test";
 import { existsSync, mkdirSync, rmSync, unlinkSync } from "fs";
 import { join } from "path";
+import {
+	adjustConfidence,
+	applyDecay,
+	CONFIDENCE_ADJUSTMENTS,
+	CONFIDENCE_THRESHOLDS,
+	computeInitialConfidence,
+	computeSkillMetrics,
+	confidenceToBehavior,
+	confidenceToThreshold,
+	evaluatePromotionGate,
+	getSkillActivations,
+	recordSkillActivation,
+} from "../../src/runtime/skill-effectiveness.ts";
+import { projectCrewRoot } from "../../src/utils/paths.ts";
 
+const TEST_CWD = process.cwd();
 const TEST_RUN_ID = `test-skill-eff-${Date.now()}`;
 
 function cleanup() {
-	const path = join(process.cwd(), `.crew/state/runs/${TEST_RUN_ID}`);
+	// Cleanup at projectCrewRoot so the test follows the resolver (issue #29).
+	const path = join(projectCrewRoot(TEST_CWD), `state/runs/${TEST_RUN_ID}`);
 	try {
 		if (existsSync(path)) {
 			rmSync(path, { recursive: true, force: true });
@@ -32,16 +35,18 @@ function cleanup() {
 test("skill-effectiveness: CONFIDENCE_THRESHOLDS are ordered correctly", () => {
 	assert.ok(CONFIDENCE_THRESHOLDS.TENTATIVE < CONFIDENCE_THRESHOLDS.MODERATE);
 	assert.ok(CONFIDENCE_THRESHOLDS.MODERATE < CONFIDENCE_THRESHOLDS.STRONG);
-	assert.ok(CONFIDENCE_THRESHOLDS.STRONG < CONFIDENCE_THRESHOLDS.NEAR_CERTAIN);
+	assert.ok(
+		CONFIDENCE_THRESHOLDS.STRONG < CONFIDENCE_THRESHOLDS.NEAR_CERTAIN,
+	);
 });
 
 test("skill-effectiveness: computeInitialConfidence from observation count", () => {
-	assert.equal(computeInitialConfidence(0), 0.3);  // No observations → tentative
-	assert.equal(computeInitialConfidence(1), 0.3);  // 1 observation → tentative
-	assert.equal(computeInitialConfidence(2), 0.3);  // 2 observations → tentative
-	assert.equal(computeInitialConfidence(3), 0.5);  // 3-5 observations → moderate
+	assert.equal(computeInitialConfidence(0), 0.3); // No observations → tentative
+	assert.equal(computeInitialConfidence(1), 0.3); // 1 observation → tentative
+	assert.equal(computeInitialConfidence(2), 0.3); // 2 observations → tentative
+	assert.equal(computeInitialConfidence(3), 0.5); // 3-5 observations → moderate
 	assert.equal(computeInitialConfidence(5), 0.5);
-	assert.equal(computeInitialConfidence(6), 0.7);  // 6-10 observations → strong
+	assert.equal(computeInitialConfidence(6), 0.7); // 6-10 observations → strong
 	assert.equal(computeInitialConfidence(10), 0.7);
 	assert.equal(computeInitialConfidence(11), 0.85); // 11+ observations → very strong
 });
@@ -62,12 +67,14 @@ test("skill-effectiveness: adjustConfidence decreases on failure", () => {
 
 test("skill-effectiveness: adjustConfidence clamps to valid range", () => {
 	assert.equal(adjustConfidence(0.15, false), 0.1); // Can't go below 0.1
-	assert.equal(adjustConfidence(0.9, true), 0.95);  // Can't go above 0.95
+	assert.equal(adjustConfidence(0.9, true), 0.95); // Can't go above 0.95
 });
 
 test("skill-effectiveness: applyDecay reduces confidence over time", () => {
 	const current = 0.7;
-	const weekAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+	const weekAgo = new Date(
+		Date.now() - 8 * 24 * 60 * 60 * 1000,
+	).toISOString();
 	const decayed = applyDecay(current, weekAgo);
 	assert.ok(decayed < current);
 	assert.ok(decayed >= 0.1);
@@ -94,7 +101,7 @@ test("skill-effectiveness: confidenceToThreshold returns correct threshold name"
 test("skill-effectiveness: recordSkillActivation and getSkillActivations", () => {
 	cleanup();
 	try {
-		const activation = recordSkillActivation({
+		const activation = recordSkillActivation(TEST_CWD, {
 			id: `act-${Date.now()}`,
 			skillId: "verification-before-done",
 			role: "executor",
@@ -105,7 +112,7 @@ test("skill-effectiveness: recordSkillActivation and getSkillActivations", () =>
 			confidence: 0.5,
 		});
 
-		const activations = getSkillActivations(TEST_RUN_ID);
+		const activations = getSkillActivations(TEST_CWD, TEST_RUN_ID);
 		assert.equal(activations.length, 1);
 		assert.equal(activations[0].skillId, "verification-before-done");
 		assert.equal(activations[0].passed, true);
@@ -130,7 +137,7 @@ test("skill-effectiveness: computeSkillMetrics with activations", () => {
 	cleanup();
 	try {
 		// Record activations
-		recordSkillActivation({
+		recordSkillActivation(TEST_CWD, {
 			id: "act-1",
 			skillId: "test-skill",
 			role: "executor",
@@ -140,7 +147,7 @@ test("skill-effectiveness: computeSkillMetrics with activations", () => {
 			passed: true,
 			confidence: 0.5,
 		});
-		recordSkillActivation({
+		recordSkillActivation(TEST_CWD, {
 			id: "act-2",
 			skillId: "test-skill",
 			role: "executor",
@@ -150,7 +157,7 @@ test("skill-effectiveness: computeSkillMetrics with activations", () => {
 			passed: true,
 			confidence: 0.55,
 		});
-		recordSkillActivation({
+		recordSkillActivation(TEST_CWD, {
 			id: "act-3",
 			skillId: "test-skill",
 			role: "executor",
@@ -161,7 +168,10 @@ test("skill-effectiveness: computeSkillMetrics with activations", () => {
 			confidence: 0.45,
 		});
 
-		const metrics = computeSkillMetrics("test-skill", getSkillActivations(TEST_RUN_ID));
+		const metrics = computeSkillMetrics(
+			"test-skill",
+			getSkillActivations(TEST_CWD, TEST_RUN_ID),
+		);
 		assert.equal(metrics.totalActivations, 3);
 		assert.equal(metrics.passedActivations, 2);
 		assert.equal(metrics.failedActivations, 1);

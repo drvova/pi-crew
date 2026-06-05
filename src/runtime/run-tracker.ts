@@ -1,21 +1,31 @@
-import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadRunManifestById } from "../state/state-store.ts";
+import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
+import { projectCrewRoot } from "../utils/paths.ts";
 import { isFinishedRunStatus } from "./process-status.ts";
 
 export interface ActiveRunPromise {
 	promise: Promise<{ manifest: TeamRunManifest; tasks: TeamTaskState[] }>;
-	resolve: (value: { manifest: TeamRunManifest; tasks: TeamTaskState[] }) => void;
+	resolve: (value: {
+		manifest: TeamRunManifest;
+		tasks: TeamTaskState[];
+	}) => void;
 	reject: (reason: unknown) => void;
 }
 
 const activeRunPromises = new Map<string, ActiveRunPromise>();
 
 export function registerRunPromise(runId: string): ActiveRunPromise {
-	let resolve!: (value: { manifest: TeamRunManifest; tasks: TeamTaskState[] }) => void;
+	let resolve!: (value: {
+		manifest: TeamRunManifest;
+		tasks: TeamTaskState[];
+	}) => void;
 	let reject!: (reason: unknown) => void;
-	const promise = new Promise<{ manifest: TeamRunManifest; tasks: TeamTaskState[] }>((res, rej) => {
+	const promise = new Promise<{
+		manifest: TeamRunManifest;
+		tasks: TeamTaskState[];
+	}>((res, rej) => {
 		resolve = res;
 		reject = rej;
 	});
@@ -24,7 +34,10 @@ export function registerRunPromise(runId: string): ActiveRunPromise {
 	return entry;
 }
 
-export function resolveRunPromise(runId: string, result: { manifest: TeamRunManifest; tasks: TeamTaskState[] }): void {
+export function resolveRunPromise(
+	runId: string,
+	result: { manifest: TeamRunManifest; tasks: TeamTaskState[] },
+): void {
 	const entry = activeRunPromises.get(runId);
 	if (entry) {
 		entry.resolve(result);
@@ -65,7 +78,13 @@ export async function waitForRun(
 	if (entry) {
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const timeoutPromise = new Promise<never>((_, reject) => {
-			timer = setTimeout(() => reject(new Error(`waitForRun timed out after ${timeoutMs}ms`)), timeoutMs);
+			timer = setTimeout(
+				() =>
+					reject(
+						new Error(`waitForRun timed out after ${timeoutMs}ms`),
+					),
+				timeoutMs,
+			);
 		});
 		try {
 			return await Promise.race([entry.promise, timeoutPromise]);
@@ -78,8 +97,17 @@ export async function waitForRun(
 	let attempt = 0;
 	while (Date.now() < deadline) {
 		if (attempt === 0) {
-			// Early exit: if the run directory doesn't exist, don't waste time polling
-			const runDir = path.join(cwd, ".crew", "state", "runs", runId);
+			// Early exit: if the run directory doesn't exist, don't waste time polling.
+			// Use projectCrewRoot() to honour the .pi/teams/ fallback for .pi-based
+			// projects (see issue #29). Without this, the hardcoded `.crew/state/runs/`
+			// path never resolves in projects that use the `.pi/` layout, the throw
+			// escapes via subagent-manager.ts:281, and pi crashes with uncaughtException.
+			const runDir = path.join(
+				projectCrewRoot(cwd),
+				"state",
+				"runs",
+				runId,
+			);
 			if (!fs.existsSync(runDir)) {
 				throw new Error(
 					`Run ${runId} not found. No run directory at ${runDir}`,

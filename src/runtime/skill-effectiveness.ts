@@ -1,17 +1,18 @@
 /**
  * Skill Effectiveness — ECC INSTINCT/CONFIDENCE Pattern Implementation
- * 
+ *
  * Implements confidence-weighted skill activation based on ECC's instinct system.
  * Tracks skill activation success and adjusts confidence scores.
- * 
+ *
  * Based on: docs/distillation/ECC-hooks-instincts.md §2-3 (instinct system, confidence thresholds)
  * Based on: docs/distillation/ECC-10-skills.md §8 (continuous-learning-v2)
- * 
+ *
  * @module skill-effectiveness
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
+import { projectCrewRoot } from "../utils/paths.ts";
 import { crewHooks } from "./crew-hooks.ts";
 
 /**
@@ -19,10 +20,10 @@ import { crewHooks } from "./crew-hooks.ts";
  * Skills below 0.3 threshold are considered tentative and not enforced.
  */
 export const CONFIDENCE_THRESHOLDS = {
-	TENTATIVE: 0.3,      // Suggested but not enforced
-	MODERATE: 0.5,       // Applied when relevant
-	STRONG: 0.7,         // Auto-approved for application
-	NEAR_CERTAIN: 0.9,   // Core behavior
+	TENTATIVE: 0.3, // Suggested but not enforced
+	MODERATE: 0.5, // Applied when relevant
+	STRONG: 0.7, // Auto-approved for application
+	NEAR_CERTAIN: 0.9, // Core behavior
 } as const;
 
 /**
@@ -30,12 +31,12 @@ export const CONFIDENCE_THRESHOLDS = {
  * From ECC instinct system: 1-2 observations → 0.3, 3-5 → 0.5, etc.
  */
 export const INITIAL_CONFIDENCE_BY_FREQUENCY: Record<string, number> = {
-	"1": 0.3,  // 1 observation → tentative
-	"2": 0.3,  // 2 observations → tentative
-	"3": 0.5,  // 3 observations → moderate
+	"1": 0.3, // 1 observation → tentative
+	"2": 0.3, // 2 observations → tentative
+	"3": 0.5, // 3 observations → moderate
 	"4": 0.5,
 	"5": 0.5,
-	"6": 0.7,  // 6-10 observations → strong
+	"6": 0.7, // 6-10 observations → strong
 	"7": 0.7,
 	"8": 0.7,
 	"9": 0.7,
@@ -47,8 +48,8 @@ export const INITIAL_CONFIDENCE_BY_FREQUENCY: Record<string, number> = {
  * Confidence adjustments per ECC instinct system.
  */
 export const CONFIDENCE_ADJUSTMENTS = {
-	CONFIRMING: 0.05,      // Each confirming observation
-	CONTRADICTING: -0.1,   // Each contradicting observation
+	CONFIRMING: 0.05, // Each confirming observation
+	CONTRADICTING: -0.1, // Each contradicting observation
 	DECAY_PER_WEEK: -0.02, // Per week without observation
 } as const;
 
@@ -57,24 +58,24 @@ export const CONFIDENCE_ADJUSTMENTS = {
  * Skill can be promoted to "strong enforcement" when these are met.
  */
 export const PROMOTION_GATE_CRITERIA = {
-	MIN_CORRECTNESS: 0.8,      // 80% pass rate
-	MIN_ACTIVATIONS: 5,         // Minimum observations before filtering
-	MIN_AVG_CONFIDENCE: 0.7,   // Average confidence threshold
+	MIN_CORRECTNESS: 0.8, // 80% pass rate
+	MIN_ACTIVATIONS: 5, // Minimum observations before filtering
+	MIN_AVG_CONFIDENCE: 0.7, // Average confidence threshold
 } as const;
 
 /**
  * Skill activation record - captures each time a skill is used.
  */
 export interface SkillActivation {
-	id: string;           // Unique activation ID
-	skillId: string;      // Skill identifier (e.g., "verification-before-done")
-	role: string;         // Role that activated the skill
-	runId: string;        // Run ID
-	taskId: string;       // Task ID
-	timestamp: string;    // ISO timestamp
-	passed: boolean;       // Whether the skill was successfully applied
-	outcome?: string;     // Optional outcome description
-	confidence: number;    // Confidence at time of activation
+	id: string; // Unique activation ID
+	skillId: string; // Skill identifier (e.g., "verification-before-done")
+	role: string; // Role that activated the skill
+	runId: string; // Run ID
+	taskId: string; // Task ID
+	timestamp: string; // ISO timestamp
+	passed: boolean; // Whether the skill was successfully applied
+	outcome?: string; // Optional outcome description
+	confidence: number; // Confidence at time of activation
 }
 
 /**
@@ -85,13 +86,13 @@ export interface SkillMetrics {
 	totalActivations: number;
 	passedActivations: number;
 	failedActivations: number;
-	passRate: number;           // passed / total
-	avgConfidence: number;       // Rolling average confidence
-	currentConfidence: number;   // Current confidence score
+	passRate: number; // passed / total
+	avgConfidence: number; // Rolling average confidence
+	currentConfidence: number; // Current confidence score
 	trend: "improving" | "stable" | "declining";
-	lastActivation?: string;    // ISO timestamp
-	firstActivation?: string;   // ISO timestamp
-	roleBreakdown: Record<string, number>;  // Activations per role
+	lastActivation?: string; // ISO timestamp
+	firstActivation?: string; // ISO timestamp
+	roleBreakdown: Record<string, number>; // Activations per role
 }
 
 /**
@@ -102,35 +103,39 @@ export interface WeightedSkill {
 	confidence: number;
 	threshold: keyof typeof CONFIDENCE_THRESHOLDS;
 	behavior: "suggest" | "apply_if_asked" | "apply_auto" | "act_autonomous";
-	evidence: string;  // Evidence for confidence score
+	evidence: string; // Evidence for confidence score
 	metrics: SkillMetrics;
 }
 
 /**
  * Get skill effectiveness storage path.
+ * Uses projectCrewRoot() so the path honours the `.pi/teams/` fallback
+ * for `.pi`-based projects (see issue #29).
  */
-function getSkillMetricsPath(runId: string): string {
+function getSkillMetricsPath(cwd: string, runId: string): string {
 	return join(
-		process.cwd(),
-		`.crew/state/runs/${runId}/skill-metrics.jsonl`,
+		projectCrewRoot(cwd),
+		`state/runs/${runId}/skill-metrics.jsonl`,
 	);
 }
 
 /**
  * Get skill activations path.
+ * Uses projectCrewRoot() so the path honours the `.pi/teams/` fallback
+ * for `.pi`-based projects (see issue #29).
  */
-function getSkillActivationsPath(runId: string): string {
+function getSkillActivationsPath(cwd: string, runId: string): string {
 	return join(
-		process.cwd(),
-		`.crew/state/runs/${runId}/skill-activations.jsonl`,
+		projectCrewRoot(cwd),
+		`state/runs/${runId}/skill-activations.jsonl`,
 	);
 }
 
 /**
  * Ensure directory exists for skill metrics.
  */
-function ensureSkillMetricsDir(runId: string): void {
-	const dir = dirname(getSkillMetricsPath(runId));
+function ensureSkillMetricsDir(cwd: string, runId: string): void {
+	const dir = dirname(getSkillMetricsPath(cwd, runId));
 	if (!existsSync(dir)) {
 		mkdirSync(dir, { recursive: true });
 	}
@@ -163,7 +168,9 @@ export function adjustConfidence(current: number, passed: boolean): number {
 export function applyDecay(current: number, lastActivation?: string): number {
 	if (!lastActivation) return current;
 
-	const daysSince = (Date.now() - new Date(lastActivation).getTime()) / (1000 * 60 * 60 * 24);
+	const daysSince =
+		(Date.now() - new Date(lastActivation).getTime()) /
+		(1000 * 60 * 60 * 24);
 	const decayWeeks = Math.floor(daysSince / 7);
 	const decay = decayWeeks * CONFIDENCE_ADJUSTMENTS.DECAY_PER_WEEK;
 
@@ -173,8 +180,11 @@ export function applyDecay(current: number, lastActivation?: string): number {
 /**
  * Determine behavior based on confidence threshold.
  */
-export function confidenceToBehavior(confidence: number): WeightedSkill["behavior"] {
-	if (confidence >= CONFIDENCE_THRESHOLDS.NEAR_CERTAIN) return "act_autonomous";
+export function confidenceToBehavior(
+	confidence: number,
+): WeightedSkill["behavior"] {
+	if (confidence >= CONFIDENCE_THRESHOLDS.NEAR_CERTAIN)
+		return "act_autonomous";
 	if (confidence >= CONFIDENCE_THRESHOLDS.STRONG) return "apply_auto";
 	if (confidence >= CONFIDENCE_THRESHOLDS.MODERATE) return "apply_if_asked";
 	return "suggest";
@@ -183,7 +193,9 @@ export function confidenceToBehavior(confidence: number): WeightedSkill["behavio
 /**
  * Determine threshold name from confidence.
  */
-export function confidenceToThreshold(confidence: number): keyof typeof CONFIDENCE_THRESHOLDS {
+export function confidenceToThreshold(
+	confidence: number,
+): keyof typeof CONFIDENCE_THRESHOLDS {
 	if (confidence >= CONFIDENCE_THRESHOLDS.NEAR_CERTAIN) return "NEAR_CERTAIN";
 	if (confidence >= CONFIDENCE_THRESHOLDS.STRONG) return "STRONG";
 	if (confidence >= CONFIDENCE_THRESHOLDS.TENTATIVE) return "MODERATE";
@@ -195,11 +207,12 @@ export function confidenceToThreshold(confidence: number): keyof typeof CONFIDEN
  * Appends to the run's skill-activations.jsonl for learning.
  */
 export function recordSkillActivation(
+	cwd: string,
 	activation: SkillActivation,
 ): SkillActivation {
-	ensureSkillMetricsDir(activation.runId);
+	ensureSkillMetricsDir(cwd, activation.runId);
 
-	const path = getSkillActivationsPath(activation.runId);
+	const path = getSkillActivationsPath(cwd, activation.runId);
 	const line = JSON.stringify(activation) + "\n";
 	writeFileSync(path, line, { flag: "a", encoding: "utf-8" });
 
@@ -209,8 +222,11 @@ export function recordSkillActivation(
 /**
  * Get all skill activations for a run.
  */
-export function getSkillActivations(runId: string): SkillActivation[] {
-	const path = getSkillActivationsPath(runId);
+export function getSkillActivations(
+	cwd: string,
+	runId: string,
+): SkillActivation[] {
+	const path = getSkillActivationsPath(cwd, runId);
 
 	if (!existsSync(path)) {
 		return [];
@@ -256,11 +272,13 @@ export function computeSkillMetrics(
 		skillActivations.reduce((sum, a) => sum + a.confidence, 0) /
 		skillActivations.length;
 	const currentConfidence =
-		skillActivations[skillActivations.length - 1]?.confidence ?? avgConfidence;
+		skillActivations[skillActivations.length - 1]?.confidence ??
+		avgConfidence;
 
 	// Compute trend from last 5 activations
 	const recent = skillActivations.slice(-5);
-	const recentPassRate = recent.filter((a) => a.passed).length / recent.length;
+	const recentPassRate =
+		recent.filter((a) => a.passed).length / recent.length;
 	const earlier = skillActivations.slice(0, -5);
 	const earlierPassRate =
 		earlier.length > 0
@@ -282,7 +300,8 @@ export function computeSkillMetrics(
 	}
 
 	// Apply decay if not observed recently
-	const lastActivation = skillActivations[skillActivations.length - 1]?.timestamp;
+	const lastActivation =
+		skillActivations[skillActivations.length - 1]?.timestamp;
 	const decayedConfidence = applyDecay(currentConfidence, lastActivation);
 
 	return {
@@ -315,10 +334,13 @@ export function evaluatePromotionGate(metrics: SkillMetrics): {
 	reason: string;
 } {
 	const criteria = {
-		correctness: metrics.passRate >= PROMOTION_GATE_CRITERIA.MIN_CORRECTNESS,
-		evidence: metrics.totalActivations >= PROMOTION_GATE_CRITERIA.MIN_ACTIVATIONS,
+		correctness:
+			metrics.passRate >= PROMOTION_GATE_CRITERIA.MIN_CORRECTNESS,
+		evidence:
+			metrics.totalActivations >= PROMOTION_GATE_CRITERIA.MIN_ACTIVATIONS,
 		rollback: metrics.trend !== "declining",
-		encoding: metrics.avgConfidence >= PROMOTION_GATE_CRITERIA.MIN_AVG_CONFIDENCE,
+		encoding:
+			metrics.avgConfidence >= PROMOTION_GATE_CRITERIA.MIN_AVG_CONFIDENCE,
 	};
 
 	const allPassed = Object.values(criteria).every(Boolean);
@@ -341,12 +363,13 @@ export function evaluatePromotionGate(metrics: SkillMetrics): {
  * Filters by minimum confidence threshold.
  */
 export function getWeightedSkillsForRole(
+	cwd: string,
 	role: string,
 	skillIds: string[],
 	runId: string,
 	minConfidence: number = CONFIDENCE_THRESHOLDS.TENTATIVE,
 ): WeightedSkill[] {
-	const activations = getSkillActivations(runId);
+	const activations = getSkillActivations(cwd, runId);
 
 	return skillIds
 		.map((skillId) => {
@@ -376,12 +399,19 @@ export function getWeightedSkillsForRole(
  */
 /** @internal */
 function filterSkillsByConfidence(
+	cwd: string,
 	skillIds: string[],
 	runId: string,
 	threshold: keyof typeof CONFIDENCE_THRESHOLDS = "MODERATE",
 ): WeightedSkill[] {
 	const minConfidence = CONFIDENCE_THRESHOLDS[threshold];
-	return getWeightedSkillsForRole("global", skillIds, runId, minConfidence);
+	return getWeightedSkillsForRole(
+		cwd,
+		"global",
+		skillIds,
+		runId,
+		minConfidence,
+	);
 }
 
 /**
@@ -415,7 +445,11 @@ export function registerSkillEffectivenessHooks(): void {
 				passed: success,
 				confidence: computeInitialConfidence(1),
 			};
-			recordSkillActivation(activation);
+			// cwd comes from the event payload (set by callers) so that the
+			// activation lands in the correct .pi/teams/ or .crew/state/runs/
+			// (see issue #29).
+			const eventCwd = (data?.cwd as string) ?? process.cwd();
+			recordSkillActivation(eventCwd, activation);
 		}
 	});
 
@@ -434,10 +468,11 @@ export function registerSkillEffectivenessHooks(): void {
  */
 /** @internal */
 function generateSkillEffectivenessReport(
+	cwd: string,
 	runId: string,
 	skillIds: string[],
 ): string {
-	const activations = getSkillActivations(runId);
+	const activations = getSkillActivations(cwd, runId);
 	const lines: string[] = [
 		`# Skill Effectiveness Report: ${runId}`,
 		"",
@@ -459,13 +494,21 @@ function generateSkillEffectivenessReport(
 		const gate = evaluatePromotionGate(metrics);
 
 		lines.push(`### ${skillId}`);
-		lines.push(`- **Confidence**: ${metrics.currentConfidence.toFixed(2)} (${metrics.trend})`);
-		lines.push(`- **Pass Rate**: ${(metrics.passRate * 100).toFixed(1)}% (${metrics.passedActivations}/${metrics.totalActivations})`);
+		lines.push(
+			`- **Confidence**: ${metrics.currentConfidence.toFixed(2)} (${metrics.trend})`,
+		);
+		lines.push(
+			`- **Pass Rate**: ${(metrics.passRate * 100).toFixed(1)}% (${metrics.passedActivations}/${metrics.totalActivations})`,
+		);
 		lines.push(`- **Avg Confidence**: ${metrics.avgConfidence.toFixed(2)}`);
-		lines.push(`- **Promotion Gate**: ${gate.passed ? "PASSED ✅" : "NOT MET"}`);
+		lines.push(
+			`- **Promotion Gate**: ${gate.passed ? "PASSED ✅" : "NOT MET"}`,
+		);
 
 		if (Object.keys(metrics.roleBreakdown).length > 0) {
-			lines.push(`- **By Role**: ${JSON.stringify(metrics.roleBreakdown)}`);
+			lines.push(
+				`- **By Role**: ${JSON.stringify(metrics.roleBreakdown)}`,
+			);
 		}
 
 		lines.push("");
