@@ -125,6 +125,10 @@ export function startAsyncRunNotifier(ctx: ExtensionContext, state: AsyncNotifie
 			logInternalError("async-notifier", error, `interval=${intervalMs}`);
 		}
 	}, intervalMs);
+	// Defense-in-depth: never let the notifier timer keep the event loop alive.
+	// If stopAsyncRunNotifier is missed (session switch race), the next run of
+	// this interval is harmless, but the timer must not block process exit.
+	if (typeof state.interval.unref === "function") state.interval.unref();
 }
 
 export function stopAsyncRunNotifier(state: AsyncNotifierState): void {

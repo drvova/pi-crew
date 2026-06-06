@@ -262,9 +262,13 @@ export function flushPendingAtomicWrites(): void {
 	for (const filePath of [...pendingAtomicWrites.keys()]) flushOnePendingAtomicWrite(filePath);
 }
 
+// Defense-in-depth: signal handlers must return immediately.
+// Use setImmediate so the handler exits before any sync I/O runs.
+// This prevents the main thread from being blocked if a signal
+// arrives while the user is idle in the terminal.
 process.on("exit", () => flushPendingAtomicWrites());
-process.on("SIGTERM", () => flushPendingAtomicWrites());
-process.on("SIGINT", () => flushPendingAtomicWrites());
+process.on("SIGTERM", () => setImmediate(() => flushPendingAtomicWrites()));
+process.on("SIGINT", () => setImmediate(() => flushPendingAtomicWrites()));
 
 export function readJsonFile<T>(filePath: string): T | undefined {
 	try {

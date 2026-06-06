@@ -131,6 +131,10 @@ export class CountdownTimer {
 				this.emitExpire();
 			}
 		}, 1000);
+		// Defense-in-depth: never let the countdown timer keep the event loop
+		// alive. If dispose() is missed (e.g. UI unmount race), the timer must
+		// not block process exit.
+		if (typeof this.timer.unref === "function") this.timer.unref();
 	}
 
 	private emitExpire(): void {

@@ -511,9 +511,11 @@ export function appendEventFireAndForget(eventsPath: string, event: AppendTeamEv
 }
 
 // Auto-flush on process exit so buffered events do not silently leak.
+// Defense-in-depth: SIGTERM/SIGINT use setImmediate so the handler returns
+// immediately and the main thread is not blocked by sync I/O.
 process.on("exit", () => flushEventLogBuffer());
-process.on("SIGTERM", () => flushEventLogBuffer());
-process.on("SIGINT", () => flushEventLogBuffer());
+process.on("SIGTERM", () => setImmediate(() => flushEventLogBuffer()));
+process.on("SIGINT", () => setImmediate(() => flushEventLogBuffer()));
 
 export function readEvents(eventsPath: string): TeamEvent[] {
 	if (!fs.existsSync(eventsPath)) return [];
