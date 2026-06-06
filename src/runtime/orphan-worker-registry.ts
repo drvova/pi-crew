@@ -55,8 +55,15 @@ function verifyIsBackgroundWorker(pid: number): boolean {
 	}
 }
 
+let REGISTRY_PATH = path.join(userPiRoot(), "state", "orphan-workers.json");
+
+/** @internal Test-only: override the registry path. */
+export function __test_setRegistryPath(p: string): void {
+	REGISTRY_PATH = p;
+}
+
 function getRegistryPath(): string {
-	return path.join(userPiRoot(), "state", "orphan-workers.json");
+	return REGISTRY_PATH;
 }
 
 function readRegistry(): OrphanWorkerEntry[] {
@@ -73,7 +80,8 @@ function readRegistry(): OrphanWorkerEntry[] {
 				typeof e.pid === "number" &&
 				typeof e.sessionId === "string" &&
 				typeof e.runId === "string" &&
-				typeof e.registeredAt === "number",
+				typeof e.registeredAt === "number" &&
+				typeof (e as { parentPid?: unknown }).parentPid === "number",
 		);
 	} catch {
 		return [];

@@ -84,7 +84,14 @@ export function checkCrewDepth(inputMaxDepth?: number, env: NodeJS.ProcessEnv = 
  * 2. lstatSync to verify it is not a symlink (TOCTOU safety)
  * 3. realpathSync to resolve the canonical path
  */
-function createSafeTempDir(base: string, prefix: string): string {
+/**
+ * Create a temp dir with symlink-safety checks. Tracked in the
+ * `createdTempDirs` Set for global cleanup.
+ *
+ * Exported (rather than module-private) so unit tests can populate
+ * the tracking Set without going through the public build flow.
+ */
+export function createSafeTempDir(base: string, prefix: string): string {
 	if (!fs.existsSync(base)) fs.mkdirSync(base, { recursive: true });
 	// Verify base dir is not a symlink (TOCTOU safety)
 	const baseStat = fs.lstatSync(base);
@@ -217,6 +224,22 @@ export function cleanupAllTrackedTempDirs(): { cleaned: number; failed: number }
 	return { cleaned, failed };
 }
 
+/**
+ * @internal Test-only: reset the in-memory `createdTempDirs` Set.
+ * Used by unit tests to ensure isolation between cases. Not exported
+ * via the public API surface.
+ */
+export function __test_resetTrackedTempDirs(): void {
+	createdTempDirs.clear();
+}
+
+/**
+ * @internal Test-only: get a snapshot of currently tracked temp dirs.
+ */
+export function __test_getTrackedTempDirs(): readonly string[] {
+	return [...createdTempDirs];
+}
+
 /** Max age (ms) for orphan temp dirs. Anything older is considered abandoned. */
 const ORPHAN_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 /** Cap dirs removed per call to avoid main-thread stalls. */
@@ -230,11 +253,13 @@ const ORPHAN_TEMP_CLEAN_BATCH_SIZE = 50;
  * Called periodically by register.ts:tempReconcileTimer.
  *
  * @param now Current epoch ms (parameter for testability)
+ * @param baseDir Override base dir (for testing). Defaults to
+ *   `<userPiRoot>/tmp/`.
  */
 export function cleanupOrphanTempDirs(
 	now: number = Date.now(),
+	baseDir: string = path.join(userPiRoot(), "tmp"),
 ): { scanned: number; cleaned: number; failed: number } {
-	const baseDir = path.join(userPiRoot(), "tmp");
 	let scanned = 0;
 	let cleaned = 0;
 	let failed = 0;
@@ -296,11 +321,16 @@ export function cleanupOrphanTempDirs(
  * threshold protects active processes that might still be writing.
  *
  * Bounded to ORPHAN_TEMP_CLEAN_BATCH_SIZE dirs per call.
+ *
+ * @param now Current epoch ms (parameter for testability)
+ * @param tmpDirOverride Override /tmp dir (for testing). Defaults to
+ *   `os.tmpdir()`.
  */
 export function cleanupLegacyOrphanTempDirs(
 	now: number = Date.now(),
+	tmpDirOverride: string = os.tmpdir(),
 ): { scanned: number; cleaned: number; failed: number } {
-	const tmpDir = os.tmpdir();
+	const tmpDir = tmpDirOverride;
 	let scanned = 0;
 	let cleaned = 0;
 	let failed = 0;
