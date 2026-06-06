@@ -132,6 +132,7 @@ import {
 } from "../runtime/crash-recovery.ts";
 import { appendDeadletter } from "../runtime/deadletter.ts";
 import { HeartbeatWatcher } from "../runtime/heartbeat-watcher.ts";
+import { cleanupOrphanTempDirs } from "../runtime/pi-args.ts";
 import { reconcileOrphanedTempWorkspaces } from "../runtime/stale-reconciler.ts";
 
 let _cachedCrashRecovery:
@@ -443,6 +444,18 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 						cleanupOrphanedTempDirs:
 							config.reliability?.cleanupOrphanedTempDirs,
 					});
+					// Layer 4: also clean orphan temp dirs under
+					// ~/.pi/agent/pi-crew/tmp/ that the SIGKILL'd parent
+					// processes left behind. Catches anything Layers 1-3 missed.
+					const orphanResult = cleanupOrphanTempDirs();
+					if (orphanResult.cleaned > 0) {
+						logInternalError(
+							"register.tempAutoRepair.orphanTemp",
+							new Error(
+								`cleaned ${orphanResult.cleaned} orphan temp dirs`,
+							),
+						);
+					}
 				} catch (error) {
 					logInternalError("register.tempAutoRepair", error);
 				}

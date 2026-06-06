@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentConfig } from "../agents/agent-config.ts";
 import { getAgentSessionOptions } from "../agents/agent-config.ts";
+import { userPiRoot } from "../utils/paths.ts";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 const PROMPT_RUNTIME_EXTENSION_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "prompt", "prompt-runtime.ts");
@@ -17,15 +18,13 @@ const createdTempDirs = new Set<string>();
 
 /**
  * Resolve the temp-dir base path.
- * Uses pi's own config dir (`~/.pi/agent/pi-crew/tmp/`) so the temp files
- * live alongside other pi state and never pollute the shared /tmp directory.
- * Respects `PI_CODING_AGENT_DIR` env var (pi's documented override).
+ * Uses pi-crew's own user-root (`~/.pi/agent/pi-crew/tmp/`) so the temp
+ * files live alongside other pi-crew state and never pollute the shared
+ * /tmp directory. Uses `userPiRoot()` so the path stays consistent with
+ * the rest of pi-crew (respects PI_TEAMS_HOME / PI_CODING_AGENT_DIR).
  */
 function getPiTempBase(): string {
-	const agentDir =
-		process.env.PI_CODING_AGENT_DIR?.trim() ||
-		path.join(os.homedir(), ".pi", "agent");
-	return path.join(agentDir, "pi-crew", "tmp");
+	return path.join(userPiRoot(), "tmp");
 }
 
 export interface BuildPiWorkerArgsInput {
@@ -216,4 +215,53 @@ export function cleanupAllTrackedTempDirs(): { cleaned: number; failed: number }
 		}
 	}
 	return { cleaned, failed };
+}
+
+/** Max age (ms) for orphan temp dirs. Anything older is considered abandoned. */
+const ORPHAN_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+/** Cap dirs removed per call to avoid main-thread stalls. */
+const ORPHAN_TEMP_CLEAN_BATCH_SIZE = 50;
+
+/**
+ * Remove orphan temp dirs in `~/.pi/agent/pi-crew/tmp/` older than the age
+ * threshold. This catches dirs left behind by parent processes that were
+ * SIGKILL'd (no graceful shutdown to call cleanupAllTrackedTempDirs).
+ *
+ * Called periodically by register.ts:tempReconcileTimer.
+ *
+ * @param now Current epoch ms (parameter for testability)
+ */
+export function cleanupOrphanTempDirs(
+	now: number = Date.now(),
+): { scanned: number; cleaned: number; failed: number } {
+	const baseDir = path.join(userPiRoot(), "tmp");
+	let scanned = 0;
+	let cleaned = 0;
+	let failed = 0;
+	try {
+		if (!fs.existsSync(baseDir)) return { scanned: 0, cleaned: 0, failed: 0 };
+		const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+		// Only process pi-crew-* dirs to avoid touching unrelated files
+		const candidates = entries
+			.filter((e) => e.isDirectory() && e.name.startsWith("pi-crew-"))
+			.sort((a, b) => a.name.localeCompare(b.name))
+			.slice(0, ORPHAN_TEMP_CLEAN_BATCH_SIZE);
+		for (const entry of candidates) {
+			scanned++;
+			const dir = path.join(baseDir, entry.name);
+			try {
+				const stat = fs.statSync(dir);
+				if (now - stat.mtimeMs > ORPHAN_TEMP_MAX_AGE_MS) {
+					fs.rmSync(dir, { recursive: true, force: true });
+					createdTempDirs.delete(dir);
+					cleaned++;
+				}
+			} catch {
+				failed++;
+			}
+		}
+	} catch {
+		/* skip if tmpdir unreadable */
+	}
+	return { scanned, cleaned, failed };
 }
