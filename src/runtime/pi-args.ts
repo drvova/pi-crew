@@ -327,6 +327,10 @@ export function cleanupLegacyOrphanTempDirs(
 			// reconcileOrphanedTempWorkspaces which has run-state semantics.
 			const crewDir = path.join(dir, ".crew");
 			if (fs.existsSync(crewDir)) continue;
+			// Skip dirs currently tracked by this process (defense in depth:
+			// with 8ba270d the Set should never contain /tmp/ paths, but
+			// future code or external callers might).
+			if (createdTempDirs.has(dir)) continue;
 			try {
 				const stat = fs.statSync(dir);
 				if (now - stat.mtimeMs > ORPHAN_TEMP_MAX_AGE_MS) {

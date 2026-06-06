@@ -189,9 +189,14 @@ export async function spawnBackgroundTeamRun(manifest: TeamRunManifest): Promise
 		],
 	});
 	// Block execution control vars from leaking
-	delete filteredEnv.PI_CREW_PARENT_PID;
 	delete filteredEnv.PI_CREW_EXECUTE_WORKERS;
 	delete filteredEnv.PI_TEAMS_EXECUTE_WORKERS;
+	// PI_CREW_PARENT_PID is intentionally allowed through: background-runner
+	// uses it ONLY for `process.kill(pid, 0)` liveness check (parent-guard).
+	// The PID itself is not a secret. Without it, workers can't self-monitor
+	// the parent and remain orphaned indefinitely after a SIGKILL of pi.
+	// (Orphan-worker-registry provides a second layer of cleanup at next
+	// session_start in case workers are stuck and parent-guard can't fire.)
 
 	const loader = resolveTypeScriptLoader();
 	if (!loader) {
@@ -230,7 +235,12 @@ export async function spawnBackgroundTeamRun(manifest: TeamRunManifest): Promise
 	// Track this worker in the orphan registry so it can be killed on
 	// session_start of a future session if the parent pi process is killed.
 	if (child.pid) {
-		registerWorker(child.pid, manifest.ownerSessionId ?? "unknown", manifest.runId);
+		registerWorker(
+			child.pid,
+			manifest.ownerSessionId ?? "unknown",
+			manifest.runId,
+			process.pid, // parentPid — used by cleanup to verify session is dead
+		);
 		// Best-effort: unregister when child exits. Background-runner writes
 		// the marker file before it dies, so we unregister on the next
 		// cleanup tick. But the child "exit" event won't fire because we

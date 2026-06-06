@@ -28,7 +28,31 @@ export interface OrphanWorkerEntry {
 	pid: number;
 	sessionId: string;
 	runId: string;
+	/** Parent PID (the pi process that spawned this worker). Used to verify
+	 * the owning session is actually dead before killing the worker. */
+	parentPid: number;
 	registeredAt: number; // epoch ms
+}
+
+/**
+ * Verify that a PID is actually one of our background-runner processes.
+ * Guards against PID reuse attacks: after a worker dies, OS may reuse
+ * the same PID for an unrelated process. Without verification, we'd
+ * kill that unrelated process.
+ *
+ * Strategy: read /proc/<pid>/cmdline (Linux) and check it contains
+ * "background-runner". Falls back to trusting the registry on other
+ * platforms where /proc isn't available.
+ */
+function verifyIsBackgroundWorker(pid: number): boolean {
+	try {
+		const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf-8");
+		// cmdline fields are NUL-separated
+		return cmdline.includes("background-runner");
+	} catch {
+		// /proc not available (macOS, Windows) or PID gone — trust registry
+		return true;
+	}
 }
 
 function getRegistryPath(): string {
@@ -73,17 +97,27 @@ function writeRegistry(entries: OrphanWorkerEntry[]): void {
 /**
  * Add a worker PID to the registry. Idempotent (replaces existing entry
  * for the same PID).
+ *
+ * @param parentPid The PID of the spawning pi process. Used later to
+ *   verify the owning session is actually dead before killing the worker.
  */
 export function registerWorker(
 	pid: number,
 	sessionId: string,
 	runId: string,
+	parentPid: number,
 ): void {
 	if (!Number.isFinite(pid) || pid <= 0) return;
 	const entries = readRegistry();
 	// Dedupe by PID
 	const filtered = entries.filter((e) => e.pid !== pid);
-	filtered.push({ pid, sessionId, runId, registeredAt: Date.now() });
+	filtered.push({
+		pid,
+		sessionId,
+		runId,
+		parentPid: Number.isFinite(parentPid) ? parentPid : 0,
+		registeredAt: Date.now(),
+	});
 	writeRegistry(filtered);
 }
 
@@ -139,18 +173,46 @@ export function cleanupOrphanWorkers(
 				kept.push(entry);
 				continue;
 			}
-			if (now - entry.registeredAt > STALE_REGISTRATION_MS) {
-				// Stale orphan — kill it
+			// Verify parent is actually dead before killing worker.
+			// If parent is alive, this is a concurrent session's worker
+			// (or the same session that was misidentified). Keep it.
+			if (entry.parentPid > 0) {
 				try {
-					process.kill(entry.pid, "SIGTERM");
+					process.kill(entry.parentPid, 0);
+					// Parent is alive — concurrent session, keep worker
+					kept.push(entry);
+					continue;
+				} catch {
+					// Parent is dead — proceed to verify it's actually our worker
+				}
+			}
+			// Verify it's actually a background-runner, not a reused PID
+			if (!verifyIsBackgroundWorker(entry.pid)) {
+				// PID reused by another process — prune, don't kill
+				pruned++;
+				continue;
+			}
+			if (now - entry.registeredAt > STALE_REGISTRATION_MS) {
+				// Stale orphan — SIGKILL because background-runner
+				// intentionally ignores SIGTERM (BUG #17 fix).
+				try {
+					process.kill(entry.pid, "SIGKILL");
 					killed++;
 				} catch {
 					// Race: died between check and kill
 					pruned++;
 				}
 			} else {
-				// Fresh and not mine — could be concurrent session, keep
-				kept.push(entry);
+				// Fresh and not mine, parent dead, but recently registered.
+				// Could be the same session that died < 1h ago and was
+				// about to be cleaned up by parent-guard. Be conservative
+				// and SIGKILL — orphaned workers waste resources.
+				try {
+					process.kill(entry.pid, "SIGKILL");
+					killed++;
+				} catch {
+					pruned++;
+				}
 			}
 		} catch {
 			// PID is dead — prune from registry
