@@ -249,11 +249,88 @@ export function cleanupOrphanTempDirs(
 		for (const entry of candidates) {
 			scanned++;
 			const dir = path.join(baseDir, entry.name);
+			// CRITICAL: never rmSync a symlink. fs.rmSync with recursive:true
+			// FOLLOWS symlinks — an attacker could plant a symlink to /etc and
+			// wipe the system. Use lstat (does not follow) and skip.
+			let lstat: fs.Stats;
+			try {
+				lstat = fs.lstatSync(dir);
+			} catch {
+				failed++;
+				continue;
+			}
+			if (lstat.isSymbolicLink()) continue;
+			// Skip dirs currently in use by this process. A long-running child
+			// pi (>24h) would otherwise have its prompt/task tmp dir deleted
+			// mid-execution, causing broken-pipe failures when the child
+			// reads the system prompt.
+			if (createdTempDirs.has(dir)) continue;
 			try {
 				const stat = fs.statSync(dir);
 				if (now - stat.mtimeMs > ORPHAN_TEMP_MAX_AGE_MS) {
 					fs.rmSync(dir, { recursive: true, force: true });
 					createdTempDirs.delete(dir);
+					cleaned++;
+				}
+			} catch {
+				failed++;
+			}
+		}
+	} catch {
+		/* skip if tmpdir unreadable */
+	}
+	return { scanned, cleaned, failed };
+}
+
+/**
+ * Clean up orphan `pi-crew-*` prompt/task temp dirs left in the system
+ * `/tmp/` directory. Before commit 8ba270d these were the primary location
+ * for temp dirs; users who upgraded may have thousands of orphans (the
+ * user's /tmp had 2498 of these). The existing
+ * `reconcileOrphanedTempWorkspaces` only cleans dirs containing
+ * `.crew/state/runs/` (the run-state dirs), so prompt/task orphans are
+ * never touched.
+ *
+ * Strategy: remove `pi-crew-*` dirs in /tmp that DO NOT contain
+ * `.crew/state/runs/` AND are older than the age threshold. The age
+ * threshold protects active processes that might still be writing.
+ *
+ * Bounded to ORPHAN_TEMP_CLEAN_BATCH_SIZE dirs per call.
+ */
+export function cleanupLegacyOrphanTempDirs(
+	now: number = Date.now(),
+): { scanned: number; cleaned: number; failed: number } {
+	const tmpDir = os.tmpdir();
+	let scanned = 0;
+	let cleaned = 0;
+	let failed = 0;
+	try {
+		if (!fs.existsSync(tmpDir)) return { scanned: 0, cleaned: 0, failed: 0 };
+		const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
+		const candidates = entries
+			.filter((e) => e.isDirectory() && e.name.startsWith("pi-crew-"))
+			.sort((a, b) => a.name.localeCompare(b.name))
+			.slice(0, ORPHAN_TEMP_CLEAN_BATCH_SIZE);
+		for (const entry of candidates) {
+			scanned++;
+			const dir = path.join(tmpDir, entry.name);
+			// Symlink guard
+			let lstat: fs.Stats;
+			try {
+				lstat = fs.lstatSync(dir);
+			} catch {
+				failed++;
+				continue;
+			}
+			if (lstat.isSymbolicLink()) continue;
+			// Skip dirs containing active run state — those are handled by
+			// reconcileOrphanedTempWorkspaces which has run-state semantics.
+			const crewDir = path.join(dir, ".crew");
+			if (fs.existsSync(crewDir)) continue;
+			try {
+				const stat = fs.statSync(dir);
+				if (now - stat.mtimeMs > ORPHAN_TEMP_MAX_AGE_MS) {
+					fs.rmSync(dir, { recursive: true, force: true });
 					cleaned++;
 				}
 			} catch {

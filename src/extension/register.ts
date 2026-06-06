@@ -132,7 +132,7 @@ import {
 } from "../runtime/crash-recovery.ts";
 import { appendDeadletter } from "../runtime/deadletter.ts";
 import { HeartbeatWatcher } from "../runtime/heartbeat-watcher.ts";
-import { cleanupOrphanTempDirs } from "../runtime/pi-args.ts";
+import { cleanupOrphanTempDirs, cleanupLegacyOrphanTempDirs } from "../runtime/pi-args.ts";
 import { reconcileOrphanedTempWorkspaces } from "../runtime/stale-reconciler.ts";
 
 let _cachedCrashRecovery:
@@ -453,6 +453,20 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 							"register.tempAutoRepair.orphanTemp",
 							new Error(
 								`cleaned ${orphanResult.cleaned} orphan temp dirs`,
+							),
+						);
+					}
+					// Layer 5: clean legacy /tmp/pi-crew-* prompt/task orphans
+					// from before commit 8ba270d moved temp dirs out of /tmp.
+					// The existing reconcileOrphanedTempWorkspaces only cleans
+					// dirs containing .crew/state/runs/ (run-state dirs), so
+					// prompt/task orphans are never touched by Layer 3.
+					const legacyResult = cleanupLegacyOrphanTempDirs();
+					if (legacyResult.cleaned > 0) {
+						logInternalError(
+							"register.tempAutoRepair.legacyOrphanTemp",
+							new Error(
+								`cleaned ${legacyResult.cleaned} legacy /tmp/pi-crew-* orphans`,
 							),
 						);
 					}
