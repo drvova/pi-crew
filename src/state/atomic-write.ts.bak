@@ -169,13 +169,12 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 			// concurrent writer could modify the file between the fallback write
 			// and the read. Prefer failing over falling back when rename fails
 			// repeatedly under contention.
-			// Issue 1 fix: isSymlinkSafePath check is now immediately before writeFileSync
-			// to minimize the TOCTOU window between the check and the actual write.
+			// Re-check symlink safety before fallback to prevent TOCTOU attack.
+			if (!isSymlinkSafePath(filePath)) {
+				try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
+				throw new Error(`Refusing to write: target is a symlink or inside untrusted directory: ${filePath}`);
+			}
 			try {
-				if (!isSymlinkSafePath(filePath)) {
-					try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
-					throw new Error(`Refusing to write: target is a symlink or inside untrusted directory: ${filePath}`);
-				}
 				fs.writeFileSync(filePath, content, "utf-8");
 			} catch (writeError) {
 				// Issue 1 fix: clean up temp file before re-throwing, matching
@@ -183,11 +182,18 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 				try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
 				throw renameError;
 			}
-			// Note: Hash verification is intentionally omitted in the fallback path.
-			// The fallback is non-atomic, so a hash check after writeFileSync cannot
-			// distinguish between a TOCTOU attack and a legitimate concurrent write.
-			// The post-write hash check (lines 187-195) detects but does not prevent
-			// the race, so we rely on the pre-write isSymlinkSafePath check instead.
+			// Issue 2 fix: verify hash after fallback write to detect content mismatch
+			// (e.g., when caller hashed redacted content but fallback wrote unredacted).
+			if (expectedHash !== undefined) {
+				const actualHash = hashContent(fs.readFileSync(filePath, "utf-8"));
+				if (actualHash !== expectedHash) {
+					// Issue 2 fix: Do NOT delete the file on hash mismatch.
+					// The fallback write is non-atomic, and another process may have
+					// written valid content to this path. Deleting it would remove
+					// their content. Throw an error to alert the caller instead.
+					throw new Error(`Hash mismatch after fallback write: expected ${expectedHash}, got ${actualHash}. Another process may have written to this file.`);
+				}
+			}
 			try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
 		}
 	} catch (error) {
@@ -310,19 +316,14 @@ export function atomicWriteJsonCoalesced<T>(filePath: string, value: T, coalesce
 function flushOnePendingAtomicWrite(filePath: string): void {
 	const entry = pendingAtomicWrites.get(filePath);
 	if (!entry) return;
-	// Issue 2 fix: Remove entry ONLY after successful flush.
+	// Issue 3 fix: Remove entry ONLY after successful flush.
 	// If flush fails, keep the entry so the next flush (or process exit)
 	// can retry. This prevents silent data loss when writes fail.
 	clearTimeout(entry.timer);
 	try {
 		atomicWriteFile(filePath, entry.content);
-		// Issue 2 fix: Verify this entry is still the current one before deleting.
-		// A concurrent write may have replaced entry with a newer one during the flush.
-		// Only delete if pendingAtomicWrites.get(filePath) === entry (not a newer entry).
-		// This prevents orphaning newer entries that arrived during the flush.
-		if (pendingAtomicWrites.get(filePath) === entry) {
-			pendingAtomicWrites.delete(filePath);
-		}
+		// Success - remove the entry now that content is safely on disk
+		pendingAtomicWrites.delete(filePath);
 	} catch (error) {
 		logInternalError("atomic-write.coalesced-flush", error, filePath);
 		// Failure: keep entry for retry. The timer was already cleared

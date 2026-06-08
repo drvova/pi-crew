@@ -59,6 +59,9 @@ export function resolveContainedPath(baseDir: string, targetPath: string): strin
  * realpathed) path when the target does not exist yet.
  */
 export function resolveRealContainedPath(baseDir: string, targetPath: string): string {
+	if (targetPath.includes('\0')) {
+	  throw new Error(`Security: path contains null byte`);
+	}
 	const resolved = resolveContainedPath(baseDir, targetPath);
 	// Walk the full ancestor chain of baseDir and verify none are symlinks.
 	// This must be done BEFORE realpathSync to prevent TOCTOU attacks where

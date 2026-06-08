@@ -384,25 +384,20 @@ export function cleanupOrphanTempDirs(
 			// reads the system prompt.
 			if (createdTempDirs.has(dir)) continue;
 			try {
-				const stat = fs.statSync(dir);
+				// FIX: Perform lstatSync BEFORE statSync mtime check to close TOCTOU window.
+				// An attacker could plant a symlink between the early lstatSync (line 373) and statSync.
+				// If statSync follows the symlink, it reads the target's mtime, not the dir's.
+				// By checking lstatSync first, we skip the mtime check entirely for symlinks.
+				let preRmlstat: fs.Stats | undefined;
+				try {
+					preRmlstat = fs.lstatSync(dir);
+				} catch {
+					failed++;
+					continue;
+				}
+				if (!preRmlstat || preRmlstat.isSymbolicLink()) continue;
+				const stat = fs.lstatSync(dir);
 				if (now - stat.mtimeMs > ORPHAN_TEMP_MAX_AGE_MS) {
-					// FIX: Re-check not a symlink IMMEDIATELY before rmSync to close TOCTOU window.
-					// An attacker could plant a symlink between stat and rmSync.
-					let preRmlstat: fs.Stats | undefined;
-					try {
-						preRmlstat = fs.lstatSync(dir);
-					} catch {
-						failed++;
-						continue;
-					}
-					if (!preRmlstat || preRmlstat.isSymbolicLink()) continue;
-					// FIX: Double-check symlink status one more time immediately before rmSync
-					try {
-						const immediateCheck = fs.lstatSync(dir);
-						if (immediateCheck.isSymbolicLink()) continue;
-					} catch {
-						continue;
-					}
 					fs.rmSync(dir, { recursive: true, force: true });
 					createdTempDirs.delete(dir);
 					cleaned++;
@@ -472,18 +467,20 @@ export function cleanupLegacyOrphanTempDirs(
 			// future code or external callers might).
 			if (createdTempDirs.has(dir)) continue;
 			try {
-				const stat = fs.statSync(dir);
+				// FIX: Perform lstatSync BEFORE statSync mtime check to close TOCTOU window.
+				// An attacker could plant a symlink between the early lstatSync (line 457) and statSync.
+				// If statSync follows the symlink, it reads the target's mtime, not the dir's.
+				// By checking lstatSync first, we skip the mtime check entirely for symlinks.
+				let preRmlstat: fs.Stats;
+				try {
+					preRmlstat = fs.lstatSync(dir);
+				} catch {
+					failed++;
+					continue;
+				}
+				if (preRmlstat.isSymbolicLink()) continue;
+				const stat = fs.lstatSync(dir);
 				if (now - stat.mtimeMs > ORPHAN_TEMP_MAX_AGE_MS) {
-					// Re-check not a symlink immediately before rmSync to narrow TOCTOU window.
-					// An attacker could plant a symlink between the earlier lstatSync and now.
-					let preRmlstat: fs.Stats;
-					try {
-						preRmlstat = fs.lstatSync(dir);
-					} catch {
-						failed++;
-						continue;
-					}
-					if (preRmlstat.isSymbolicLink()) continue;
 					fs.rmSync(dir, { recursive: true, force: true });
 					cleaned++;
 				}

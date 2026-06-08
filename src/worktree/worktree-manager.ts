@@ -238,6 +238,18 @@ export function normalizeSeedPaths(seedPaths: string[], repoRoot: string): strin
 			throw new Error(`seedPaths entries must stay inside repoRoot: ${entry}`);
 		}
 
+		// Reject symlinks to prevent escape via symlink-based path traversal.
+		// This check is also performed in overlaySeedPaths for defense-in-depth.
+		try {
+			const stat = fs.lstatSync(absolutePath);
+			if (stat.isSymbolicLink()) {
+				throw new Error(`seedPaths entries cannot be symlinks: ${entry}`);
+			}
+		} catch (error) {
+			if (error instanceof Error && error.message.startsWith("seedPaths entries")) throw error;
+			throw new Error(`seedPaths entries must be accessible: ${entry}`);
+		}
+
 		const normalizedPath = relativePath.split(path.sep).join("/");
 		if (seen.has(normalizedPath)) continue;
 		seen.add(normalizedPath);
