@@ -41,10 +41,17 @@ export function isSymlinkSafePath(filePath: string): boolean {
 				}
 			} catch (err) {
 				// Directory doesn't exist yet — that's OK, mkdirSync will create it.
-				// Surface unexpected errors (not ENOENT) since they may indicate
-				// permission or filesystem issues that compromise the safety check.
+				// For permission errors (EACCES, EPERM), we cannot verify the path
+				// is safe, so treat it as unsafe rather than returning true.
 				const code = (err as NodeJS.ErrnoException).code;
-				if (code !== "ENOENT") {
+				if (code === "ENOENT") {
+					// OK - directory doesn't exist yet
+				} else if (code === "EACCES" || code === "EPERM") {
+					// Permission error - cannot verify path is safe
+					logInternalError("isSymlinkSafePath.lstat.permission", err, `dir=${dir}`);
+					return false;
+				} else {
+					// Other errors - log but continue (better to be conservative)
 					logInternalError("isSymlinkSafePath.lstat", err, `dir=${dir}`);
 				}
 			}

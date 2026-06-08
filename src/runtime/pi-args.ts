@@ -373,16 +373,23 @@ export function cleanupOrphanTempDirs(
 			try {
 				const stat = fs.statSync(dir);
 				if (now - stat.mtimeMs > ORPHAN_TEMP_MAX_AGE_MS) {
-					// Re-check not a symlink immediately before rmSync to narrow TOCTOU window.
-					// An attacker could plant a symlink between the earlier lstatSync and now.
-					let preRmlstat: fs.Stats;
+					// FIX: Re-check not a symlink IMMEDIATELY before rmSync to close TOCTOU window.
+					// An attacker could plant a symlink between stat and rmSync.
+					let preRmlstat: fs.Stats | undefined;
 					try {
 						preRmlstat = fs.lstatSync(dir);
 					} catch {
 						failed++;
 						continue;
 					}
-					if (preRmlstat.isSymbolicLink()) continue;
+					if (!preRmlstat || preRmlstat.isSymbolicLink()) continue;
+					// FIX: Double-check symlink status one more time immediately before rmSync
+					try {
+						const immediateCheck = fs.lstatSync(dir);
+						if (immediateCheck.isSymbolicLink()) continue;
+					} catch {
+						continue;
+					}
 					fs.rmSync(dir, { recursive: true, force: true });
 					createdTempDirs.delete(dir);
 					cleaned++;

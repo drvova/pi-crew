@@ -18,7 +18,7 @@ import {
 import type { executeTeamRun as _executeTeamRunFn } from "../runtime/team-runner.ts";
 import type { TeamToolParamsValue } from "../schema/team-tool-schema.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
-import { appendEvent } from "../state/event-log.ts";
+import { appendEvent, appendEventFireAndForget } from "../state/event-log.ts";
 import { withRunLock } from "../state/locks.ts";
 import { replayPendingMailboxMessages } from "../state/mailbox.ts";
 import {
@@ -704,9 +704,18 @@ export function handleSteer(
 	// HIGH-04: Cap pendingSteers array to prevent unbounded memory growth
 	const MAX_PENDING_STEERS = 100;
 	if (task.pendingSteers.length >= MAX_PENDING_STEERS) {
-		task.pendingSteers = task.pendingSteers.slice(
-			-(MAX_PENDING_STEERS - 1),
-		);
+		// Log warning before dropping the oldest message
+		appendEventFireAndForget(loaded.manifest.eventsPath, {
+			type: "task.steer_dropped",
+			runId,
+			taskId,
+			data: {
+				droppedMessage: task.pendingSteers[0],
+				reason: "pendingSteers cap exceeded",
+				queueDepth: task.pendingSteers.length,
+			},
+		});
+		task.pendingSteers = task.pendingSteers.slice(-(MAX_PENDING_STEERS - 1));
 	}
 	task.pendingSteers.push(message);
 	saveRunTasks(loaded.manifest, loaded.tasks);
