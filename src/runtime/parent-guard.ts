@@ -15,6 +15,26 @@
  * const parentPid = Number(process.env.PI_CREW_PARENT_PID);
  * if (parentPid > 0) startParentGuard(parentPid);
  * ```
+ *
+ * ## Trust model
+ *
+ * `PI_CREW_PARENT_PID` is propagated from the spawning team-runner to each
+ * child via the explicit env allow-list in `child-pi.ts`. The PID itself is
+ * NOT a secret — process identifiers are public knowledge on Unix-like
+ * systems (visible in `ps`, `/proc`, etc.) and carry no privilege.
+ *
+ * Residual risk: a malicious or compromised child can spoof
+ * `process.env.PI_CREW_PARENT_PID` before invoking `startParentGuard()`.
+ * This is acceptable because the parent-guard is a self-termination
+ * signal, NOT a security boundary:
+ *   - It only causes the (already-compromised) child to exit earlier.
+ *   - A truly malicious child can simply not call `startParentGuard()`.
+ *   - Real protection against hostile children comes from the sandbox,
+ *     env-filter allowlist, and redaction — all enforced before spawn.
+ *
+ * The guard exists for the benign case: a parent dies (user closes the
+ * terminal, pi crashes, machine loses power) and we want all detached
+ * workers to stop wasting CPU. It is NOT an anti-tampering mechanism.
  */
 
 /**
@@ -71,16 +91,13 @@ function selfTerminate(parentPid: number): never {
 export function startParentGuard(parentPid: number): void {
 	if (!parentPid || !Number.isFinite(parentPid) || parentPid <= 0) return;
 
-	let firstTick = true;
-
 	guardInterval = setInterval(() => {
-		// Immediate check on first tick — eliminates race between guard start
-		// and parent death that would otherwise go undetected until next poll.
+		// Immediate check on every tick — detects parent death within one poll
+		// interval (max POLL_INTERVAL_MS latency, default 500ms).
 		if (!isPidAlive(parentPid)) {
 			if (guardInterval) clearInterval(guardInterval);
 			selfTerminate(parentPid);
 		}
-		firstTick = false;
 	}, POLL_INTERVAL_MS);
 
 	// NOTE: Intentionally NOT calling guardInterval.unref() here.

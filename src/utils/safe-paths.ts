@@ -21,6 +21,43 @@ export function resolveContainedPath(baseDir: string, targetPath: string): strin
 	return resolved;
 }
 
+/**
+ * Resolve a target path to its real (symlink-resolved) absolute path while
+ * guaranteeing the result stays inside `baseDir`.
+ *
+ * ## Security model — asymmetric ancestor handling
+ *
+ * `baseDir` and `targetPath` are validated with different policies because
+ * they play different roles:
+ *
+ * - **baseDir** (the container): all ancestors MUST exist and MUST NOT be
+ *   symlinks. We refuse to operate if any component is missing or symlinked,
+ *   because a symlinked container could point the caller outside the
+ *   intended trust boundary (e.g. `/var/run -> /run` resolving into an
+ *   attacker-controlled directory).
+ *
+ * - **targetPath** (the contained file): the FINAL component may be
+ *   non-existent (for write operations creating a new file) and EXISTING
+ *   ancestors of the target may also be missing. We DO require that any
+ *   ancestor that DOES exist must not be a symlink — an attacker who can
+ *   create a directory in the container must not be able to redirect the
+ *   file being created.
+ *
+ * This asymmetry is intentional: callers that need to create a new file
+ * pass a non-existent targetPath. Callers that operate on an existing file
+ * get full symlink protection. Callers MUST NOT pass a symlinked
+ * intermediate component; if you need to, use `resolveContainedPath`
+ * instead (which only checks the resolved path, not the chain).
+ *
+ * Throws on:
+ *   - null byte in targetPath
+ *   - targetPath resolves outside baseDir
+ *   - any existing ancestor (base or target) is a symlink
+ *   - baseDir itself does not exist
+ *
+ * Returns the resolved real path on success, or the resolved (but not
+ * realpathed) path when the target does not exist yet.
+ */
 export function resolveRealContainedPath(baseDir: string, targetPath: string): string {
 	const resolved = resolveContainedPath(baseDir, targetPath);
 	// Walk the full ancestor chain of baseDir and verify none are symlinks.

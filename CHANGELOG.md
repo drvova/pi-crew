@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.6.3] — Post-Release Hardening: Cleanup, Safe-Paths, State-Store Race (2026-06-08)
+
+### Highlights
+- **State-store manifest/tasks mtime race fixed** (commits `04fe0be`, `f15ee98`) — `loadRunManifestById` no longer throws on benign mtime skew between `manifest.json` and `tasks.json`. A previous user review (run `team_20260608082852_*`) hit a 4812-second hang because of this throw; the fix prevents the same hang from recurring.
+- **Orphan worker + temp dir cleanup hardened** (8 commits) — 4-layer defense (in-memory Set, per-session temp dir, user-root temp dir, legacy `/tmp` cleanup) with symlink guards, `O_NOFOLLOW` opens, and bounded batch sizes.
+- **`PI_CREW_PARENT_PID` restored to child env allow-list** (commit `e1f7dfe`) — silent regression from a previous round fixed; parent-guard now works again for orphan-worker detection.
+- **`safe-paths.resolveRealContainedPath` extended** (commits `ba0ce54`, `aa457a5`) — now supports creating new files (target does not have to exist) while keeping full symlink-ancestor protection.
+- **`blob-store` metadata race fixed** (commit `5819b18`) — per-hash in-memory lock + atomic write of content-then-metadata prevents concurrent writers from corrupting metadata.
+- **Behavior change: `parent-guard` no longer `.unref()`s its interval** — the guard timer now keeps the event loop alive by design so workers do not exit while their parent is still alive but the worker has no other pending work. See "Behavior Changes" below.
+
+### Security Fixes
+- **`e1f7dfe`** — Restored `PI_CREW_PARENT_PID` in `child-pi.ts` env allow-list. Previous round (`dbf7a48`) replaced `PI_CREW_*`/`PI_TEAMS_*` wildcards with an explicit list but omitted `PI_CREW_PARENT_PID`, silently breaking the parent-guard mechanism.
+- **`ba0ce54` / `aa457a5`** — `safe-paths.resolveRealContainedPath` now allows new-file creation while keeping symlink-ancestor protection. Documented the asymmetric ancestor policy in the function JSDoc.
+- **`e1f7dfe`** (sibling) — `worktree/cleanup.ts` no longer uses `PI_*` / `PI_CREW_*` wildcards in `GIT_SAFE_ENV` (could match secret vars like `PI_PASSWORD`).
+- **`2b8f27a` / `1bf67eb`** — Child env allow-list switched from dangerous wildcards (`*_API_KEY`, `*_TOKEN`, `*_SECRET`, `LC_*`, `XDG_*`, `NPM_*`) to an explicit list of 6 API keys + 12 essential env vars. Eliminates accidental secret leakage via matching name patterns.
+
+### Cleanup Hardening (8 commits)
+- **`5edcb18`** — Track temp dirs globally via in-memory `Set<string>`, cap `reconcileOrphanedTempWorkspaces` scan size, fix cleanup stub.
+- **`8ba270d`** — Move temp dirs from `/tmp` to `~/.pi/agent/pi-crew/tmp/` (uses `userPiRoot()` so `PI_TEAMS_HOME` / `PI_CODING_AGENT_DIR` are respected). Eliminates `/tmp` pollution and unifies state layout.
+- **`ceb1cb1`** — Layer 4 periodic cleanup for orphan prompt/task temp dirs older than 24h.
+- **`a76932d`** — Skip symlinks and in-use dirs during cleanup, plus a one-shot legacy `/tmp` sweep to clean up directories left behind by pre-`8ba270d` installations.
+- **`c9eb430`** — Kill orphan background workers and trigger temp cleanup on `session_start`.
+- **`a192509`** — 4 critical hardening fixes: never `rmSync` a symlink, double-check immediately before delete, skip dirs currently in use, and tear down the global tracker on process exit.
+- **`992231d`** — 24 new unit tests in `test/unit/cleanup-orphan-temp.test.ts` covering each cleanup layer and failure mode.
+- **`dbf7a48`** — UI: replace `console.log` cleanup messages with `notifyOperator` for proper user notification.
+
+### Bug Fixes
+- **`5819b18`** — `blob-store.writeBlob` race condition: per-hash lock + atomic write of content-then-metadata (previously metadata first, leaving orphans on blob write failure).
+- **`04fe0be`** — `state-store.loadRunManifestById` returned `undefined` (was: threw) on manifest/tasks mtime mismatch — the throw caused background runners to crash within 1s of startup.
+- **`f15ee98`** — `state-store.loadRunManifestById` removed the false-positive mtime check entirely. The `saveManifestAndTasksAtomicSync` writer intentionally writes manifest before tasks, so a manifest with newer mtime than tasks is a NORMAL post-write state, not corruption.
+- **`cd7ef89` / `a0c2ba3` / `098c8a9` / `b782424` / `e1ea7d4` / `de3f550` / `2b8f27a` / `1bf67eb`** — 8 deep-review auto-fix commits addressing 78+77+29+28+24+24+24+24 verified issues across the cleanup, state, runtime, and utils modules.
+- **`e1f7dfe`** — `parent-guard.ts` unref'd timers were silently causing worker exit while parent was still alive; restoring the allow-list entry brought the guard back into effect.
+
+### Behavior Changes
+- **`parent-guard.ts` no longer `.unref()`s the guard interval** (revert/restore series `0aed8b5` / `152ac80` / `ee0ddb4` / `81b9608`). The watchdog timer now keeps the event loop alive by design. If a worker has no other pending work (no I/O, no timers, no child processes), the guard interval is the only thing keeping the worker alive until either the parent dies or the worker is explicitly stopped. The previous revert-then-restore pattern ("to test if they cause pi hang") never conclusively identified a root cause; the current state was reached after manual testing. **Mitigation recommended**: add a max-worker-lifetime safety net in a future release.
+
+### New / Heavily Expanded Source Files
+- **`src/runtime/orphan-worker-registry.ts`** (NEW, 307 lines) — PID+start-time+parent-PID verification before SIGKILL; file-locked registry at `<userPiRoot>/state/orphan-workers.json`; honest about residual userspace TOCTOU window between start-time re-check and actual `process.kill`.
+- **`src/runtime/pi-args.ts`** (heavily expanded, 342 lines) — `createSafeTempDir` walks the full ancestor chain rejecting symlinks; `buildPiWorkerArgs` builds the child argv safely (no shell); `cleanupTempDir` / `cleanupAllTrackedTempDirs` / `cleanupOrphanTempDirs` / `cleanupLegacyOrphanTempDirs` provide 4 layers of defense with bounded work.
+
+### Test Coverage
+- **`test/unit/orphan-worker-registry.test.ts`** (NEW, 279 lines) — `registerWorker` / `unregisterWorker` / `cleanupOrphanWorkers` with `__test_setRegistryPath` for isolation; covers invalid PIDs, dedup, parent-PID tolerance, current-session protection, dead-PID pruning.
+- **`test/unit/cleanup-orphan-temp.test.ts`** (NEW, 242 lines) — covers `cleanupTempDir` / `cleanupAllTrackedTempDirs` / `cleanupOrphanTempDirs` / `cleanupLegacyOrphanTempDirs` with `utimesSync` to simulate aged dirs; tests symlink skip, in-use skip, and `/tmp` legacy cleanup.
+- **`test/integration/cleanup-full-flow.test.ts`** (NEW, 241 lines) — end-to-end integration of all cleanup layers, simulating a crashed session.
+
+### Documentation
+- **`src/runtime/parent-guard.ts`** — added a "Trust model" JSDoc section explaining why `PI_CREW_PARENT_PID` is safe to pass in env (PID is not a secret), what residual risks remain (child can spoof before guard starts), and why the guard is a self-termination signal, not a security boundary.
+- **`src/utils/safe-paths.ts:resolveRealContainedPath`** — added a "Security model — asymmetric ancestor handling" JSDoc section explaining why `baseDir` ancestors must exist (cannot validate otherwise) while target ancestors may be non-existent (for new-file creation).
+
+### Stats
+- 23 commits since v0.6.2: `0aed8b5`, `152ac80`, `ee0ddb4`, `81b9608`, `5edcb18`, `8ba270d`, `ceb1cb1`, `a76932d`, `c9eb430`, `a192509`, `992231d`, `dbf7a48`, `e1f7dfe`, `1bf67eb`, `2b8f27a`, `de3f550`, `e1ea7d4`, `5819b18`, `cd7ef89`, `b782424`, `a0c2ba3`, `098c8a9`, `ba0ce54`, `aa457a5`, `04fe0be`, `f15ee98`
+- 79 files changed (+3567 / -712)
+- 1 new state fix: manifest/tasks mtime false positive
+- 1 new file: `orphan-worker-registry.ts` (307 lines)
+- 3 new test files: 762 lines
+
 ## [0.6.2] — Issue #28 + #29 Fixes + Post-Review Hardening (2026-06-05)
 
 ### Highlights
