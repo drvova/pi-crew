@@ -187,8 +187,11 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 			if (expectedHash !== undefined) {
 				const actualHash = hashContent(fs.readFileSync(filePath, "utf-8"));
 				if (actualHash !== expectedHash) {
-					try { fs.rmSync(filePath, { force: true }); } catch { /* best-effort */ }
-					throw new Error(`Hash mismatch after atomic write: expected ${expectedHash}, got ${actualHash}`);
+					// Issue 2 fix: Do NOT delete the file on hash mismatch.
+					// The fallback write is non-atomic, and another process may have
+					// written valid content to this path. Deleting it would remove
+					// their content. Throw an error to alert the caller instead.
+					throw new Error(`Hash mismatch after fallback write: expected ${expectedHash}, got ${actualHash}. Another process may have written to this file.`);
 				}
 			}
 			try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
@@ -313,12 +316,18 @@ export function atomicWriteJsonCoalesced<T>(filePath: string, value: T, coalesce
 function flushOnePendingAtomicWrite(filePath: string): void {
 	const entry = pendingAtomicWrites.get(filePath);
 	if (!entry) return;
-	pendingAtomicWrites.delete(filePath);
+	// Issue 3 fix: Remove entry ONLY after successful flush.
+	// If flush fails, keep the entry so the next flush (or process exit)
+	// can retry. This prevents silent data loss when writes fail.
 	clearTimeout(entry.timer);
 	try {
 		atomicWriteFile(filePath, entry.content);
+		// Success - remove the entry now that content is safely on disk
+		pendingAtomicWrites.delete(filePath);
 	} catch (error) {
 		logInternalError("atomic-write.coalesced-flush", error, filePath);
+		// Failure: keep entry for retry. The timer was already cleared
+		// so a new timer will be set on the next write to this path.
 	}
 }
 

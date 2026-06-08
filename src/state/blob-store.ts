@@ -174,10 +174,11 @@ export function writeBlob(artifactsRoot: string, input: {
 			atomicWriteFile(metadataPath, JSON.stringify(metadata, null, 2));
 		});
 	} catch (error) {
-		// Metadata write failed - clean up the orphaned blob content
-		if (blobContentWritten) {
-			try { fs.rmSync(blobPath, { force: true }); } catch { /* best-effort */ }
-		}
+		// Issue 8 fix: Do NOT delete blob content on metadata failure.
+		// If metadata write fails due to concurrent conflict (different values),
+		// the blob content is still valid. Another process has written metadata
+		// referencing this blob - deleting the blob would orphan their metadata.
+		// The caller can retry the metadata write if needed.
 		throw error;
 	}
 
