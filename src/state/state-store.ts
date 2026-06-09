@@ -11,6 +11,7 @@ import { findRepoRoot, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
 import { assertSafePathId, resolveContainedRelativePath, resolveRealContainedPath } from "../utils/safe-paths.ts";
 import { withRunLock, withRunLockSync } from "./locks.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { errors } from "../errors.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
 import type { WorkflowConfig } from "../workflows/workflow-config.ts";
 import { toPiSessionId } from "../utils/session-utils.ts";
@@ -210,7 +211,8 @@ export function createRunManifest(params: {
 	// throw to ensure manifest and tasks are always consistent.
 	const result = saveManifestAndTasksAtomicSync(manifest, tasks);
 	if (!result.manifestWritten || !result.tasksWritten) {
-		throw new Error(`Failed to write run state: manifestWritten=${result.manifestWritten} tasksWritten=${result.tasksWritten} error=${result.error ?? "unknown"}`);
+		throw errors.fileWrite(paths.stateRoot, result.error as unknown as NodeJS.ErrnoException)
+			.withContext(`saveManifestAndTasksAtomicSync: manifestWritten=${result.manifestWritten}, tasksWritten=${result.tasksWritten}`);
 	}
 	appendEvent(paths.eventsPath, {
 		type: "run.created",
@@ -297,7 +299,7 @@ export function saveRunTasks(manifest: TeamRunManifest, tasks: TeamTaskState[]):
 	const cached = manifestCache.get(manifest.stateRoot);
 	const manifestEntry = cached?.manifest ?? readJsonFile<TeamRunManifest>(manifestPath);
 	if (!manifestEntry) {
-		throw new Error(`saveRunTasks: manifest not found at ${manifestPath}`);
+		throw errors.taskNotFound("manifest", manifest.runId).withContext(`saveRunTasks: manifest not found at ${manifestPath}`);
 	}
 	// Preserve current status from the manifest parameter if the on-disk
 	// manifest is missing it (could be a partial write).
@@ -415,7 +417,7 @@ export interface UpdateRunStatusOptions {
 
 export function updateRunStatus(manifest: TeamRunManifest, status: TeamRunManifest["status"], summary?: string, options: UpdateRunStatusOptions = {}): TeamRunManifest {
 	if (!canTransitionRunStatus(manifest.status, status)) {
-		throw new Error(`Invalid run status transition: ${manifest.status} -> ${status}`);
+		throw errors.invalidStatusTransition(manifest.status, status);
 	}
 	const updated: TeamRunManifest = { ...manifest, status, updatedAt: new Date().toISOString(), summary: summary ?? manifest.summary };
 	saveRunManifest(updated);

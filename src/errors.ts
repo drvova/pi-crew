@@ -84,7 +84,7 @@ export const errors = {
   invalidStatusTransition(from: string, to: string): CrewError {
     return new CrewError(
       ErrorCode.InvalidStatusTransition,
-      `Invalid run status transition: ${from} → ${to}`,
+      `Invalid run status transition: ${from} -> ${to}`,
     );
   },
 
