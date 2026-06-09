@@ -34,7 +34,7 @@ interface ManifestCacheEntry {
 	cachedAt?: number;
 }
 
-const MANIFEST_CACHE_TTL_MS = 5 * 1000; // 5 seconds (FIX: reduced from 30s for faster state updates)
+const MANIFEST_CACHE_TTL_MS = 15 * 1000; // 15 seconds (FIX: increased from 5s for read-heavy workloads; 5s was too short causing unnecessary cache invalidation)
 const manifestCache = new Map<string, ManifestCacheEntry>();
 
 function setManifestCache(stateRoot: string, entry: ManifestCacheEntry): void {
@@ -98,12 +98,21 @@ function validateRunManifestPaths(cwd: string, runId: string, manifest: TeamRunM
 	const artifactsParent = path.join(scopeBaseRoot(cwd), DEFAULT_PATHS.state.artifactsSubdir);
 	const expectedArtifactsRoot = resolveContainedRelativePath(artifactsParent, runId, "runId");
 	if (manifest.artifactsRoot !== expectedArtifactsRoot) return false;
-	if (fs.existsSync(expectedArtifactsRoot)) {
-		try {
-			if (fs.lstatSync(expectedArtifactsRoot).isSymbolicLink()) return false;
-			resolveRealContainedPath(artifactsParent, runId);
-		} catch {
-			return false;
+	// FIX: Only validate artifactsRoot existence if the manifest has at least
+	// one artifact entry. Runs that haven't written artifacts yet have a valid
+	// manifest but no artifacts directory - we should not reject them.
+	if (manifest.artifacts && manifest.artifacts.length > 0) {
+		if (fs.existsSync(expectedArtifactsRoot)) {
+			try {
+				if (fs.lstatSync(expectedArtifactsRoot).isSymbolicLink()) return false;
+				resolveRealContainedPath(artifactsParent, runId);
+			} catch {
+				return false;
+			}
+		} else {
+			// Has artifacts but directory doesn't exist yet - this is a
+			// benign state for runs still in progress.
+			return true;
 		}
 	}
 	return true;
@@ -220,6 +229,13 @@ export function saveRunManifest(manifest: TeamRunManifest): void {
 	// FIX: Re-populate cache with actual mtime/size so loadRunManifestById
 	// doesn't miss the cache on next read. Without this, every load until
 	// TTL expires would hit disk because cached 0 !== any real mtime.
+	// NOTE: tasks is set to [] here because saveRunManifest only writes the
+	// manifest file, not tasks.json. Callers that need tasks should call
+	// saveRunTasks or loadRunTasks separately. If loadRunManifestById is called
+	// immediately after saveRunManifest, it may return empty tasks even if
+	// tasks.json exists on disk — the mtime/size cache check should invalidate
+	// on next read, but the returned empty tasks array could confuse callers
+	// that don't re-read.
 	const manifestStat = fs.statSync(manifestPath);
 	setManifestCache(manifest.stateRoot, {
 		manifest,
@@ -259,9 +275,13 @@ export function saveRunTasks(manifest: TeamRunManifest, tasks: TeamTaskState[]):
 	const manifestPath = path.join(manifest.stateRoot, "manifest.json");
 	const manifestStat = fs.statSync(manifestPath);
 	const tasksStat = fs.statSync(manifest.tasksPath);
+	// FIX: If cache was evicted, re-read manifest from disk rather than using
+	// a minimal fallback. A stale minimal manifest with only runId populated
+	// would cause manifest.status to be undefined, breaking status checks.
 	const cached = manifestCache.get(manifest.stateRoot);
+	const manifestEntry: TeamRunManifest = cached?.manifest ?? (readJsonFile<TeamRunManifest>(manifestPath) ?? { runId: manifest.runId } as TeamRunManifest);
 	setManifestCache(manifest.stateRoot, {
-		manifest: cached?.manifest ?? { runId: manifest.runId } as TeamRunManifest,
+		manifest: manifestEntry,
 		tasks,
 		manifestMtimeMs: manifestStat.mtimeMs,
 		manifestSize: manifestStat.size,
@@ -294,11 +314,14 @@ export async function saveRunTasksAsync(manifest: TeamRunManifest, tasks: TeamTa
 /**
  * Save manifest and tasks files with individual atomic writes.
  * FIX: Changed from Promise.all (parallel, non-jointly-atomic) to sequential
- * writes to ensure manifest and tasks are always consistent. A crash between
- * writes now leaves them in a known state (manifest is the older copy, tasks
- * is newer) that stale-reconciler can repair.
+ * writes to ensure manifest is written before tasks. A crash between writes
+ * leaves them in a known state (manifest is older, tasks is newer) which
+ * loadRunManifestById's retry loop can detect via mtime comparison.
+ * NOTE: There is no stale-reconciler component — the retry loop provides
+ * best-effort detection of mid-write crashes by re-reading until mtime/size
+ * are stable. For strict atomicity, callers should use withRunLock().
  * FIX: Returns a result object so callers know which write step failed.
- * If manifest write succeeds but tasks write fails, the caller can recovery.
+ * If manifest write succeeds but tasks write fails, the caller can recover.
  */
 /** @internal */
 interface SaveManifestAndTasksResult {
@@ -326,7 +349,10 @@ async function saveManifestAndTasksAtomic(manifest: TeamRunManifest, tasks: Team
 		return {
 			manifestWritten,
 			tasksWritten,
-			error: err instanceof Error ? err.message : String(err),
+			// FIX: Use String(err) to safely convert any thrown value (Error,
+			// string, number, null, undefined) to a string. err.message would be
+			// undefined for non-Error throwables, losing useful context.
+			error: String(err),
 		};
 	}
 	return { manifestWritten: true, tasksWritten: true };
@@ -349,7 +375,10 @@ function saveManifestAndTasksAtomicSync(manifest: TeamRunManifest, tasks: TeamTa
 		return {
 			manifestWritten,
 			tasksWritten,
-			error: err instanceof Error ? err.message : String(err),
+			// FIX: Use String(err) to safely convert any thrown value (Error,
+			// string, number, null, undefined) to a string. err.message would be
+			// undefined for non-Error throwables, losing useful context.
+			error: String(err),
 		};
 	}
 	return { manifestWritten: true, tasksWritten: true };
@@ -409,6 +438,14 @@ async function readJsonFileAsync<T>(filePath: string): Promise<T | undefined> {
 	}
 }
 
+/**
+ * Load a run manifest and its tasks by runId.
+ * WARNING: This function provides best-effort consistency only. The sentinel-based
+ * retry loop does NOT guarantee manifest/tasks consistency under contention —
+ * a concurrent writer can complete a full write cycle between the final stat
+ * and the read. For strict consistency, callers MUST wrap load+modify+save in
+ * withRunLock(). Callers that need guaranteed consistency should use the lock.
+ */
 export function loadRunManifestById(cwd: string, runId: string): { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined {
 	const stateRoot = resolveRunStateRoot(cwd, runId);
 	if (!stateRoot) return undefined;
@@ -437,7 +474,12 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 		&& cached.tasksSize === (tasksStat?.size ?? 0)
 	) {
 		// TTL eviction: expire stale entries even if mtime matches
-		if (cached.cachedAt && Date.now() - cached.cachedAt > MANIFEST_CACHE_TTL_MS) {
+		// FIX: Also evict entries where cachedAt is undefined — such entries are
+		// effectively immortal otherwise (the `cached.cachedAt &&` check would skip
+		// them every time). This can happen if a cache entry was created by
+		// setManifestCache that didn't set cachedAt (shouldn't happen in current
+		// code, but defensive against future regressions).
+		if (!cached.cachedAt || Date.now() - cached.cachedAt > MANIFEST_CACHE_TTL_MS) {
 			manifestCache.delete(stateRoot);
 		} else if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
 			manifestCache.delete(stateRoot);
@@ -477,8 +519,11 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 		tasksStat = freshTasksStat;
 	}
 	// NOTE: manifest mtime may legitimately be >= tasks mtime because
-	// saveManifestAndTasksAtomicSync writes manifest before tasks. Do NOT
-	// fail based on this comparison alone - it does not indicate corruption.
+	// saveManifestAndTasksAtomicSync writes manifest before tasks. However,
+	// if a crash occurs AFTER tasks is written but BEFORE manifest is written,
+	// tasks mtime would be > manifest mtime (the opposite). The comment above
+	// describes the normal case only. Do NOT fail based on this comparison
+	// alone - it does not indicate corruption.
 	if (!manifest || !validateRunManifestPaths(cwd, runId, manifest, stateRoot, tasksPath)) return undefined;
 	setManifestCache(stateRoot, {
 		manifest,
@@ -513,7 +558,12 @@ export async function loadRunManifestByIdAsync(cwd: string, runId: string): Prom
 	const tasksMtimeMs = tasksStat?.mtimeMs ?? 0;
 	if (cached && cached.manifestMtimeMs === manifestStat.mtimeMs && cached.manifestSize === manifestStat.size && cached.tasksMtimeMs === tasksMtimeMs && cached.tasksSize === (tasksStat?.size ?? 0)) {
 		// TTL eviction: expire stale entries even if mtime matches
-		if (cached.cachedAt && Date.now() - cached.cachedAt > MANIFEST_CACHE_TTL_MS) {
+		// FIX: Also evict entries where cachedAt is undefined — such entries are
+		// effectively immortal otherwise (the `cached.cachedAt &&` check would skip
+		// them every time). This can happen if a cache entry was created by
+		// setManifestCache that didn't set cachedAt (shouldn't happen in current
+		// code, but defensive against future regressions).
+		if (!cached.cachedAt || Date.now() - cached.cachedAt > MANIFEST_CACHE_TTL_MS) {
 			manifestCache.delete(stateRoot);
 		} else if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
 			manifestCache.delete(stateRoot);
@@ -547,8 +597,11 @@ export async function loadRunManifestByIdAsync(cwd: string, runId: string): Prom
 		tasksStat = freshTasksStat;
 	}
 	// NOTE: manifest mtime may legitimately be >= tasks mtime because
-	// saveManifestAndTasksAtomicSync writes manifest before tasks. Do NOT
-	// fail based on this comparison alone - it does not indicate corruption.
+	// saveManifestAndTasksAtomicSync writes manifest before tasks. However,
+	// if a crash occurs AFTER tasks is written but BEFORE manifest is written,
+	// tasks mtime would be > manifest mtime (the opposite). The comment above
+	// describes the normal case only. Do NOT fail based on this comparison
+	// alone - it does not indicate corruption.
 
 	if (!manifest || !validateRunManifestPaths(cwd, runId, manifest, stateRoot, tasksPath)) return undefined;
 	setManifestCache(stateRoot, { manifest, tasks: tasks ?? [], manifestMtimeMs: manifestStat.mtimeMs, manifestSize: manifestStat.size, tasksMtimeMs, tasksSize: tasksStat?.size ?? 0 });

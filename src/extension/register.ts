@@ -1007,9 +1007,25 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			const registry = (globalThis as Record<symbol | string, unknown>)[
 				CREW_REGISTRY_KEY
 			] as Record<string, unknown>;
-			registry.getRecord = (runId: string) =>
+			// Phase 3b (defensive): Validate registry structure before patching methods.
+			// If a previous occupant left a non-conforming object, replace it entirely.
+			// This prevents runtime failures if getRecord/listRuns/etc. are called on a
+			// malformed predecessor value.
+			if (
+				registry === null ||
+				typeof registry !== "object" ||
+				Array.isArray(registry)
+			) {
+				(globalThis as Record<symbol | string, unknown>)[
+					CREW_REGISTRY_KEY
+				] = {};
+			}
+			const validatedRegistry = (globalThis as Record<symbol | string, unknown>)[
+				CREW_REGISTRY_KEY
+			] as Record<string, unknown>;
+			validatedRegistry.getRecord = (runId: string) =>
 				manifestCacheForRegistry.get(runId);
-			registry.listRuns = () =>
+			validatedRegistry.listRuns = () =>
 				manifestCacheForRegistry
 					.list(100)
 					.map(
@@ -1023,7 +1039,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 							goal: m.goal,
 						}),
 					);
-			registry.appendEvent = (
+			validatedRegistry.appendEvent = (
 				runId: string,
 				event: Record<string, unknown>,
 			) => {
@@ -1039,7 +1055,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 							),
 					);
 			};
-			registry.waitForAll = async (runId: string) => {
+			validatedRegistry.waitForAll = async (runId: string) => {
 				// LAZY: state-store only needed for post-completion polling (waitForAll) and sync hasRunning check; avoid at startup.
 				const { loadRunManifestById } = await import(
 					"../state/state-store.ts"
@@ -1058,7 +1074,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				while (!check())
 					await new Promise((resolve) => setTimeout(resolve, 500));
 			};
-			registry.hasRunning = async (runId: string) => {
+			validatedRegistry.hasRunning = async (runId: string) => {
 				const manifest = manifestCacheForRegistry.get(runId);
 				if (!manifest) return false;
 				// LAZY: state-store only needed in hasRunning; avoid at startup.

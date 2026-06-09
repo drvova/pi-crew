@@ -141,7 +141,16 @@ function shouldMergeTaskUpdate(current: TeamTaskState, updated: TeamTaskState): 
 	// completed. Never let those stale snapshots regress durable task state.
 	if (current.status === "waiting" && updated.status === "running") return false;
 	if (current.status === "queued" && updated.status === "running") return false;
+	// Block non-terminal→terminal transitions (queued/running/waiting → terminal).
 	if (!isNonTerminalTaskStatus(current.status) && isNonTerminalTaskStatus(updated.status)) return false;
+	// Explicitly block terminal→non-terminal transitions (e.g. failed→running).
+	// The check above guards non-terminal→terminal; this makes the protection symmetric.
+	if (isNonTerminalTaskStatus(updated.status) && !isNonTerminalTaskStatus(current.status)) return false;
+	// Explicitly block completed↔needs_attention terminal-to-terminal transitions.
+// Both are success terminal states used interchangeably; stale worker updates must
+// not cause a completed task to appear as needs_attention or vice versa.
+if (current.status === "completed" && updated.status === "needs_attention") return false;
+if (current.status === "needs_attention" && updated.status === "completed") return false;
 	// Explicitly block failed→completed resurrection. Both statuses are terminal,
 	// but completed is the success terminal state and should not be reachable from
 	// failed via a stale merge. The check above only guards non-terminal→terminal.
@@ -178,7 +187,8 @@ const hasMeaningfulUpdate =
   updated.status !== current.status ||
   updated.finishedAt !== current.finishedAt ||
   updated.startedAt !== current.startedAt ||
-  Boolean(updated.resultArtifact) && updated.resultArtifact !== current.resultArtifact ||
+  Boolean(updated.resultArtifact) !== Boolean(current.resultArtifact) ||
+  (Boolean(updated.resultArtifact) && updated.resultArtifact !== current.resultArtifact) ||
   Boolean(updated.error) ||
   Boolean(updated.modelAttempts?.length) ||
   Boolean(updated.usage) ||
@@ -784,7 +794,7 @@ manifest = updateRunStatus({ ...manifest, artifacts: mergedArtifacts }, "running
 		}
 		await saveRunTasksAsync(manifest, tasks);
 		saveCrewAgents(manifest, recordsForMaterializedTasks(manifest, tasks, runtimeKind));
-		const completedBatch = batchTasks.map((task) => tasks.find((item) => item.id === task.id) ?? task);
+		const completedBatch = tasks.filter((t) => batchTasks.some((bt) => bt.id === t.id));
 		const batchArtifact = writeArtifact(manifest.artifactsRoot, {
 			kind: "summary",
 			relativePath: `batches/${batchTasks.map((task) => task.id).join("+")}.md`,
@@ -851,7 +861,12 @@ manifest = updateRunStatus({ ...manifest, artifacts: mergedArtifacts }, "running
 		].join("\n"),
 	});
 	manifest = { ...manifest, updatedAt: new Date().toISOString(), artifacts: [...manifest.artifacts, summaryArtifact] };
-	await saveRunManifestAsync(manifest);
-	await saveRunTasksAsync(manifest, tasks);
+	// Joint atomic save: wrap manifest + tasks in a single run lock so they are
+	// written together or not at all. Crash between separate saveRunManifestAsync
+	// and saveRunTasksAsync calls could leave manifest/tasks.json out of sync.
+	await withRunLock(manifest, async () => {
+		await saveRunManifestAsync(manifest);
+		await saveRunTasksAsync(manifest, tasks);
+	});
 	return { manifest, tasks };
 }

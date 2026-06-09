@@ -212,31 +212,8 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 			throw renameError;
 		}
 	} catch (error) {
-		// Issue 2 fix: wrap content-match read in nested try-catch that always
-		// cleans up the temp file before re-throwing, preventing orphaned temps.
-		//
-		// Content-match fallback: best-effort only — if a concurrent writer
-		// modified the file between the fallback write and this read, the
-		// comparison may not reflect what was actually written. Treat this as
-		// a hint rather than a guarantee of atomicity.
-		let matches = false;
-		try {
-			const existing = fs.readFileSync(filePath, "utf-8");
-			matches = existing === content;
-		} catch (readError) {
-			// Clean up temp file before re-throwing, then re-throw the original error
-			try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
-			throw error;
-		}
-		if (matches) {
-			try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
-			return;
-		}
-		try {
-			fs.rmSync(tempPath, { force: true });
-		} catch (cleanupError) {
-			logInternalError("atomic-write.cleanup", cleanupError, `tempPath=${tempPath}`);
-		}
+		// Clean up temp file before re-throwing, preventing orphaned temps.
+		try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
 		throw error;
 	}
 }
@@ -258,6 +235,17 @@ export async function atomicWriteFileAsync(filePath: string, content: string): P
 		await fd.writeFile(content, "utf-8");
 		await fd.close();
 		try {
+			// Re-check symlink safety immediately before rename.
+			// Between the initial isSymlinkSafePath check and here,
+			// an attacker with control of an ancestor directory could plant a
+			// symlink at the target path. If rename succeeds with a symlink at
+			// target, the symlink is atomically replaced with attacker's content.
+			// The post-rename lstat check only runs on rename failure, so we must
+			// check BEFORE the rename to catch this TOCTOU race.
+			if (!isSymlinkSafePath(filePath)) {
+				try { await fs.promises.rm(tempPath, { force: true }); } catch { /* best-effort */ }
+				throw new Error(`Refusing to rename: target became a symlink or inside untrusted directory: ${filePath}`);
+			}
 			await renameWithRetryAsync(tempPath, filePath);
 		} catch (renameError) {
 			let matches = false;
@@ -312,6 +300,7 @@ export async function atomicWriteJsonAsync<T>(filePath: string, value: T): Promi
 interface CoalescedAtomicWrite {
 	content: string;
 	timer: ReturnType<typeof setTimeout>;
+	coalesceMs: number;
 }
 const pendingAtomicWrites = new Map<string, CoalescedAtomicWrite>();
 const DEFAULT_ATOMIC_COALESCE_MS = 50;
@@ -319,13 +308,21 @@ const DEFAULT_ATOMIC_COALESCE_MS = 50;
 // Issue 1 fix: guard against concurrent AND re-entrant flushes using depth counter
 let flushInProgress = 0;
 
+/**
+ * Buffer a JSON write and flush it after `coalesceMs` ms (default 50).
+ * Multiple writes to the same path within the window collapse to one disk write.
+ *
+ * @see The coalescing caveat: a `readJsonFile` call between buffer and flush
+ *      sees the previous on-disk content. Callers needing read-after-write
+ *      must call `flushPendingAtomicWrites()` first or use `atomicWriteJson`.
+ */
 export function atomicWriteJsonCoalesced<T>(filePath: string, value: T, coalesceMs = DEFAULT_ATOMIC_COALESCE_MS): void {
 	const content = `${JSON.stringify(value, null, 2)}\n`;
 	const previous = pendingAtomicWrites.get(filePath);
 	if (previous) clearTimeout(previous.timer);
 	const timer = setTimeout(() => flushOnePendingAtomicWrite(filePath), coalesceMs);
 	timer.unref();
-	pendingAtomicWrites.set(filePath, { content, timer });
+	pendingAtomicWrites.set(filePath, { content, timer, coalesceMs });
 }
 
 function flushOnePendingAtomicWrite(filePath: string): void {
@@ -346,8 +343,16 @@ function flushOnePendingAtomicWrite(filePath: string): void {
 		}
 	} catch (error) {
 		logInternalError("atomic-write.coalesced-flush", error, filePath);
-		// Failure: keep entry for retry. The timer was already cleared
-		// so a new timer will be set on the next write to this path.
+		// Issue 2 fix: set a fresh timer for failed entries before returning.
+		// This ensures failed entries are retried without waiting for another
+		// write to arrive. Only set timer if this entry is still current
+		// (not replaced by a newer write during the flush).
+		const current = pendingAtomicWrites.get(filePath);
+		if (current === entry) {
+			const timer = setTimeout(() => flushOnePendingAtomicWrite(filePath), entry.coalesceMs);
+			timer.unref();
+			entry.timer = timer;
+		}
 	}
 }
 

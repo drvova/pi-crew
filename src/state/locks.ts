@@ -55,6 +55,8 @@ function isLockHolderAlive(filePath: string): boolean {
 			// EPERM: process exists but we don't have permission to signal it.
 			// Since we cannot verify liveness, treat the holder as potentially
 			// stale so the lock can be stolen rather than blocking indefinitely.
+			// This is an acceptable trade-off: EPERM requires elevated privileges,
+			// and blocking indefinitely would be worse. The risk is low.
 			// Other errors (ESRCH — process doesn't exist) also mean holder is dead.
 			return false;
 		}

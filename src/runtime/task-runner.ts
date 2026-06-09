@@ -401,6 +401,7 @@ export async function runTeamTask(
 				// stale reconciler from seeing a live heartbeat paired with stale task state
 				// (which could cause false zombie detection).
 				tasks = persistSingleTaskUpdate(manifest, tasks, task);
+				task = tasks.find(t => t.id === task.id) ?? task;
 				lastHeartbeatPersistedAt = now;
 			};
 			const persistChildProgress = (

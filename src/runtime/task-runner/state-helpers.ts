@@ -35,7 +35,7 @@ export function persistSingleTaskUpdate(manifest: TeamRunManifest, fallbackTasks
 	return withRunLockSync(manifest, () => {
 		let merged: TeamTaskState[];
 
-		for (let attempt = 0; attempt < 10; attempt++) {
+		retryLoop: for (let attempt = 0; attempt < 50; attempt++) {
 			const latest = loadRunManifestById(manifest.cwd, manifest.runId)?.tasks ?? fallbackTasks;
 			merged = updateTask(latest, updated);
 
@@ -50,7 +50,7 @@ export function persistSingleTaskUpdate(manifest: TeamRunManifest, fallbackTasks
 			if (currentMtime !== baseMtime) {
 				// Another writer committed — their update is in latest, re-merge on top
 				baseMtime = currentMtime;
-				continue;
+				continue retryLoop;
 			}
 
 			// No concurrent writer — check that our merged result is based on the
@@ -58,10 +58,24 @@ export function persistSingleTaskUpdate(manifest: TeamRunManifest, fallbackTasks
 			const recheckMtime = fs.statSync(manifest.tasksPath).mtimeMs;
 			if (recheckMtime !== baseMtime) {
 				baseMtime = recheckMtime;
-				continue;
+				continue retryLoop;
 			}
 
-			break;
+			// Final pre-write mtime check to catch any concurrent writer that completed
+			// between the recheck and saveRunTasks
+			let preWriteMtime: number;
+			try {
+				preWriteMtime = fs.statSync(manifest.tasksPath).mtimeMs;
+			} catch {
+				preWriteMtime = 0;
+			}
+			if (preWriteMtime !== baseMtime) {
+				// Another writer committed — retry
+				baseMtime = preWriteMtime;
+				continue retryLoop;
+			}
+
+			break retryLoop;
 		}
 
 		try {

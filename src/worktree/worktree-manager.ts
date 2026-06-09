@@ -30,12 +30,11 @@ function git(cwd: string, args: string[]): string {
 return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: { ...sanitizeEnvSecrets(process.env, { allowList: ["PATH", "HOME", "USER", "USERPROFILE", "SHELL", "TERM", "LANG", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MESSAGES", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "NVM_BIN", "NVM_DIR", "NODE_PATH", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"] }), LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" }, windowsHide: true }).trim();
 }
 
-// Note: Dots are allowed in branch names (git supports them), but if branch names
-// are ever used in path construction, dots could cause ambiguity with relative
-// path handling. This function is safe for path use because it replaces dots with
-// dashes via the regex above, so output always contains only alphanumerics, dashes, slashes, and underscores.
+// Dots are removed from branch names since they are used in path construction,
+// and dots could cause ambiguity with relative path handling on some platforms.
+// Branch names themselves support dots in git, but we strip them for safe path use.
 function sanitizeBranchPart(value: string): string {
-	return value.toLowerCase().replace(/[^a-z0-9._/-]+/g, "-").replace(/^-+|-+$/g, "") || "task";
+	return value.toLowerCase().replace(/[^a-z0-9_/-]+/g, "-").replace(/^-+|-+$/g, "") || "task";
 }
 
 export function findGitRoot(cwd: string): string {
@@ -309,7 +308,14 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 	fs.mkdirSync(worktreeRoot, { recursive: true });
 	const worktreePath = path.join(worktreeRoot, task.id);
 	const branch = `pi-crew/${sanitizeBranchPart(manifest.runId)}/${sanitizeBranchPart(task.id)}`;
-	if (fs.existsSync(worktreePath)) {
+	// Use `git worktree list --porcelain` to atomically verify the worktree exists.
+	// This avoids a TOCTOU race between fs.existsSync and git branch verification.
+	let worktreeExists = false;
+	try {
+		const worktreeList = git(repoRoot, ["worktree", "list", "--porcelain"]);
+		worktreeExists = worktreeList.split("\n").some((line) => line.trim() === worktreePath);
+	} catch { worktreeExists = false; }
+	if (worktreeExists) {
 		let currentBranch: string;
 		try {
 			currentBranch = git(worktreePath, ["rev-parse", "--abbrev-ref", "HEAD"]);

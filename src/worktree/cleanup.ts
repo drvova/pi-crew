@@ -64,6 +64,7 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 		const worktreePath = path.join(worktreeRoot, entry.name);
 		const dirty = isDirty(worktreePath);
 		const branchName = `pi-crew/${manifest.runId}/${sanitizeBranchPart(entry.name)}`;
+		const safeBranchName = sanitizeBranchPart(entry.name);
 		if (dirty) {
 			// Commit changes to a branch instead of just preserving the worktree
 			try {
@@ -105,7 +106,6 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 				} catch (removeError) {
 					// Commit succeeded but worktree remove failed — directory is orphaned
 					result.preserved.push({ path: worktreePath, reason: `commit succeeded but worktree remove failed: ${removeError instanceof Error ? removeError.message : String(removeError)}` });
-					const safeBranchName = sanitizeBranchPart(entry.name);
 					const artifact = writeArtifact(manifest.artifactsRoot, {
 						kind: "metadata",
 						relativePath: `metadata/worktree-branch-${safeBranchName}.json`,
@@ -115,9 +115,6 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 					result.artifactPaths.push(artifact.path);
 					continue;
 				}
-				// FIX: entry is a DirEnt object, must use entry.name for the path.
-				// Also apply same newline stripping as safeDesc for consistency.
-				const safeBranchName = sanitizeBranchPart(entry.name);
 				const artifact = writeArtifact(manifest.artifactsRoot, {
 					kind: "metadata",
 					relativePath: `metadata/worktree-branch-${safeBranchName}.json`,

@@ -134,7 +134,7 @@ export function resolveContainedRelativePath(baseDir: string, relativePath: stri
 	if (relativePath.includes('\0')) {
 		throw new Error(`Security: path contains null byte: ${kind}`);
 	}
-	const normalized = relativePath.replaceAll("\\", "/").replace(/^\.\/+/, "");
+	const normalized = relativePath.replace(/\\/g, "/").replace(/^\.\/+/, "");
 	// Detect Windows absolute paths (C:\, \\server\share) that path.isAbsolute may miss after normalization
 	if (/^[A-Za-z]:/.test(normalized)) throw new Error(`Invalid ${kind}: ${relativePath}`);
 	if (!normalized || normalized.split("/").some((segment) => segment === "..") || path.isAbsolute(normalized)) throw new Error(`Invalid ${kind}: ${relativePath}`);

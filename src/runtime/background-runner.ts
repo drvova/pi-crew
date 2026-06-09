@@ -635,6 +635,11 @@ async function main(): Promise<void> {
 		// Terminate live agents on failure too — agents are done when the run fails
 		try {
 			const loaded = loadRunManifestById(cwd, runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency;
+			// This best-effort read is used to update task status on failure. If another writer
+			// (e.g., the stale reconciler) concurrently modifies the manifest between the read
+			// and the subsequent save, the save could overwrite the reconciler's changes. The
+			// run could remain stuck in 'running' status if the save fails to acquire the lock.
+			// The stale reconciler will eventually repair this inconsistency.
 			if (loaded) {
 				// LAZY: live-agent-manager only needed on failure cleanup path; avoid module load at hot path.
 				const { terminateLiveAgentsForRun } = await import(
@@ -670,14 +675,25 @@ async function main(): Promise<void> {
 	} finally {
 		// FIX Issue #4: Use shared runCleanup() function for consistent cleanup
 		// across all exit paths (normal, unhandled rejection, main() exception).
-		runCleanup(
-			stopInterruptGuard,
-			stopParentGuard,
-			stopHeartbeat,
-			keepAlive,
-			exitDueToRejection,
-			manifest.eventsPath,
-		);
+		// FIX Issue #1: Wrap runCleanup in try/catch to ensure process.exit(1)
+		// is called even if runCleanup throws unexpectedly.
+		try {
+			runCleanup(
+				stopInterruptGuard,
+				stopParentGuard,
+				stopHeartbeat,
+				keepAlive,
+				exitDueToRejection,
+				manifest.eventsPath,
+			);
+		} catch (cleanupError) {
+			console.error(
+				`[background-runner] runCleanup threw: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+			);
+		}
+		// If exitDueToRejection was set, we must exit with code 1 regardless of
+		// whether runCleanup succeeded or threw.
+		if (exitDueToRejection) process.exit(1);
 	}
 }
 

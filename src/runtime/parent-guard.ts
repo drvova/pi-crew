@@ -56,7 +56,7 @@
  */
 const POLL_INTERVAL_MS = Number(process.env.PI_CREW_PARENT_GUARD_INTERVAL_MS) || 500;
 
-let guardInterval: ReturnType<typeof setInterval> | undefined;
+const guardIntervals = new Map<number, ReturnType<typeof setInterval>>();
 
 function isPidAlive(pid: number): boolean {
 	try {
@@ -91,15 +91,22 @@ function selfTerminate(parentPid: number): never {
 export function startParentGuard(parentPid: number): void {
 	if (!parentPid || !Number.isFinite(parentPid) || parentPid <= 0) return;
 
-	if (guardInterval) clearInterval(guardInterval);
-	guardInterval = setInterval(() => {
+	// Clear any existing guard for this specific parentPid before setting a new one
+	const existing = guardIntervals.get(parentPid);
+	if (existing) clearInterval(existing);
+
+	const interval = setInterval(() => {
 		// Immediate check on every tick — detects parent death within one poll
 		// interval (max POLL_INTERVAL_MS latency, default 500ms).
 		if (!isPidAlive(parentPid)) {
-			if (guardInterval) clearInterval(guardInterval);
+			const guard = guardIntervals.get(parentPid);
+			if (guard) clearInterval(guard);
+			guardIntervals.delete(parentPid);
 			selfTerminate(parentPid);
 		}
 	}, POLL_INTERVAL_MS);
+
+	guardIntervals.set(parentPid, interval);
 
 	// NOTE: Intentionally NOT calling guardInterval.unref() here.
 	// The watchdog timer must keep the event loop alive to ensure the worker
@@ -114,8 +121,8 @@ export function startParentGuard(parentPid: number): void {
  * and doesn't need to watch the parent anymore.
  */
 export function stopParentGuard(): void {
-	if (guardInterval) {
-		clearInterval(guardInterval);
-		guardInterval = undefined;
+	for (const interval of guardIntervals.values()) {
+		clearInterval(interval);
 	}
+	guardIntervals.clear();
 }

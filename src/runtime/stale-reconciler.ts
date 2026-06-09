@@ -79,11 +79,39 @@ function checkResultFile(
 }
 
 /**
+ * Get process start time in milliseconds since boot from /proc/<pid>/stat.
+ * Returns undefined if the process is gone or /proc is unavailable.
+ *
+ * Platform limitation: Relies on Linux's /proc filesystem. On macOS/Windows,
+ * startTime will be undefined and PID reuse detection is weaker.
+ *
+ * The start time is in the 22nd field (index 21 after comm) of /proc/<pid>/stat.
+ */
+function getProcessStartTime(pid: number): number | undefined {
+	try {
+		const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf-8");
+		const lastParen = stat.lastIndexOf(")");
+		if (lastParen === -1) return undefined;
+		const fieldsAfterComm = stat.slice(lastParen + 1).trim().split(/\s+/);
+		// starttime is at index 19 (the 20th field after comm)
+		const startTimeClockTicks = Number(fieldsAfterComm[19]);
+		if (!Number.isFinite(startTimeClockTicks)) return undefined;
+		// Convert clock ticks to ms using ~100 ticks/sec (CLK_TCK).
+		// The absolute value matters less than uniqueness per PID lifecycle.
+		return Math.floor(startTimeClockTicks * 10);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * Phase 2: Check PID liveness.
- * Uses process.kill(pid, 0) for the authoritative check, but also checks
- * the heartbeat file as corroborating evidence. If a heartbeat was recently
- * written, treat the PID as alive even if process.kill returns false
- * (handles SIGKILL race where PID hasn't been recycled yet).
+ * Uses process.kill(pid, 0) for the authoritative check, but also verifies
+ * startTime before and after to detect PID recycling. If the OS recycles
+ * the PID between the kill(0) call and the repair action, a newly spawned
+ * unrelated process could be incorrectly identified as the async worker.
+ * The heartbeat file is used as corroborating evidence when the process
+ * appears dead per kill(0).
  */
 function checkPidLiveness(
 	pid: number | undefined,
@@ -95,7 +123,20 @@ function checkPidLiveness(
 	if (pid === undefined || !Number.isInteger(pid) || pid <= 0) {
 		return { alive: false, detail: "no pid recorded" };
 	}
+	// Capture startTime before kill(0) to detect PID recycling.
+	const startTimeBefore = getProcessStartTime(pid);
 	const liveness = checkProcessLiveness(pid);
+	// Re-verify startTime after kill(0) to close the TOCTOU window.
+	// If startTime changed, the PID was recycled to a different process.
+	const startTimeAfter = getProcessStartTime(pid);
+	if (
+		startTimeBefore !== undefined &&
+		startTimeAfter !== undefined &&
+		startTimeBefore !== startTimeAfter
+	) {
+		// PID was recycled — treat as dead to avoid acting on wrong process.
+		return { alive: false, detail: "pid_recycled" };
+	}
 	// If process is alive per kill(0), we're done.
 	if (liveness.alive) return { alive: true, detail: liveness.detail };
 	// Process is dead per kill(0). Check heartbeat as corroborating evidence.

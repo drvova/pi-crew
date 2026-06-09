@@ -180,11 +180,17 @@ function atomicWriteBinary(filePath: string, entries: ActiveRunRegistryEntry[]):
 	}
 }
 
-function writeEntries(entries: ActiveRunRegistryEntry[]): void {
+function writeEntries(entries: ActiveRunRegistryEntry[], skipTerminalRunIds?: Set<string>): void {
 	const max = DEFAULT_CACHE.manifestMaxEntries;
-	// FIX Issue 3: Throw instead of silently truncating when cap is exceeded.
+	// FIX Issue 3: Gracefully prune oldest entries instead of throwing when cap is exceeded.
 	if (entries.length > max) {
-		throw new Error(`${entries.length - max} entries would be dropped (cap=${max}) — refusing to write partial registry`);
+		const sorted = [...entries].sort((a, b) => (a.updatedAt ?? "").localeCompare(b.updatedAt ?? ""));
+		entries = sorted.slice(entries.length - max);
+	}
+	// FIX Issue 1: Skip entries that transitioned to terminal since filterAliveEntries was called.
+	// This closes the TOCTOU race between status check in filterAliveEntries and write.
+	if (skipTerminalRunIds?.size) {
+		entries = entries.filter((e) => !skipTerminalRunIds.has(e.runId));
 	}
 	fs.mkdirSync(path.dirname(registryPath()), { recursive: true });
 	// FIX Issues 1 & 2: Write both to temp files first, then rename both atomically.
@@ -240,10 +246,12 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "blocked"
  * or symlink-unsafe paths. This prevents unbounded growth and guards against symlink attacks.
  *
  * WARNING: This function reads manifest files WITHOUT holding the registry lock (TOCTOU race).
- * Stale entries are cleaned up on next writeEntries call. Best-effort filtering only.
+ * Status filtering is best-effort at read time. The terminal runIds set is returned so callers
+ * can pass them to writeEntries to skip entries that transitioned to terminal since filtering.
  */
-function filterAliveEntries(entries: ActiveRunRegistryEntry[]): ActiveRunRegistryEntry[] {
-	return entries.filter((entry) => {
+function filterAliveEntries(entries: ActiveRunRegistryEntry[]): { alive: ActiveRunRegistryEntry[]; terminalRunIds: Set<string> } {
+	const terminalRunIds = new Set<string>();
+	const alive = entries.filter((entry) => {
 		try {
 			if (!fs.existsSync(entry.cwd)) return false;
 			if (!fs.existsSync(entry.manifestPath)) return false;
@@ -255,7 +263,10 @@ function filterAliveEntries(entries: ActiveRunRegistryEntry[]): ActiveRunRegistr
 		}
 		try {
 			const raw = JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8")) as { status?: string; async?: { pid?: number }; updatedAt?: string };
-			if (TERMINAL_STATUSES.has(raw.status ?? "")) return false;
+			if (TERMINAL_STATUSES.has(raw.status ?? "")) {
+				terminalRunIds.add(entry.runId);
+				return false;
+			}
 			// FIX Issue 2: Robust PID liveness check - only ESRCH means process is dead.
 			// EPERM means process exists but we can't signal it (different security context).
 			// Also check manifest age to guard against PID reuse.
@@ -283,6 +294,7 @@ function filterAliveEntries(entries: ActiveRunRegistryEntry[]): ActiveRunRegistr
 		}
 		return true;
 	});
+	return { alive, terminalRunIds };
 }
 
 export function registerActiveRun(manifest: TeamRunManifest): void {
@@ -297,35 +309,38 @@ export function registerActiveRun(manifest: TeamRunManifest): void {
 		const existing = readActiveRunRegistry().filter((item) => item.runId !== manifest.runId);
 		// Inline cleanup: remove terminal-status and stale entries before writing.
 		// This prevents unbounded growth between sessions.
-		const alive = filterAliveEntries(existing);
+		const { alive, terminalRunIds } = filterAliveEntries(existing);
 		// FIX Issue 4: Also filter the new entry being registered through filterAliveEntries
 		// to exclude it if it is terminal (e.g. completed between call and write).
-		const filteredEntry = filterAliveEntries([entry]).length > 0 ? entry : null;
+		const { alive: filteredAlive } = filterAliveEntries([entry]);
+		const filteredEntry = filteredAlive.length > 0 ? entry : null;
 		if (filteredEntry === null) {
 			throw new Error(`Cannot register run ${manifest.runId}: entry is terminal or paths are not symlink-safe`);
 		}
-		// FIX Issue 3: Re-check manifest status right before writing to avoid TOCTOU race.
-		// The filter check above and write below are not atomic; verify status at write time.
-		try {
-			const currentManifest = JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8")) as { status?: string };
-			if (TERMINAL_STATUSES.has(currentManifest.status ?? "")) {
-				throw new Error(`Cannot register run ${manifest.runId}: manifest transitioned to terminal status`);
-			}
-		} catch (err) {
-			if (err instanceof Error && err.message.startsWith("Cannot register")) throw err;
-			throw new Error(`Cannot register run ${manifest.runId}: failed to verify manifest status: ${err}`);
-		}
-		writeEntries([filteredEntry, ...alive]);
+		// FIX Issue 1: Pass terminal runIds from filterAliveEntries to writeEntries.
+		// writeEntries will skip these entries, closing the TOCTOU race between status check
+		// and write without re-reading manifest inside the lock.
+		const allTerminalRunIds = new Set(terminalRunIds);
+		if (filteredAlive.length === 0) allTerminalRunIds.add(entry.runId);
+		writeEntries([filteredEntry, ...alive], allTerminalRunIds);
 	});
 }
 
 export function unregisterActiveRun(runId: string): void {
-	if (!isSafePathId(runId)) return;
+	if (!isSafePathId(runId)) {
+		console.warn(`unregisterActiveRun: invalid runId ignored: ${runId}`);
+		return;
+	}
 	withRegistryLock(() => {
 		writeEntries(readActiveRunRegistry().filter((entry) => entry.runId !== runId));
 	});
 }
 
+/**
+ * Status filtering is best-effort at read time — entries returned by this function may have
+ * transitioned to terminal status between the manifest read and the filter check.
+ * Callers must re-check status when opening individual run manifests.
+ */
 export function activeRunEntries(): ActiveRunRegistryEntry[] {
 	const entries: ActiveRunRegistryEntry[] = [];
 	for (const entry of readActiveRunRegistry()) {

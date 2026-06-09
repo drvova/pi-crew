@@ -341,7 +341,7 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 
 		if (!skippedDueToSize) {
 			const line = JSON.stringify(redactSecrets(fullEvent)) + "\n";
-			await fs.promises.appendFile(eventsPath, line, { encoding: "utf-8" });
+			await fs.promises.appendFile(eventsPath, line, { encoding: "utf-8", flag: "a" });
 		}
 
 		appendCounter++;
@@ -381,7 +381,10 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 			} catch {
 				// logging failed — ensure queue is still cleaned up
 			}
-			asyncQueues.delete(queueKey);
+			// FIX: Reset queue to a resolved state instead of deleting it.
+			// This prevents cascading failures where a single transient error
+			// (e.g., ENOSPC) causes all subsequent events on the same path to fail.
+			asyncQueues.set(queueKey, Promise.resolve());
 		},
 	));
 	return next;
@@ -456,10 +459,11 @@ function appendEventInsideLock(eventsPath: string, event: AppendTeamEvent): Team
 		// FIX: Persist sequence BEFORE the event append to prevent sequence reuse
 		// on crash. The async path already does this (line 256).
 		persistSequence(eventsPath, seq);
-		// FIX: Update cache BEFORE append so that if a crash occurs after append
-		// but before the cache update below, the cache already reflects the
-		// persisted sequence. If crash happens before this point, the .seq file
-		// is already correct and nextSequence() will return the correct value.
+		fs.appendFileSync(eventsPath, `${JSON.stringify(redactSecrets(fullEvent))}\n`, "utf-8");
+		// FIX: Update cache AFTER append so cache and log are consistent with each other.
+		// This matches the async path behavior where cache is updated after the append.
+		// If a crash occurs after append but before cache update, the .seq file is
+		// already correct and nextSequence() will return the correct value on restart.
 		try {
 			const stat = fs.statSync(eventsPath);
 			if (sequenceCache.size >= MAX_SEQUENCE_CACHE_ENTRIES) {
@@ -469,7 +473,6 @@ function appendEventInsideLock(eventsPath: string, event: AppendTeamEvent): Team
 		} catch (error) {
 			logInternalError("event-log.persist-sequence", error, `eventsPath=${eventsPath}`);
 		}
-		fs.appendFileSync(eventsPath, `${JSON.stringify(redactSecrets(fullEvent))}\n`, "utf-8");
 	}
 	appendCounter++;
 	if (appendCounter % 100 === 0 && needsRotation(eventsPath)) {
@@ -527,10 +530,7 @@ function flushOneEventLogBuffer(eventsPath: string): void {
 	const queue = bufferedQueues.get(eventsPath);
 	bufferedQueues.delete(eventsPath);
 	const timer = bufferedTimers.get(eventsPath);
-	if (timer) clearTimeout(timer);
-	// FIX (Issue 7): Move timer deletion to finally block after flush completes.
-	// If flush throws before completion, the timer entry stays so cleanup can retry.
-	// New events for this path will create a new timer via bufferedQueues.delete above.
+	// Timer is cleared in the finally block to ensure cleanup happens even on error
 	try {
 		if (!queue || queue.length === 0) return;
 
@@ -542,14 +542,18 @@ function flushOneEventLogBuffer(eventsPath: string): void {
 		if (queue.length > 1000) {
 			const dropped = queue.splice(0, queue.length - 500);
 			overflowCounter++;
+			// FIX: Include first/last dropped event type and sequence number in error
+			// message to make debugging easier when events are dropped.
+			const firstDroppedMeta = dropped[0]?.event.metadata;
+			const lastDroppedMeta = dropped[dropped.length - 1]?.event.metadata;
 			logInternalError(
 				"event-log.buffer-overflow",
-				new Error(`Buffer overflow #${overflowCounter}: ${dropped.length} events dropped for ${eventsPath}`),
+				new Error(`Buffer overflow #${overflowCounter}: Dropped ${dropped.length} events: first seq=${firstDroppedMeta?.seq} type=${dropped[0]?.event.type}, last seq=${lastDroppedMeta?.seq} type=${dropped[dropped.length - 1]?.event.type}`),
 				`${eventsPath}: ${queue.length + dropped.length} entries > 1000 cap`,
 			);
 			for (const item of dropped) {
 				item.reject(new Error(
-					`Event log buffer overflow: ${queue.length + dropped.length} entries > 1000 cap; oldest ${dropped.length} dropped to keep memory bounded`,
+					`Event log buffer overflow: ${queue.length + dropped.length} entries > 1000 cap; oldest ${dropped.length} dropped to keep memory bounded; first dropped seq=${firstDroppedMeta?.seq} type=${dropped[0]?.event.type}`,
 				));
 			}
 		}
@@ -583,14 +587,14 @@ export function flushEventLogBuffer(): void {
  * Use only for events whose return value is ignored (high-frequency `task.progress`).
  * Errors are logged via logInternalError.
  */
-export function appendEventFireAndForget(eventsPath: string, event: AppendTeamEvent, _bufferMs = DEFAULT_BUFFER_MS): void {
+export function appendEventFireAndForget(eventsPath: string, event: AppendTeamEvent): void {
 	appendEventAsync(eventsPath, event).catch((error) => logInternalError("event-log.fire-and-forget", error, eventsPath));
 }
 
 // Auto-flush on process exit so buffered events do not silently leak.
 // Defense-in-depth: SIGTERM/SIGINT use setImmediate so the handler returns
 // immediately and the main thread is not blocked by sync I/O.
-process.on("exit", () => flushEventLogBuffer());
+process.on("exit", () => setImmediate(() => flushEventLogBuffer()));
 process.on("SIGTERM", () => setImmediate(() => flushEventLogBuffer()));
 process.on("SIGINT", () => setImmediate(() => flushEventLogBuffer()));
 

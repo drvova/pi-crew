@@ -252,7 +252,10 @@ export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): S
 			"NVM_BIN",
 			"NVM_DIR",
 			"NVM_INC",
-			"NODE_PATH",
+			// NODE_PATH is intentionally omitted from the allowlist.
+			// NODE_PATH can reveal user environment information (e.g., NVM paths under $HOME)
+			// and the validation at lines 286-298 only filters to standard system prefixes.
+			// Removing it entirely is cleaner than best-effort filtering.
 			"NODE_DISABLE_COLORS",
 			"NODE_EXTRA_CA_CERTS",
 			"NPM_CONFIG_REGISTRY",
@@ -284,7 +287,7 @@ export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): S
 	// under $HOME) and could theoretically be exploited if it contains untrusted entries.
 	// Only allow paths under standard system directories like /usr, /opt, /lib.
 	if (filteredEnv.NODE_PATH) {
-		const validPrefixes = ["/usr/", "/opt/", "/lib/", "/share/"];
+		const validPrefixes = ["/opt/", "/lib/"];
 		const validPaths = filteredEnv.NODE_PATH.split(":").filter((p) => {
 			return validPrefixes.some((prefix) => p.startsWith(prefix));
 		});
@@ -329,12 +332,12 @@ function appendTranscript(input: ChildPiRunInput, line: string): void {
 		logInternalError("child-pi.transcript-path-rejected", error as Error, `transcriptPath=${input.transcriptPath}`);
 		return;
 	}
-	// Create parent directory of the validated path (not the original input.transcriptPath).
-	fs.mkdirSync(path.dirname(safePath), { recursive: true });
-	// Use O_NOFOLLOW | O_APPEND to safely open the file for appending without following symlinks.
-	// This prevents an attacker from creating a symlink at transcriptPath pointing to a
-	// sensitive file (e.g., /etc/passwd) and having us append to it.
-	const fd = fs.openSync(safePath, fs.constants.O_NOFOLLOW | fs.constants.O_APPEND | fs.constants.O_CREAT, 0o644);
+	// Use O_NOFOLLOW | O_CREAT | O_EXCL to atomically create the file without following
+	// symlinks. O_EXCL fails if the file already exists, preventing TOCTOU attacks where
+	// an attacker replaces the path with a symlink between mkdir and open. We skip
+	// mkdirSync entirely since the parent directory must already exist for the path
+	// to have been validated by resolveRealContainedPath.
+	const fd = fs.openSync(safePath, fs.constants.O_NOFOLLOW | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o644);
 	try {
 		fs.writeSync(fd, `${redactJsonLine(line)}\n`, undefined, "utf-8");
 	} finally {

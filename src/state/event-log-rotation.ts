@@ -85,8 +85,10 @@ export function compactEventLog(eventsPath: string, config?: Partial<RotationCon
 			return undefined;
 		}
 		// C2: Re-read to recover any events appended during the compaction window.
-		// If events were appended and then overwritten by atomicWriteFile, they are LOST.
-		// Detect this and re-append any missing events.
+			// Events appended during the compaction window are preserved because they
+			// appear in afterWrite and the condition afterWrite.length >= kept.length is
+			// true, so they are included in the return stats without entering the
+			// recovery branch.
 		try {
 			const afterWrite = readEvents(eventsPath);
 			// FIX: Check if events were actually lost (afterWrite.length < kept.length)
