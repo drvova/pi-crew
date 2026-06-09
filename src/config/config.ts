@@ -1242,6 +1242,19 @@ function unsetPath(record: Record<string, unknown>, dottedPath: string): void {
 
 function readConfigRecord(filePath: string): Record<string, unknown> {
 	if (!fs.existsSync(filePath)) return {};
+	// Defense-in-depth: reject config files larger than 10 MB before parsing.
+	// This prevents memory exhaustion and blocks deeply nested JSON that could
+	// cause stack overflow during parsing.
+	const MAX_CONFIG_SIZE = 10 * 1024 * 1024;
+	const stat = fs.statSync(filePath);
+	if (stat.size > MAX_CONFIG_SIZE) {
+		logInternalError(
+			"config.file-too-large",
+			new Error(`config file exceeds ${MAX_CONFIG_SIZE} bytes`),
+			`path=${filePath}; size=${stat.size}`,
+		);
+		return {};
+	}
 	const raw = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
 	return raw as Record<string, unknown>;

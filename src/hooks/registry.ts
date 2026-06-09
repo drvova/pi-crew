@@ -36,7 +36,7 @@ export async function executeHook(name: HookName, ctx: HookContext): Promise<Hoo
 	// TODO: Add a linter rule to detect hooks registered without workspaceId in multi-tenant deployments.
 	const scopedHooks = hooks.filter((h) => h.workspaceId === undefined || h.workspaceId === null || h.workspaceId === ctx.workspaceId);
 	if (scopedHooks.length === 0) return { hookName: name, outcome: "allow", durationMs: 0 };
-	const POLLUTED_KEYS = new Set(["__proto__", "constructor", "prototype", "hasOwnProperty", "toString", "valueOf", "isPrototypeOf", "propertyIsEnumerable", "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__"]);
+	const POLLUTED_KEYS = new Set(["__proto__", "constructor", "prototype", "hasOwnProperty", "toString", "valueOf", "isPrototypeOf", "propertyIsEnumerable", "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__"].map((k) => k.toLowerCase().normalize("NFKC")));
 	function sanitizeMergeData(data: Record<string, unknown>): Record<string, unknown> {
 		const clean: Record<string, unknown> = {};
 		for (const [k, v] of Object.entries(data)) {

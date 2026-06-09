@@ -150,12 +150,30 @@ function writeRegistry(entries: OrphanWorkerEntry[]): void {
 		logInternalError("orphan-worker-registry.write", new Error("Refusing to write: parent directory is a symlink or inside untrusted directory"), `dir=${dir}`);
 		return;
 	}
+	// Issue 2 fix: Defense-in-depth validation of IDs inside writeRegistry.
+	// Even if registerWorker is bypassed in the future, we still validate
+	// that sessionId/runId don't contain path traversal characters before
+	// writing to disk.
+	for (const entry of entries) {
+		if (!isValidId(entry.sessionId) || !isValidId(entry.runId)) {
+			logInternalError("orphan-worker-registry.write", new Error("Refusing to write: invalid sessionId or runId"), `sessionId=${entry.sessionId} runId=${entry.runId}`);
+			return;
+		}
+	}
 	withFileLockSync(getRegistryPath(), () => {
 		// Guard against symlink attacks on the registry file.
 		// isSymlinkSafePath walks the ancestor chain to detect any symlinks,
 		// preventing attacks where an intermediate ancestor is a symlink.
 		if (!isSymlinkSafePath(p)) {
 			logInternalError("orphan-worker-registry.write", new Error("Refusing to write: target is a symlink or inside untrusted directory"), `path=${p}`);
+			return;
+		}
+		// Re-check parent directory safety immediately before creating it.
+		// This closes the TOCTOU window between the check at line 149 and
+		// mkdirSync below: if an attacker planted a symlink at dir after
+		// the earlier check, we detect it and refuse to create inside it.
+		if (!isSymlinkSafePath(dir)) {
+			logInternalError("orphan-worker-registry.write", new Error("Refusing to create: parent directory is a symlink or inside untrusted directory"), `dir=${dir}`);
 			return;
 		}
 		// Ensure parent directory exists inside the lock to serialize directory

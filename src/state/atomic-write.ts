@@ -39,8 +39,18 @@ const RETRYABLE_RENAME_CODES = new Set(["EPERM", "EBUSY", "EACCES"]);
  */
 export function isSymlinkSafePath(filePath: string): boolean {
 	try {
-		// Issue 3 fix: track the original baseDir for boundary verification after symlink resolution
-		const baseDir = path.dirname(filePath);
+		// Issue 1 fix: resolve baseDir early so boundary checks use resolved paths.
+		// If baseDir itself is a symlink, comparing realDir (resolved intermediate)
+		// against unresolved baseDir would produce false negatives (incorrectly reject
+		// safe paths) and false positives (incorrectly accept unsafe paths when
+		// baseDir is a symlink pointing outside the intended boundary).
+		let baseDir = path.dirname(filePath);
+		try {
+			baseDir = fs.realpathSync(baseDir);
+		} catch {
+			// baseDir doesn't exist yet — that's OK, we can't have a symlink issue
+			// with a non-existent directory. The existence checks below will handle it.
+		}
 		// Walk the full ancestor chain to detect any symlinks
 		let currentPath = filePath;
 		while (currentPath !== path.dirname(currentPath)) {
@@ -50,7 +60,7 @@ export function isSymlinkSafePath(filePath: string): boolean {
 				if (dirStat.isSymbolicLink()) {
 					// Resolve and verify ownership on Unix
 					const realDir = fs.realpathSync(dir);
-					// Issue 3 fix: verify resolved path stays within the original baseDir boundary
+					// Issue 1 fix: use resolved baseDir for boundary verification
 					if (!realDir.startsWith(baseDir + path.sep) && realDir !== baseDir) return false;
 					const realStat = fs.statSync(realDir);
 					if (!realStat.isDirectory()) return false;

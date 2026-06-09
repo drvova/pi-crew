@@ -11,6 +11,18 @@ export function userPiRoot(): string {
 	const home = process.env.PI_TEAMS_HOME?.trim() || os.homedir();
 	const resolved = path.join(home, ".pi", "agent");
 
+	// Reject symlinks to prevent confusion attacks where PI_TEAMS_HOME points to
+	// an attacker-controlled target via a user-owned symlink.
+	// We use lstatSync (does NOT follow) to detect symlinks before they are resolved.
+	const lstats = fs.lstatSync(resolved);
+	if (lstats.isSymbolicLink()) {
+		throw new Error(
+			`userPiRoot: PI_TEAMS_HOME path "${resolved}" is a symlink. ` +
+			"Symlinks are not supported for PI_TEAMS_HOME to prevent confusion attacks. " +
+			"Set PI_TEAMS_HOME to a direct path owned by the current user.",
+		);
+	}
+
 	// Validate that the resolved path is owned by the current user
 	// to ensure security assumptions about file permissions (0o600/0o700) hold.
 	// Skip check if the directory does not exist yet.
@@ -69,7 +81,9 @@ function hasProjectMarker(dir: string): boolean {
 }
 
 export function findRepoRoot(cwd: string): string | undefined {
-	const startKey = path.resolve(cwd);
+	// Resolve symlinks before walking to prevent malicious symlinks from bypassing
+	// home/temp boundary checks.
+	const startKey = fs.realpathSync(cwd);
 	const cached = projectRootCache.get(startKey);
 	if (cached && Date.now() - cached.cachedAt < PROJECT_ROOT_CACHE_TTL_MS) {
 		// Re-insert to refresh LRU position.
@@ -109,11 +123,13 @@ export function projectCrewRoot(cwd: string): string {
 	const repoRoot = findRepoRoot(cwd) ?? cwd;
 	const crewDir = path.join(repoRoot, ".crew");
 	// Keep an existing .crew/ stable even when .pi/ exists for project config.
-	if (fs.existsSync(crewDir)) return crewDir;
+	// Use realpathSync to resolve any symlinks before returning to prevent
+	// state/artifacts from being written outside expected boundaries.
+	if (fs.existsSync(crewDir)) return fs.realpathSync(crewDir);
 	// Legacy reuse: if .pi/ already exists for the project, namespace under .pi/teams/
 	// to avoid creating a parallel .crew/ alongside an existing pi project layout.
 	const piDir = path.join(repoRoot, ".pi");
-	if (fs.existsSync(piDir)) return path.join(piDir, "teams");
+	if (fs.existsSync(piDir)) return path.join(fs.realpathSync(piDir), "teams");
 	return crewDir;
 }
 

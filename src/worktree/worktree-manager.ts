@@ -325,6 +325,13 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		if (currentBranch !== branch) {
 			throw new Error(`Existing worktree branch mismatch at ${worktreePath}: expected '${branch}', got '${currentBranch}'.`);
 		}
+		// Check for uncommitted changes from previous run before reusing
+		const dirtyStatus = git(worktreePath, ["status", "--porcelain"]);
+		if (dirtyStatus.trim()) {
+			// Discard uncommitted changes to ensure clean slate for new task
+			git(worktreePath, ["checkout", "--", "."]);
+			git(worktreePath, ["clean", "-fd"]);
+		}
 		// Overlay seed paths from config + step-level seedPaths (reused worktree)
 		const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
 		const mergedReused = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);

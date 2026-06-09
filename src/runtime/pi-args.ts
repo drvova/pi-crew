@@ -416,6 +416,10 @@ export function cleanupOrphanTempDirs(
 				// Reuse preRmlstat (captured at line 408) — already verified non-symlink at line 415.
 				// Avoid calling lstatSync again to eliminate the TOCTOU window between
 				// preRmlstat lstatSync (line 408) and this mtime check.
+				// NOTE: This is a best-effort approximation. The mtime was captured at line 408,
+				// potentially seconds before the rmSync at line 420. If the directory was modified
+				// after line 408, the age check uses stale data. This could cause premature cleanup
+				// of dirs that were recently modified but appeared old based on cached mtime (±seconds jitter).
 				if (now - preRmlstat.mtimeMs > ORPHAN_TEMP_MAX_AGE_MS) {
 					fs.rmSync(dir, { recursive: true, force: true });
 					createdTempDirs.delete(dir);

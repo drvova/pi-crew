@@ -61,14 +61,20 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 	for (const entry of withFileTypes) {
 		if (options.signal?.aborted) break;
 		if (!entry.isDirectory()) continue;
+		// Issue 1 fix: check signal before each git operation to respect abort faster
+		if (options.signal?.aborted) break;
 		const worktreePath = path.join(worktreeRoot, entry.name);
 		const dirty = isDirty(worktreePath);
 		const branchName = `pi-crew/${manifest.runId}/${sanitizeBranchPart(entry.name)}`;
 		const safeBranchName = sanitizeBranchPart(entry.name);
 		if (dirty) {
+			// Issue 1 fix: check signal before git operations
+			if (options.signal?.aborted) break;
 			// Commit changes to a branch instead of just preserving the worktree
 			try {
 				execFileSync("git", ["add", "-A"], { cwd: worktreePath, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: GIT_SAFE_ENV, windowsHide: true });
+				// Issue 1 fix: check signal before commit
+				if (options.signal?.aborted) break;
 				let safeDesc = entry.name.slice(0, 200);
 				// SECURITY: Strip any newlines that could be injected via a malicious worktree name
 				// to prevent newline injection in git commit messages
@@ -76,6 +82,8 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 					safeDesc = safeDesc.replace(/[\r\n]+/g, " ");
 				}
 				execFileSync("git", ["commit", "-m", `pi-crew: ${safeDesc}`], { cwd: worktreePath, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: GIT_SAFE_ENV, windowsHide: true });
+				// Issue 1 fix: check signal before branch creation
+				if (options.signal?.aborted) break;
 				// Create branch in the main repo pointing to this worktree's HEAD
 				let branchError: Error | null = null;
 				try {
@@ -93,6 +101,8 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 					}
 				}
 				result.committedBranches.push(branchName);
+				// Issue 1 fix: check signal before worktree remove
+				if (options.signal?.aborted) break;
 				// Remove the worktree (branch persists).
 				// NOTE: If git worktree remove fails here after the commit succeeded,
 				// the worktree directory remains on disk orphaned from the branch.
@@ -137,6 +147,8 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 			}
 			continue;
 		}
+		// Issue 1 fix: check signal before non-dirty worktree remove
+		if (options.signal?.aborted) break;
 		const args = ["worktree", "remove"];
 		if (options.force) args.push("--force");
 		args.push(worktreePath);
@@ -149,6 +161,14 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 		}
 	}
 
+	try {
+		// Issue 2 fix: run git worktree prune to clean up any orphaned worktree references
+		// after processing all worktrees. This helps clean up directories left orphaned
+		// when git worktree remove failed after a successful commit.
+		git(manifest.cwd, ["worktree", "prune"]);
+	} catch {
+		// Non-critical cleanup.
+	}
 	try {
 		if (fs.existsSync(worktreeRoot) && fs.readdirSync(worktreeRoot).length === 0) fs.rmSync(worktreeRoot, { recursive: true, force: true });
 	} catch {
