@@ -146,3 +146,23 @@ export type DependencyType =
 	| "duplicates"          // A duplicates B
 	| "delegated-from"      // A was delegated from B
 	| "validates";          // A validates B's output
+
+// ── Stable IDs (full hash, for cross-run references) ──────────────────────
+
+/**
+ * Generate a stable, collision-resistant ID from arbitrary content.
+ * Uses full SHA-256 hash (not adaptive length) for maximum stability.
+ * Format: {prefix}-{first12charsOfBase36hash}
+ *
+ * Use for: run-level IDs, artifact keys, cross-run references
+ * where determinism and uniqueness matter more than short length.
+ */
+export function stableIdFromContent(content: string, prefix = "id"): string {
+	const hash = createHash("sha256").update(content).digest("hex");
+	const hashChars = "0123456789abcdefghijklmnopqrstuvwxyz";
+	let b36 = "";
+	for (let i = 0; i < 16 && i < hash.length; i++) {
+		b36 += hashChars[parseInt(hash[i]!, 16)] ?? "0";
+	}
+	return `${prefix}-${b36.slice(0, 12)}`;
+}
