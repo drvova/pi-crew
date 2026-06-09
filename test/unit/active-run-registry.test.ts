@@ -14,6 +14,9 @@ const workflow: WorkflowConfig = { name: "ari", description: "ari", source: "bui
 function withIsolatedHome<T>(fn: () => T): T {
 	const previousHome = process.env.PI_TEAMS_HOME;
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-active-reg-home-"));
+	// Create .pi/agent directory structure that userPiRoot() requires
+	// (userPiRoot validates the path exists and is owned by current user)
+	fs.mkdirSync(path.join(home, ".pi", "agent"), { recursive: true });
 	process.env.PI_TEAMS_HOME = home;
 	try {
 		return fn();
