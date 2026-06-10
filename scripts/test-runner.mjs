@@ -17,8 +17,10 @@ import process from "node:process";
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
-	console.error("Usage: node scripts/test-runner.mjs [tsx test args...]");
-	process.exit(1);
+	// When run by Node's test runner (no args), exit 0 gracefully.
+	// This script needs test file arguments to do anything useful.
+	console.log("skip: no test files specified");
+	process.exit(0);
 }
 
 // Always inject --test-force-exit to guarantee child exits (prevents pi hang).

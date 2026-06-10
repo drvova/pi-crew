@@ -121,8 +121,8 @@ test("full cleanup flow: orphan temp dirs + legacy /tmp + orphan workers", () =>
 	});
 	const workerPid = worker.pid!;
 
-	// Register with dead parent
-	registerWorker(workerPid, "session-DEAD", "run-dead", 999999);
+	// Register with dead parent (registered 2 hours ago so it's stale)
+	registerWorker(workerPid, "session-DEAD", "run-dead", 999999, { registeredAt: Date.now() - 2 * 60 * 60 * 1000 });
 
 	// Run full cleanup with custom paths
 	const result = runFullCleanup(userTmp, legacyTmp, "session-NEW");

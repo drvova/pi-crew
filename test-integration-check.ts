@@ -65,7 +65,9 @@ test("fast-fix team run completes successfully with mock child Pi", async () => 
 
 	const prevExec = process.env.PI_TEAMS_EXECUTE_WORKERS;
 	const prevMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const prevAllow = process.env.PI_CREW_ALLOW_MOCK;
 	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
+	process.env.PI_CREW_ALLOW_MOCK = "1";
 	process.env.PI_TEAMS_MOCK_CHILD_PI = "success";
 
 	try {
@@ -109,6 +111,8 @@ test("fast-fix team run completes successfully with mock child Pi", async () => 
 		else process.env.PI_TEAMS_EXECUTE_WORKERS = prevExec;
 		if (prevMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
 		else process.env.PI_TEAMS_MOCK_CHILD_PI = prevMock;
+		if (prevAllow === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = prevAllow;
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });

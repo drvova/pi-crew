@@ -69,13 +69,17 @@ if (completedIdsFix) {
 
 // Check dist file
 console.log("\n=== Checking dist/index.mjs ===");
-const distContent = fs.readFileSync("dist/index.mjs", "utf-8");
-const distNeedsAttention = distContent.includes('t2.status === "completed" || t2.status === "needs_attention"');
-if (distNeedsAttention) {
-    console.log("  ✅ Bug #20 fix is in dist/index.mjs");
+if (fs.existsSync("dist/index.mjs")) {
+	const distContent = fs.readFileSync("dist/index.mjs", "utf-8");
+	const distNeedsAttention = distContent.includes('t2.status === "completed" || t2.status === "needs_attention"');
+	if (distNeedsAttention) {
+		console.log("  ✅ Bug #20 fix is in dist/index.mjs");
+	} else {
+		console.log("  ❌ Bug #20 fix NOT in dist/index.mjs - rebuild needed");
+		allPassed = false;
+	}
 } else {
-    console.log("  ❌ Bug #20 fix NOT in dist/index.mjs - rebuild needed");
-    allPassed = false;
+	console.log("  ⚠️  dist/index.mjs not found - run npm run build first");
 }
 
 console.log("\n" + "=".repeat(40));

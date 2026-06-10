@@ -113,14 +113,22 @@ test("phase8 smoke: health pane exposes recovery and diagnostic actions", async 
 });
 
 test("phase8 smoke: telemetry disabled config keeps notification sink opt-out explicit", () => {
-	const run = makeRun();
+	const previousHome = process.env.PI_TEAMS_HOME;
+	const previousSkip = process.env.PI_CREW_SKIP_HOME_CHECK;
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-phase8-home-"));
 	try {
+		process.env.PI_TEAMS_HOME = home;
+		process.env.PI_CREW_SKIP_HOME_CHECK = "1";
+		const run = makeRun();
 		fs.writeFileSync(path.join(run.cwd, ".crew", "config.json"), JSON.stringify({ telemetry: { enabled: false }, notifications: { enabled: true } }, null, 2), "utf-8");
 		const loaded = loadConfig(run.cwd);
 		assert.equal(loaded.config.telemetry?.enabled, false);
 		assert.equal(fs.existsSync(path.join(run.cwd, ".crew", "state", "notifications")), false);
-	} finally {
 		fs.rmSync(run.cwd, { recursive: true, force: true });
+	} finally {
+		if (previousHome === undefined) delete process.env.PI_TEAMS_HOME; else process.env.PI_TEAMS_HOME = previousHome;
+		if (previousSkip === undefined) delete process.env.PI_CREW_SKIP_HOME_CHECK; else process.env.PI_CREW_SKIP_HOME_CHECK = previousSkip;
+		fs.rmSync(home, { recursive: true, force: true });
 	}
 });
 

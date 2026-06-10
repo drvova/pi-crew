@@ -350,11 +350,18 @@ export function withFileLockSync<T>(filePath: string, fn: () => T, options: RunL
 export function withRunLockSync<T>(manifest: TeamRunManifest, fn: () => T, options: RunLockOptions = {}): T {
 	const filePath = lockPath(manifest);
 	const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
+	const existingToken = runLockHeldByUs.get(filePath);
+	if (existingToken) {
+		// Re-entrant: already hold this lock, just run the callback.
+		return fn();
+	}
 	fs.mkdirSync(path.dirname(filePath), { recursive: true });
 	const token = acquireLockWithRetry(filePath, staleMs, "run");
+	runLockHeldByUs.set(filePath, token);
 	try {
 		return fn();
 	} finally {
+		runLockHeldByUs.delete(filePath);
 		releaseLock(filePath, token);
 	}
 }

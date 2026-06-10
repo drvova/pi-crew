@@ -251,6 +251,7 @@ export function registerWorker(
 	sessionId: string,
 	runId: string,
 	parentPid: number,
+	options?: { registeredAt?: number },
 ): void {
 	if (!Number.isFinite(pid) || pid <= 0) return;
 	// Issue 3 fix: Validate sessionId and runId to prevent path traversal attacks.
@@ -269,7 +270,7 @@ export function registerWorker(
 			runId,
 			parentPid: Number.isFinite(parentPid) ? parentPid : 0,
 			parentPidStartTime,
-			registeredAt: Date.now(),
+			registeredAt: options?.registeredAt ?? Date.now(),
 			startTime,
 		});
 		writeRegistry(filtered);
