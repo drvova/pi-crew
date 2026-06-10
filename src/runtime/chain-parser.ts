@@ -114,7 +114,11 @@ function tokenize(input: string): Token[] {
 class ChainParser {
 	private pos = 0;
 
-	constructor(private tokens: Token[]) {}
+	private tokens: Token[];
+
+	constructor(tokens: Token[]) {
+		this.tokens = tokens;
+	}
 
 	parse(): ChainStep[] {
 		const steps: ChainStep[] = [];

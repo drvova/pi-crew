@@ -106,8 +106,10 @@ test("configPatchFromConfig validates config updates with TypeBox and drops inva
 
 test("loadConfig surfaces schema warnings without failing config load", () => {
 	const previousHome = process.env.PI_TEAMS_HOME;
+	const previousSkipCheck = process.env.PI_CREW_SKIP_HOME_CHECK;
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-config-warn-"));
 	process.env.PI_TEAMS_HOME = home;
+	process.env.PI_CREW_SKIP_HOME_CHECK = "1";
 	try {
 		const filePath = configPath();
 		fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -120,6 +122,8 @@ test("loadConfig surfaces schema warnings without failing config load", () => {
 	} finally {
 		if (previousHome === undefined) delete process.env.PI_TEAMS_HOME;
 		else process.env.PI_TEAMS_HOME = previousHome;
+		if (previousSkipCheck === undefined) delete process.env.PI_CREW_SKIP_HOME_CHECK;
+		else process.env.PI_CREW_SKIP_HOME_CHECK = previousSkipCheck;
 		fs.rmSync(home, { recursive: true, force: true });
 	}
 });

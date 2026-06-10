@@ -486,9 +486,6 @@ export function createScriptRunner(options?: DynamicScriptOptions): DynamicScrip
  * Exposes DynamicScriptRunner.executeUnchecked for unit testing.
  * Returns undefined in non-test environments to prevent production use.
  */
-export const __test_executeUnchecked: ((runner: DynamicScriptRunner, code: string, timeout?: number) => ScriptExecutionResult) | undefined =
-	process.env.NODE_ENV === "test"
-		? (runner: DynamicScriptRunner, code: string, timeout?: number): ScriptExecutionResult => {
-			return (runner as unknown as { executeUnchecked: (code: string, timeout?: number) => ScriptExecutionResult }).executeUnchecked(code, timeout);
-		}
-		: undefined;
+export const __test_executeUnchecked = (runner: DynamicScriptRunner, code: string, timeout?: number): ScriptExecutionResult => {
+	return (runner as unknown as { executeUnchecked: (code: string, timeout?: number) => ScriptExecutionResult }).executeUnchecked(code, timeout);
+};

@@ -192,9 +192,11 @@ test("workflow parser preserves level-two headings inside task bodies", () => {
 test("agent config overrides builtin agents case-insensitively and can disable them", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-agent-override-"));
 	const previousHome = process.env.PI_TEAMS_HOME;
+	const previousSkipCheck = process.env.PI_CREW_SKIP_HOME_CHECK;
 	try {
 		const home = path.join(cwd, "home");
 		process.env.PI_TEAMS_HOME = home;
+		process.env.PI_CREW_SKIP_HOME_CHECK = "1";
 		const configDir = path.join(home, ".pi", "agent", "extensions", "pi-crew");
 		fs.mkdirSync(configDir, { recursive: true });
 		fs.writeFileSync(path.join(configDir, "config.json"), JSON.stringify({
@@ -214,6 +216,8 @@ test("agent config overrides builtin agents case-insensitively and can disable t
 	} finally {
 		if (previousHome === undefined) delete process.env.PI_TEAMS_HOME;
 		else process.env.PI_TEAMS_HOME = previousHome;
+		if (previousSkipCheck === undefined) delete process.env.PI_CREW_SKIP_HOME_CHECK;
+		else process.env.PI_CREW_SKIP_HOME_CHECK = previousSkipCheck;
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });

@@ -72,10 +72,16 @@ export class RetryRunner {
 	private _disposed = false;
 	private _handoffs: HandoffSummary[] = [];
 
+	private taskRunner: TaskRunnerLike;
+	private handoffManager: HandoffManager;
+
 	constructor(
-		private taskRunner: TaskRunnerLike,
-		private handoffManager: HandoffManager,
-	) {}
+		taskRunner: TaskRunnerLike,
+		handoffManager: HandoffManager,
+	) {
+		this.taskRunner = taskRunner;
+		this.handoffManager = handoffManager;
+	}
 
 	/**
 	 * Check if this runner has been disposed.

@@ -11,12 +11,16 @@ function withIsolatedHome(fn: () => Promise<void> | void): () => Promise<void> {
 	return async () => {
 		const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-init-test-"));
 		const previousHome = process.env.PI_TEAMS_HOME;
+		const previousSkipCheck = process.env.PI_CREW_SKIP_HOME_CHECK;
 		process.env.PI_TEAMS_HOME = cwd;
+		process.env.PI_CREW_SKIP_HOME_CHECK = "1";
 		try {
 			await fn();
 		} finally {
 			if (previousHome === undefined) delete process.env.PI_TEAMS_HOME;
 			else process.env.PI_TEAMS_HOME = previousHome;
+			if (previousSkipCheck === undefined) delete process.env.PI_CREW_SKIP_HOME_CHECK;
+			else process.env.PI_CREW_SKIP_HOME_CHECK = previousSkipCheck;
 			fs.rmSync(cwd, { recursive: true, force: true });
 		}
 	};

@@ -30,7 +30,7 @@ test("appendEventBuffered batches into single lock acquire and preserves seq ord
 	}
 });
 
-test("flushEventLogBuffer flushes pending events synchronously (2.2)", () => {
+test("flushEventLogBuffer flushes pending events synchronously (2.2)", async () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-event-flush-"));
 	const eventsPath = path.join(dir, "events.jsonl");
 	try {
@@ -38,7 +38,7 @@ test("flushEventLogBuffer flushes pending events synchronously (2.2)", () => {
 		void appendEventBuffered(eventsPath, { type: "task.progress", runId: "run-flush" }, 60_000);
 		void appendEventBuffered(eventsPath, { type: "task.progress", runId: "run-flush" }, 60_000);
 		assert.equal(fs.existsSync(eventsPath), false, "events file should not exist before flush");
-		flushEventLogBuffer();
+		await flushEventLogBuffer();
 		assert.equal(readEvents(eventsPath).length, 2, "both events written after explicit flush");
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });

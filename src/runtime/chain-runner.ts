@@ -106,10 +106,16 @@ export class ChainRunner {
 	/** Maximum size per handoff entry to prevent memory issues from large artifacts */
 	private static readonly MAX_HANDOFF_ENTRY_SIZE = 5000; // bytes per entry
 
+	private taskRunner: ChainTaskRunner;
+	private handoffManager: HandoffManager;
+
 	constructor(
-		private taskRunner: ChainTaskRunner,
-		private handoffManager: HandoffManager,
-	) {}
+		taskRunner: ChainTaskRunner,
+		handoffManager: HandoffManager,
+	) {
+		this.taskRunner = taskRunner;
+		this.handoffManager = handoffManager;
+	}
 
 	/**
 	 * Parse chain syntax: step1 -> step2 -> step3
