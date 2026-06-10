@@ -196,7 +196,6 @@ export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): S
 	// Filter out env vars whose keys match secret patterns to avoid leaking credentials to child processes.
 	// IMPORTANT: preserve model provider API keys — they are needed by the child Pi to call the LLM.
 	// Also preserve essential non-secret vars (PATH, HOME, USER, etc.) so the child process can function.
-	// Bug #10 fix: allow-list preserves model provider keys.
 	// Bug #12 fix: essential env vars (PATH, HOME, etc.) are always preserved so child can find npm/node.
 	const filteredEnv = sanitizeEnvSecrets(env, {
 		allowList: [
@@ -215,25 +214,8 @@ export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): S
 			 * A CI check should fail if a secret-like env var (matching patterns like *_API_KEY,
 			 * *_TOKEN, *_SECRET) is detected in the codebase but not present in this list.
 			 */
-			// Model provider API keys (explicit list — do NOT use wildcards)
-			"MINIMAX_API_KEY",
-			"MINIMAX_GROUP_ID",
-			"OPENAI_API_KEY",
-			"OPENAI_ORG_ID",
-			"ANTHROPIC_API_KEY",
-			"GOOGLE_API_KEY",
-			"GOOGLE_GENERATIVE_LANGUAGE_API_KEY",
-			"AZURE_OPENAI_API_KEY",
-			"AZURE_OPENAI_ENDPOINT",
-			"AWS_ACCESS_KEY_ID",
-			"AWS_SECRET_ACCESS_KEY",
-			"AWS_REGION",
-			"ZEU_API_KEY",
-			"ZERODEV_API_KEY",
-			// SECURITY FIX: Removed dangerous wildcards "*_API_KEY", "*_TOKEN", "*_SECRET"
-			// These patterns would leak ALL secrets matching the pattern to child processes.
-			// Only add specific, intended provider keys above.
-			// Essential non-secret vars for child process to function
+			// NOTE: Model provider API keys are NOT needed here — child Pi uses the same
+			// config file as parent Pi. Passing keys via env is a security risk.
 			"PATH",
 			"HOME",
 			"USER",
