@@ -341,7 +341,12 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 	let worktreeExists = false;
 	try {
 		const worktreeList = git(repoRoot, ["worktree", "list", "--porcelain"]);
-		worktreeExists = worktreeList.split("\n").some((line) => line.trim() === worktreePath);
+		// `git worktree list --porcelain` outputs "worktree /path" per entry.
+		// We must compare against the path part (after "worktree ").
+		worktreeExists = worktreeList.split("\n").some((line) => {
+			const trimmed = line.trim();
+			return trimmed === worktreePath || trimmed === `worktree ${worktreePath}`;
+		});
 	} catch { worktreeExists = false; }
 	if (worktreeExists) {
 		let currentBranch: string;

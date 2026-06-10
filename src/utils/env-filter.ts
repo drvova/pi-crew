@@ -1,5 +1,23 @@
 import { isSecretKey } from "./redaction.ts";
 
+// Well-known LLM provider API keys that are intentionally allowlisted in
+// child-pi.ts and async-runner.ts for pass-through to worker processes.
+// These are "secret" by pattern (contain KEY/API) but are safe to allowlist
+// because they are standard provider credentials, not arbitrary secrets.
+const KNOWN_PROVIDER_KEYS = new Set([
+	"MINIMAX_API_KEY", "MINIMAX_GROUP_ID",
+	"OPENAI_API_KEY", "OPENAI_ORG_ID",
+	"ANTHROPIC_API_KEY",
+	"GOOGLE_API_KEY", "GOOGLE_GENERATIVE_LANGUAGE_API_KEY",
+	"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
+	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION",
+	"ZEU_API_KEY", "ZERODEV_API_KEY",
+]);
+
+function isKnownProviderKey(key: string): boolean {
+	return KNOWN_PROVIDER_KEYS.has(key);
+}
+
 export interface SanitizeEnvOptions {
 	/** Allow-list of env var names to preserve. Supports trailing glob, e.g. `"PI_*"`. */
 	allowList?: string[];
@@ -47,12 +65,13 @@ export function sanitizeEnvSecrets(env: NodeJS.ProcessEnv, options?: SanitizeEnv
 			if (isDangerousGlob(pattern)) {
 				throw new Error(`Allowlist pattern "${pattern}" could match secret env vars. Use a more specific pattern.`);
 			}
-			// Validate non-glob entries don't look like secret keys — but skip the check
-			// if the key actually exists in env. This allows intentional allowlisting of
-			// known provider keys (MINIMAX_API_KEY, ANTHROPIC_API_KEY, etc.) that are
-			// legitimately needed by child Pi processes, while still catching accidental
-			// additions like "SECRET_TOKEN = ..." in config files.
-			if (!pattern.endsWith("*") && isSecretKey(pattern) && !(pattern in env)) {
+			// Validate non-glob entries don't look like secret keys.
+			// Exception 1: if the key exists in env, it was intentionally set and
+			// should be allowed through (user knows what they're doing).
+			// Exception 2: known provider keys (MINIMAX_API_KEY, etc.) are always
+			// allowed because they are standard provider credentials explicitly
+			// listed in async-runner.ts / child-pi.ts allowlists.
+			if (!pattern.endsWith("*") && isSecretKey(pattern) && !(pattern in env) && !isKnownProviderKey(pattern)) {
 				throw new Error(`Allowlist entry "${pattern}" looks like a secret key. Use a more specific pattern.`);
 			}
 		}

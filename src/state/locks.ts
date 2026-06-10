@@ -359,14 +359,26 @@ export function withRunLockSync<T>(manifest: TeamRunManifest, fn: () => T, optio
 	}
 }
 
+// Track re-entrant lock acquisitions per lock file path. When a lock is
+// already held by this call stack (handleResume -> executeTeamRun ->
+// executeTeamRunCore), we skip re-acquisition to avoid deadlock.
+const runLockHeldByUs = new Map<string, string>(); // filePath -> token
+
 export async function withRunLock<T>(manifest: TeamRunManifest, fn: () => Promise<T>, options: RunLockOptions = {}): Promise<T> {
 	const filePath = lockPath(manifest);
 	const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
+	const existingToken = runLockHeldByUs.get(filePath);
+	if (existingToken) {
+		// Re-entrant: already hold this lock, just run the callback.
+		return await fn();
+	}
 	fs.mkdirSync(path.dirname(filePath), { recursive: true });
 	const token = await acquireLockWithRetryAsync(filePath, staleMs, "run");
+	runLockHeldByUs.set(filePath, token);
 	try {
 		return await fn();
 	} finally {
+		runLockHeldByUs.delete(filePath);
 		releaseLock(filePath, token);
 	}
 }

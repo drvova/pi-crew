@@ -273,6 +273,7 @@ export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): S
 			"PI_TEAMS_INHERIT_SKILLS",
 			"PI_TEAMS_PI_BIN",
 			"PI_TEAMS_MOCK_CHILD_PI",
+			"PI_CREW_ALLOW_MOCK",
 		],
 	});
 	// FIX: Removed delete workarounds — with explicit allowlist, these vars
@@ -340,7 +341,7 @@ function appendTranscript(input: ChildPiRunInput, line: string): void {
 	// We skip mkdirSync here for security — adding it would create parent
 	// directories during validation, contradicting the original design where
 	// resolveRealContainedPath validates a pre-existing path.
-	const fd = fs.openSync(safePath, fs.constants.O_NOFOLLOW | fs.constants.O_CREAT | fs.constants.O_APPEND, 0o600);
+	const fd = fs.openSync(safePath, fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW | fs.constants.O_CREAT | fs.constants.O_APPEND, 0o600);
 	try {
 		fs.writeSync(fd, `${redactJsonLine(line)}\n`, undefined, "utf-8");
 	} finally {

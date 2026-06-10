@@ -29,8 +29,10 @@ test("worktree mode supports setup hook metadata and diff stat artifacts", async
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-worktree-hook-"));
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-worktree-home-"));
 	const previousHome = process.env.PI_TEAMS_HOME;
+	const previousSkipHome = process.env.PI_CREW_SKIP_HOME_CHECK;
 	try {
 		process.env.PI_TEAMS_HOME = home;
+		process.env.PI_CREW_SKIP_HOME_CHECK = "1";
 		git(cwd, ["init"]);
 		git(cwd, ["config", "user.email", "pi-crew@example.invalid"]);
 		git(cwd, ["config", "user.name", "pi Teams Test"]);
@@ -58,6 +60,8 @@ test("worktree mode supports setup hook metadata and diff stat artifacts", async
 	} finally {
 		if (previousHome === undefined) delete process.env.PI_TEAMS_HOME;
 		else process.env.PI_TEAMS_HOME = previousHome;
+		if (previousSkipHome === undefined) delete process.env.PI_CREW_SKIP_HOME_CHECK;
+		else process.env.PI_CREW_SKIP_HOME_CHECK = previousSkipHome;
 		fs.rmSync(cwd, { recursive: true, force: true });
 		fs.rmSync(home, { recursive: true, force: true });
 	}

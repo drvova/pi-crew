@@ -196,6 +196,7 @@ export async function spawnBackgroundTeamRun(manifest: TeamRunManifest): Promise
 			"PI_TEAMS_INHERIT_SKILLS",
 			"PI_TEAMS_PI_BIN",
 			"PI_TEAMS_MOCK_CHILD_PI",
+			"PI_CREW_ALLOW_MOCK",
 		],
 	});
 	// FIX: removed delete workarounds — with explicit allowlist, these vars
