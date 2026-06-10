@@ -445,6 +445,10 @@ export async function runTeamTask(
 			for (let i = 0; i < attemptModels.length; i++) {
 				// M1 fix: set transcript path per attempt to avoid mixing across fallback attempts.
 				transcriptPath = `${manifest.artifactsRoot}/transcripts/${task.id}.attempt-${i}.jsonl`;
+				// Ensure transcripts/ subdirectory exists before child-pi appends
+				// to it. appendTranscript uses O_APPEND (no mkdir) for security,
+				// so the caller must create the directory.
+				fs.mkdirSync(path.join(manifest.artifactsRoot, "transcripts"), { recursive: true });
 				const model = attemptModels[i];
 				const attemptStartedAt = new Date();
 				const pendingAttempt: ModelAttemptSummary = {
