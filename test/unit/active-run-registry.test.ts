@@ -8,12 +8,16 @@ import { createRunManifest, updateRunStatus } from "../../src/state/state-store.
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
+// Use realpath to resolve symlinks (macOS /var/folders → /private/var/folders).
+// Several pi-crew code paths refuse to write through untrusted symlink paths.
+const realTmp = fs.realpathSync(os.tmpdir());
+
 const team: TeamConfig = { name: "ari", description: "ari", source: "builtin", filePath: "ari.team.md", roles: [{ name: "explorer", agent: "explorer" }] };
 const workflow: WorkflowConfig = { name: "ari", description: "ari", source: "builtin", filePath: "ari.workflow.md", steps: [{ id: "explore", role: "explorer", task: "Explore" }] };
 
 function withIsolatedHome<T>(fn: () => T): T {
 	const previousHome = process.env.PI_TEAMS_HOME;
-	const home = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-active-reg-home-"));
+	const home = fs.mkdtempSync(path.join(realTmp, "pi-crew-active-reg-home-"));
 	// Create .pi/agent directory structure that userPiRoot() requires
 	// (userPiRoot validates the path exists and is owned by current user)
 	fs.mkdirSync(path.join(home, ".pi", "agent"), { recursive: true });
@@ -36,7 +40,7 @@ test("active-run registry starts empty", () => {
 
 test("register and unregister active run", () => {
 	withIsolatedHome(() => {
-		const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-active-reg-"));
+		const cwd = fs.mkdtempSync(path.join(realTmp, "pi-crew-active-reg-"));
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		try {
 			const created = createRunManifest({ cwd, team, workflow, goal: "test active run" });
@@ -57,7 +61,7 @@ test("register and unregister active run", () => {
 
 test("register deduplicates by runId", () => {
 	withIsolatedHome(() => {
-		const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-active-dedup-"));
+		const cwd = fs.mkdtempSync(path.join(realTmp, "pi-crew-active-dedup-"));
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		try {
 			const created = createRunManifest({ cwd, team, workflow, goal: "dedup test" });
@@ -89,7 +93,7 @@ test("registry ignores invalid entries", () => {
 
 test("activeRunRoots skips entries with missing stateRoot", () => {
 	withIsolatedHome(() => {
-		const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-active-missing-"));
+		const cwd = fs.mkdtempSync(path.join(realTmp, "pi-crew-active-missing-"));
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		try {
 			const created = createRunManifest({ cwd, team, workflow, goal: "missing roots" });
@@ -106,7 +110,7 @@ test("activeRunRoots skips entries with missing stateRoot", () => {
 
 test("blocked runs remain visible in active-run registry roots", () => {
 	withIsolatedHome(() => {
-		const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-active-blocked-"));
+		const cwd = fs.mkdtempSync(path.join(realTmp, "pi-crew-active-blocked-"));
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		try {
 			const created = createRunManifest({ cwd, team, workflow, goal: "blocked is terminal" });
@@ -123,7 +127,7 @@ test("blocked runs remain visible in active-run registry roots", () => {
 
 test("register recovers stale active-run registry lock", () => {
 	withIsolatedHome(() => {
-		const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-active-stale-lock-"));
+		const cwd = fs.mkdtempSync(path.join(realTmp, "pi-crew-active-stale-lock-"));
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		try {
 			const registryFile = path.join(process.env.PI_TEAMS_HOME!, ".pi", "agent", "extensions", "pi-crew", "state", "runs", "active-run-index.json");

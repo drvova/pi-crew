@@ -6,7 +6,10 @@ import * as path from "node:path";
 import { cleanupOldArtifacts, CLEANUP_MARKER_FILE, writeCleanupMarker } from "../../src/state/artifact-store.ts";
 
 function makeDir(): string {
-	return fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-artifact-cleanup-"));
+	// Use realpath to resolve symlinks (macOS /var/folders → /private/var/folders).
+	// atomicWriteFile refuses to write through untrusted symlink paths.
+	const realTmp = fs.realpathSync(os.tmpdir());
+	return fs.mkdtempSync(path.join(realTmp, "pi-crew-artifact-cleanup-"));
 }
 
 test("cleanup removes old files but keeps new files", () => {

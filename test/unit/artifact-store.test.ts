@@ -6,8 +6,12 @@ import * as os from "node:os";
 import { createHash } from "node:crypto";
 import { writeArtifact } from "../../src/state/artifact-store.ts";
 
+// Use realpath to resolve symlinks (macOS /var/folders → /private/var/folders).
+// atomicWriteFile refuses to write through untrusted symlink paths.
+const realTmp = fs.realpathSync(os.tmpdir());
+
 test("writeArtifact: contentHash matches sha256 of bytes on disk", () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-art-"));
+	const root = fs.mkdtempSync(path.join(realTmp, "pi-crew-art-"));
 	const desc = writeArtifact(root, {
 		kind: "log",
 		relativePath: "x.log",
@@ -23,7 +27,7 @@ test("writeArtifact: contentHash matches sha256 of bytes on disk", () => {
 });
 
 test("writeArtifact: rejects path traversal", () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-art-"));
+	const root = fs.mkdtempSync(path.join(realTmp, "pi-crew-art-"));
 	assert.throws(() => writeArtifact(root, {
 		kind: "log",
 		relativePath: "../escape.log",
@@ -34,7 +38,7 @@ test("writeArtifact: rejects path traversal", () => {
 });
 
 test("writeArtifact: creates nested directories", () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-art-"));
+	const root = fs.mkdtempSync(path.join(realTmp, "pi-crew-art-"));
 	const desc = writeArtifact(root, {
 		kind: "log",
 		relativePath: "a/b/c.log",
