@@ -27,7 +27,12 @@ export function resolveContainedPath(baseDir: string, targetPath: string): strin
 	const relative = process.platform === "win32"
 		? path.relative(baseCompare, resolvedCompare)
 		: path.relative(base, resolved);
-	if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`Path is outside ${baseDir}: ${targetPath}`);
+	if (relative.startsWith("..") || path.isAbsolute(relative)) {
+		if (process.platform === "win32") {
+			console.error(`[safe-paths] DEBUG resolveContainedPath: baseCompare=${baseCompare} resolvedCompare=${resolvedCompare} relative=${relative}`);
+		}
+		throw new Error(`Path is outside ${baseDir}: ${targetPath}`);
+	}
 	return resolved;
 }
 
