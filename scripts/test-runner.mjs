@@ -34,7 +34,7 @@ const result = spawnSync(
 		stdio: ["inherit", "pipe", "inherit"],
 		encoding: "utf-8",
 		env: { ...process.env, NODE_ENV: "test" },
-		maxBuffer: 50 * 1024 * 1024, // 50MB for large test output
+		maxBuffer: 200 * 1024 * 1024, // 200MB for large test output
 	},
 );
 
