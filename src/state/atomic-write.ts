@@ -58,8 +58,16 @@ export function isSymlinkSafePath(filePath: string): boolean {
 					// Accept if realDir is inside baseDir, equals baseDir, or is an
 					// ancestor of baseDir. On macOS, /var/folders is a symlink to
 					// /private/var/folders — resolve baseDir too for comparison.
-					let realBase: string;
-					try { realBase = fs.realpathSync(baseDir); } catch { realBase = baseDir; }
+					// Walk up ancestors to find the deepest existing one and resolve it.
+					let realBase = baseDir;
+					for (let walk = baseDir; walk !== path.dirname(walk); walk = path.dirname(walk)) {
+						try {
+							const resolved = fs.realpathSync(walk);
+							// Found existing ancestor — join with remaining non-existent parts
+							realBase = path.join(resolved, path.relative(walk, baseDir));
+							break;
+						} catch { /* not found yet, keep walking */ }
+					}
 					const realDirNorm = realDir.endsWith(path.sep) ? realDir : realDir + path.sep;
 					const realBaseNorm = realBase.endsWith(path.sep) ? realBase : realBase + path.sep;
 					const isAncestor = realBaseNorm.startsWith(realDirNorm) || realBase === realDir;

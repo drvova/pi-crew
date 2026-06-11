@@ -116,7 +116,14 @@ test("loadRunManifestById rejects symlinked artifact roots outside artifact pare
 			return;
 		}
 		__test__clearManifestCache();
-		assert.equal(loadRunManifestById(cwd, created.manifest.runId), undefined);
+		// loadRunManifestById should reject — either by returning undefined
+		// or by throwing (e.g. path containment check on symlinked dirs).
+		try {
+			const result = loadRunManifestById(cwd, created.manifest.runId);
+			assert.equal(result, undefined);
+		} catch (e) {
+			assert.ok(e instanceof Error && e.message.includes("outside"), `Expected containment error, got: ${e}`);
+		}
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
@@ -135,7 +142,14 @@ test("loadRunManifestById revalidates cached artifact root containment", (t) => 
 			t.skip("directory symlinks unavailable on this platform");
 			return;
 		}
-		assert.equal(loadRunManifestById(cwd, created.manifest.runId), undefined);
+		// loadRunManifestById should reject — either by returning undefined
+		// or by throwing (e.g. path containment check on symlinked dirs).
+		try {
+			const result = loadRunManifestById(cwd, created.manifest.runId);
+			assert.equal(result, undefined);
+		} catch (e) {
+			assert.ok(e instanceof Error && e.message.includes("outside"), `Expected containment error, got: ${e}`);
+		}
 	} finally {
 		__test__clearManifestCache();
 		fs.rmSync(cwd, { recursive: true, force: true });
