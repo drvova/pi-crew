@@ -36,7 +36,9 @@ import {
 } from "../../src/runtime/orphan-worker-registry.ts";
 
 function mkdtemp(prefix: string): string {
-	return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+	let dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+	try { dir = fs.realpathSync(dir); } catch { /* keep */ }
+	return dir;
 }
 
 function rmrf(p: string): void {
