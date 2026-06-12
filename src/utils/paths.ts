@@ -90,6 +90,18 @@ function hasProjectMarker(dir: string): boolean {
 	return false;
 }
 
+/** On Windows, resolve a path to its canonical long-name form.
+ *  Uses realpathSync.native to get the \\?\ long-name path, then strips
+ *  the prefix for path.relative compatibility. */
+function canonicalizePath(p: string): string {
+	try {
+		const r = fs.realpathSync.native(p);
+		return r.startsWith("\\\\?\\") ? r.slice(4) : r;
+	} catch {
+		try { return fs.realpathSync(p); } catch { return p; }
+	}
+}
+
 export function findRepoRoot(cwd: string): string | undefined {
 	// Resolve symlinks before walking to prevent malicious symlinks from bypassing
 	// home/temp boundary checks. If the path doesn't exist (e.g., caller passed
@@ -150,13 +162,13 @@ export function projectCrewRoot(cwd: string): string {
 	const repoRoot = findRepoRoot(cwd) ?? cwd;
 	const crewDir = path.join(repoRoot, ".crew");
 	// Keep an existing .crew/ stable even when .pi/ exists for project config.
-	// Use realpathSync to resolve any symlinks before returning to prevent
-	// state/artifacts from being written outside expected boundaries.
-	if (fs.existsSync(crewDir)) return fs.realpathSync(crewDir);
+	// Use canonicalizePath to get long-name form on Windows, matching
+	// what worktree operations and resolveRealContainedPath expect.
+	if (fs.existsSync(crewDir)) return canonicalizePath(crewDir);
 	// Legacy reuse: if .pi/ already exists for the project, namespace under .pi/teams/
 	// to avoid creating a parallel .crew/ alongside an existing pi project layout.
 	const piDir = path.join(repoRoot, ".pi");
-	if (fs.existsSync(piDir)) return path.join(fs.realpathSync(piDir), "teams");
+	if (fs.existsSync(piDir)) return path.join(canonicalizePath(piDir), "teams");
 	return crewDir;
 }
 

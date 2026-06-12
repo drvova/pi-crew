@@ -22,6 +22,11 @@ export function createTrackedTempDir(prefix: string): string {
 	// that atomicWriteFile refuses to write through. Resolve to the real path.
 	const realTmp = fs.realpathSync(os.tmpdir());
 	let dir = fs.mkdtempSync(path.join(realTmp, prefix));
+	// Resolve to long-name form on Windows via realpathSync.native
+	try {
+		const r = fs.realpathSync.native(dir);
+		dir = r.startsWith("\\\\?\\") ? r.slice(4) : r;
+	} catch { /* keep as-is */ }
 	tracked.add(dir);
 	return dir;
 }
