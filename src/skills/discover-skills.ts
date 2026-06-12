@@ -54,10 +54,16 @@ export function discoverSkills(cwd: string): SkillDescriptor[] {
 				} catch { continue; }
 				let description = "";
 				try {
-					const realPath = resolveRealContainedPath(dir.root, skillMdRelative);
-					const content = fs.readFileSync(realPath, "utf-8");
+					let readPath = skillMdPath;
+					try {
+						readPath = resolveRealContainedPath(dir.root, skillMdRelative);
+						skillMdPath = readPath;
+					} catch {
+						// resolveRealContainedPath may fail for symlinked system paths
+						// (e.g. macOS /var → /private/var). Fall through with un-resolved path.
+					}
+					const content = fs.readFileSync(readPath, "utf-8");
 					description = frontmatterDescription(content) ?? "";
-					skillMdPath = realPath;
 				} catch (error) {
 					logInternalError("discoverSkills.readSkill", error, `skill=${entry.name}`);
 				}

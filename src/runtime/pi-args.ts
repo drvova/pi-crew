@@ -113,7 +113,13 @@ export function createSafeTempDir(base: string, prefix: string): string {
 		accumulated = path.join(accumulated, parts[i]);
 		try {
 			const stat = fs.lstatSync(accumulated);
-			if (stat.isSymbolicLink()) throw new Error("Refusing to create temp dir: ancestor is a symlink: " + accumulated);
+			if (stat.isSymbolicLink()) {
+				// On macOS, /var → /private/var, /tmp → /private/tmp, /etc → /private/etc
+				// are system symlinks managed by the OS. Allow them.
+				const knownDarwinSymlinks = ["/var", "/tmp", "/etc", "/private/var", "/private/tmp", "/private/etc"];
+				if (process.platform === "darwin" && knownDarwinSymlinks.includes(accumulated)) continue;
+				throw new Error("Refusing to create temp dir: ancestor is a symlink: " + accumulated);
+			}
 		} catch (e) {
 			if (e instanceof Error && e.message.includes("symlink")) throw e;
 			// Component doesn't exist yet — OK, proceed
@@ -142,7 +148,11 @@ export function createSafeTempDir(base: string, prefix: string): string {
 		accumulated = path.join(accumulated, parts[i]);
 		try {
 			const stat = fs.lstatSync(accumulated);
-			if (stat.isSymbolicLink()) throw new Error("Refusing to create temp dir: ancestor is a symlink (post-mkdir): " + accumulated);
+			if (stat.isSymbolicLink()) {
+				const knownDarwinSymlinks = ["/var", "/tmp", "/etc", "/private/var", "/private/tmp", "/private/etc"];
+				if (process.platform === "darwin" && knownDarwinSymlinks.includes(accumulated)) continue;
+				throw new Error("Refusing to create temp dir: ancestor is a symlink (post-mkdir): " + accumulated);
+			}
 		} catch (e) {
 			if (e instanceof Error && e.message.includes("symlink")) throw e;
 			// Component doesn't exist — OK
@@ -175,6 +185,8 @@ export function createSafeTempDir(base: string, prefix: string): string {
 			try {
 				const stat = fs.lstatSync(revalidateAccumulated);
 				if (stat.isSymbolicLink()) {
+					const knownDarwinSymlinks = ["/var", "/tmp", "/etc", "/private/var", "/private/tmp", "/private/etc"];
+					if (process.platform === "darwin" && knownDarwinSymlinks.includes(revalidateAccumulated)) continue;
 					throw new Error("Refusing to create temp dir: ancestor is a symlink (post-mkdir): " + revalidateAccumulated);
 				}
 			} catch (e) {

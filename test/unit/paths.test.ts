@@ -17,7 +17,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { findRepoRoot, projectPiRoot, projectCrewRoot, userPiRoot, packageRoot, clearProjectRootCache } from "../../src/utils/paths.ts";
 
-const makeTempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), "paths-test-"));
+const makeTempDir = () => {
+	let dir = fs.mkdtempSync(path.join(os.tmpdir(), "paths-test-"));
+	// Resolve symlinks (macOS /var → /private/var) so assertions match findRepoRoot's realpath behavior
+	try { dir = fs.realpathSync(dir); } catch { /* keep as-is */ }
+	return dir;
+};
 
 test("packageRoot returns a valid directory", () => {
 	const root = packageRoot();

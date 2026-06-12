@@ -132,12 +132,27 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 
 	// Open baseDir with O_NOFOLLOW to atomically validate no symlinks in the path.
 	// O_NOFOLLOW makes the open fail with ELOOP if any path component is a symlink.
-	let baseFd: number;
+	let baseFd: number | undefined;
 	try {
 		baseFd = fs.openSync(baseDir, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ELOOP") throw new Error("Refusing to resolve: baseDir path contains a symlink: " + baseDir);
-		throw new Error(`Cannot open base directory ${baseDir}: ${error instanceof Error ? error.message : String(error)}`);
+		if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+			// On macOS, system directories like /var → /private/var contain symlinks.
+			// If baseDir is under such a path, resolve through realpath and retry.
+			if (process.platform === "darwin") {
+				try {
+					const realBaseDir = fs.realpathSync(baseDir);
+					if (realBaseDir !== baseDir) {
+						baseFd = fs.openSync(realBaseDir, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+						baseDir = realBaseDir; // update for later use
+						// Fall through to fstatSync below
+					}
+				} catch { /* throw original */ }
+			}
+			if (baseFd === undefined) throw new Error("Refusing to resolve: baseDir path contains a symlink: " + baseDir);
+		} else {
+			throw new Error(`Cannot open base directory ${baseDir}: ${error instanceof Error ? error.message : String(error)}`);
+		}
 	}
 	let realBase: string;
 	try {
@@ -177,7 +192,16 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 			const fd = fs.openSync(resolvedAccumulated, O_RDONLY | O_NOFOLLOW);
 			fs.closeSync(fd);
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "ELOOP") throw new Error("Refusing to resolve: target path ancestor is a symlink: " + resolvedAccumulated);
+			if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+			// On macOS, /var → /private/var, /tmp → /private/tmp, /etc → /private/etc
+			// are system symlinks managed by the OS. Allow them.
+			if (process.platform === "darwin") {
+				const resolvedSymlink = resolvedAccumulated;
+				const knownDarwinSymlinks = ["/var", "/tmp", "/etc", "/private/var", "/private/tmp", "/private/etc"];
+				if (knownDarwinSymlinks.includes(resolvedSymlink)) continue;
+			}
+			throw new Error("Refusing to resolve: target path ancestor is a symlink: " + resolvedAccumulated);
+		}
 			// EPERM on Windows when opening a directory — skip validation
 			if ((error as NodeJS.ErrnoException).code === "EPERM" && process.platform === "win32") continue;
 			// ENOENT means component doesn't exist — that's OK. Only existing symlinks
