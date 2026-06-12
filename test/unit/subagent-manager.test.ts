@@ -142,6 +142,7 @@ test("readPersistedSubagentRecord returns undefined for missing file", () => {
 
 test("savePersistedSubagentRecord creates directory and file", () => {
 	const dir = makeTempDir();
+	fs.mkdirSync(path.join(dir, ".crew"), { recursive: true });
 	try {
 		const record: SubagentRecord = {
 			id: "agent_001",

@@ -136,7 +136,16 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 	try {
 		baseFd = fs.openSync(baseDir, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+		const errCode = (error as NodeJS.ErrnoException).code;
+		if (errCode === "ENOENT") {
+			// baseDir doesn't exist yet — create it and retry
+			try {
+				fs.mkdirSync(baseDir, { recursive: true });
+				baseFd = fs.openSync(baseDir, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+			} catch (retryError) {
+				throw new Error(`Cannot open base directory ${baseDir}: ${retryError instanceof Error ? retryError.message : String(retryError)}`);
+			}
+		} else if (errCode === "ELOOP") {
 			// On macOS, system directories like /var → /private/var contain symlinks.
 			// If baseDir is under such a path, resolve through realpath and retry.
 			if (process.platform === "darwin") {
