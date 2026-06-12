@@ -153,7 +153,10 @@ function ensureRunMailbox(manifest: TeamRunManifest): void {
 		}
 	}
 	const delivery = deliveryFile(manifest, true);
-	if (!fs.existsSync(delivery)) fs.writeFileSync(delivery, `${JSON.stringify({ messages: {}, updatedAt: new Date().toISOString() }, null, 2)}\n`, "utf-8");
+	if (!fs.existsSync(delivery)) {
+		fs.mkdirSync(path.dirname(delivery), { recursive: true });
+		fs.writeFileSync(delivery, `${JSON.stringify({ messages: {}, updatedAt: new Date().toISOString() }, null, 2)}\n`, "utf-8");
+	}
 }
 
 function ensureTaskMailbox(manifest: TeamRunManifest, taskId: string): void {
