@@ -12,11 +12,14 @@ import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
 /** Resolve temp dir through realpath to handle macOS /var → /private/var symlink. */
 function makeResolvedTempDir(prefix: string): string {
-	// On macOS, resolve /var → /private/var symlink.
-	// On Windows, use regular realpathSync (not .native) to stay consistent
-	// with os.tmpdir()'s path form.
 	let dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), prefix));
-	try { dir = fs.realpathSync(dir); } catch { /* keep as-is */ }
+	// Resolve to canonical long-name form matching resolveRealContainedPath
+	try {
+		const resolved = fs.realpathSync.native(dir);
+		dir = resolved.startsWith("\\\\?\\") ? resolved.slice(4) : resolved;
+	} catch {
+		try { dir = fs.realpathSync(dir); } catch { /* keep as-is */ }
+	}
 	return dir;
 }
 const team: TeamConfig = {

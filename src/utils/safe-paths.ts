@@ -29,9 +29,15 @@ export function resolveContainedPath(baseDir: string, targetPath: string): strin
 	return resolved;
 }
 
+/**
+ * On Windows, resolve a path to its canonical (long-name) form.
+ * Walks up ancestors until finding one that exists, then joins back down.
+ * This handles paths where intermediate directories don't exist yet but
+ * their ancestors do (and may use short-name aliases).
+ */
 function resolveWindowsCanonical(p: string): string {
 	try {
-		let real = fs.realpathSync(p);
+		let real = fs.realpathSync.native(p);
 		if (real.startsWith("\\\\?\\")) real = real.slice(4);
 		// Guard against NTFS internal paths (e.g. C:\$Extend\$Deleted)
 		if (real.includes("$Extend") || real.includes("$Deleted")) throw new Error("NTFS internal path");
@@ -47,7 +53,7 @@ function resolveWindowsCanonical(p: string): string {
 		let current = p;
 		while (current !== path.dirname(current)) {
 			try {
-				let real = fs.realpathSync(current);
+				let real = fs.realpathSync.native(current);
 				if (real.startsWith("\\\\?\\")) real = real.slice(4);
 				// Guard against NTFS internal paths
 				if (real.includes("$Extend") || real.includes("$Deleted")) throw new Error("NTFS internal path");
@@ -164,7 +170,11 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 		// Use realpathSync.native on the path - we've already validated with O_NOFOLLOW
 		// that no symlinks exist in the path at open time. Any TOCTOU race would cause
 		// the O_NOFOLLOW open to fail before we reach this point.
-		realBase = fs.realpathSync(baseDir);
+		realBase = fs.realpathSync.native(baseDir);
+		// Strip Windows extended-length prefix (\\?\) for path.relative compatibility.
+		if (process.platform === "win32" && realBase.startsWith("\\\\?\\")) {
+			realBase = realBase.slice(4);
+		}
 	} catch (error) {
 		// baseDir MUST exist and be resolvable for the containment guarantee to hold.
 		// Callers creating new directories must create baseDir atomically (e.g.,
@@ -179,14 +189,7 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 
 	// Walk the ancestor chain of the resolved target path, using O_NOFOLLOW
 	// on each ancestor to atomically validate none are symlinks.
-	
-/** Resolve to real path. On Windows, use regular realpathSync (not .native)
- *  to maintain consistency with os.tmpdir()'s path form (short-name 8.3).
- *  .native returns long-name paths that differ from os.tmpdir() causing
- *  false containment check failures. */
-
-
-const O_NOFOLLOW = fs.constants.O_NOFOLLOW;
+	const O_NOFOLLOW = fs.constants.O_NOFOLLOW;
 	const O_RDONLY = fs.constants.O_RDONLY;
 	const resolvedParts = resolved.split(path.sep);
 	let resolvedAccumulated = "";
@@ -246,7 +249,11 @@ const O_NOFOLLOW = fs.constants.O_NOFOLLOW;
 		// Use realpathSync.native on the path - we've already validated with O_NOFOLLOW
 		// that no symlinks exist in the path at open time. Any TOCTOU race would cause
 		// the O_NOFOLLOW open to fail before we reach this point.
-		realTarget = fs.realpathSync(resolved);
+		realTarget = fs.realpathSync.native(resolved);
+		// Strip Windows extended-length prefix (\\?\) for path.relative compatibility.
+		if (process.platform === "win32" && realTarget.startsWith("\\\\?\\")) {
+			realTarget = realTarget.slice(4);
+		}
 	} catch (targetError) {
 		if ((targetError as NodeJS.ErrnoException).code === "ENOENT") {
 			// Target doesn't exist yet — this is OK for write operations.
@@ -310,12 +317,12 @@ const O_NOFOLLOW = fs.constants.O_NOFOLLOW;
 		let compBase = realBase;
 		let compTarget = realTarget;
 		try {
-			const rb = fs.realpathSync(realBase);
-			compBase = rb;
+			const rb = fs.realpathSync.native(realBase);
+			compBase = rb.startsWith("\\\\?\\") ? rb.slice(4) : rb;
 		} catch { /* use realBase as-is */ }
 		try {
-			const rt = fs.realpathSync(realTarget);
-			compTarget = rt;
+			const rt = fs.realpathSync.native(realTarget);
+			compTarget = rt.startsWith("\\\\?\\") ? rt.slice(4) : rt;
 		} catch { /* use realTarget as-is */ }
 		const normBase = compBase.replace(/\\/g, "/").toLowerCase();
 		const normTarget = compTarget.replace(/\\/g, "/").toLowerCase();

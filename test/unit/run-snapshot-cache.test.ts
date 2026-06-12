@@ -11,12 +11,15 @@ import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 import { createRunSnapshotCache } from "../../src/ui/run-snapshot-cache.ts";
 
 function tempCwd(prefix: string): string {
+	// Resolve to canonical long-name form (e.g. C:\Users\runneradmin\...)
+	// matching what resolveRealContainedPath uses internally.
 	let cwd = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-	// On macOS, resolve /var → /private/var symlink.
-	// On Windows, do NOT use realpathSync.native — it returns long-name paths
-	// (runneradmin) that differ from os.tmpdir()'s short-name form (RUNNER~1),
-	// causing containment check failures in resolveRealContainedPath.
-	try { cwd = fs.realpathSync(cwd); } catch { /* keep as-is */ }
+	try {
+		const resolved = fs.realpathSync.native(cwd);
+		cwd = resolved.startsWith("\\\\?\\") ? resolved.slice(4) : resolved;
+	} catch {
+		try { cwd = fs.realpathSync(cwd); } catch { /* keep as-is */ }
+	}
 	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 	return cwd;
 }
