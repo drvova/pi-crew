@@ -57,17 +57,18 @@ function resolveWindowsCanonical(p: string): string {
 				if (real.startsWith("\\\\?\\")) real = real.slice(4);
 				// Guard against NTFS internal paths
 				if (real.includes("$Extend") || real.includes("$Deleted")) throw new Error("NTFS internal path");
-				// Found existing ancestor — join with remaining parts
-				for (const part of parts.reverse()) {
-					real = path.join(real, part);
+				// Found existing ancestor — join with remaining parts in reverse order
+				// (parts were pushed bottom-up, so iterate from last to first)
+				for (let i = parts.length - 1; i >= 0; i--) {
+					real = path.join(real, parts[i]);
 				}
 				return real;
 			} catch {
 				// Also try non-native for ancestor
 				try {
 					let real = fs.realpathSync(current);
-					for (const part of parts.reverse()) {
-						real = path.join(real, part);
+					for (let i = parts.length - 1; i >= 0; i--) {
+						real = path.join(real, parts[i]);
 					}
 					return real;
 				} catch { /* keep walking */ }
@@ -309,23 +310,13 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 	}
 
 	// Verify the resolved real path is still within baseDir.
-	// Verify the resolved real path is still within baseDir.
+	// On Windows, realpathSync.native may return different short/long-name forms
+	// for the same physical directory depending on how the path was opened.
+	// Use resolveWindowsCanonical (same as resolveContainedPath) to normalize
+	// both paths consistently before comparison.
 	if (process.platform === "win32") {
-		// Windows: realpathSync.native may return different short/long-name forms
-		// for the same physical directory. Re-resolve both through .native
-		// to get consistent long-name forms, then compare case-insensitively.
-		let compBase = realBase;
-		let compTarget = realTarget;
-		try {
-			const rb = fs.realpathSync.native(realBase);
-			compBase = rb.startsWith("\\\\?\\") ? rb.slice(4) : rb;
-		} catch { /* use realBase as-is */ }
-		try {
-			const rt = fs.realpathSync.native(realTarget);
-			compTarget = rt.startsWith("\\\\?\\") ? rt.slice(4) : rt;
-		} catch { /* use realTarget as-is */ }
-		const normBase = compBase.replace(/\\/g, "/").toLowerCase();
-		const normTarget = compTarget.replace(/\\/g, "/").toLowerCase();
+		const normBase = resolveWindowsCanonical(realBase).replace(/\\/g, "/").toLowerCase();
+		const normTarget = resolveWindowsCanonical(realTarget).replace(/\\/g, "/").toLowerCase();
 		if (!normTarget.startsWith(normBase + "/") && normBase !== normTarget) {
 			throw new Error(`Path is outside ${baseDir}: ${targetPath}`);
 		}
