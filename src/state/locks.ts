@@ -180,45 +180,12 @@ function acquireLockWithRetry(filePath: string, staleMs: number, kind: LockKind 
 			if (Date.now() > deadline) {
 				throw new Error(`Run '${path.basename(filePath)}' is locked by another operation.`);
 			}
-			// FIX: Use both staleness AND PID liveness to decide if we can steal
-			// a lock. Previously only staleness was checked, so a process whose
-			// PID was recently reused by another process could have its lock
-			// stolen even while still active. Now: fresh+alive = fail, else = clear.
 			const isStale = isLockStale(filePath, staleMs);
 			const isHolderAlive = isLockHolderAlive(filePath);
 			if (!isStale && isHolderAlive) {
-				// Lock is fresh AND holder is alive — fail fast
 				throw new Error(`Run '${path.basename(filePath)}' is locked by another operation.`);
 			}
-			// Verify the stale lock still has the expected token before removing it.
-			// Use O_RDONLY (without O_EXCL) since the file exists and we need to
-			// read its token to avoid removing a freshly-acquired lock from another process.
-			let fd = -1;
-			try {
-				fd = fs.openSync(filePath, fs.constants.O_RDONLY);
-			} catch (error) {
-				const code = (error as NodeJS.ErrnoException).code;
-				if (code === "ENOENT") {
-					// Lock was removed by a competing process — retry acquire
-					sleepSync(Math.min(250, 25 * 2 ** attempt));
-					attempt++;
-					continue;
-				}
-				throw error;
-			} finally {
-				if (fd >= 0) fs.closeSync(fd);
-			}
-			// O_EXCL succeeded — we atomically verified the lock is still free.
-			// Now verify the token is still valid (not replaced by a new lock).
-			// If the token is missing, the lock was replaced and we should not remove it.
-			const currentToken = readLockToken(filePath);
-			if (currentToken === undefined) {
-				// Lock was replaced between O_EXCL and now — retry the full sequence
-				sleepSync(Math.min(250, 25 * 2 ** attempt));
-				attempt++;
-				continue;
-			}
-			// Token is valid — proceed to remove the stale lock.
+			// Stale or dead holder — forcibly remove the lock.
 			try {
 				fs.rmSync(filePath, { force: true });
 			} catch { /* race — let loop retry */ }
@@ -246,43 +213,12 @@ async function acquireLockWithRetryAsync(filePath: string, staleMs: number, kind
 			if (Date.now() > deadline) {
 				throw new Error(`Run '${path.basename(filePath)}' is locked by another operation.`);
 			}
-			// FIX (Round 14, locks-async): Mirror the sync path's staleness AND
-			// PID liveness check. Previously the async path only checked
-			// staleness, so a recently-reused PID could have its lock stolen
-			// even while still running. Now: fresh + alive holder = fail.
 			const isStale = isLockStale(filePath, staleMs);
 			const isHolderAlive = isLockHolderAlive(filePath);
 			if (!isStale && isHolderAlive) {
 				throw new Error(`Run '${path.basename(filePath)}' is locked by another operation.`);
 			}
-			// Verify the stale lock still has the expected token before removing it.
-			let fd = -1;
-			try {
-				fd = fs.openSync(filePath, fs.constants.O_RDONLY);
-			} catch (error) {
-				const code = (error as NodeJS.ErrnoException).code;
-				if (code === "ENOENT") {
-					const delay = Math.min(250, 25 * 2 ** attempt);
-					await sleep(delay);
-					attempt++;
-					continue;
-				}
-				throw error;
-			} finally {
-				if (fd >= 0) fs.closeSync(fd);
-			}
-			// O_EXCL succeeded — we atomically verified the lock is still free.
-			// Now verify the token is still valid (not replaced by a new lock).
-			// If the token is missing, the lock was replaced and we should not remove it.
-			const currentToken = readLockToken(filePath);
-			if (currentToken === undefined) {
-				// Lock was replaced between O_EXCL and now — retry the full sequence
-				const delay = Math.min(250, 25 * 2 ** attempt);
-				await sleep(delay);
-				attempt++;
-				continue;
-			}
-			// Token is valid — proceed to remove the stale lock.
+			// Stale or dead holder — forcibly remove the lock.
 			try {
 				fs.rmSync(filePath, { force: true });
 			} catch { /* race — let loop retry */ }
