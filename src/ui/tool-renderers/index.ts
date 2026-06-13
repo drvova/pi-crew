@@ -1,11 +1,13 @@
 /**
- * Tool renderer registry and types.
+ * Tool renderer registry — visually rich rendering for team & agent tools.
  *
- * Each tool gets a focused renderer that handles both collapsed and expanded
- * display. Inspired by oh-my-pi's rendering-only override pattern.
+ * Uses box-drawing chars, progress bars, colored badges, and structured
+ * layouts to create a distinctly different TUI appearance.
+ * Uses visibleWidth() for ANSI-aware padding so borders align correctly.
  */
 
 import { Container, Text } from "@earendil-works/pi-tui";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import type { CrewTheme } from "../theme-adapter.ts";
 import { truncLine, formatTokens, formatDuration } from "../tool-render.ts";
 import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
@@ -26,6 +28,94 @@ export interface ToolRenderer {
 
 export type Component = Container | Text;
 
+// ── ANSI-aware padding ─────────────────────────────────────────────────
+
+/** Pad a string (which may contain ANSI codes) to a target VISUAL width. */
+function padVisual(str: string, targetWidth: number): string {
+	const vw = visibleWidth(str);
+	if (vw >= targetWidth) return str;
+	return str + " ".repeat(targetWidth - vw);
+}
+
+/** Truncate a string (which may contain ANSI codes) to a target VISUAL width. */
+function truncVisual(str: string, maxWidth: number): string {
+	if (visibleWidth(str) <= maxWidth) return str;
+	// Strip ANSI to truncate safely, then caller re-colors
+	const stripped = str.replace(/\x1b\[[0-9;]*m/g, "");
+	return stripped.slice(0, maxWidth);
+}
+
+// ── Visual primitives ──────────────────────────────────────────────────
+
+/** Status icon with color */
+function statusBadge(status: string, theme: CrewTheme): string {
+	switch (status) {
+		case "completed": return theme.fg("success", "●");
+		case "failed":
+		case "cancelled": return theme.fg("error", "✖");
+		case "running": return theme.fg("warning", "◉");
+		default: return theme.fg("dim", "○");
+	}
+}
+
+/** Status icon — compact */
+export function statusIcon(status: string, theme: CrewTheme): string {
+	switch (status) {
+		case "completed": return theme.fg("success", "✓");
+		case "failed":
+		case "cancelled": return theme.fg("error", "✗");
+		case "running": return theme.fg("warning", "⟳");
+		default: return theme.fg("dim", "○");
+	}
+}
+
+/** Short run ID */
+function shortId(id: string | undefined): string {
+	return id ? id.slice(-8) : "????????";
+}
+
+/** Border color based on status */
+function borderColorForStatus(status: string): "success" | "error" | "border" {
+	switch (status) {
+		case "completed": return "success";
+		case "failed":
+		case "cancelled": return "error";
+		default: return "border";
+	}
+}
+
+/** Build a visual progress bar: ██████░░░░░░ 60% */
+function progressBar(ratio: number, barWidth: number, theme: CrewTheme): string {
+	const clamped = Math.max(0, Math.min(1, ratio));
+	const filled = Math.round(clamped * barWidth);
+	const empty = barWidth - filled;
+	const bar = theme.fg("success", "█".repeat(filled)) + theme.fg("dim", "░".repeat(empty));
+	const pct = theme.fg("text", ` ${Math.round(clamped * 100)}%`.padStart(5));
+	return bar + pct;
+}
+
+// ── Frame builder ──────────────────────────────────────────────────────
+
+/** Create a rounded-corner framed card.
+ *  Pi wraps our Text in Box(1,1) which subtracts 2 from content width.
+ *  So frame lines must be ≤ totalWidth - 2 visible chars.
+ */
+function buildFrame(contentLines: string[], totalWidth: number, theme: CrewTheme, borderSlot: "success" | "error" | "border" | "borderAccent" = "border"): string {
+	const frameW = totalWidth - 2; // available after Box(1,1) padding
+	const innerW = frameW - 2;    // │ chars
+	const top = theme.fg(borderSlot, `╭${"─".repeat(innerW)}╮`);
+	const bottom = theme.fg(borderSlot, `╰${"─".repeat(innerW)}╯`);
+	const v = theme.fg(borderSlot, "│");
+
+	const lines: string[] = [top];
+	for (const line of contentLines) {
+		const padded = padVisual(line, innerW);
+		lines.push(v + padded + v);
+	}
+	lines.push(bottom);
+	return lines.join("\n");
+}
+
 // ── Team Tool Renderer ─────────────────────────────────────────────────
 
 export const teamToolRenderer: ToolRenderer = {
@@ -33,195 +123,362 @@ export const teamToolRenderer: ToolRenderer = {
 		const action = args.action as string ?? "";
 		const goal = args.goal as string ?? "";
 		const team = args.team as string | undefined;
-		const teamLabel = team ? ` ${theme.fg("dim", `(${team})`)}` : "";
+		const w = ctx.width ?? 116;
+		const innerW = w - 4;
 
-		if (!ctx.expanded) {
-			const preview = goal.length > 60 ? goal.slice(0, 60) + "…" : goal;
-			return new Text(
-				`${theme.fg("toolTitle", theme.bold("team"))}  action=${theme.fg("accent", `'${action}'`)}${teamLabel}${theme.fg("dim", preview ? `  "${preview.replace(/\n/g, " ")}"` : "")}`,
-				0, 0,
-			);
-		}
+		const contentLines: string[] = [];
 
-		const c = ctx.lastComponent instanceof Container ? (ctx.lastComponent.clear(), ctx.lastComponent) : new Container();
-		c.addChild(new Text(`${theme.fg("toolTitle", theme.bold("team"))}  action=${theme.fg("accent", `'${action}'`)}${teamLabel}`, 0, 0));
+		// Header: action badge + team name
+		const actionBadge = theme.fg("accent", `◀ ${action.toUpperCase()} ▶`);
+		const teamLabel = team ? `  ${theme.fg("dim", `via ${team}`)}` : "";
+		const header = ` ${actionBadge}${teamLabel}`;
+		contentLines.push(padVisual(header, innerW));
+
+		// Goal preview
 		if (goal) {
-			c.addChild(new Text("", 0, 0)); // spacer
-			c.addChild(new Text(theme.fg("text", goal), 0, 0));
+			const maxLen = innerW - 2;
+			const preview = goal.replace(/\n/g, " ");
+			const previewText = visibleWidth(preview) > maxLen ? truncVisual(preview, maxLen - 1) + "…" : preview;
+			contentLines.push(padVisual(` ${theme.fg("dim", previewText)}`, innerW));
 		}
-		return c;
+
+		return new Text(buildFrame(contentLines, w, theme, "borderAccent"), 0, 0);
 	},
 
 	renderResult(result, _options, theme, ctx) {
-		const d = (result.details ?? result) as Record<string, unknown>;
-		const records = (d.agentRecords ?? d.results) as CrewAgentRecord[] | undefined;
-		const action = typeof d.action === "string" ? d.action : "";
-		const status = typeof d.status === "string" ? d.status : "";
-		const runId = typeof d.runId === "string" ? d.runId : "";
-
-		// Brief mode: one-line compact summary
-		if (isBrief() && !ctx.expanded) {
-			return new Text(briefToolResult("team", result as { content?: unknown[] }, theme), 0, 0);
+		try {
+			return renderTeamResult(result, _options, theme, ctx);
+		} catch {
+			// Fallback to avoid Pi's catch hiding everything
+			return new Text(statusIcon("completed", theme) + " done", 0, 0);
 		}
-
-		// Compact: one-line summary
-		if (!ctx.expanded) {
-			if (action === "run") {
-				const m = d.metrics as { taskCount?: number; completedCount?: number; totalTokens?: number; totalCost?: number; durationMs?: number } | undefined;
-				if (m) {
-					const icon = m.completedCount === m.taskCount ? theme.fg("success", "✓") : m.completedCount && m.taskCount && m.completedCount < m.taskCount ? theme.fg("warning", "⟳") : statusIcon(status, theme);
-					const parts: string[] = [];
-					if (m.completedCount != null && m.taskCount) parts.push(`${m.completedCount}/${m.taskCount} tasks`);
-					if (m.durationMs) parts.push(formatDuration(m.durationMs));
-					if (m.totalTokens) parts.push(`${formatTokens(m.totalTokens)} tok`);
-					if (m.totalCost) parts.push(`$${m.totalCost.toFixed(3)}`);
-					return new Text(`${icon} ${parts.join(" · ")}`, 0, 0);
-				}
-				// Fallback: status + runId
-				const icon = statusIcon(status, theme);
-				return new Text(`${icon} ${status}${runId ? " · " + runId.slice(-8) : ""}`, 0, 0);
-			}
-			const parts: string[] = [];
-			if (status) parts.push(`status=${status}`);
-			if (runId) parts.push(`runId=${runId.slice(-8)}`);
-			if (d.error) parts.push(theme.fg("error", "error"));
-			if (d.goal && !parts.length) parts.push(theme.fg("dim", truncLine(d.goal as string, 100)));
-			return new Text(parts.join("  ·  ") || theme.fg("muted", "(no output)"), 0, 0);
-		}
-
-		// Expanded: agent progress rows
-		if (action === "run" && records?.length) {
-			const c = new Container();
-			for (const r of records) {
-				c.addChild(renderAgentRow(r, theme, ctx.width ?? 116));
-			}
-			return c;
-		}
-
-		// Expanded: metrics summary when no agent records
-		if (action === "run") {
-			const m = d.metrics as { taskCount?: number; completedCount?: number; totalTokens?: number; totalCost?: number; durationMs?: number } | undefined;
-			if (m) {
-				const c = new Container();
-				const icon = m.completedCount === m.taskCount ? theme.fg("success", "✓") : theme.fg("warning", "⟳");
-				c.addChild(new Text(`${icon} ${m.completedCount}/${m.taskCount} tasks · ${formatDuration(m.durationMs ?? 0)} · ${formatTokens(m.totalTokens ?? 0)} tok`, 0, 0));
-				if (runId) c.addChild(new Text(theme.fg("dim", `runId: ${runId}`), 0, 0));
-				return c;
-			}
-		}
-
-		// Fallback: content text
-		const text = extractContentText(result?.content);
-		return new Text(text.slice(0, 200), 0, 0);
 	},
 };
+
+function renderTeamResult(result: Record<string, unknown>, options: unknown, theme: CrewTheme, ctx: ToolRenderContext): Text {
+	const d = (result.details ?? result) as Record<string, unknown>;
+	const records = (d.agentRecords ?? d.results) as CrewAgentRecord[] | undefined;
+	const action = typeof d.action === "string" ? d.action : "";
+	const status = typeof d.status === "string" ? d.status : "";
+	const runId = typeof d.runId === "string" ? d.runId : "";
+	const w = ctx.width ?? 116;
+	const innerW = w - 4;
+	const bColor = borderColorForStatus(status);
+	const contentLines: string[] = [];
+
+	// isPartial = tool still streaming — show live progress
+	const isPartial = (options as Record<string, unknown>)?.isPartial === true;
+	if (isPartial && !ctx.expanded) {
+		const content = extractContentText(result?.content);
+		const parsed = parseStreamingProgress(content);
+
+		if (parsed) {
+			// Parsed progress from progress binder
+			const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+			const frameIdx = Math.floor(Date.now() / 80) % spinnerFrames.length;
+			const spinner = theme.fg("accent", spinnerFrames[frameIdx]!);
+
+			if (parsed.completed != null && parsed.total != null) {
+				// Task progress available
+				const ratio = parsed.total > 0 ? parsed.completed / parsed.total : 0;
+				const barW = Math.min(innerW - 22, 30);
+				const bar = progressBar(ratio, barW, theme);
+				const count = theme.fg("muted", ` ${parsed.completed}/${parsed.total}`);
+				contentLines.push(padVisual(` ${spinner} ${theme.fg("toolTitle", theme.bold("crew run"))}  ${theme.fg("dim", formatDuration(parsed.elapsedMs))}`, innerW));
+				contentLines.push(padVisual(`   ${bar}${count}`, innerW));
+				if (parsed.status) contentLines.push(padVisual(`   ${theme.fg("dim", parsed.status)}`, innerW));
+			} else if (parsed.elapsedMs > 0) {
+				// Only elapsed — starting phase
+				const elapsed = formatDuration(parsed.elapsedMs);
+				contentLines.push(padVisual(` ${spinner} ${theme.fg("muted", "crew starting")}  ${theme.fg("dim", elapsed)}`, innerW));
+			}
+		} else if (content) {
+			// Fallback: show streaming text
+			const preview = truncLine(content.split("\n").filter(Boolean).pop() ?? "", innerW - 4);
+			contentLines.push(padVisual(` ${theme.fg("warning", "◉")} ${theme.fg("dim", preview)}`, innerW));
+		}
+
+		if (contentLines.length > 0) {
+			return new Text(buildFrame(contentLines, w, theme, "borderAccent"), 0, 0);
+		}
+	}
+
+	// Brief mode: compact summary (still framed)
+	// But NOT for action=run — those always get progress bar + metrics
+	if (isBrief() && !ctx.expanded && action !== "run") {
+		const briefText = briefToolResult("team", result as { content?: unknown[] }, theme);
+		contentLines.push(padVisual(` ${briefText}`, innerW));
+		return new Text(buildFrame(contentLines, w, theme, bColor), 0, 0);
+	}
+
+	if (!ctx.expanded) {
+		// ── Collapsed: compact framed card ──
+		if (action === "run" && records?.length) {
+			appendRunCard(contentLines, records, status, runId, theme, innerW);
+		} else if (action === "run") {
+			const m = d.metrics as Metrics | undefined;
+			if (m) {
+				appendMetricsCard(contentLines, m, status, runId, theme, innerW);
+			} else {
+				appendSimpleCard(contentLines, status, runId, theme, innerW);
+			}
+		} else {
+			appendSimpleCard(contentLines, status, runId, theme, innerW);
+		}
+	} else {
+		// ── Expanded: detailed card ──
+		if (action === "run" && records?.length) {
+			appendExpandedRun(contentLines, records, status, runId, theme, w, innerW);
+		} else if (action === "run") {
+			const m = d.metrics as Metrics | undefined;
+			appendExpandedMetrics(contentLines, m, status, runId, theme, w, innerW);
+		} else {
+			const text = extractContentText(result?.content);
+			contentLines.push(padVisual(` ${text.slice(0, innerW - 2)}`, innerW));
+		}
+	}
+
+	return new Text(buildFrame(contentLines, w, theme, bColor), 0, 0);
+}
 
 // ── Agent Tool Renderer ────────────────────────────────────────────────
 
 export const agentToolRenderer: ToolRenderer = {
 	renderCall(args, theme, _ctx) {
-		const agentName = args.agent as string ?? "";
+		const agentName = args.agent as string ?? args.subagent_type as string ?? "";
 		const prompt = (args.prompt ?? args.task ?? "") as string;
-		const preview = prompt.length > 60 ? prompt.slice(0, 60) + "…" : prompt;
-		return new Text(
-			`${theme.fg("toolTitle", theme.bold("agent"))}  ${theme.fg("accent", agentName)}${theme.fg("dim", preview ? `  "${preview.replace(/\n/g, " ")}"` : "")}`,
-			0, 0,
-		);
+		const w = _ctx.width ?? 116;
+		const innerW = w - 4;
+
+		const contentLines: string[] = [];
+		const badge = theme.fg("accent", `◀ AGENT ▶`);
+		const nameTag = theme.fg("toolTitle", theme.bold(agentName));
+		contentLines.push(padVisual(` ${badge}  ${nameTag}`, innerW));
+
+		if (prompt) {
+			const maxLen = innerW - 2;
+			const preview = prompt.replace(/\n/g, " ");
+			const previewText = visibleWidth(preview) > maxLen ? truncVisual(preview, maxLen - 1) + "…" : preview;
+			contentLines.push(padVisual(` ${theme.fg("dim", previewText)}`, innerW));
+		}
+
+		return new Text(buildFrame(contentLines, w, theme, "borderAccent"), 0, 0);
 	},
 
 	renderResult(result, _options, theme, ctx) {
-		const d = (result.details ?? result) as Record<string, unknown>;
-		const results = d.results as Array<Record<string, unknown>> | undefined;
-		const w = ctx.width ?? 116;
-
-		// Brief mode: one-line compact summary
-		if (isBrief() && !ctx.expanded) {
-			return new Text(briefToolResult("agent", result as { content?: unknown[] }, theme), 0, 0);
+		try {
+			return renderAgentResult(result, _options, theme, ctx);
+		} catch {
+			return new Text(statusIcon("completed", theme) + " agent done", 0, 0);
 		}
-
-		if (results?.length) {
-			const c = new Container();
-			for (const item of results) {
-				const icon = statusIcon(item.status as string ?? "", theme);
-				const label = (item.agentId as string) ?? "agent";
-				c.addChild(new Text(`${icon}  ${theme.fg("toolTitle", theme.bold(label))}`, 0, 0));
-				if (item.error) {
-					c.addChild(new Text(theme.fg("error", `  Error: ${truncLine(String(item.error), w - 2)}`), 0, 0));
-				} else if (item.output) {
-					for (const line of String(item.output).split("\n").slice(0, 5)) {
-						c.addChild(new Text(theme.fg("dim", `  ${truncLine(line, w - 2)}`), 0, 0));
-					}
-				}
-			}
-			return c;
-		}
-
-		if (d.agentId) {
-			const icon = statusIcon(d.status as string ?? "", theme);
-			const c = new Container();
-			c.addChild(new Text(`${icon}  ${theme.fg("toolTitle", theme.bold(d.agentId as string))}`, 0, 0));
-			if (d.error) {
-				c.addChild(new Text(theme.fg("error", `  Error: ${truncLine(String(d.error), w - 2)}`), 0, 0));
-			} else if (d.output) {
-				for (const line of String(d.output).split("\n").slice(0, 5)) {
-					c.addChild(new Text(theme.fg("dim", `  ${truncLine(line, w - 2)}`), 0, 0));
-				}
-			}
-			return c;
-		}
-
-		const text = extractContentText(result?.content);
-		return new Text(text.slice(0, 200), 0, 0);
 	},
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────
+function renderAgentResult(result: Record<string, unknown>, options: unknown, theme: CrewTheme, ctx: ToolRenderContext): Text {
+	const d = (result.details ?? result) as Record<string, unknown>;
+	const results = d.results as Array<Record<string, unknown>> | undefined;
+	const w = ctx.width ?? 116;
+	const innerW = w - 4;
+	const status = ((d.status ?? (results?.[0] as Record<string, unknown>)?.status ?? "") as string) || "completed";
+	const bColor: "success" | "error" | "border" = status === "completed" ? "success" : status === "failed" ? "error" : "border";
 
-function statusIcon(status: string, theme: CrewTheme): string {
-	switch (status) {
-		case "completed": return theme.fg("success", "✓");
-		case "failed": case "cancelled": return theme.fg("error", "✗");
-		case "running": return theme.fg("warning", "⟳");
-		case "queued": case "waiting": return theme.fg("dim", "○");
-		default: return theme.fg("dim", "○");
+	const contentLines: string[] = [];
+
+	// isPartial = agent still running
+	const isPartial = (options as Record<string, unknown>)?.isPartial === true;
+	if (isPartial && !ctx.expanded) {
+		const spinner = theme.fg("warning", "◉");
+		const label = theme.fg("muted", "agent working...");
+		contentLines.push(padVisual(` ${spinner} ${label}`, innerW));
+		return new Text(buildFrame(contentLines, w, theme, "borderAccent"), 0, 0);
 	}
+
+	// Brief mode: non-agent results get brief treatment
+	if (!results?.length && !d.agentId) {
+		const briefText = briefToolResult("agent", result as { content?: unknown[] }, theme);
+		contentLines.push(padVisual(` ${briefText}`, innerW));
+		return new Text(buildFrame(contentLines, w, theme, bColor), 0, 0);
+	}
+
+	if (!ctx.expanded) {
+		// Collapsed: compact card
+		const badge = statusBadge(status, theme);
+		const agentId = (d.agentId as string) ?? (results?.[0] as Record<string, unknown>)?.agentId as string ?? "agent";
+		const nameTag = theme.fg("toolTitle", theme.bold(agentId));
+		contentLines.push(padVisual(` ${badge} ${nameTag}`, innerW));
+
+		// Error or output preview
+		if (d.error) {
+			contentLines.push(padVisual(` ${theme.fg("error", truncLine(String(d.error), innerW - 4))}`, innerW));
+		} else if (results?.length) {
+			const output = (results[0] as Record<string, unknown>).output as string | undefined;
+			if (output) {
+				const preview = truncLine(output.split("\n")[0] ?? "", innerW - 4);
+				contentLines.push(padVisual(` ${theme.fg("muted", preview)}`, innerW));
+			}
+		}
+	} else {
+		// Expanded: detailed rows
+		if (results?.length) {
+			for (let i = 0; i < results.length; i++) {
+				const item = results[i]!;
+				const icon = statusIcon(item.status as string ?? "", theme);
+				const label = theme.fg("toolTitle", theme.bold((item.agentId as string) ?? "agent"));
+				contentLines.push(padVisual(` ${icon} ${label}`, innerW));
+
+				if (item.error) {
+					contentLines.push(padVisual(`   ${theme.fg("error", truncLine(String(item.error), innerW - 6))}`, innerW));
+				} else if (item.output) {
+					const outputLines = String(item.output).split("\n").slice(0, 5);
+					for (const line of outputLines) {
+						contentLines.push(padVisual(`   ${theme.fg("dim", truncLine(line, innerW - 6))}`, innerW));
+					}
+				}
+				// Separator between agents
+				if (i < results.length - 1) {
+					contentLines.push(padVisual(theme.fg("borderMuted", "─".repeat(innerW - 2)), innerW));
+				}
+			}
+		} else if (d.agentId) {
+			const icon = statusIcon(d.status as string ?? "", theme);
+			contentLines.push(padVisual(` ${icon} ${theme.fg("toolTitle", theme.bold(d.agentId as string))}`, innerW));
+			if (d.error) {
+				contentLines.push(padVisual(`   ${theme.fg("error", truncLine(String(d.error), innerW - 6))}`, innerW));
+			}
+		} else {
+			const text = extractContentText(result?.content);
+			if (text) contentLines.push(padVisual(` ${theme.fg("dim", truncLine(text, innerW - 4))}`, innerW));
+		}
+	}
+
+	return new Text(buildFrame(contentLines, w, theme, bColor), 0, 0);
 }
 
-function renderCompactRunSummary(records: CrewAgentRecord[], theme: CrewTheme): Text {
+// ── Card builders ──────────────────────────────────────────────────────
+
+interface Metrics {
+	taskCount?: number;
+	completedCount?: number;
+	totalTokens?: number;
+	totalCost?: number;
+	durationMs?: number;
+}
+
+function appendRunCard(lines: string[], records: CrewAgentRecord[], status: string, runId: string, theme: CrewTheme, innerW: number): void {
 	const completed = records.filter((r) => r.status === "completed").length;
 	const total = records.length;
+	const ratio = total > 0 ? completed / total : 0;
 	const duration = computeTotalDuration(records);
 	const tokens = computeTotalTokens(records);
-	const cost = computeTotalCost(records);
-	const icon = completed === total ? theme.fg("success", "✓") : theme.fg("warning", "⟳");
-	const parts: string[] = [`${completed}/${total} tasks`];
-	if (duration > 0) parts.push(formatDuration(duration));
-	if (tokens > 0) parts.push(`${formatTokens(tokens)} tok`);
-	if (cost > 0) parts.push(`$${cost.toFixed(3)}`);
-	return new Text(`${icon} ${parts.join(" · ")}`, 0, 0);
+
+	// Line 1: status badge + title + id
+	const badge = statusBadge(status, theme);
+	const title = theme.fg("toolTitle", theme.bold("crew run"));
+	const idTag = theme.fg("dim", shortId(runId));
+	lines.push(padVisual(` ${badge} ${title}  ${idTag}`, innerW));
+
+	// Line 2: progress bar + count
+	const barW = Math.min(innerW - 20, 30);
+	const bar = progressBar(ratio, barW, theme);
+	const count = theme.fg("muted", ` ${completed}/${total}`);
+	lines.push(padVisual(` ${bar}${count}`, innerW));
+
+	// Line 3: metrics
+	const metricParts: string[] = [];
+	if (duration > 0) metricParts.push(formatDuration(duration));
+	if (tokens > 0) metricParts.push(`${formatTokens(tokens)} tok`);
+	if (metricParts.length) {
+		lines.push(padVisual(` ${theme.fg("dim", metricParts.join(" · "))}`, innerW));
+	}
 }
 
-function renderAgentRow(record: CrewAgentRecord, theme: CrewTheme, w: number): Container {
-	const c = new Container();
-	const icon = statusIcon(record.status, theme);
-	const role = record.role || record.agent || "agent";
-	const model = record.model ? ` (${record.model.split("/").at(-1)})` : "";
-	const durationMs = record.startedAt
-		? Math.max(0, (record.completedAt ? new Date(record.completedAt).getTime() : Date.now()) - new Date(record.startedAt).getTime())
-		: 0;
-	const stats = `${record.toolUses ?? record.progress?.toolCount ?? 0} tools · ${formatDuration(durationMs)}`;
-	c.addChild(new Text(`${icon}  ${theme.fg("toolTitle", theme.bold(role))}${theme.fg("dim", model)}  —  ${theme.fg("dim", stats)}`, 0, 0));
-	// Usage line
-	const usage = record.usage;
+function appendMetricsCard(lines: string[], m: Metrics, status: string, runId: string, theme: CrewTheme, innerW: number): void {
+	const ratio = m.taskCount ? (m.completedCount ?? 0) / m.taskCount : 0;
+
+	const badge = statusBadge(status, theme);
+	const title = theme.fg("toolTitle", theme.bold("crew run"));
+	const idTag = theme.fg("dim", shortId(runId));
+	lines.push(padVisual(` ${badge} ${title}  ${idTag}`, innerW));
+
+	const barW = Math.min(innerW - 20, 30);
+	const bar = progressBar(ratio, barW, theme);
+	const count = theme.fg("muted", ` ${m.completedCount ?? 0}/${m.taskCount ?? 0}`);
+	lines.push(padVisual(` ${bar}${count}`, innerW));
+
 	const parts: string[] = [];
-	if (usage?.input) parts.push(theme.fg("dim", `↑${formatTokens(usage.input)}`));
-	if (usage?.output) parts.push(theme.fg("dim", `↓${formatTokens(usage.output)}`));
-	if (usage?.cost) parts.push(theme.fg("dim", `$${usage.cost.toFixed(3)}`));
-	if (parts.length) {
-		c.addChild(new Text(`  ${parts.join(" ")}`, 0, 0));
-	}
-	return c;
+	if (m.durationMs) parts.push(formatDuration(m.durationMs));
+	if (m.totalTokens) parts.push(`${formatTokens(m.totalTokens)} tok`);
+	if (parts.length) lines.push(padVisual(` ${theme.fg("dim", parts.join(" · "))}`, innerW));
 }
+
+function appendSimpleCard(lines: string[], status: string, runId: string, theme: CrewTheme, innerW: number): void {
+	const badge = statusBadge(status, theme);
+	const parts: string[] = [status];
+	if (runId) parts.push(shortId(runId));
+	lines.push(padVisual(` ${badge} ${theme.fg("text", parts.join(" · ") || "done")}`, innerW));
+}
+
+function appendExpandedRun(lines: string[], records: CrewAgentRecord[], status: string, runId: string, theme: CrewTheme, w: number, innerW: number): void {
+	const completed = records.filter((r) => r.status === "completed").length;
+	const total = records.length;
+	const ratio = total > 0 ? completed / total : 0;
+	const duration = computeTotalDuration(records);
+	const tokens = computeTotalTokens(records);
+
+	// Header
+	lines.push(padVisual(` ${theme.fg("toolTitle", theme.bold("CREW RUN RESULT"))}  ${theme.fg("dim", shortId(runId))}`, innerW));
+	lines.push(padVisual(theme.fg("borderMuted", "─".repeat(innerW - 2)), innerW));
+
+	// Progress bar
+	const barW = Math.min(innerW - 22, 40);
+	const bar = progressBar(ratio, barW, theme);
+	const count = theme.fg("muted", ` ${completed}/${total}`);
+	lines.push(padVisual(` ${theme.fg("muted", "Progress")} ${bar}${count}`, innerW));
+
+	// Metrics
+	const metricLine = [
+		theme.fg("muted", formatDuration(duration)),
+		theme.fg("muted", `${formatTokens(tokens)} tok`),
+	].join(theme.fg("dim", " · "));
+	lines.push(padVisual(` ${metricLine}`, innerW));
+	lines.push(padVisual(theme.fg("borderMuted", "─".repeat(innerW - 2)), innerW));
+
+	// Agent rows
+	for (const r of records) {
+		const icon = statusIcon(r.status, theme);
+		const role = theme.fg("toolTitle", theme.bold(r.role || r.agent || "agent"));
+		const model = r.model ? theme.fg("dim", ` (${r.model.split("/").at(-1)})`) : "";
+		const dur = r.startedAt ? formatDuration(computeRecordDuration(r)) : "";
+		const toolCount = `${r.toolUses ?? r.progress?.toolCount ?? 0} tools`;
+		lines.push(padVisual(` ${icon} ${role}${model}  ${theme.fg("dim", `${toolCount} · ${dur}`)}`, innerW));
+
+		// Usage
+		const usage = r.usage;
+		const usageParts: string[] = [];
+		if (usage?.input) usageParts.push(theme.fg("dim", `↑${formatTokens(usage.input)}`));
+		if (usage?.output) usageParts.push(theme.fg("dim", `↓${formatTokens(usage.output)}`));
+		if (usage?.cost) usageParts.push(theme.fg("dim", `$${usage.cost.toFixed(3)}`));
+		if (usageParts.length) lines.push(padVisual(`   ${usageParts.join(" ")}`, innerW));
+	}
+}
+
+function appendExpandedMetrics(lines: string[], m: Metrics | undefined, status: string, runId: string, theme: CrewTheme, w: number, innerW: number): void {
+	lines.push(padVisual(` ${theme.fg("toolTitle", theme.bold("CREW RUN RESULT"))}  ${theme.fg("dim", shortId(runId))}`, innerW));
+	lines.push(padVisual(theme.fg("borderMuted", "─".repeat(innerW - 2)), innerW));
+	if (m) {
+		const ratio = m.taskCount ? (m.completedCount ?? 0) / m.taskCount : 0;
+		const barW = Math.min(innerW - 22, 40);
+		const bar = progressBar(ratio, barW, theme);
+		const count = theme.fg("muted", ` ${m.completedCount ?? 0}/${m.taskCount ?? 0}`);
+		lines.push(padVisual(` ${bar}${count}`, innerW));
+		const parts: string[] = [];
+		if (m.durationMs) parts.push(formatDuration(m.durationMs));
+		if (m.totalTokens) parts.push(`${formatTokens(m.totalTokens)} tok`);
+		if (parts.length) lines.push(padVisual(` ${theme.fg("dim", parts.join(" · "))}`, innerW));
+	}
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
 
 function extractContentText(content: unknown): string {
 	if (!Array.isArray(content)) return typeof content === "string" ? content : "";
@@ -231,30 +488,54 @@ function extractContentText(content: unknown): string {
 		.join("\n");
 }
 
+/** Parse streaming progress text from team-tool progress binder. */
+interface StreamingProgress {
+	elapsedMs: number;
+	completed: number | null;
+	total: number | null;
+	status: string | null;
+}
+
+function parseStreamingProgress(text: string): StreamingProgress | null {
+	if (!text) return null;
+
+	// Format: "team status=starting elapsed=11s"
+	const elapsedMatch = text.match(/elapsed=(\d+)s/);
+	const elapsedMs = elapsedMatch ? parseInt(elapsedMatch[1]!, 10) * 1000 : 0;
+
+	// Format from formatCompactToolProgress: "Crew agents · 2/3 done · runId"
+	const doneMatch = text.match(/(\d+)\/(\d+)\s+done/);
+	if (doneMatch) {
+		return { elapsedMs, completed: parseInt(doneMatch[1]!, 10), total: parseInt(doneMatch[2]!, 10), status: text.split("·")[0]?.trim() ?? null };
+	}
+
+	// Format: "team status=starting elapsed=Ns"
+	if (elapsedMs > 0) {
+		const statusMatch = text.match(/status=(\w+)/);
+		return { elapsedMs, completed: null, total: null, status: statusMatch?.[1] ?? null };
+	}
+
+	return null;
+}
+
 function computeTotalDuration(records: CrewAgentRecord[]): number {
 	let total = 0;
-	for (const r of records) {
-		if (r.startedAt) {
-			const start = new Date(r.startedAt).getTime();
-			const end = r.completedAt ? new Date(r.completedAt).getTime() : Date.now();
-			if (Number.isFinite(start) && Number.isFinite(end)) total += Math.max(0, end - start);
-		}
-	}
+	for (const r of records) total += computeRecordDuration(r);
 	return total;
+}
+
+function computeRecordDuration(r: CrewAgentRecord): number {
+	if (!r.startedAt) return 0;
+	const start = new Date(r.startedAt).getTime();
+	const end = r.completedAt ? new Date(r.completedAt).getTime() : Date.now();
+	if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+	return Math.max(0, end - start);
 }
 
 function computeTotalTokens(records: CrewAgentRecord[]): number {
 	let total = 0;
 	for (const r of records) {
 		if (r.usage) total += (r.usage.input ?? 0) + (r.usage.output ?? 0) + (r.usage.cacheWrite ?? 0);
-	}
-	return total;
-}
-
-function computeTotalCost(records: CrewAgentRecord[]): number {
-	let total = 0;
-	for (const r of records) {
-		if (r.usage?.cost) total += r.usage.cost;
 	}
 	return total;
 }

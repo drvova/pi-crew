@@ -22,6 +22,8 @@ import { t } from "../../i18n.ts";
 import { loadRunManifestById } from "../../state/state-store.ts";
 import { readCrewAgents } from "../../runtime/crew-agent-records.ts";
 import { formatCompactToolProgress } from "../../ui/tool-progress-formatter.ts";
+import { writeFileSync } from "node:fs";
+import { Text } from "@earendil-works/pi-tui";
 import { agentToolRenderer } from "../../ui/tool-renderers/index.ts";
 
 const TOOL_PROGRESS_TICK_MS = 1000;
@@ -102,7 +104,14 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 		},
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		renderResult(result: any, options: any, theme: any, context: any): any {
-			return agentToolRenderer.renderResult(result, options, theme, context);
+			try {
+				return agentToolRenderer.renderResult(result, options, theme, context);
+			} catch (e: any) {
+				try {
+					writeFileSync('/tmp/pi-crew-render-error.log', `[${new Date().toISOString()}] AGENT renderResult ERROR: ${e?.message}\nstack: ${e?.stack?.slice(0,500)}\nresult keys: ${Object.keys(result ?? {})}\ndetails: ${JSON.stringify(result?.details ?? '(none)').slice(0,300)}\n\n`, { flag: 'a' });
+			} catch { /* ignore */ }
+				return new Text('agent-err: ' + (e?.message ?? 'unknown'), 0, 0);
+			}
 		},
 	};
 

@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { loadConfig } from "../../config/config.ts";
 import { TeamToolParams, type TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
@@ -9,7 +8,8 @@ import type { createManifestCache } from "../../runtime/manifest-cache.ts";
 import type { createRunSnapshotCache } from "../../ui/run-snapshot-cache.ts";
 import type { MetricRegistry } from "../../observability/metric-registry.ts";
 import { resolveRealContainedPath } from "../../utils/safe-paths.ts";
-import { teamToolRenderer } from "../../ui/tool-renderers/index.ts";
+import { Text } from "@earendil-works/pi-tui";
+import { teamToolRenderer, statusIcon } from "../../ui/tool-renderers/index.ts";
 // Team tool handler — lazy-loaded because team-tool.ts imports many modules
 import type { handleTeamTool as HandleTeamToolFn } from "../team-tool.ts";
 let _cachedHandleTeamTool: typeof HandleTeamToolFn | undefined;
@@ -111,7 +111,11 @@ export function registerTeamTool(pi: ExtensionAPI, deps: RegisterTeamToolDeps): 
 		},
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		renderResult(result: any, options: any, theme: any, context: any): any {
-			return teamToolRenderer.renderResult(result, options, theme, context);
+			try {
+				return teamToolRenderer.renderResult(result, options, theme, context);
+			} catch {
+				return new Text(statusIcon("completed", theme) + " done", 0, 0);
+			}
 		},
 	};
 	pi.registerTool(tool);
