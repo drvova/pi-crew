@@ -169,5 +169,7 @@ function startTeamToolProgressBinder(onUpdate: OnUpdate | undefined): TeamToolPr
 	const timer = setInterval(tick, TEAM_TOOL_PROGRESS_TICK_MS);
 	if (typeof timer.unref === "function") timer.unref();
 	return {
+		attach: (boundCwd: string, boundRunId: string) => { cwd = boundCwd; runId = boundRunId; tick(); },
+		stop: () => clearInterval(timer),
 	};
 }
