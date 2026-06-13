@@ -123,7 +123,7 @@ export const teamToolRenderer: ToolRenderer = {
 		const action = args.action as string ?? "";
 		const goal = args.goal as string ?? "";
 		const team = args.team as string | undefined;
-		const w = ctx.width ?? 116;
+		const w = (ctx.width || process.stdout.columns || 116);
 		const innerW = w - 4;
 
 		const contentLines: string[] = [];
@@ -161,7 +161,7 @@ function renderTeamResult(result: Record<string, unknown>, options: unknown, the
 	const action = typeof d.action === "string" ? d.action : "";
 	const status = typeof d.status === "string" ? d.status : "";
 	const runId = typeof d.runId === "string" ? d.runId : "";
-	const w = ctx.width ?? 116;
+	const w = (ctx.width || process.stdout.columns || 116);
 	const innerW = w - 4;
 	const bColor = borderColorForStatus(status);
 	const contentLines: string[] = [];
@@ -248,7 +248,7 @@ export const agentToolRenderer: ToolRenderer = {
 	renderCall(args, theme, _ctx) {
 		const agentName = args.agent as string ?? args.subagent_type as string ?? "";
 		const prompt = (args.prompt ?? args.task ?? "") as string;
-		const w = _ctx.width ?? 116;
+		const w = (_ctx.width || process.stdout.columns || 116);
 		const innerW = w - 4;
 
 		const contentLines: string[] = [];
@@ -278,7 +278,7 @@ export const agentToolRenderer: ToolRenderer = {
 function renderAgentResult(result: Record<string, unknown>, options: unknown, theme: CrewTheme, ctx: ToolRenderContext): Text {
 	const d = (result.details ?? result) as Record<string, unknown>;
 	const results = d.results as Array<Record<string, unknown>> | undefined;
-	const w = ctx.width ?? 116;
+	const w = (ctx.width || process.stdout.columns || 116);
 	const innerW = w - 4;
 	const status = ((d.status ?? (results?.[0] as Record<string, unknown>)?.status ?? "") as string) || "completed";
 	const bColor: "success" | "error" | "border" = status === "completed" ? "success" : status === "failed" ? "error" : "border";
