@@ -16,24 +16,24 @@
  * muted gray so highlights stay readable on dark terminal backgrounds.
  */
 import { supportsLanguage, highlight } from "cli-highlight";
+import { bundledThemes } from "shiki";
 import type { CrewTheme } from "./theme-adapter.ts";
 import { asCrewTheme } from "./theme-adapter.ts";
 
 // ── Optional Shiki integration (async, fire-and-forget) ─────────────────
 // Loaded lazily so pi-crew works without @shikijs/cli installed.
 
-type BundledLanguage = string;
-type BundledTheme = string;
+type CodeToAnsiFn = (code: string, lang: string, theme: string) => Promise<string>;
 
-let _codeToANSI: ((code: string, lang: BundledLanguage, theme: BundledTheme) => Promise<string>) | null | undefined;
+let _codeToANSI: CodeToAnsiFn | null | undefined;
 let _shikiLoadFailed = false;
 
-async function loadShiki(): Promise<typeof _codeToANSI | null> {
+async function loadShiki(): Promise<CodeToAnsiFn | null> {
 	if (_shikiLoadFailed) return null;
 	if (_codeToANSI !== undefined) return _codeToANSI;
 	try {
 		const mod = await import("@shikijs/cli");
-		_codeToANSI = (mod as unknown as { codeToANSI?: typeof _codeToANSI }).codeToANSI ?? null;
+		_codeToANSI = (mod as unknown as { codeToANSI?: CodeToAnsiFn }).codeToANSI ?? null;
 		return _codeToANSI;
 	} catch {
 		_shikiLoadFailed = true;
@@ -46,13 +46,45 @@ async function loadShiki(): Promise<typeof _codeToANSI | null> {
 void loadShiki();
 
 // ── Theme resolution ────────────────────────────────────────────────────
+// Pi theme names (e.g. "crew-dark", "catppuccin-mocha") are NOT the same as
+// Shiki theme names (e.g. "github-dark", "catppuccin-mocha"). We validate
+// against Shiki's bundledThemes registry and fall back to a sensible default
+// so highlighting always works regardless of which Pi theme is active.
 
-const DEFAULT_SHIKI_THEME: BundledTheme = "github-dark";
+const DEFAULT_SHIKI_THEME = "github-dark";
 const FG_MUTED_FALLBACK = "\x1b[38;2;139;148;158m";
 
-function resolveShikiTheme(): BundledTheme {
-	const env = process.env.CREW_SHIKI_THEME as BundledTheme | undefined;
-	if (env) return env;
+/** Map common Pi/theme names to Shiki bundled theme names. */
+const THEME_ALIASES: Record<string, string> = {
+	"dark": "github-dark",
+	"light": "github-light",
+	"crew-dark": "github-dark",
+	"github-dark": "github-dark",
+	"github-light": "github-light",
+	"catppuccin-mocha": "catppuccin-mocha",
+	"catppuccin-macchiato": "catppuccin-macchiato",
+	"catppuccin-frappe": "catppuccin-frappe",
+	"catppuccin-latte": "catppuccin-latte",
+	"dracula": "dracula",
+	"nord": "nord",
+	"tokyo-night": "tokyo-night",
+	"one-dark": "one-dark-pro",
+	"material": "material-theme",
+	"solarized": "solarized-dark",
+};
+
+/** Validate that a theme name is a real Shiki bundled theme. */
+function isValidShikiTheme(name: string): boolean {
+	return Object.prototype.hasOwnProperty.call(bundledThemes, name);
+}
+
+function resolveShikiTheme(): string {
+	// 1. Explicit override via env var (highest priority).
+	const env = process.env.CREW_SHIKI_THEME;
+	if (env) {
+		return isValidShikiTheme(env) ? env : DEFAULT_SHIKI_THEME;
+	}
+	// 2. Read Pi's settings.json theme, map to Shiki if possible.
 	try {
 		const home = process.env.HOME;
 		if (!home) return DEFAULT_SHIKI_THEME;
@@ -61,13 +93,19 @@ function resolveShikiTheme(): BundledTheme {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const path = require("node:path");
 		const settings = JSON.parse(fs.readFileSync(path.join(home, ".pi/agent/settings.json"), "utf8"));
-		return (settings.theme as BundledTheme) ?? DEFAULT_SHIKI_THEME;
+		const piTheme = settings.theme as string | undefined;
+		if (!piTheme) return DEFAULT_SHIKI_THEME;
+		// Try alias map first, then direct validation, then fallback.
+		const aliased = THEME_ALIASES[piTheme.toLowerCase()];
+		if (aliased && isValidShikiTheme(aliased)) return aliased;
+		if (isValidShikiTheme(piTheme)) return piTheme;
+		return DEFAULT_SHIKI_THEME;
 	} catch {
 		return DEFAULT_SHIKI_THEME;
 	}
 }
 
-let SHIKI_THEME: BundledTheme = resolveShikiTheme();
+let SHIKI_THEME: string = resolveShikiTheme();
 
 // ── Contrast normalization (ported from pi-pretty) ──────────────────────
 // Shiki themes designed for white backgrounds (e.g. "github-light") produce
