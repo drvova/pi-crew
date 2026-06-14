@@ -51,6 +51,10 @@ const MAX_QUEUE_SIZE = 100;
 export class IntercomQueue {
 	private pending = new Map<string, PendingMessage>();
 	private queue: IntercomMessage[] = [];
+	/** Monotonic sequence counter — guarantees unique IDs even when many
+	 * messages enqueue within the same millisecond (avoids Date.now()
+	 * collision + weak Math.random birthday-paradox flakes under load). */
+	private seq = 0;
 
 	/**
 	 * Enqueue a message and return a promise that resolves when the
@@ -63,7 +67,7 @@ export class IntercomQueue {
 			if (firstKey) this.evict(firstKey, "queue_full");
 		}
 
-		const id = `icm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+		const id = `icm-${Date.now().toString(36)}-${(this.seq++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 		return new Promise<IntercomResponse>((resolve) => {
 			const entry: PendingMessage = { message, id, resolve };
