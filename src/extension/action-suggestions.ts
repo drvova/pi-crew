@@ -46,6 +46,10 @@ export const KNOWN_TEAM_ACTIONS = [
 export function suggestAction(input: string): string | null {
 	const trimmed = input.trim();
 	if (!trimmed) return null;
+	// Defense-in-depth (Round 18 security F1): levenshtein is O(n×m). A hostile
+	// very-long input would waste cycles. The action is enum-validated upstream
+	// so this is unreachable in practice, but cap input length cheaply.
+	if (trimmed.length > 64) return null;
 	return findClosestKey(trimmed, KNOWN_TEAM_ACTIONS, 2);
 }
 

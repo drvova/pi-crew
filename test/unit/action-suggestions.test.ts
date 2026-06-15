@@ -34,6 +34,13 @@ test("formatActionSuggestion returns empty string for no good match", () => {
 	assert.equal(formatActionSuggestion(""), "");
 });
 
+test("suggestAction rejects overly-long input (DoS defense-in-depth)", () => {
+	assert.equal(suggestAction("x".repeat(65)), null);
+	assert.equal(suggestAction("x".repeat(1000)), null);
+	// Normal short input still works.
+	assert.equal(suggestAction("stat"), "status");
+});
+
 test("formatActionSuggestion returns '' for an already-valid action (no noise)", () => {
 	assert.equal(formatActionSuggestion("status"), "");
 });
