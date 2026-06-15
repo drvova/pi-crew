@@ -6,6 +6,7 @@ import type { PiTeamsToolResult } from "../tool-result.ts";
 import { locateRunCwd } from "../team-tool.ts";
 import { result, type TeamContext } from "./context.ts";
 import { RUN_NOT_FOUND_HINT } from "./run-not-found.ts";
+import { formatFailurePatterns } from "./failure-patterns.ts";
 
 export function handleEvents(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	if (!params.runId) return result("Events requires runId.", { action: "events", status: "error" }, true);
@@ -35,6 +36,7 @@ export function handleSummary(params: TeamToolParamsValue, ctx: TeamContext): Pi
 	const loaded = loadRunManifestById(runCwd, params.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 	if (!loaded) return result(`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`, { action: "summary", status: "error" }, true);
 	const usage = aggregateUsage(loaded.tasks);
+	const failurePatternLines = formatFailurePatterns(loaded.tasks);
 	const lines = [
 		`Summary for ${loaded.manifest.runId}`,
 		`Status: ${loaded.manifest.status}`,
@@ -44,6 +46,7 @@ export function handleSummary(params: TeamToolParamsValue, ctx: TeamContext): Pi
 		`Usage: ${formatUsage(usage)}`,
 		"",
 		formatCostReport(loaded.tasks),
+		...(failurePatternLines.length > 0 ? ["", ...failurePatternLines] : []),
 		"",
 		"Tasks:",
 		...loaded.tasks.map((task) => `- ${task.id}: ${task.status} (${task.role} -> ${task.agent})${task.error ? ` - ${task.error}` : ""}`),
