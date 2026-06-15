@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.7.0] — Long-Term Roadmap: Compaction Resilience, Cost Visibility, Trust Trinity (2026-06-15)
+
+This release implements Phase 0 + Phase 1 of the pi-crew long-term roadmap (a 10-round research synthesis), plus the single-agent cliff hedge. The organizing principle: **build trust and cliff-resilience, stay lean, delete before adding.**
+
+### Highlights
+
+- **🛡️ Compaction resilience (O10)** — the #1 user pain ("after auto-compact, the task stops midway") is fixed. pi-crew now detects in-flight runs, injects an explicit resume directive into the compaction summary, and re-attaches after compaction. Tasks survive context compaction.
+- **💰 Cost visibility (O1)** — `team summary <runId>` now shows a full cost report with per-role attribution and token breakdown. Multi-agent's #1 barrier is cost; now it's visible.
+- **✋ Plan-level HITL for any workflow (O5)** — plan approval was locked to the `implementation` workflow; now any workflow honors `config.runtime.requirePlanApproval`, gating at the read-only→mutating (plan→execute) boundary.
+- **🧠 Cross-run memory (O4)** — `.crew/knowledge.md` is auto-read and injected into every agent's system prompt. pi-crew "gets better the longer you use it." Radically downsized (~80 LOC) replacement for the deleted MemoryStore.
+- **🎯 Single-agent cliff hedge (T0.5/T2.2)** — any workflow can be composed into a single sequential prompt (`team plan singleAgent=true`). Proves pi-crew's mission survives even if multi-agent is obsoleted by 1M+ token models.
+- **🧹 2,335 LOC of dead code removed** — grep-verified unused BudgetTracker, MemoryStore, `.bak` files, disabled brief-mode.
+- **🔌 Pi-api seam** — centralizes the 8-symbol Pi coupling surface in one file, hedging against Pi API churn.
+
+### Features (Phase 0 — Stabilize & Clean)
+
+- **`dbb4b6c`** — Deleted `budget-tracker.ts` (353 LOC), `memory-store.ts` (244 LOC), `brief-tool-overrides.ts` (400 LOC, disabled since 0.6.4), 3× `.bak` files (1,338 LOC), and their tests. Net −2,918 LOC including tests.
+- **`42c1442`** — **Compaction resilience (O10)**: `compaction-guard.ts` gained `collectInFlightRuns()`, `formatResumeDirective()`, and a new `session_compact` handler that re-injects a `crew:resume-directive` entry into the fresh post-compaction context + notifies the user. Covers both the proactive path and Pi's reactive auto-compact path.
+- **`40caf9e`** — `src/extension/pi-api.ts`: a type-level seam re-exporting the 8 public-API symbols pi-crew uses (ExtensionAPI, ExtensionContext, ExtensionCommandContext, ToolDefinition, defineTool, createBashTool, AgentSessionEvent, BeforeAgentStartEvent) + `BUILT_AGAINST_PI_VERSION` constant for version-drift diagnostics.
+- **`8f40b07`** — **Single-agent cliff hedge v0**: `single-agent-compose.ts` (~95 LOC). `orderSteps()` topologically sorts by dependsOn; `composeSingleAgentPrompt()` turns a workflow into one sequential execution prompt.
+
+### Features (Phase 1 — Trust Trinity)
+
+- **`3184303`** — **Cost visibility (O1)**: `state/usage.ts` gained `formatTokens()`, `formatCost()`, `aggregateUsageByRole()`, and `formatCostReport()`. The `summary` action now includes a multi-line report with token split + per-role % breakdown.
+- **`198994e`** — **Plan-level HITL (O5)**: `team-runner.ts` `requiresPlanApproval()` dropped the `workflow.name === "implementation"` constraint; `hasPendingMutatingTaskAtBoundary()` (new) gates at the plan→execute boundary for any workflow; `ensurePlanApprovalRequested()` is robust to a missing `assess` step and gives clearer approval guidance.
+- **`0272d77`** — **Cross-run memory (O4)**: `knowledge-injection.ts` (~80 LOC) registers a `before_agent_start` hook that appends `.crew/knowledge.md` (truncated to 16KB) to every agent's system prompt — main session + each crew worker.
+
+### Features (Phase 2 — Lean Power)
+
+- **`eeefe0a`** — **Single-agent runtime mode (T2.2)**: `singleAgent` boolean param on the `team plan` action. A Pi agent calling `team plan singleAgent=true` receives the full composed sequential prompt for any workflow. MCP tool consumption (T2.1) already existed for live-session workers (`mcp-proxy.ts`); verified and left in place rather than duplicated.
+
+### Upgrade Notes
+- New config: `runtime.requirePlanApproval = true` enables plan-level approval gates on any workflow.
+- New file: `.crew/knowledge.md` (optional) — write durable project knowledge; it's injected into every run.
+- Cost report appears automatically in `team summary`. Budget *enforcement* (auto-stop) is intentionally deferred until cost-data accuracy is validated.
+
 ## [0.6.4] — Visually Rich Tool Rendering: Merged Frames, Live Progress Bars (2026-06-14)
 
 ### Highlights

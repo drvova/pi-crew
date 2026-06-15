@@ -11,6 +11,17 @@ repo: https://github.com/baphuongna/pi-crew
 
 **v0.6.4**: See [CHANGELOG.md](CHANGELOG.md).
 
+### Highlights (v0.6.4 → v0.7.0)
+
+This release implements **Phase 0 + Phase 1** of the long-term roadmap (synthesized from a 10-round research process), plus the **single-agent cliff hedge**. Principle: *build trust and cliff-resilience, stay lean, delete before adding.*
+
+- **🛡️ Compaction resilience (O10)** — the #1 user pain ("after auto-compact, the task stops midway") is fixed. In-flight crew runs are detected, a resume directive is injected into the compaction summary, and tasks re-attach after compaction.
+- **💰 Cost visibility (O1)** — `team summary <runId>` now shows a full cost report with per-role attribution and token breakdown (`$0.77 — executor 79%, reviewer 14%...`).
+- **✋ Plan-level HITL for any workflow (O5)** — set `runtime.requirePlanApproval = true` to gate any workflow at the plan→execute boundary; approve via `team api op=approve-plan`.
+- **🧠 Cross-run memory (O4)** — `.crew/knowledge.md` is auto-injected into every run's system prompt. pi-crew remembers project context across runs.
+- **🎯 Single-agent cliff hedge** — `team plan singleAgent=true` composes any workflow into one sequential prompt, so pi-crew's mission survives even if multi-agent is obsoleted by large-context models.
+- **🧹 2,335 LOC of dead code removed** + **Pi-api seam** centralizing the coupling surface.
+
 ### Highlights (v0.6.3 → v0.6.4)
 
 - **Visually rich tool rendering** — `team` and `Agent` tool calls now render as framed cards in the Pi TUI with box-drawing borders, colored status badges, and structured layouts
@@ -257,6 +268,63 @@ If preconditions are not met, a friendly error message is returned instead of cr
 > ⚠️ **Trust boundary**: project config cannot override sensitive execution controls (workers, runtime mode, autonomy, agent overrides). Set those in **user config** only.
 
 📖 Full config reference: [docs/commands-reference.md#team-settings--config-management](docs/commands-reference.md) and [schema.json](schema.json)
+
+---
+
+## Reliability & Trust
+
+### Compaction resilience
+
+pi-crew survives Pi's context compaction. When the context is compacted (auto or manual), in-flight crew runs are detected and a **resume directive** is injected into the post-compaction context, so tasks continue instead of stalling. You'll see a notification like:
+
+```
+Context compacted. 1 pi-crew run(s) still in-flight — use team status to continue.
+```
+
+### Plan-level human-in-the-loop (HITL)
+
+Set `runtime.requirePlanApproval = true` to gate **any workflow** at the plan→execute boundary. After the read-only (planning) phases complete, the run pauses for explicit approval before mutating tasks run:
+
+```
+team api op=approve-plan runId=<runId>   # approve → execute
+  team api op=cancel-plan runId=<runId>    # cancel
+```
+
+This is plan-level (not per-step) — per-step gates would kill the parallelism that's pi-crew's point.
+
+### Cross-run memory (`.crew/knowledge.md`)
+
+Create `.crew/knowledge.md` in your project root with durable learnings (code style, test commands, common pitfalls, past refactors). It's auto-read (up to 16KB) and injected into **every** agent's system prompt — the main session and each crew worker. pi-crew gets better the longer you use it.
+
+```markdown
+# Project Knowledge
+- Tests: run with `npm test` (not jest directly)
+- Style: tabs, not spaces
+- Auth refactor (2026-06): split auth.ts into session.ts + api.ts
+```
+
+### Cost visibility
+
+Every `team summary <runId>` includes a per-role cost report:
+
+```
+═══ Cost Report ═══
+Tokens: 134k (in 112k, out 5.7k, cache-write 16k)
+Cost: $0.7700 across 18 turn(s)
+By role:
+  executor (2 tasks): $0.6100 — 79%, 98k tok, 13 turns
+  reviewer (1 task): $0.1100 — 14%, 23k tok, 3 turns
+```
+
+### Single-agent mode (cliff hedge)
+
+Any workflow can run single-agent instead of multi-agent — composing all phases into one sequential prompt:
+
+```
+team plan team=default workflow=default goal="..." singleAgent=true
+```
+
+This is pi-crew's cliff-resilient mode: the workflow definitions, phase structure, and artifact contracts survive even if a single large-context model outperforms multi-agent teams.
 
 ---
 
