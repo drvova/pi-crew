@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.7.3] — Reliability hardening + UX quick wins (2026-06-15)
+
+This release fixes 4 critical data-loss bugs found by the Round 12 reliability audit and adds three UX quick wins from the Round 13 UX research (+125 tests from the Round 14 coverage sprint).
+
+### Bug Fixes (Critical — data loss prevention)
+
+- **`rotateEventLog` destroyed ALL events** — `atomicWriteFile("")` then `rename` replaced the file with empty content *before* the rename, so the archive received an empty file. Now copies content to archive first, then truncates in place. Also handles sub-millisecond timestamp collisions.
+- **`compactEventLog` recovery loop replaced the file per-event** — each `atomicWriteFile` iteration overwrote the compacted log + previous recoveries, leaving only the last event. Now accumulates missing events into one `appendFileSync`.
+- **Mailbox `delivery.json` lost-update race** — `appendMailboxMessage`, `acknowledgeMailboxMessage`, and `replayPendingMailboxMessages` all had unlocked read-modify-write cycles. Now wrapped in `withFileLockSync`.
+- **`observation-store.save()` non-atomic write** — raw `writeFileSync` could leave a truncated file on crash. Now uses `atomicWriteJson`.
+- **`background-runner` DEBUG log noise** — 10 trace-level `console.log` statements gated behind `PI_CREW_DEBUG` env var.
+
+### Features (UX)
+
+- **Command argument autocomplete** — 13 run-scoped and team-scoped commands now implement `getArgumentCompletions` so Pi's built-in Tab-completion surfaces run IDs (with status icon + goal preview), team names, workflow names, and task IDs. No more memorizing long generated run IDs.
+- **Custom message renderers** — `crew:run-started`, `crew:run-completed`, and `crew:resume-directive` entries now render with a clean crew-branded look (🚀/✅/❌ status icons, theme colors) instead of raw JSON blobs.
+- **Natural-language crew routing** — type `crew status`, `team dashboard`, `crew help`, `teams`, etc. and pi-crew rewrites it to the equivalent slash command. Only transforms interactive input; never shadows explicit slash commands.
+
+### Tests
+
+- +125 tests (4795 pass / 0 fail). New coverage: cascading replace engine (31), safe-paths traversal defense (21), atomic-write symlink prevention (15), command completions (20), message renderers (12), input router (18), event-log rotate regression (9).
+
+### Research
+
+This release was driven by 4 deep research rounds (11–14), documented in `research-findings/`.
+
 ## [0.7.2] — Fix: Knowledge Injection into Workers + HITL for All Workflows (2026-06-15)
 
 ### Bug Fixes
