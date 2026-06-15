@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.2] — Fix: Knowledge Injection into Workers + HITL for All Workflows (2026-06-15)
+
+### Bug Fixes
+
+- **Knowledge injection into crew workers (O4)** — crew workers are spawned with `--no-extensions` and only load `prompt-runtime.ts`; they do **not** load the pi-crew extension. So the `before_agent_start` hook in `knowledge-injection.ts` never fired for workers — `.crew/knowledge.md` was invisible to every crew worker. **Fix**: inject `buildKnowledgeFragment(task.cwd)` directly into `renderTaskPrompt()` in `prompt-builder.ts` (where all worker context is assembled). The main session still gets knowledge via the hook; workers now get it via the prompt path.
+
+  **Live-verified**: all 3 workers (explorer, executor, verifier) in a fast-fix run confirmed seeing the knowledge section verbatim (`"Use TABS for indentation"`, `"Tests run via npm test"`).
+
+- **Plan-level HITL for all workflows (T1.2)** — the post-batch approval re-check in the team-runner main loop only checked `hasPendingMutatingAdaptiveTask(tasks)` (adaptive/implementation workflows only). The boundary detector `hasPendingMutatingTaskAtBoundary(tasks)` was added to the initial build but **not** to the loop's re-check. So for non-adaptive workflows (`default`, `fast-fix`), the approval gate never fired after read-only tasks completed. **Fix**: add `hasPendingMutatingTaskAtBoundary(tasks)` to the loop's post-batch re-check (line 835), matching the initial-build logic.
+
+  **Verified** via 6 new unit tests + full flow trace. When `runtime.requirePlanApproval: true`, the run now blocks at the plan→execute boundary (`status: blocked`, "Plan approval required") until approved via `team api op=approve-plan`.
+
 ## [0.7.1] — Fix: Auto-Continue After Compaction (2026-06-15)
 
 ### Bug Fix
