@@ -164,7 +164,15 @@ export function rotateEventLog(eventsPath: string): boolean {
 	return withEventLogLockSync(eventsPath, () => {
 		try {
 			const ts = new Date().toISOString().replace(/[:.]/g, "-");
-			const archivePath = `${eventsPath}.${ts}.archive.jsonl`;
+			let archivePath = `${eventsPath}.${ts}.archive.jsonl`;
+			// Round 12: avoid timestamp collisions when two rotations happen within
+			// the same millisecond (copyFileSync would silently overwrite the
+			// first archive). Append a counter until the path is free.
+			let collision = 1;
+			while (fs.existsSync(archivePath)) {
+				archivePath = `${eventsPath}.${ts}.${collision}.archive.jsonl`;
+				collision++;
+			}
 			// BUGFIX (Round 12 C1): the previous order (atomicWriteFile empty THEN
 			// rename) destroyed ALL events — atomicWriteFile replaces the file
 			// in place, so the rename then moved an EMPTY file to the archive.

@@ -23,6 +23,7 @@ import { handleTeamManagerCommand } from "../team-manager-command.ts";
 import { loadRunManifestById } from "../../state/state-store.ts";
 import type { TeamRunManifest } from "../../state/types.ts";
 import { readCrewAgents } from "../../runtime/crew-agent-records.ts";
+import { suggestRunIds, suggestTaskIds, suggestTeams } from "../command-completions.ts";
 import * as path from "node:path";
 // Heavy UI modules — lazy-loaded because they're only used in /crew commands.
 // RunDashboard (288ms), DurableTextViewer (658ms), Overlays are unnecessary at Pi startup.
@@ -203,6 +204,8 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 
 	pi.registerCommand("team-run", {
 		description: "Manually start a pi-crew run (agent may also use the team tool autonomously)",
+		// Round 13 UX: suggest team names for Tab-completion of the first positional arg.
+		getArgumentCompletions: (argumentPrefix: string) => suggestTeams(argumentPrefix),
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const result = await handleTeamTool(parseRunArgs(args), { ...teamCommandContext(ctx), metricRegistry: deps.getMetricRegistry?.(), startForegroundRun: (runner, runId) => deps.startForegroundRun(ctx as ExtensionContext, runner, runId), abortForegroundRun: deps.abortForegroundRun, onRunStarted: undefined });
 			await notifyCommandResult(ctx, commandText(result));
@@ -219,15 +222,21 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 		["team-export", "export", "Export a pi-crew run bundle to artifacts/export"],
 		["team-cancel", "cancel", "Cancel a pi-crew run"],
 	] as const) {
-		pi.registerCommand(name, { description, handler: async (args: string, ctx: ExtensionCommandContext) => {
-			const runId = args.trim() || undefined;
-			const result = await handleTeamTool({ action, runId }, { ...teamCommandContext(ctx), getRunSnapshotCache: deps.getRunSnapshotCache });
-			await notifyCommandResult(ctx, commandText(result));
-		} });
+		pi.registerCommand(name, {
+			description,
+			// Round 13 UX: suggest recent run IDs for Tab-completion.
+			getArgumentCompletions: (argumentPrefix: string) => suggestRunIds(argumentPrefix),
+			handler: async (args: string, ctx: ExtensionCommandContext) => {
+				const runId = args.trim() || undefined;
+				const result = await handleTeamTool({ action, runId }, { ...teamCommandContext(ctx), getRunSnapshotCache: deps.getRunSnapshotCache });
+				await notifyCommandResult(ctx, commandText(result));
+			},
+		});
 	}
 
 	pi.registerCommand("team-invalidate", {
 		description: "Invalidate the snapshot cache for a run so the UI refreshes immediately: <runId>",
+		getArgumentCompletions: (argumentPrefix: string) => suggestRunIds(argumentPrefix),
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const runId = args.trim() || undefined;
 			if (!runId) {
@@ -241,6 +250,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 
 	pi.registerCommand("team-retry", {
 		description: "Retry failed/cancelled pi-crew tasks: <runId> [taskId]",
+		getArgumentCompletions: (argumentPrefix: string) => suggestRunIds(argumentPrefix),
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
 			const runId = tokens.shift();
@@ -256,6 +266,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 
 	pi.registerCommand("team-respond", {
 		description: "Respond to a waiting pi-crew task: <runId> <taskId|--all> <message>",
+		getArgumentCompletions: (argumentPrefix: string) => suggestRunIds(argumentPrefix),
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
 			const runId = tokens.shift();
@@ -269,6 +280,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 
 	pi.registerCommand("team-follow-up", {
 		description: "Send a follow-up prompt to a pi-crew task: <runId> <taskId> <prompt>",
+		getArgumentCompletions: (argumentPrefix: string) => suggestRunIds(argumentPrefix),
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
 			const runId = tokens.shift();
@@ -285,6 +297,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 
 	pi.registerCommand("team-api", {
 		description: "Run safe pi-crew API interop operations: <runId> <operation> [key=value]",
+		getArgumentCompletions: (argumentPrefix: string) => suggestRunIds(argumentPrefix),
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
 			const positional = tokens.filter((token) => !token.includes("=") && !token.startsWith("--"));
@@ -329,7 +342,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 		await notifyCommandResult(ctx, commandText(result));
 	} });
 
-	pi.registerCommand("team-forget", { description: "Forget a pi-crew run by deleting its state and artifacts", handler: async (args: string, ctx: ExtensionCommandContext) => {
+	pi.registerCommand("team-forget", { description: "Forget a pi-crew run by deleting its state and artifacts", getArgumentCompletions: (argumentPrefix: string) => suggestRunIds(argumentPrefix), handler: async (args: string, ctx: ExtensionCommandContext) => {
 		const tokens = args.trim().split(/\s+/).filter(Boolean);
 		const runId = tokens.find((token) => !token.startsWith("--"));
 		const result = await handleTeamTool({ action: "forget", runId, force: tokens.includes("--force"), confirm: tokens.includes("--confirm") }, teamCommandContext(ctx));
@@ -415,7 +428,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 
 	pi.registerCommand("team-cleanup", { description: "Open a simple pi-crew interactive manager", handler: handleTeamManagerCommand });
 
-	pi.registerCommand("team-result", { description: "Open a pi-crew agent result viewer: <runId> [taskId]", handler: async (args: string, ctx: ExtensionCommandContext) => {
+	pi.registerCommand("team-result", { description: "Open a pi-crew agent result viewer: <runId> [taskId]", getArgumentCompletions: async (argumentPrefix: string) => { const parts = argumentPrefix.trim().split(/\s+/); return parts.length <= 1 ? suggestRunIds(parts[0] ?? "") : suggestTaskIds(parts[0] ?? "", parts[1] ?? ""); }, handler: async (args: string, ctx: ExtensionCommandContext) => {
 		const [runId, rawTaskId] = args.trim().split(/\s+/).filter(Boolean);
 		const selected = await selectAgentTask(ctx, runId, rawTaskId);
 		const loaded = selected ? loadRunManifestById(ctx.cwd, selected.runId) : undefined; // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
@@ -430,7 +443,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 		await notifyCommandResult(ctx, commandText(result));
 	} });
 
-	pi.registerCommand("team-transcript", { description: "Open a pi-crew transcript viewer: <runId> [taskId]", handler: async (args: string, ctx: ExtensionCommandContext) => {
+	pi.registerCommand("team-transcript", { description: "Open a pi-crew transcript viewer: <runId> [taskId]", getArgumentCompletions: async (argumentPrefix: string) => { const parts = argumentPrefix.trim().split(/\s+/); return parts.length <= 1 ? suggestRunIds(parts[0] ?? "") : suggestTaskIds(parts[0] ?? "", parts[1] ?? ""); }, handler: async (args: string, ctx: ExtensionCommandContext) => {
 		const [runId, taskId] = args.trim().split(/\s+/).filter(Boolean);
 		if (await openTranscriptViewer(ctx, runId, taskId)) return;
 		const result = await handleTeamTool({ action: "api", runId, config: { operation: "read-agent-transcript", agentId: taskId } }, teamCommandContext(ctx));
