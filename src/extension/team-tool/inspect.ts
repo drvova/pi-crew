@@ -1,7 +1,7 @@
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 import { readEvents } from "../../state/event-log.ts";
 import { loadRunManifestById } from "../../state/state-store.ts";
-import { aggregateUsage, formatUsage } from "../../state/usage.ts";
+import { aggregateUsage, formatUsage, formatCostReport } from "../../state/usage.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
 import { locateRunCwd } from "../team-tool.ts";
 import { result, type TeamContext } from "./context.ts";
@@ -41,6 +41,9 @@ export function handleSummary(params: TeamToolParamsValue, ctx: TeamContext): Pi
 		`Workflow: ${loaded.manifest.workflow ?? "(none)"}`,
 		`Goal: ${loaded.manifest.goal}`,
 		`Usage: ${formatUsage(usage)}`,
+		"",
+		formatCostReport(loaded.tasks),
+		"",
 		"Tasks:",
 		...loaded.tasks.map((task) => `- ${task.id}: ${task.status} (${task.role} -> ${task.agent})${task.error ? ` - ${task.error}` : ""}`),
 	];
