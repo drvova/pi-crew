@@ -5,8 +5,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { withEventLogLockSync } from "../../src/state/event-log.ts";
 
-describe("event-log lock timeout is capped at 5s", () => {
-	it("should throw after ~5s when lock is contended", () => {
+describe("event-log lock timeout is capped", () => {
+	it("should throw quickly when lock is contended (injectable timeout)", () => {
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "evlog-timeout-"));
 		const eventsPath = path.join(tmpDir, "events.jsonl");
 		const lockDir = `${eventsPath}.lock`;
@@ -16,17 +16,19 @@ describe("event-log lock timeout is capped at 5s", () => {
 		// Write a PID that is alive (our own PID) so stale detection does NOT clean it
 		fs.writeFileSync(path.join(lockDir, "pid"), String(process.pid), "utf-8");
 
+		// Round 19: inject a tiny timeout (50ms) instead of waiting the real 5s.
+		// The test now runs in <100ms instead of >4s, exercising the same code path.
 		const start = Date.now();
 		assert.throws(
-			() => withEventLogLockSync(eventsPath, () => "unreachable"),
+			() => withEventLogLockSync(eventsPath, () => "unreachable", { timeoutMs: 50, staleMs: 60_000 }),
 			/lock timeout/,
 		);
 		const elapsed = Date.now() - start;
 
-		// Must not block for more than ~7s (5s timeout + some overhead)
-		assert.ok(elapsed < 10_000, `Expected < 10s but took ${elapsed}ms`);
-		// Must have waited at least ~4s (close to the 5s cap)
-		assert.ok(elapsed >= 4000, `Expected >= 4s but took only ${elapsed}ms`);
+		// Must not block for more than ~1s (50ms timeout + retries overhead)
+		assert.ok(elapsed < 1000, `Expected < 1s but took ${elapsed}ms`);
+		// Must have waited at least the injected timeout (40ms with retry granularity)
+		assert.ok(elapsed >= 40, `Expected >= 40ms but took only ${elapsed}ms`);
 
 		// Cleanup
 		try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }

@@ -76,7 +76,7 @@ let overflowCounter = 0;
  *  `flushOneEventLogBuffer`, and `state/mailbox.ts`. Prefer the async alternative
  *  (`appendEventAsync`) for all new code.
  */
-export function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
+export function withEventLogLockSync<T>(eventsPath: string, fn: () => T, options?: { timeoutMs?: number; staleMs?: number }): T {
 	// Ensure parent directory exists before attempting lock
 	fs.mkdirSync(path.dirname(eventsPath), { recursive: true });
 	const lockDir = `${eventsPath}.lock`;
@@ -86,8 +86,8 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T): T {
 	// event loop indefinitely. 500 retries × 10ms = 5s max. After timeout, we
 	// throw a clear error instead of blocking forever. This ensures AbortSignal
 	// handlers, SIGTERM, and graceful shutdown can fire within seconds.
-	const timeout = 5000;
-	const staleMs = 10000;
+	const timeout = options?.timeoutMs ?? 5000;
+	const staleMs = options?.staleMs ?? 10000;
 	let acquired = false;
 	while (true) {
 		try {

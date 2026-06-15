@@ -57,7 +57,7 @@ export interface RunPaths {
 	eventsPath: string;
 }
 
-interface ManifestCacheEntry {
+export interface ManifestCacheEntry {
 	manifest: TeamRunManifest;
 	tasks: TeamTaskState[];
 	manifestMtimeMs: number;
@@ -75,6 +75,19 @@ let manifestCacheGeneration = 0;
 const MANIFEST_CACHE_TTL_MS = 15 * 1000; // 15 seconds (FIX: increased from 5s for read-heavy workloads; 5s was too short causing unnecessary cache invalidation)
 const LOAD_MANIFEST_RETRY_LIMIT = 5; // Configurable retry limit for mtime/size stability checks under contention
 const manifestCache = new Map<string, ManifestCacheEntry>();
+
+/** @internal — exported for TTL-eviction unit testing (Round 19). */
+export function __test__setManifestCache(stateRoot: string, entry: ManifestCacheEntry): void {
+	setManifestCache(stateRoot, entry);
+}
+
+/** @internal — exported for TTL-eviction unit testing (Round 19). */
+export function __test__getManifestCacheEntry(stateRoot: string): ManifestCacheEntry | undefined {
+	return manifestCache.get(stateRoot);
+}
+
+/** @internal — the TTL in ms used for manifest cache eviction. */
+export const MANIFEST_CACHE_TTL_MS_VALUE = MANIFEST_CACHE_TTL_MS;
 
 function setManifestCache(stateRoot: string, entry: ManifestCacheEntry): void {
 	if (manifestCache.has(stateRoot)) manifestCache.delete(stateRoot);
