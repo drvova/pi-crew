@@ -103,19 +103,20 @@ test("saveCheckpoint + loadCheckpoint: using cwd-based path", () => {
   const runDir = path.join(tmp, ".crew/state/runs/test_run");
   fs.mkdirSync(runDir, { recursive: true });
 
-  const origCwd = process.cwd();
-  process.chdir(tmp);
+  // cwd passed explicitly to each call — no process.chdir (node:test runs
+  // files concurrently; process.chdir mutates global state and corrupts
+  // sibling test files like state-store.test.ts).
   try {
-    saveCheckpoint("test_run", "01", 3, "context summary", "step 3/10", "explorer", "minimax/MiniMax-M2.7");
+    saveCheckpoint("test_run", "01", 3, "context summary", "step 3/10", "explorer", "minimax/MiniMax-M2.7", tmp);
 
-    const loaded = loadCheckpoint("test_run", "01");
+    const loaded = loadCheckpoint("test_run", "01", tmp);
     assert.ok(loaded !== null);
     assert.equal(loaded.taskId, "01");
     assert.equal(loaded.step, 3);
 
-    clearCheckpoint("test_run", "01");
+    clearCheckpoint("test_run", "01", tmp);
   } finally {
-    process.chdir(origCwd);
+    // no chdir to restore
   }
 });
 
@@ -125,16 +126,14 @@ test("hasCheckpoint: returns true when exists", () => {
   const runDir = path.join(tmp, ".crew/state/runs/has_cp");
   fs.mkdirSync(runDir, { recursive: true });
 
-  const origCwd = process.cwd();
-  process.chdir(tmp);
   try {
-    saveCheckpoint("has_cp", "01", 1, "ctx", "progress", "agent");
-    assert.equal(hasCheckpoint("has_cp", "01"), true);
-    assert.equal(hasCheckpoint("has_cp", "02"), false);
+    saveCheckpoint("has_cp", "01", 1, "ctx", "progress", "agent", undefined, tmp);
+    assert.equal(hasCheckpoint("has_cp", "01", tmp), true);
+    assert.equal(hasCheckpoint("has_cp", "02", tmp), false);
 
-    clearCheckpoint("has_cp", "01");
+    clearCheckpoint("has_cp", "01", tmp);
   } finally {
-    process.chdir(origCwd);
+    // no chdir to restore
   }
 });
 
@@ -164,21 +163,19 @@ test("formatAllCheckpoints: shows all checkpoints", () => {
   const runDir = path.join(tmp, ".crew/state/runs/format_all");
   fs.mkdirSync(runDir, { recursive: true });
 
-  const origCwd = process.cwd();
-  process.chdir(tmp);
   try {
-    saveCheckpoint("format_all", "01", 1, "ctx", "step 1", "agent");
-    saveCheckpoint("format_all", "02", 2, "ctx", "step 2", "agent");
+    saveCheckpoint("format_all", "01", 1, "ctx", "step 1", "agent", undefined, tmp);
+    saveCheckpoint("format_all", "02", 2, "ctx", "step 2", "agent", undefined, tmp);
 
-    const formatted = formatAllCheckpoints("format_all");
+    const formatted = formatAllCheckpoints("format_all", tmp);
     assert.ok(formatted.includes("# Checkpoints: format_all"));
     assert.ok(formatted.includes("01"));
     assert.ok(formatted.includes("02"));
 
-    clearCheckpoint("format_all", "01");
-    clearCheckpoint("format_all", "02");
+    clearCheckpoint("format_all", "01", tmp);
+    clearCheckpoint("format_all", "02", tmp);
   } finally {
-    process.chdir(origCwd);
+    // no chdir to restore
   }
 });
 
