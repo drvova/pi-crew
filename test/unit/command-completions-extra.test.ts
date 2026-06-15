@@ -31,7 +31,8 @@ function beforeEachFn() {
 	const home = fs.mkdtempSync(path.join(realTmp, "pi-crew-comp-extra-home-"));
 	fs.mkdirSync(path.join(home, ".pi", "agent"), { recursive: true });
 	process.env.PI_TEAMS_HOME = home;
-	process.chdir(tmpCwd);
+	// NOTE: do NOT process.chdir() — node:test runs files concurrently and
+	// mutating the global cwd corrupts sibling test files. Pass cwd explicitly.
 }
 
 function afterEachFn() {
@@ -55,10 +56,9 @@ describe("suggestRunIds — MAX_RUN_SUGGESTIONS limit", () => {
 	afterEach(afterEachFn);
 
 	it("respects the max suggestions limit (create > 15 runs, verify only 15 returned)", () => {
-		// Create more runs than MAX_RUN_SUGGESTIONS
 		createNRuns(EXPECTED_MAX + 5);
 
-		const result = suggestRunIds("");
+		const result = suggestRunIds("", tmpCwd);
 		assert.ok(result, "expected run-id suggestions");
 		assert.equal(result.length, EXPECTED_MAX,
 			`should return exactly ${EXPECTED_MAX} suggestions, got ${result.length}`);
@@ -68,7 +68,7 @@ describe("suggestRunIds — MAX_RUN_SUGGESTIONS limit", () => {
 		const count = 5;
 		createNRuns(count);
 
-		const result = suggestRunIds("");
+		const result = suggestRunIds("", tmpCwd);
 		assert.ok(result, "expected run-id suggestions");
 		assert.equal(result.length, count);
 	});
@@ -83,7 +83,7 @@ describe("suggestRunIds — prefix filtering", () => {
 
 		// Use a prefix from the first run
 		const prefix = created[0].manifest.runId.slice(0, 15);
-		const result = suggestRunIds(prefix);
+		const result = suggestRunIds(prefix, tmpCwd);
 		assert.ok(result, "expected filtered suggestions");
 		// All returned items should start with the prefix (or have matching label)
 		for (const item of result) {
@@ -97,12 +97,12 @@ describe("suggestRunIds — prefix filtering", () => {
 	it("returns null for a non-matching prefix", () => {
 		createNRuns(3);
 
-		assert.equal(suggestRunIds("zzz_nonexistent_prefix_zzz"), null);
+		assert.equal(suggestRunIds("zzz_nonexistent_prefix_zzz", tmpCwd), null);
 	});
 
 	it("returns null when no runs exist at all", () => {
-		assert.equal(suggestRunIds(""), null);
-		assert.equal(suggestRunIds("team_"), null);
+		assert.equal(suggestRunIds("", tmpCwd), null);
+		assert.equal(suggestRunIds("team_", tmpCwd), null);
 	});
 });
 
@@ -111,7 +111,6 @@ describe("suggestTeams — prefix filtering", () => {
 	afterEach(afterEachFn);
 
 	it("filters by team name prefix when teams exist in project .crew/teams/", () => {
-		// Create discoverable team files in the project crew root
 		const teamsDir = path.join(tmpCwd, ".crew", "teams");
 		fs.mkdirSync(teamsDir, { recursive: true });
 
@@ -122,8 +121,7 @@ describe("suggestTeams — prefix filtering", () => {
 		fs.writeFileSync(path.join(teamsDir, "gamma-crew.team.md"),
 			"---\nname: gamma-crew\ndescription: Gamma team\n---\n- explorer: agent=explorer\n");
 
-		// Prefix "alpha" should only return alpha-squad
-		const result = suggestTeams("alpha");
+		const result = suggestTeams("alpha", tmpCwd);
 		assert.ok(result, "expected team suggestions for prefix 'alpha'");
 		assert.equal(result.length, 1);
 		assert.equal(result[0].value, "alpha-squad");
@@ -138,7 +136,7 @@ describe("suggestTeams — prefix filtering", () => {
 		fs.writeFileSync(path.join(teamsDir, "beta.team.md"),
 			"---\nname: beta\ndescription: Beta\n---\n- explorer: agent=explorer\n");
 
-		const result = suggestTeams("");
+		const result = suggestTeams("", tmpCwd);
 		assert.ok(result, "expected all teams");
 		assert.ok(result.length >= 2, `should find at least 2 teams, got ${result.length}`);
 	});
@@ -150,7 +148,7 @@ describe("suggestTeams — prefix filtering", () => {
 		fs.writeFileSync(path.join(teamsDir, "alpha.team.md"),
 			"---\nname: alpha\ndescription: Alpha\n---\n- explorer: agent=explorer\n");
 
-		assert.equal(suggestTeams("zzz_nonexistent"), null);
+		assert.equal(suggestTeams("zzz_nonexistent", tmpCwd), null);
 	});
 });
 
@@ -159,31 +157,28 @@ describe("suggestTaskIds — edge cases", () => {
 	afterEach(afterEachFn);
 
 	it("returns null for a run that exists but has no tasks (workflow with empty steps)", async () => {
-		// Create a run with a workflow that has zero steps → zero tasks
 		const created = createRunManifest({ cwd: tmpCwd, team, workflow: emptyWorkflow, goal: "empty" });
 
-		const result = await suggestTaskIds(created.manifest.runId, "");
-		// With no tasks, filterByPrefix returns null
+		const result = await suggestTaskIds(created.manifest.runId, "", tmpCwd);
 		assert.equal(result, null);
 	});
 
 	it("returns null for a run created without any workflow (no tasks)", async () => {
-		// Pass workflow: undefined → tasks will be empty
 		const created = createRunManifest({ cwd: tmpCwd, team, goal: "no workflow" });
 
-		const result = await suggestTaskIds(created.manifest.runId, "");
+		const result = await suggestTaskIds(created.manifest.runId, "", tmpCwd);
 		assert.equal(result, null);
 	});
 
 	it("returns null for a completely non-existent run", async () => {
-		const result = await suggestTaskIds("team_nonexistent_run", "");
+		const result = await suggestTaskIds("team_nonexistent_run", "", tmpCwd);
 		assert.equal(result, null);
 	});
 
 	it("returns task IDs for a run with tasks", async () => {
 		const created = createRunManifest({ cwd: tmpCwd, team, workflow, goal: "with tasks" });
 
-		const result = await suggestTaskIds(created.manifest.runId, "");
+		const result = await suggestTaskIds(created.manifest.runId, "", tmpCwd);
 		assert.ok(result, "expected task-id suggestions");
 		assert.ok(result.length > 0, "workflow has at least one task");
 		for (const item of result) {

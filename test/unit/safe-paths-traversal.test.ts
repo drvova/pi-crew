@@ -133,7 +133,12 @@ describe("resolveRealContainedPath — symlink rejection", () => {
 	beforeEach(beforeEachFn);
 	afterEach(afterEachFn);
 
-	it("rejects when the target path is a symlink to outside baseDir", () => {
+	// Symlink-based containment checks are Unix-only: Windows symlinks require
+	// elevated privileges and behave differently, so the rejection semantics
+	// can't be reliably asserted there. Skip the whole group on win32.
+	const unixOnly = process.platform !== "win32" ? it : it.skip;
+
+	unixOnly("rejects when the target path is a symlink to outside baseDir", () => {
 		// Create an outside directory and a symlink inside baseDir pointing to it
 		const outsideDir = fs.mkdtempSync(path.join(realTmp, "pi-crew-outside-"));
 		const outsideFile = path.join(outsideDir, "secret.txt");
@@ -151,7 +156,7 @@ describe("resolveRealContainedPath — symlink rejection", () => {
 		}
 	});
 
-	it("rejects when an intermediate ancestor directory is a symlink to outside", () => {
+	unixOnly("rejects when an intermediate ancestor directory is a symlink to outside", () => {
 		// Create an outside directory
 		const outsideDir = fs.mkdtempSync(path.join(realTmp, "pi-crew-outside2-"));
 		// Create a symlinked subdir inside baseDir that points outside

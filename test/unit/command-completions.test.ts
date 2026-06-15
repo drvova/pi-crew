@@ -29,7 +29,8 @@ function beforeEachFn() {
 	const home = fs.mkdtempSync(path.join(realTmp, "pi-crew-comp-home-"));
 	fs.mkdirSync(path.join(home, ".pi", "agent"), { recursive: true });
 	process.env.PI_TEAMS_HOME = home;
-	process.chdir(tmpCwd);
+	// NOTE: do NOT process.chdir() — node:test runs files concurrently and
+	// mutating the global cwd corrupts sibling test files. Pass cwd explicitly.
 }
 
 function afterEachFn() {
@@ -43,13 +44,13 @@ describe("suggestRunIds", () => {
 	afterEach(afterEachFn);
 
 	it("returns null when no runs exist", () => {
-		assert.equal(suggestRunIds(""), null);
-		assert.equal(suggestRunIds("team_"), null);
+		assert.equal(suggestRunIds("", tmpCwd), null);
+		assert.equal(suggestRunIds("team_", tmpCwd), null);
 	});
 
 	it("suggests run IDs for created runs", () => {
 		const created = createRunManifest({ cwd: tmpCwd, team, workflow, goal: "test goal" });
-		const result = suggestRunIds("");
+		const result = suggestRunIds("", tmpCwd);
 		assert.ok(result, "expected run-id suggestions");
 		const match = result.find((item) => item.value === created.manifest.runId);
 		assert.ok(match, "created run should appear in suggestions");
@@ -59,9 +60,9 @@ describe("suggestRunIds", () => {
 	it("filters by prefix", () => {
 		const created = createRunManifest({ cwd: tmpCwd, team, workflow, goal: "filterable" });
 		// Correct prefix → matches
-		assert.ok(suggestRunIds(created.manifest.runId.slice(0, 10)));
+		assert.ok(suggestRunIds(created.manifest.runId.slice(0, 10), tmpCwd));
 		// Wrong prefix → no matches → null
-		assert.equal(suggestRunIds("nonexistent_prefix_xyz"), null);
+		assert.equal(suggestRunIds("nonexistent_prefix_xyz", tmpCwd), null);
 	});
 });
 
@@ -70,17 +71,17 @@ describe("suggestTeams / suggestWorkflows / suggestAgents", () => {
 	afterEach(afterEachFn);
 
 	it("suggestTeams returns null or valid items without throwing", () => {
-		const result = suggestTeams("");
+		const result = suggestTeams("", tmpCwd);
 		if (result) for (const item of result) assert.ok(item.value.length > 0);
 	});
 
 	it("suggestWorkflows returns null or valid items without throwing", () => {
-		const result = suggestWorkflows("");
+		const result = suggestWorkflows("", tmpCwd);
 		if (result) for (const item of result) assert.ok(item.value.length > 0);
 	});
 
 	it("suggestAgents returns null or valid items without throwing", () => {
-		const result = suggestAgents("");
+		const result = suggestAgents("", tmpCwd);
 		if (result) for (const item of result) assert.ok(item.value.length > 0);
 	});
 });
@@ -90,13 +91,13 @@ describe("suggestTaskIds", () => {
 	afterEach(afterEachFn);
 
 	it("returns null for non-existent run", async () => {
-		const result = await suggestTaskIds("team_nonexistent", "");
+		const result = await suggestTaskIds("team_nonexistent", "", tmpCwd);
 		assert.equal(result, null);
 	});
 
 	it("suggests task IDs for a real run", async () => {
 		const created = createRunManifest({ cwd: tmpCwd, team, workflow, goal: "task test" });
-		const result = await suggestTaskIds(created.manifest.runId, "");
+		const result = await suggestTaskIds(created.manifest.runId, "", tmpCwd);
 		assert.ok(result, "expected task-id suggestions");
 		assert.ok(result.length > 0, "workflow has at least one task");
 		for (const item of result) {

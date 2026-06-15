@@ -21,7 +21,11 @@ describe("atomicWriteFile — symlink attack prevention", () => {
 	beforeEach(beforeEachFn);
 	afterEach(afterEachFn);
 
-	it("rejects writing to a path that is a symlink (original target NOT modified)", () => {
+	// Symlink semantics differ on Windows (elevated privileges, junctions).
+	// The symlink-rejection behavior is Unix-only.
+	const unixOnly = process.platform !== "win32" ? it : it.skip;
+
+	unixOnly("rejects writing to a path that is a symlink (original target NOT modified)", () => {
 		// Create a real target file with original content
 		const targetDir = fs.mkdtempSync(path.join(realTmp, "pi-crew-target-"));
 		const realTarget = path.join(targetDir, "real-file.txt");
@@ -47,7 +51,7 @@ describe("atomicWriteFile — symlink attack prevention", () => {
 		}
 	});
 
-	it("isSymlinkSafePath returns false for a symlink", () => {
+	unixOnly("isSymlinkSafePath returns false for a symlink", () => {
 		const targetDir = fs.mkdtempSync(path.join(realTmp, "pi-crew-safe-"));
 		const realTarget = path.join(targetDir, "real.txt");
 		fs.writeFileSync(realTarget, "data");
@@ -110,6 +114,8 @@ describe("atomicWriteFile — normal operation", () => {
 	});
 
 	it("sets restrictive permissions (0600) on the written file", () => {
+		// Unix-only: Windows ignores Unix permission bits (files always appear 0666).
+		if (process.platform === "win32") return;
 		const filePath = path.join(tmpDir, "perms.txt");
 		atomicWriteFile(filePath, "restricted");
 		const stat = fs.statSync(filePath);
