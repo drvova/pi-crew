@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.7.6] — DX, observability, and a critical interactive-session hang fix (2026-06-16)
+
+This release bundles Rounds 16–28: a developer-experience pass, an observability pass, and eight correctness/security audits — culminating in the **fix for the pts/2 interactive-session busy-loop hang** (two separate Pi sessions had hung at 71.5% CPU with 339 inotify watches). All 24 commits passed CI on Windows, Ubuntu, and macOS.
+
+### 🚨 Critical — interactive-session hang (Round 28 + pts/2 investigation)
+
+Report: `/home/bom/pts2-hang-investigation-2026-06-16.md`. Three root causes, all fixed:
+
+- **BUG C (CRITICAL): recursive watcher busy-loop** — `watchCrewState` used `fs.watch(<crewRoot>/state, {recursive:true})`. On Linux, Node implements "recursive" as ONE inotify watch PER SUBDIRECTORY, so with many historical runs under `.crew/state/runs/` this ballooned to hundreds of watches (109→339 observed) and caused a permanent busy-loop even with no active work. **Fix**: new `src/utils/run-watcher-registry.ts` (`RunWatcherRegistry`) — one non-recursive watcher on the `runs/` root (for new-run detection, since `crew.run.created` is never emitted) + one non-recursive watcher per **active** run, reconciled each preload tick against `running`/`queued`/`planning` status. Total inotify cost is now O(active runs) — typically 1–5 — not O(total history). Completed runs leave the active set and their watcher closes within one tick. The dead `createRecursiveWatcher` / `watchCrewState` / `runIdFromStateRelativePath` primitives were deleted from `fs-watch.ts`.
+- **BUG A (MEDIUM): health double-join path** — `HEALTH_DIR = ".crew/state/health"` was joined with a `crewRoot` computed only 2 `dirname`s up, writing to `.crew/state/.crew/state/health` — a path **no code ever reads**. It produced a growing ghost subtree that the recursive watcher then walked. **Fix**: `crewRoot` = 3 `dirname`s up; `HEALTH_DIR` = `"state/health"`.
+- **BUG B (MEDIUM): OTLP CRLF injection** — header-value validation left CR (0x0D) and LF (0x0A) unblocked, enabling header-splitting / log-injection via crafted values. **Fix**: regex now `/[\x00-\x08\x0a-\x1f]/`.
+
+Cleanup: 246 orphaned health snapshots (~1 MB) across 4 bogus `.crew/state/.crew/state/` subtrees were removed.
+
+### Correctness audits (Rounds 22–27)
+
+- **Round 27 — resource leaks**: (1) orphaned heartbeat timer in the team-runner catch block (`stopTeamHeartbeat()` never called on the error path; non-unref'd 30s interval kept the event loop alive → foreground pi hung); (2) FD leak in background-runner (`fs.openSync` without `closeSync`); (3) pipe FD leak + potential deadlock in async-runner (piped stdout/stderr never drained → >64 KB blocks forever); (4) AbortSignal listener leak in child-pi + live-session-runtime (anonymous `{once:true}` listeners never removed on normal completion).
+- **Round 26 — cross-process file-locking** (5 bugs): TOCTOU split-read in `acquireLockWithRetry` (single-snapshot read closes the window); racy pre-acquisition target cleanup in `withFileLockSync` (removed); crash-between-mkdir-and-pidFile wedge (mtime-based stale check); PID-recycling wedge (mtime checked first for all holders); non-token-guarded release (PID-guarded removal).
+- **Round 25 — security**: deleted two vulnerable dead modules — `sandbox.ts` (CRITICAL VM sandbox escape) and `dynamic-script-runner.ts` (HIGH `skip-validateScript`) — totalling −1701 LOC across 2 source + 5 test files. Plus closed verification-gate newline + `$VARNAME` injection (DANGEROUS_SHELL_PATTERNS extended).
+- **Round 24 — event-log deadlock**: `appendEventInsideLock` (already inside `withEventLogLockSync`) called the public `compactEventLog`/`rotateEventLog` which re-acquired the same non-reentrant mkdir lock → 5 s timeout → compaction never ran → unbounded log growth → events silently dropped past 50 MB. Fix: extracted `prepareCompaction` / `applyCompactionUnlocked` / `rotateEventLogUnlocked` into `event-log-rotation.ts`.
+- **Round 23 — UI correctness**: negative live duration in `agents-pane.ts` (shared `src/ui/live-duration.ts`); Unicode width/truncation bugs in `card-colors.ts`, `tool-renderers/index.ts`, `tool-render.ts`.
+- **Round 22 — reliability**: checkpoint `.tmp.checkpoint` was reused across concurrent saves (cross-process data corruption → now unique per save); chain-parser had no recursion-depth limit (now `MAX_CHAIN_NESTING=100`).
+
+### Developer experience (Round 16)
+
+- **F1 "Did you mean?"** suggestions on unknown team actions.
+- **F2 recovery hint** on all "Run not found" errors.
+- **F3 compact status mode** (`details=false`) for low-noise polling.
+- **F4 config errors surfaced** on the run path.
+- **F5 pipeline dead-end redirect** — unsupported `action=pipeline` now points at a working workflow.
+- **F6 troubleshooting guide** added at `docs/troubleshooting.md`; usage.md config path fixed.
+
+### Observability (Round 17)
+
+- **Progress % + ETA** in `status`; run age in the ambient context note.
+- **Per-agent cost** in the dashboard + status output.
+- **Aggregate failure patterns** in the run summary.
+
+### Features
+
+- **Round 21 (E4): `preStepOptional`** — advisory pre-step hooks that don't fail the run. Opt-in (`preStepOptional: true` on a `WorkflowStep`); fail-fast remains the default.
+- **Round 18 (defense-in-depth)**: capped `suggestAction` input length.
+
+### Tests
+
+- +60+ tests across Rounds 16–28 (run-watcher-registry: 12, event-log deadlock: 5, injection guards: 6, file/event-log locks: 8, plus UI, DX, observability, and test-isolation coverage). 4955 pass / 0 fail. Test health pass restored the false-confidence security suite.
+
+### Documentation
+
+- Round 20 documentation-accuracy audit fixed 8 defects across README, CHANGELOG, and `docs/`.
+
 ## [0.7.5] — Ambient context status + perf hardening + error taxonomy (2026-06-15)
 
 Three workstreams from the Round 11 API-gap and Round 15 perf/error audits: a new `context`-event feature, three performance fixes, and a full error-taxonomy expansion.
