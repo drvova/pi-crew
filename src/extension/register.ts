@@ -81,6 +81,7 @@ import {
 } from "../ui/powerbar-publisher.ts";
 import { RenderScheduler } from "../ui/render-scheduler.ts";
 import { runEventBus } from "../ui/run-event-bus.ts";
+import { createTerminalStatusController, type TerminalStatusController } from "../ui/terminal-status.ts";
 import { createRunSnapshotCache } from "../ui/run-snapshot-cache.ts";
 import { closeWatcher } from "../utils/fs-watch.ts";
 import { RunWatcherRegistry } from "../utils/run-watcher-registry.ts";
@@ -711,6 +712,12 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	let liveSidebarRunId: string | undefined;
 	let renderScheduler: RenderScheduler | undefined;
 	const renderSchedulerUnsubscribers: Array<() => void> = [];
+	// T4 (v0.8.3): terminal tab title + Ghostty native progress bar. Lazily
+	// constructed on the first run event (needs a ctx for setTitle). Driven
+	// from runEventBus.onAny with an idle<->active transition guard so we
+	// don't re-emit the OSC sequence on every event.
+	let terminalStatus: TerminalStatusController | undefined;
+	let terminalStatusActive = false;
 	let crewScheduler: CrewScheduler | undefined;
 	let preloadTimer: ReturnType<typeof setTimeout> | undefined;
 	const disposeRenderSchedulerSubscriptions = (): void => {
@@ -757,6 +764,9 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		disposeRenderSchedulerSubscriptions();
 		renderScheduler?.dispose();
 		renderScheduler = undefined;
+		terminalStatus?.dispose();
+		terminalStatus = undefined;
+		terminalStatusActive = false;
 		liveSidebarRunId = undefined;
 		if (currentCtx)
 			stopCrewWidget(
@@ -1562,6 +1572,9 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		);
 		disposeRenderSchedulerSubscriptions();
 		renderScheduler?.dispose();
+		terminalStatus?.dispose();
+		terminalStatus = undefined;
+		terminalStatusActive = false;
 		// Phase 12: Async preloading — renderTick reads only a pre-computed frame
 		// from memory (zero fs I/O). Background preload refreshes the frame async.
 		let preloading = false;

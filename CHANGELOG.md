@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.8.3] — Terminal tab title + Ghostty native progress bar (T4) (2026-06-16)
+
+First APPLIED technique from the pi-ecosystem distillation (pi-status /
+Thinkscape). Adds two UI channels pi-crew didn't use before, both surviving
+subprocess and visible even when the TUI isn't in focus:
+
+1. **Terminal tab title** via `ctx.ui.setTitle()` — shows a one-line crew run
+   summary (e.g. "π-crew · 2 active · explorer, executor") while runs are
+   in-flight, restored to "π-crew" on idle. Idle re-assert uses an
+   exponential backoff loop (mirrors pi-status) because pi itself re-sets the
+   title on some events.
+2. **Ghostty OSC 9;4 native progress bar** — written to `/dev/tty` (a separate
+   channel from pi's TUI, so it works even when pi runs in a subprocess).
+   state 3 = indeterminate pulsing while runs are active; state 1 value 100 =
+   green completion flash; state 0 = clear on idle. Compatible with all
+   libghostty-based terminals (Ghostty, cmux, muxy).
+
+Driven from `runEventBus.onAny` with an idle↔active transition guard so the
+OSC sequence isn't re-emitted on every event. **Purely additive and
+best-effort**: `/dev/tty` may be absent (non-interactive / subagent / CI /
+Windows) and `setTitle` may be unavailable — all failures are swallowed and
+never surface. Cannot regress existing behavior (nothing depends on it).
+
+### Files
+- NEW `src/ui/terminal-status.ts` — `setGhosttyProgress` +
+  `ghosttyWorking/Complete/Clear`, `buildCrewTitleSegment`, and
+  `createTerminalStatusController` (owns the title + progress lifecycle with
+  a dispose + idle-reassert loop). Minimal `TerminalStatusUi` interface
+  (dependency inversion: depends only on `{ hasUI; ui: { setTitle } }`).
+- `src/extension/register.ts` — construct + drive the controller from
+  `runEventBus.onAny` (transition-guarded); dispose in cleanupRuntime + the
+  session-rescope path.
+- NEW `test/unit/t4-terminal-status.test.ts` (16 tests): OSC 9;4 sequence
+  shape, title-segment builder, controller lifecycle, best-effort error
+  handling, double-dispose idempotency.
+
+typecheck clean; full suite 1893 ok / 0 fail (local EXIT=1 is only the test-
+runner infra `spawnSync ETIMEDOUT` under load — clean on CI).
+
 ## [0.8.2] — Skill confidence dead-code fix (T7) (2026-06-16)
 
 Fixes a **real correctness bug** surfaced by the pi-extensions deep-dive
