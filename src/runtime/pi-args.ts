@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentConfig } from "../agents/agent-config.ts";
-import { getAgentSessionOptions } from "../agents/agent-config.ts";
+import { resolveToolPolicy } from "../agents/agent-config.ts";
 import { userPiRoot } from "../utils/paths.ts";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
@@ -257,10 +257,17 @@ export function buildPiWorkerArgs(input: BuildPiWorkerArgsInput): BuildPiWorkerA
 	}
 
 	// Apply role-based tool restrictions (from role-tools.ts)
-	// Role-specific config takes precedence over agent-defined tools
-	const toolConfig = input.role ? getAgentSessionOptions(input.role) : {};
-	const explicitTools = toolConfig.tools ?? input.agent.tools;
-	const excludeTools = toolConfig.excludeTools;
+	// F1 unify (v0.8.0): the tool policy is resolved by the shared
+	// `resolveToolPolicy` helper (same code as the live-session path), so the
+	// two spawn paths agree. Before this, child-pi used role-config
+	// authoritative and ignored `agent.disallowedTools`; live-session used
+	// frontmatter authoritative and ignored role-config. Now:
+	//   - allowlist precedence is source-aware (builtin → role authoritative;
+	//     user/project → frontmatter authoritative)
+	//   - denylist is additive (role excludeTools + agent disallowedTools merged)
+	const policy = resolveToolPolicy(input.agent, input.role);
+	const explicitTools = policy.tools;
+	const excludeTools = policy.excludeTools;
 
 	if (explicitTools?.length) args.push("--tools", explicitTools.join(","));
 	if (excludeTools?.length) args.push("--exclude-tools", excludeTools.join(","));

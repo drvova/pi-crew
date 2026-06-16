@@ -16,6 +16,7 @@ import { isLiveSessionRuntimeAvailable } from "./runtime-resolver.ts";
 import { redactSecrets } from "../utils/redaction.ts";
 import { buildConfiguredModelRouting } from "./model-fallback.ts";
 import { readEnabledModelsPatterns } from "./model-scope.ts";
+import { resolveToolPolicy } from "../agents/agent-config.ts";
 import { loadConfig } from "../config/config.ts";
 import { DEFAULT_LIVE_SESSION } from "../config/defaults.ts";
 import { buildYieldReminder, hasYieldInOutput, isYieldEvent, extractYieldResult, validateYieldData, DEFAULT_YIELD_CONFIG, type YieldResult } from "./yield-handler.ts";
@@ -319,11 +320,17 @@ function liveSystemPrompt(input: LiveSessionSpawnInput): string {
 	].filter(Boolean).join("\n");
 }
 
-function filterActiveTools(session: LiveSessionLike, agent: AgentConfig): void {
+function filterActiveTools(session: LiveSessionLike, agent: AgentConfig, role?: string): void {
 	if (typeof session.getActiveToolNames !== "function" || typeof session.setActiveToolsByName !== "function") return;
 	const recursiveTools = new Set(["team", "Team", "Agent", "get_subagent_result", "steer_subagent"]);
-	const disallowed = agent.disallowedTools?.length ? new Set(agent.disallowedTools) : undefined;
-	const allowed = agent.tools?.length ? new Set(agent.tools) : undefined;
+	// F1 unify (v0.8.0): use the shared resolveToolPolicy so this path agrees
+	// with child-pi (pi-args.ts). Before this, live-session used frontmatter
+	// only and ignored role-config entirely — so a builtin explorer on the
+	// live-session path wasn't bound by the role's read-only security constraint.
+	// Now allowlist precedence is source-aware and the denylist is additive.
+	const policy = resolveToolPolicy(agent, role);
+	const disallowed = policy.excludeTools?.length ? new Set(policy.excludeTools) : undefined;
+	const allowed = policy.tools?.length ? new Set(policy.tools) : undefined;
 	const active = session.getActiveToolNames().filter((name) => !recursiveTools.has(name) && (!disallowed || !disallowed.has(name)) && (!allowed || allowed.has(name)));
 	session.setActiveToolsByName(active);
 }
@@ -462,7 +469,7 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 		});
 		session = created.session;
 		appendEvent(input.manifest.eventsPath, { type: "live-session.session_created", runId: input.manifest.runId, taskId: input.task.id, data: { elapsedMs: Date.now() - sessionCreateStart, modelFallbackMessage: created.modelFallbackMessage } });
-		filterActiveTools(session, input.agent);
+		filterActiveTools(session, input.agent, input.task.role);
 
 		// Diagnostic: log before bindExtensions so we can identify extension-loading hangs
 		const bindExtensionsStart = Date.now();

@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.8.0] — Tool-restriction unification across spawn paths (2026-06-16)
+
+Fixes a long-standing correctness gap where the same agent behaved
+*differently* depending on which runtime spawned it.
+
+### Bug fixed
+
+The child-pi path (`pi-args.ts`) and the live-session path
+(`live-session-runtime.ts`) **disagreed on tool restrictions**:
+
+| | allowlist | denylist |
+|---|---|---|
+| child-pi (before) | `roleConfig.tools ?? agent.tools` (role authoritative) | `roleConfig.excludeTools` only |
+| live-session (before) | `agent.tools` only (frontmatter authoritative) | `agent.disallowedTools` only |
+
+So a user defining `tools:` or `disallowed_tools:` in a custom agent's
+frontmatter saw it honored on one path and ignored on the other:
+- `disallowed_tools: web` was **silently ignored on child-pi** (the default
+  async path).
+- A builtin `explorer` on the live-session path was **not bound by the role's
+  read-only security constraint** (it relied solely on the frontmatter).
+
+### Fix
+
+A shared `resolveToolPolicy(agent, role)` helper in `agent-config.ts` is
+now the **single source of truth** used by BOTH spawn paths. Stable,
+unified semantics:
+
+- **Allowlist precedence is source-aware**:
+  - `source === "builtin"` → role-config authoritative (security: a builtin
+    explorer MUST stay read-only even if its frontmatter is loose).
+    Frontmatter is the fallback when the role has no allowlist.
+  - `source !== "builtin"` (user / project) → frontmatter `tools:`
+    authoritative (user intent). Role-config is the fallback.
+- **Denylist is additive**: `roleConfig.excludeTools` and
+  `agent.disallowedTools` are MERGED (dedup, order-insensitive). It is
+  always safe to forbid more, and merging means a security exclude from
+  the role can never be weakened by a frontmatter omission.
+
+This is **not a regression** for builtin agents: their allowlist still comes
+from `ROLE_TOOL_CONFIGS` (the authoritative security set), and the merged
+denylist only adds constraints. Custom agents now behave identically
+across both runtimes.
+
+### Files
+- `src/agents/agent-config.ts` — NEW `resolveToolPolicy` + `ResolvedToolPolicy`
+  (the shared resolver) + `uniqueToolMerge` helper.
+- `src/runtime/pi-args.ts` — uses `resolveToolPolicy` (drops the inline
+  role-authoritative logic; removes now-unused `getAgentSessionOptions` import).
+- `src/runtime/live-session-runtime.ts` — `filterActiveTools` now takes the
+  role and uses `resolveToolPolicy` (drops the inline frontmatter-only logic).
+- NEW `test/unit/v0-8-0-tool-policy-unification.test.ts` (10 tests pinning
+  the resolver: source-aware allowlist, additive denylist, cross-path
+  determinism).
+
+typecheck clean; 4980+ tests pass / 0 fail. CI green on win/ubuntu/macos.
+
 ## [0.7.9] — Interop & agent granularity (4 grouped items, 2026-06-16)
 
 One grouped release for four related, surgical interop / agent-granularity
