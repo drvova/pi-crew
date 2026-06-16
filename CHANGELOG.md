@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.7] — Windows spawn fix + plan-approval crash-recovery fix + CI flake fixes (2026-06-16)
+
+A focused patch release driven by two community reports (Issue #33 and PR #32) plus the CI flake surfaced while validating them. CI green on Windows / Ubuntu / macOS (run 27599121797). 4965 tests pass / 0 fail.
+
+### Bug Fixes
+
+- **`#33` — Windows `spawn pi ENOENT`** (commit `afc23b4`): when pi is installed outside `%APPDATA%\npm` (nvm-windows / Volta / fnm put the global `node_modules` elsewhere), the static `%APPDATA%\npm` paths in `resolvePiCliScript()` all miss, and the fallback `spawn("pi")` fails with `ENOENT` because `child_process.spawn` does NOT do PATHEXT resolution on Windows (only `exec`/`execSync` via `cmd.exe` do). **Fix**: pi-crew now discovers the real npm global `node_modules` dir at runtime via `npm root -g` (run through `execSync`, which DOES resolve `npm.cmd` via PATHEXT), then derives the `@earendil-works` / `@mariozechner` package dirs from it and checks them BEFORE the static `%APPDATA%\npm` paths and the cwd fallback. Covers standard installs **and** nvm-windows / Volta / fnm uniformly. Memoized once per process (one-time ~200ms cost). Injection-safe — no `shell: true` on the real worker spawn. +6 tests.
+- **Plan-approval-blocked runs crash-recovery fix** (commit `421b76d`, adapts PR #32 change #1 by @gustavo-pelissaro): crash recovery and stale reconciliation both treated `status === "blocked"` runs as repair candidates, so a run legitimately blocked on **human** plan approval (`requirePlanApproval`, `status="pending"`) was marked failed and/or orphan-cancelled when its owning session died or its async PID was no longer live — destroying an in-flight HITL checkpoint. **Fix**: new `isPlanApprovalPending(manifest)` guard (status=blocked AND `planApproval.required=true` AND `planApproval.status=pending`). Guarded in `reconcileStaleRun` (new `blocked_awaiting_approval` verdict, `repaired=false` — which automatically covers `reconcileAllStaleRuns`), `detectInterruptedRuns` (skip), `cancelOrphanedRuns` (push to `skipped`), and a belt-and-suspenders re-check under the lock in `reconcileAllStaleRuns`. The guard is intentionally narrow: a plain `blocked` run (no planApproval, or already approved/cancelled) is still a recovery candidate, so existing orphaned-blocked-run handling is unchanged. +6 tests.
+
+### Tests (CI reliability)
+
+- **`run-watcher-registry` macOS cancellation** (commit `dccb5e7`): the two fs.watch-dependent tests used unbounded `done()` callbacks that hung the whole test file on macOS CI runners (fs.watch events are slow/dropped under `/var/folders` + VM-runner FS load). Fixed with bounded async waits (1.5s deadline) consistent with production semantics, where fs.watch is best-effort and the preload poll loop is the source of truth.
+- **`operator-experience` ubuntu redaction flake** (commit `2da1a1b`): the redaction test seeded a secret literally named `abc` and asserted `/abc/` does not leak, but the runId hash (`randomBytes(8).toString("hex")`) occasionally spells `...abc...` (e.g. `team_..._9791deabc2f52485`) → false failure, even though redaction worked perfectly. Fixed by switching to a `ZZ_LEAK_CANARY` marker — uppercase letters never appear in a lowercase-hex hash, so the marker is collision-proof.
+
+### Community
+
+- Thanks to **@YrFnS** for the textbook-quality Issue #33 report and diagnosis (PATHEXT, spawn vs execSync matrix) that pinpointed the fix.
+- Thanks to **@gustavo-pelissaro** for PR #32 — change #1 (plan-approval preservation) landed here; changes #2/#3 (child exit-143 normalization, symlinked temp base) were closed for heavy conflicts but will be revisited.
+- PR #34 (closed) overlapped the existing `%APPDATA%\npm` resolution; superseded by the runtime `npm root -g` probe.
+
 ## [0.7.6] — DX, observability, and a critical interactive-session hang fix (2026-06-16)
 
 This release bundles Rounds 16–28: a developer-experience pass, an observability pass, and eight correctness/security audits — culminating in the **fix for the pts/2 interactive-session busy-loop hang** (two separate Pi sessions had hung at 71.5% CPU with 339 inotify watches). All 24 commits passed CI on Windows, Ubuntu, and macOS.
