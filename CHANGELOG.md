@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.8.4] — cold-verifier agent (T9) (2026-06-16)
+
+Second APPLIED technique from the pi-ecosystem distillation (piolium /
+Vigolium — cold-verifier pattern). Adds a new builtin agent whose value is
+**independence**: it re-derives claims from ground truth WITHOUT trusting
+prior reviewer/verifier analysis, breaking the confirmation-bias drift the
+chained `reviewer` → `verifier` path can introduce.
+
+### Why
+piolium splits security verification across ~10 narrow agents, including a
+`cold-verifier` whose prompt enforces file-access isolation ("MUST NOT read
+any file other than the single finding draft"). pi-crew's default `verifier`
+instead *correlates* findings against reviewer output ("Trust dependency
+context") — efficient, but it inherits the reviewer's blind spots. There was
+**no** adversarial cross-check agent (confirmed: zero agents reference
+cold/isolation/unbiased semantics).
+
+### What
+NEW builtin `cold-verifier` agent (`agents/cold-verifier.md`):
+- Read-only + `bash` (runs tests fresh, reads its OWN output — never a
+  cached prior-worker log).
+- Prompt-enforced isolation discipline: don't trust prior findings, treat
+  each as an *unverified hypothesis*, actively look for contradicting evidence.
+- Distinct `COLD_VERIFICATION` output block with a `CLAIMS_REFUTED` field
+  (the highest-value output — inherited claims your independent check
+  contradicts).
+- `maxTurns: 12` (tighter than verifier's 15 — it's a focused cross-check).
+
+Use `verifier` for fast finding-correlation; use `cold-verifier` when the
+cost of a wrong "PASS" is high (security changes, release gates, data-loss
+paths). Both can run in the same workflow.
+
+### Files
+- NEW `agents/cold-verifier.md` — the agent (auto-discovered).
+- `src/agents/discover-agents.ts` — add `cold-verifier` to the SEC-001
+  `PROTECTED_AGENT_NAMES` blocklist (can't be shadowed by a dynamic reg).
+- `src/ui/settings-overlay.ts` — add to the settings-overlay agent list.
+- `test/unit/agent-discovery-cache.test.ts` — mirror the protected-names list.
+- NEW `test/unit/t9-cold-verifier.test.ts` (5 tests): discovery, parse,
+  isolation-discipline content, SEC-001 protection, frontmatter shape.
+
+typecheck clean; full suite 1905 ok / 0 fail.
+
 ## [0.8.3] — Terminal tab title + Ghostty native progress bar (T4) (2026-06-16)
 
 First APPLIED technique from the pi-ecosystem distillation (pi-status /

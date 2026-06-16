@@ -377,7 +377,7 @@ class AgentOverridesSubmenu {
 		this.onCancel = onCancel;
 		const existing = (config.agents as Record<string, unknown>)?.overrides as Record<string, { model?: string; thinking?: string }> | undefined;
 		this.overrides = existing ? structuredClone(existing) : {};
-		this.agents = ["explorer", "planner", "analyst", "critic", "executor", "reviewer", "security-reviewer", "test-engineer", "verifier", "writer"];
+		this.agents = ["explorer", "planner", "analyst", "critic", "executor", "reviewer", "security-reviewer", "test-engineer", "verifier", "cold-verifier", "writer"];
 	}
 
 	invalidate(): void {}

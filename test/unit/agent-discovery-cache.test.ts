@@ -88,7 +88,7 @@ test("unregisterDynamicAgent throws when agent not found", () => {
 test("dynamic agents cannot shadow protected builtin agents (SEC-001 security fix)", () => {
 	clearSecurityEventLog();
 	// Protected names are blocked at registration time
-	const protectedNames = ["executor", "test-engineer", "explorer", "planner", "analyst", "critic", "reviewer", "verifier", "writer"];
+	const protectedNames = ["executor", "test-engineer", "explorer", "planner", "analyst", "critic", "reviewer", "verifier", "cold-verifier", "writer"];
 	for (const name of protectedNames) {
 		assert.throws(
 			() => registerDynamicAgent(makeTestAgent(name)),
