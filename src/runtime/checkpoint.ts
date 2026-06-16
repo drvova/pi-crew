@@ -64,7 +64,19 @@ export class FileCheckpointStore implements CheckpointStore {
 		// Atomic write: write to temp file first, then rename, then fsync parent.
 		// This guarantees either the old file or the new file, never a partial
 		// write, even on network filesystems or certain journal modes.
-		const tmp = path.join(this.checkpointDir(), ".tmp.checkpoint");
+		//
+		// Round 22 (BUG 1): the temp filename MUST be unique per save call.
+		// Previously a fixed '.tmp.checkpoint' was shared across ALL concurrent
+		// saves; pi-crew's multi-process architecture (main + detached background
+		// workers each checkpointing their own tasks) made this realistic: two
+		// processes writing '.tmp.checkpoint' at once → one's rename picks up the
+		// other's data (silent corruption) and the second rename hits ENOENT
+		// (silent data loss). Including taskId + pid + timestamp guarantees
+		// uniqueness across processes and across tasks.
+		const tmp = path.join(
+			this.checkpointDir(),
+			`.tmp.${checkpoint.taskId}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`,
+		);
 		fs.writeFileSync(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
 		fs.renameSync(tmp, p);
 		// fsync parent directory to ensure the rename is durable

@@ -122,10 +122,10 @@ class ChainParser {
 
 	parse(): ChainStep[] {
 		const steps: ChainStep[] = [];
-		steps.push(this.parseStep());
+		steps.push(this.parseStep(0));
 		while (this.peek("ARROW")) {
 			this.consume("ARROW");
-			steps.push(this.parseStep());
+			steps.push(this.parseStep(0));
 		}
 		if (this.pos < this.tokens.length) {
 			throw new Error(`Unexpected token '${this.tokens[this.pos]?.value}' at position ${this.pos}`);
@@ -133,16 +133,24 @@ class ChainParser {
 		return steps;
 	}
 
-	private parseStep(): ChainStep {
+	private parseStep(depth: number = 0): ChainStep {
+		// Round 22 (BUG 2): guard against stack overflow on deeply nested input.
+		// Without this, a crafted 'parallel(parallel(parallel(...)))' input would
+		// recurse unbounded and crash the process with RangeError. Each nesting
+		// level needs >=9 chars, so ~130KB could overflow V8's ~15K-frame stack.
+		const MAX_CHAIN_NESTING = 100;
+		if (depth > MAX_CHAIN_NESTING) {
+			throw new Error(`Chain DSL nesting too deep (max ${MAX_CHAIN_NESTING}); likely unbalanced or malicious input`);
+		}
 		// Check for parallel(...) construct
 		if (this.peek("NAME", "parallel")) {
 			this.consume("NAME"); // eat "parallel"
 			this.consume("LPAREN");
 			const parallel: ChainStep[] = [];
-			parallel.push(this.parseStep());
+			parallel.push(this.parseStep(depth + 1));
 			while (this.peek("COMMA")) {
 				this.consume("COMMA");
-				parallel.push(this.parseStep());
+				parallel.push(this.parseStep(depth + 1));
 			}
 			this.consume("RPAREN");
 			const step: ChainStep = { name: "parallel", parallel };
