@@ -24,6 +24,7 @@ export interface ReconcileResult {
 	/** What was found and what action was taken */
 	verdict:
 		| "healthy"
+		| "blocked_awaiting_approval"
 		| "result_exists"
 		| "pid_dead"
 		| "pid_alive_stale"
@@ -34,6 +35,23 @@ export interface ReconcileResult {
 	detail: string;
 	/** Repaired task state, returned to a locked caller for persistence. */
 	repairedTasks?: TeamTaskState[];
+}
+
+/**
+ * Is this run intentionally waiting for human plan approval?
+ *
+ * Such runs are NOT stale even if their owning session died or their async PID
+ * is no longer live — they are blocked on a human decision, not a crash. Crash
+ * recovery and stale reconciliation must preserve them rather than mark them
+ * failed or orphan-cancel them. See PR #32 (gustavo-pelissaro) for the
+ * original analysis of this failure mode.
+ */
+export function isPlanApprovalPending(manifest: TeamRunManifest): boolean {
+	return (
+		manifest.status === "blocked" &&
+		manifest.planApproval?.required === true &&
+		manifest.planApproval.status === "pending"
+	);
 }
 
 const STALE_ALIVE_PID_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -346,6 +364,18 @@ export function reconcileStaleRun(
 	now = Date.now(),
 ): ReconcileResult {
 	const runId = manifest.runId;
+
+	// Preserve runs intentionally blocked on human plan approval. These are not
+	// crashes even if the owning PID is gone — they are waiting for a decision.
+	// Must short-circuit before Phase 1 (result check) and Phase 2 (PID liveness).
+	if (isPlanApprovalPending(manifest)) {
+		return {
+			runId,
+			verdict: "blocked_awaiting_approval",
+			repaired: false,
+			detail: "Plan approval is pending; blocked run is intentionally waiting and must not be stale-repaired",
+		};
+	}
 
 	// Phase 1: Check if results already exist
 	const phase1 = checkResultFile(manifest, tasks);

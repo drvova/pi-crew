@@ -9,7 +9,7 @@ import type { TeamTaskState } from "../state/types.ts";
 import { isWorkerHeartbeatStale } from "./worker-heartbeat.ts";
 import type { ManifestCache } from "./manifest-cache.ts";
 import { checkProcessLiveness } from "./process-status.ts";
-import { reconcileStaleRun, type ReconcileResult } from "./stale-reconciler.ts";
+import { isPlanApprovalPending, reconcileStaleRun, type ReconcileResult } from "./stale-reconciler.ts";
 import { executeHook, appendHookEvent } from "../hooks/registry.ts";
 import { unregisterActiveRun, readActiveRunRegistry } from "../state/active-run-registry.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
@@ -38,6 +38,8 @@ export function detectInterruptedRuns(cwd: string, manifestCache: ManifestCache,
 	const plans: RecoveryPlan[] = [];
 	for (const manifest of manifestCache.list(50)) {
 		if (manifest.status !== "running" && manifest.status !== "blocked") continue;
+		// Preserve runs intentionally blocked on plan approval — not crashes.
+		if (isPlanApprovalPending(manifest)) continue;
 		if (manifest.async?.pid !== undefined && checkProcessLiveness(manifest.async.pid).alive) continue;
 		// NOTE: no withRunLock — best-effort only; concurrent writes may cause inconsistency
 		const loaded = loadRunManifestById(cwd, manifest.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
@@ -107,6 +109,12 @@ export function cancelOrphanedRuns(
 	// Phase 1: Scan project-level manifests via manifestCache
 	for (const manifest of manifestCache.list(50)) {
 		if (manifest.status !== "running" && manifest.status !== "blocked") continue;
+		// Preserve plan-approval-blocked runs — they belong to their owner and are
+		// waiting on a human decision, not orphaned by a dead owner process.
+		if (isPlanApprovalPending(manifest)) {
+			skipped.push(manifest.runId);
+			continue;
+		}
 
 		// Only consider runs owned by a different session
 		const ownerId = manifest.ownerSessionId;
@@ -340,6 +348,18 @@ export function reconcileAllStaleRuns(cwd: string, manifestCache: ManifestCache,
 			// Re-read inside lock to get freshest data
 			const fresh = loadRunManifestById(cwd, runId); // NOTE: inside withRunLockSync - consistent read
 			if (!fresh || (fresh.manifest.status !== "running" && fresh.manifest.status !== "blocked")) return;
+			// Belt-and-suspenders: reconcileStaleRun itself guards this, but the run
+			// may have flipped to blocked+plan-approval between cache-list and lock
+			// acquisition — re-check the freshest manifest under the lock.
+			if (isPlanApprovalPending(fresh.manifest)) {
+				results.push({
+					runId,
+					verdict: "blocked_awaiting_approval",
+					repaired: false,
+					detail: "Plan approval is pending; stale reconciliation skipped",
+				});
+				return;
+			}
 			const result = reconcileStaleRun(fresh.manifest, fresh.tasks, now);
 			if (result.repaired || result.verdict === "result_exists") {
 				if (result.repairedTasks) {

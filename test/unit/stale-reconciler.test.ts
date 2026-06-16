@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
+	isPlanApprovalPending,
 	reconcileOrphanedTempWorkspaces,
 	reconcileStaleRun,
 } from "../../src/runtime/stale-reconciler.ts";
@@ -48,6 +49,50 @@ describe("reconcileStaleRun", () => {
 		const result = reconcileStaleRun(baseManifest, [completedTask]);
 		assert.equal(result.verdict, "result_exists");
 		assert.equal(result.repaired, false);
+	});
+
+	// Regression: PR #32 / gustavo-pelissaro — a run blocked on human plan
+	// approval must never be stale-repaired or marked failed, even if its
+	// owning session died or its async PID is no longer live.
+	const planApprovalNow = new Date().toISOString();
+	const planApprovalManifest: TeamRunManifest = {
+		...baseManifest,
+		runId: "run-plan-approval",
+		status: "blocked",
+		async: { pid: 99999124, logPath: "/tmp/log", spawnedAt: planApprovalNow },
+		planApproval: {
+			required: true,
+			status: "pending",
+			requestedAt: planApprovalNow,
+			updatedAt: planApprovalNow,
+			planTaskId: "01_plan",
+		},
+	};
+
+	it("isPlanApprovalPending is true only for blocked+required+pending runs", () => {
+		assert.equal(isPlanApprovalPending(planApprovalManifest), true);
+		// status not blocked
+		assert.equal(isPlanApprovalPending({ ...planApprovalManifest, status: "running" }), false);
+		// not required
+		assert.equal(
+			isPlanApprovalPending({ ...planApprovalManifest, planApproval: { ...planApprovalManifest.planApproval!, required: false } }),
+			false,
+		);
+		// already approved
+		assert.equal(
+			isPlanApprovalPending({ ...planApprovalManifest, planApproval: { ...planApprovalManifest.planApproval!, status: "approved" } }),
+			false,
+		);
+		// no planApproval at all
+		assert.equal(isPlanApprovalPending({ ...planApprovalManifest, planApproval: undefined }), false);
+	});
+
+	it("preserves plan-approval blocked runs even when async PID is dead", () => {
+		// 99999124 is a PID that will not be alive → would normally be "pid_dead" + repaired.
+		const result = reconcileStaleRun(planApprovalManifest, [runningTask], Date.now());
+		assert.equal(result.verdict, "blocked_awaiting_approval");
+		assert.equal(result.repaired, false);
+		assert.equal(result.repairedTasks, undefined);
 	});
 
 	it("returns healthy for recent non-async run", () => {
