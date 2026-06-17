@@ -9,6 +9,9 @@
  */
 import { Text } from "@earendil-works/pi-tui";
 import type { ExtensionAPI, MessageRenderOptions, Theme } from "@earendil-works/pi-coding-agent";
+import { fillToolBackground } from "../ui/ansi-box.ts";
+import { deriveCardBackground } from "../ui/card-colors.ts";
+import type { CrewTheme } from "../ui/theme-adapter.ts";
 
 interface CrewMessageDetails {
 	runId?: string;
@@ -29,6 +32,21 @@ type MessageLike = {
 function extractText(message: MessageLike): string {
 	if (typeof message.content === "string") return message.content;
 	return (message.content ?? []).map((c) => c.text ?? "").join("");
+}
+
+/**
+ * Wrap a single-line lifecycle message in a subtle status-tinted bg fill.
+ * Uses deriveCardBackground (status→bg tint, low intensity) + fillToolBackground
+ * (preserveBoxBackground so embedded resets don't punch through). Returns the
+ * original styled text unchanged when the theme exposes no fg/bg ANSI (graceful
+ * degradation — the message still renders, just without the tint). This wires
+ * the ansi-box fillToolBackground primitive into a real visible consumer
+ * (every run-start/run-completed lifecycle message).
+ */
+function tintedLifecycleLine(styledText: string, theme: Theme, bgSlot: "success" | "error" | "borderAccent" | "border"): string {
+	const bg = deriveCardBackground(theme as unknown as CrewTheme, bgSlot);
+	if (!bg) return styledText; // bg-less theme → no tint, message still readable
+	return fillToolBackground(styledText, bg);
 }
 
 function statusLevel(status: string | undefined): "success" | "error" | "warning" | "muted" {
@@ -74,7 +92,8 @@ export function renderRunStarted(message: MessageLike, _options: MessageRenderOp
 	const team = details.team ?? details.agent ?? "direct";
 	const workflow = details.workflow ?? "default";
 	const text = `🚀 crew run ${details.runId ?? ""} started — ${team}/${workflow}${goal ? ` — ${goal}` : ""}`;
-	return new Text(theme.fg("accent", theme.bold("crew ")) + theme.fg("text", text), 0, 0);
+	const styled = theme.fg("accent", theme.bold("crew ")) + theme.fg("text", text);
+	return new Text(tintedLifecycleLine(styled, theme, "borderAccent"), 0, 0);
 }
 
 /** Render crew:run-completed entries with a status-colored summary. */
@@ -86,7 +105,10 @@ export function renderRunCompleted(message: MessageLike, _options: MessageRender
 	const goal = details.goal ? truncate(details.goal, 60) : "";
 	const tasks = details.taskCount !== undefined ? ` · ${details.taskCount} tasks` : "";
 	const text = `${icon} crew run ${details.runId ?? ""} ${status ?? "finished"}${tasks}${goal ? ` — ${goal}` : ""}`;
-	return new Text(theme.fg(level, theme.bold("crew ")) + theme.fg(level, text), 0, 0);
+	const styled = theme.fg(level, theme.bold("crew ")) + theme.fg(level, text);
+	// Status-tinted bg fill: success→success-tinted, failed/blocked→error-tinted.
+	const bgSlot = level === "success" ? "success" : level === "error" ? "error" : "borderAccent";
+	return new Text(tintedLifecycleLine(styled, theme, bgSlot), 0, 0);
 }
 
 /** Render crew:resume-directive entries as an informational system note. */
