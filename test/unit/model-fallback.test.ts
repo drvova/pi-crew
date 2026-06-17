@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildConfiguredModelCandidates, buildConfiguredModelRouting, buildModelCandidates, configuredModelInfosFromPiConfig, resolveModelCandidate, splitThinkingSuffix } from "../../src/runtime/model-fallback.ts";
+import { buildConfiguredModelCandidates, buildConfiguredModelRouting, buildModelCandidates, configuredModelInfosFromPiConfig, isRetryableModelFailure, resolveModelCandidate, splitThinkingSuffix } from "../../src/runtime/model-fallback.ts";
 
 test("splitThinkingSuffix preserves model suffix", () => {
 	assert.deepEqual(splitThinkingSuffix("claude-sonnet:high"), { baseModel: "claude-sonnet", thinkingSuffix: ":high" });
@@ -123,4 +123,60 @@ test("configuredModelInfosFromPiConfig reads provider and model from Pi settings
 		fs.rmSync(tempDir, { recursive: true, force: true });
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
+});
+
+// Regression tests for isRetryableModelFailure — the pi-crew model-fallback
+// "should we try the next candidate?" gate. The pi-core provider-retry layer
+// (agent-session.ts) already retries transient 5xx, but when ALL 3 provider
+// retries fail (provider hard-down), pi-crew's fallback chain must fire as the
+// last safety net. Before this fix, `500 api_error "unknown error"` was NOT in
+// the retryable list → the fallback chain never fired → team runs died on
+// transient provider outages even when a fallback model was configured.
+// Reported 2026-06-17 against a MiniMax-style provider returning
+// `500 {"type":"error","error":{"type":"api_error","message":"unknown error, 999 (1000)"}}`.
+test("isRetryableModelFailure catches the reported 500 api_error outage", () => {
+	const reportedCases = [
+		'500 api_error "unknown error, 999 (1000)"',
+		'Error: 500 {"type":"error","error":{"type":"api_error","message":"unknown error, 999 (1000)"}}',
+		'{"error":{"type":"api_error","message":"unknown error"}}',
+	];
+	for (const err of reportedCases) {
+		assert.equal(
+			isRetryableModelFailure(err),
+			true,
+			`expected retryable for: ${err}`,
+		);
+	}
+});
+
+test("isRetryableModelFailure catches generic 5xx / internal server errors", () => {
+	for (const err of [
+		"500 Internal Server Error",
+		"Internal Server Error",
+		"Bad Gateway",
+		"501 Not Implemented",
+		"server error processing request",
+		"internal_server_error",
+	]) {
+		assert.equal(isRetryableModelFailure(err), true, `expected retryable: ${err}`);
+	}
+});
+
+test("isRetryableModelFailure still treats auth/billing/key errors as NON-retryable", () => {
+	// NON_RETRYABLE must win over RETRYABLE — otherwise a transient-looking 500
+	// wrapping an auth failure would loop the fallback chain uselessly.
+	for (const err of [
+		"unauthorized: invalid api key",
+		"forbidden: billing issue",
+		"token expired",
+		"401 Authentication failed",
+		"credit exhausted",
+	]) {
+		assert.equal(isRetryableModelFailure(err), false, `expected NON-retryable: ${err}`);
+	}
+});
+
+test("isRetryableModelFailure handles undefined/empty (no false trigger)", () => {
+	assert.equal(isRetryableModelFailure(undefined), false);
+	assert.equal(isRetryableModelFailure(""), false);
 });

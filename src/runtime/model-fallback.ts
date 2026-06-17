@@ -186,6 +186,29 @@ const RETRYABLE_MODEL_FAILURE_PATTERNS = [
 	/\b502\b/,
 	/\b503\b/,
 	/\b504\b/,
+	//
+	// Provider-side 5xx / generic api_error. The pi-core retry layer already
+	// retries these (agent-session.ts matches `500|server error|internal error`),
+	// but the pi-crew MODEL FALLBACK layer must ALSO treat them as retryable so
+	// that when the provider is hard-down across all 3 provider retries, we fail
+	// over to the next configured model instead of giving up. Reported case
+	// (2026-06-17): `500 {"type":"error","error":{"type":"api_error",
+	// "message":"unknown error, 999 (1000)"}}` — a transient provider outage that
+	// should trigger the fallback chain, not abort.
+	//
+	// `api_error` is the OpenAI-compatible generic error type (vs rate_limit_error
+	// / overloaded_error / etc.) and almost always means a transient server fault.
+	//
+	// `unknown error` is the body of the generic message; `internal`/`server`
+	// catch the common phrasings. `\b500\b`/`\b501\b` catch the HTTP status in
+	// the rendered error string.
+	/\b500\b/,
+	/\b501\b/,
+	/api_error/i,
+	/unknown error/i,
+	/internal(?:_server)?[ _]error/i,
+	/server error/i,
+	/bad gateway/i,
 ];
 
 // These patterns indicate auth/key/billing issues that will never succeed on retry.
