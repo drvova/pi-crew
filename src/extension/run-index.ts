@@ -76,7 +76,7 @@ function scopedRunRoots(cwd: string): string[] {
 	return [...roots];
 }
 
-function collectActiveRuns(): TeamRunManifest[] {
+function collectActiveRuns(cwd?: string): TeamRunManifest[] {
 	return activeRunEntries()
 		.map((entry) => readManifest(entry.manifestPath))
 		.filter((manifest): manifest is TeamRunManifest => manifest !== undefined);

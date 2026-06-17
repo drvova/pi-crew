@@ -24,6 +24,8 @@ import { afterEach, describe, it } from "node:test";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 import { createRunManifest, loadRunManifestById, saveRunManifest } from "../../src/state/state-store.ts";
+import { registerActiveRun, unregisterActiveRun } from "../../src/state/active-run-registry.ts";
+import { findRepoRoot } from "../../src/utils/paths.ts";
 import {
 	buildContinuationPrompt,
 	collectInFlightRuns,
@@ -108,6 +110,65 @@ describe("collectInFlightRuns: session-ownership filter (cross-session leak fix)
 			saveRunManifest(loaded.manifest);
 		}
 		assert.equal(collectInFlightRuns(cwd, "sess-a").length, 0, "completed run excluded");
+	});
+});
+
+describe("collectInFlightRuns: cross-PROJECT leak fix (cwd-scope barrier)", () => {
+	// Reproduces the LIVE leak observed 2026-06-17: an edge-ai-agent run
+	// (project: /home/bom/source/edge-ai-agent) bled into a my_pi session's
+	// ambient status because the GLOBAL activeRunEntries() registry merges
+	// ALL active runs regardless of project. The session-id filter (4bd6f5b)
+	// was unreliable because ctx.sessionId is absent on pi 0.79.6. The cwd-
+	// scope filter (isInProjectScope) is the version-independent barrier.
+	function gitRepo(dir: string): string {
+		fs.mkdirSync(path.join(dir, ".crew"), { recursive: true });
+		try {
+			require("node:child_process").execSync("git init", { cwd: dir, stdio: "ignore", timeout: 5000 });
+			require("node:child_process").execSync("git config user.email test@test", { cwd: dir, stdio: "ignore" });
+			require("node:child_process").execSync("git config user.name test", { cwd: dir, stdio: "ignore" });
+		} catch {
+			// git may be unavailable; the test will skip the assertion logic
+		}
+		createdDirs.push(dir);
+		return dir;
+	}
+
+	it("does NOT surface another project's active in-flight run (cwd-scope barrier)", () => {
+		const projectA = gitRepo(createTrackedTempDir("pi-crew-xproj-a-"));
+		const projectB = gitRepo(createTrackedTempDir("pi-crew-xproj-b-"));
+		// If git init failed, findRepoRoot won't resolve → skip (can't reproduce).
+		const repoA = findRepoRoot(projectA);
+		const repoB = findRepoRoot(projectB);
+		if (!repoA || !repoB || repoA === repoB) return; // pre-condition not met
+
+		// Create a run in project A and register it as active (enters the GLOBAL registry).
+		const runA = createRunManifest({ cwd: projectA, team, workflow, goal: "project A active run", ownerSessionId: "sess-a" }).manifest;
+		try {
+			registerActiveRun(runA);
+			// collectInFlightRuns in project B must NOT see project A's run.
+			const inB = collectInFlightRuns(projectB);
+			assert.ok(!inB.some((r) => r.runId === runA.runId), "project B must not see project A's active run (cross-project leak)");
+			// Even WITHOUT a session filter (the unreliable case), the cwd barrier holds.
+			const inBNoFilter = collectInFlightRuns(projectB);
+			assert.ok(!inBNoFilter.some((r) => r.runId === runA.runId), "cwd barrier holds even without session filter");
+		} finally {
+			unregisterActiveRun(runA.runId);
+		}
+	});
+
+	it("DOES surface a run from the SAME project (cwd-scope barrier is not over-restrictive)", () => {
+		const projectA = gitRepo(createTrackedTempDir("pi-crew-xproj-same-"));
+		const repoA = findRepoRoot(projectA);
+		if (!repoA) return; // pre-condition not met
+
+		const runA = createRunManifest({ cwd: projectA, team, workflow, goal: "same-project active run", ownerSessionId: "sess-a" }).manifest;
+		try {
+			registerActiveRun(runA);
+			const inA = collectInFlightRuns(projectA);
+			assert.ok(inA.some((r) => r.runId === runA.runId), "same-project run must be visible");
+		} finally {
+			unregisterActiveRun(runA.runId);
+		}
 	});
 });
 

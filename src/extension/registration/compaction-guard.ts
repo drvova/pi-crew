@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { listRecentRuns } from "../run-index.ts";
+import { findRepoRoot } from "../../utils/paths.ts";
 import { extractSessionId } from "../../utils/session-utils.ts";
 import type { ArtifactDescriptor, TeamRunManifest } from "../../state/types.ts";
 
@@ -70,6 +71,29 @@ function formatCrewArtifactIndex(entries: CrewArtifactIndexEntry[]): string {
 }
 
 /**
+ * Project-scope filter: keep `run` only if it belongs to the SAME repo as
+ * `queryCwd` (or is a user-level / legacy run with no repo). This is the
+ * version-independent, reliable barrier against cross-project leaks: even
+ * when the session-id filter below cannot fire (ctx.sessionId is absent on
+ * some pi versions — observed on pi 0.79.6 ExtensionContext), the cwd filter
+ * stops another project's in-flight runs (e.g. edge-ai-agent) from bleeding
+ * into this project's ambient status or compaction-resume directive.
+ *
+ * Note: listRecentRuns already scopes its filesystem scan via scopedRunRoots,
+ * BUT it ALSO merges the GLOBAL activeRunEntries() registry (the cross-
+ * project dashboard view). That global merge is intentional for the
+ * dashboard but wrong for "what should THIS project's session do" — hence
+ * this filter at the consumption site.
+ */
+function isInProjectScope(run: TeamRunManifest, queryCwd: string): boolean {
+	const queryRepo = findRepoRoot(queryCwd);
+	if (queryRepo === undefined) return true; // viewer not in a repo → user-level view
+	const runRepo = typeof run.cwd === "string" && run.cwd.length > 0 ? findRepoRoot(run.cwd) : undefined;
+	if (runRepo === undefined) return true; // run is user-level / legacy / not a repo → include
+	return runRepo === queryRepo; // same project only
+}
+
+/**
  * Collect in-flight (non-terminal) crew runs that must be resumable after
  * compaction. These are runs the agent was actively working on or awaiting.
  *
@@ -88,7 +112,13 @@ function formatCrewArtifactIndex(entries: CrewArtifactIndexEntry[]): string {
 export function collectInFlightRuns(cwd: string, currentSessionId?: string): TeamRunManifest[] {
 	return listRecentRuns(cwd, MAX_ARTIFACT_INDEX_RUNS).filter((run) => {
 		if (!IN_FLIGHT_RUN_STATUSES.has(run.status)) return false;
-		if (currentSessionId === undefined) return true; // no filter → back-compat
+		// Reliable barrier (2026-06-17): never leak another project's runs into
+		// THIS project's resume directive / ambient status, regardless of
+		// whether the session-id filter is available. This fixes the live
+		// cross-session leak that persisted after 4bd6f5b because ctx.sessionId
+		// is absent on pi 0.79.6.
+		if (!isInProjectScope(run, cwd)) return false;
+		if (currentSessionId === undefined) return true; // no session filter → back-compat (still project-scoped)
 		return run.ownerSessionId === currentSessionId; // strict: legacy ownerless runs excluded
 	});
 }
