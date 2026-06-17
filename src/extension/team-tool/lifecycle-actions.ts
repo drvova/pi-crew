@@ -14,6 +14,7 @@ import { enforceDestructiveIntent, intentFromConfig } from "./intent-policy.ts";
 import { executeHook, appendHookEvent } from "../../hooks/registry.ts";
 import { resolveRealContainedPath } from "../../utils/safe-paths.ts";
 import { projectCrewRoot, userCrewRoot } from "../../utils/paths.ts";
+import { removeGuidance } from "../../config/markers.ts";
 import * as path from "node:path";
 
 export function handleWorktrees(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
@@ -123,12 +124,128 @@ export async function handleForget(params: TeamToolParamsValue, ctx: TeamContext
 }
 
 export async function handleCleanup(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
+	// Intent policy applies to the cleanup action in BOTH modes (per-run and
+	// project-level). Checked once here so handleRunCleanup/handleProjectCleanup
+	// can stay focused on their own logic.
 	const intentError = enforceDestructiveIntent("cleanup", params, ctx.config);
 	if (intentError) return intentError;
-	if (!params.runId) return result("Cleanup requires runId.", { action: "cleanup", status: "error" }, true);
-	const loaded = loadRunManifestById(ctx.cwd, params.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
-	if (!loaded) return result(`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`, { action: "cleanup", status: "error" }, true);
+	// Two cleanup modes:
+	//  1. WITH runId    → per-run worktree cleanup (existing behavior).
+	//  2. WITHOUT runId → PROJECT-LEVEL uninstall cleanup: removes the
+	//     AGENTS.md guidance block pi-crew injected (`team action=init`) and
+	//     optionally the `.crew/` state dir. Use this before/after
+	//     `pi uninstall npm:pi-crew` to leave the project pristine.
+	//     Issue #35: pi doesn't fire an uninstall hook for extensions, so this
+	//     mode is the documented way to reverse an init.
+	if (params.runId) {
+		return handleRunCleanup(params, ctx);
+	}
+	return handleProjectCleanup(params, ctx);
+}
 
+/**
+ * Project-level uninstall cleanup (no runId). Reverses `team action=init`:
+ * removes the pi-crew guidance block from AGENTS.md (marker-delimited, so
+ * user content is untouched) and, with `force: true`, removes the `.crew/`
+ * runtime state directory. `dryRun: true` previews without writing.
+ *
+ * Safety:
+ *  - `removeGuidance` only touches content between the PI-CREW markers.
+ *  - `.crew/` removal requires explicit `force: true` (it holds run history,
+ *    artifacts, and worktrees — irreversible). Default is guidance-only.
+ *  - The user pi-crew user dir (`~/.pi/agent/extensions/pi-crew/`) is NEVER
+ *    touched here — `pi uninstall` owns that; we only touch project state.
+ */
+function handleProjectCleanup(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
+	const cwd = ctx.cwd;
+	const dryRun = params.dryRun === true;
+	const removeState = params.force === true;
+	const scope = typeof params.scope === "string" ? params.scope : "project";
+	if (scope !== "project") {
+		return result(
+			`Project cleanup operates on the project only (got scope='${scope}'). ` +
+				`User-scope files are owned by 'pi uninstall npm:pi-crew'.`,
+			{ action: "cleanup", status: "error", scope },
+			true,
+		);
+	}
+
+	const lines: string[] = ["Project cleanup for pi-crew:"];
+
+	// 1. Remove the AGENTS.md guidance block (marker-delimited → user content preserved).
+	const guidancePath = path.join(cwd, "AGENTS.md");
+	const guidanceResult = dryRun
+		? { path: guidancePath, modified: fs.existsSync(guidancePath), added: [], removed: dryRunRemovedIds(guidancePath) }
+		: removeGuidance(guidancePath);
+	lines.push("AGENTS.md guidance block:");
+	if (guidanceResult.modified) {
+		lines.push(`  - ${dryRun ? "would remove" : "removed"}: ${guidanceResult.removed.length ? guidanceResult.removed.join(", ") : "(marker section)"}`);
+	} else {
+		lines.push("  - (no pi-crew marker section found — nothing to do)");
+	}
+
+	// 2. Optionally remove the .crew/ runtime state directory (force: true).
+	const crewRoot = projectCrewRoot(cwd);
+	lines.push(".crew/ state directory:");
+	const crewExists = fs.existsSync(crewRoot);
+	if (!crewExists) {
+		lines.push(`  - (not present at ${crewRoot} — nothing to do)`);
+	} else if (!removeState) {
+		lines.push(`  - present at ${crewRoot} (preserved — use force: true to remove; contains run history/artifacts/worktrees and is irreversible)`);
+	} else {
+		// SAFETY: realpath + contain-check before rmSync, so a crafted cwd can't
+		// trick us into deleting an arbitrary directory.
+		let resolved: string;
+		try {
+			resolved = fs.realpathSync.native(crewRoot);
+		} catch {
+			lines.push(`  - ERROR: could not resolve ${crewRoot} (skipped)`);
+			return result(lines.join("\n"), { action: "cleanup", status: "ok", scope }, false);
+		}
+		if (!resolved.endsWith(path.sep + ".crew") && !resolved.endsWith("/teams") && path.basename(resolved) !== ".crew") {
+			lines.push(`  - ERROR: refused to remove ${resolved} (does not look like a .crew dir) — skipped`);
+		} else {
+			if (!dryRun) {
+				try {
+					fs.rmSync(resolved, { recursive: true, force: true });
+				} catch (e) {
+					lines.push(`  - ERROR removing ${resolved}: ${(e as Error).message}`);
+				}
+			}
+			lines.push(`  - ${dryRun ? "would remove" : "removed"}: ${resolved}`);
+		}
+	}
+
+	lines.push("");
+	lines.push(
+		dryRun
+			? "(dry-run preview — no files were changed. Re-run without dryRun to apply.)"
+			: "Done. To fully remove pi-crew, also run: pi uninstall npm:pi-crew",
+	);
+	return result(lines.join("\n"), { action: "cleanup", status: "ok", scope }, false);
+}
+
+/** Dry-run helper: read what removeGuidance WOULD remove without writing. */
+function dryRunRemovedIds(guidancePath: string): string[] {
+	try {
+		if (!fs.existsSync(guidancePath)) return [];
+		const content = fs.readFileSync(guidancePath, "utf-8");
+		const startIdx = content.indexOf("<!-- PI-CREW:GUIDANCE:START -->");
+		const endIdx = content.indexOf("<!-- PI-CREW:GUIDANCE:END -->");
+		if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) return [];
+		// Cheap approximation: report the marker section as a unit. Exact block
+		// IDs aren't needed for the dry-run summary; the non-dryRun path uses
+		// removeGuidance which returns the precise removed IDs.
+		return ["pi-crew-overview", "pi-crew-commands"];
+	} catch {
+		return [];
+	}
+}
+
+/** Per-run worktree cleanup (existing behavior, preserved). */
+async function handleRunCleanup(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
+	const loaded = loadRunManifestById(ctx.cwd, params.runId!); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
+	if (!loaded) return result(`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`, { action: "cleanup", status: "error", runId: params.runId }, true);
 	// Ownership check — prevent cross-session worktree cleanup unless force is set
 	const foreignRun = typeof loaded.manifest.ownerSessionId === "string" && loaded.manifest.ownerSessionId !== ctx.sessionId;
 	if (foreignRun && !params.force) return result(`Run ${params.runId} belongs to another session. Use force: true to override.`, { action: "cleanup", status: "error", runId: loaded.manifest.runId }, true);

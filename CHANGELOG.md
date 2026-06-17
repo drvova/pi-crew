@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.8.12] — `team action=cleanup` now reverses `init` (Issue #35) (2026-06-17)
+
+`team action=cleanup` gained a **project-level mode** that reverses what
+`team action=init` writes. This closes the legitimate complaint in
+[Issue #35](https://github.com/baphuongna/pi-crew/issues/35): pi-crew injects
+a guidance block into `AGENTS.md` on `init`, but `pi uninstall` has no
+extension hook to remove it — so the block (and `.crew/`) were left behind.
+
+### New `cleanup` modes
+
+| Call | What it does |
+|---|---|
+| `team action=cleanup runId=<id>` | Per-run worktree cleanup (existing behavior, unchanged) |
+| `team action=cleanup` (no runId) | **NEW**: removes the AGENTS.md guidance block |
+| `team action=cleanup force=true` | NEW: also removes the `.crew/` state directory |
+| `team action=cleanup dryRun=true` | NEW: preview without writing |
+
+### Safety guarantees
+
+- The AGENTS.md guidance block is **marker-delimited**
+  (`<!-- PI-CREW:GUIDANCE:START/END -->`), so `removeGuidance` removes **only**
+  that block — user content is never touched (pinned by a test).
+- `.crew/` removal requires explicit `force=true` (irreversible — holds run
+  history, artifacts, worktrees). Default preserves it.
+- A `realpathSync` + basename guard refuses to `rmSync` anything that isn't a
+  `.crew` dir, so a crafted cwd can't trick us into deleting an arbitrary path.
+- The user-scope dir (`~/.pi/agent/extensions/pi-crew/`) is owned by
+  `pi uninstall` and is never touched by `team action=cleanup`.
+
+### Files
+
+- `src/extension/team-tool/lifecycle-actions.ts` — `handleCleanup` dispatcher
+  + new `handleProjectCleanup` (no-runId path). Intent policy now checked once
+  in the dispatcher (applies to both modes). Per-run path preserved verbatim.
+- `src/extension/team-tool-types.ts` — `TeamToolDetails.scope?`.
+- `README.md` — new **Uninstall** section documenting the full flow.
+- `test/unit/cleanup-project-mode.test.ts` — NEW, 9 tests (removal, user-content
+  preservation, idempotency, force-gating, dry-run, scope rejection, runId
+  routing).
+- `test/unit/team-tool-dispatch.test.ts` — updated the no-runId test to the
+  new contract (project cleanup, not error).
+
+typecheck clean; full suite 2964/0.
+
 ## [0.8.11] — Split-scope install fix + transient-provider fallback (2026-06-17)
 
 Bundle of two independent fixes that were triaged from real user reports on

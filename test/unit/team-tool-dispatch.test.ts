@@ -163,12 +163,15 @@ test("handleTeamTool 'forget' returns error without confirm", async () => {
 // 6. "cleanup" action delegates to handleCleanup
 // ---------------------------------------------------------------------------
 
-test("handleTeamTool 'cleanup' returns error without runId", async () => {
+test("handleTeamTool 'cleanup' without runId does PROJECT cleanup (Issue #35)", async () => {
 	const cwd = makeTmpCwd();
 	try {
+		// No runId → project-level uninstall cleanup (not an error). Reverses
+		// `team action=init` by removing the AGENTS.md guidance block. With no
+		// marker present it's an idempotent no-op that returns ok.
 		const out = await handleTeamTool({ action: "cleanup" }, { cwd });
-		assert.equal(out.isError, true);
-		assert.match(firstText(out), /Cleanup requires runId/);
+		assert.equal(out.isError, false);
+		assert.match(firstText(out), /Project cleanup for pi-crew:/);
 	} finally {
 		cleanupCwd(cwd);
 	}

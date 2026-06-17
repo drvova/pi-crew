@@ -107,6 +107,35 @@ node ./pi-crew/install.mjs   # from local clone
 > one-line workaround (or install pi-crew in pi's own scope:
 > `npm install -g @earendil-works/pi-crew`).
 
+### Uninstall
+
+`pi uninstall npm:pi-crew` removes the package, but pi doesn't fire an
+extension uninstall hook, so two things `team action=init` created are left
+behind: the **marker-delimited guidance block in AGENTS.md** and the **`.crew/`
+runtime state directory** (run history, artifacts, worktrees). Reverse them
+explicitly:
+
+```bash
+# 1. (Optional) Preview what would be removed, without writing:
+team action=cleanup dryRun=true
+
+# 2. Remove the AGENTS.md guidance block only (.crew/ preserved):
+team action=cleanup
+
+# 3. Remove BOTH the guidance block AND the .crew/ state directory (force):
+team action=cleanup force=true
+
+# 4. Finally, remove the package itself:
+pi uninstall npm:pi-crew
+```
+
+The guidance block is wrapped in `<!-- PI-CREW:GUIDANCE:START -->` /
+`<!-- PI-CREW:GUIDANCE:END -->` markers, so `team action=cleanup` removes
+**only** that block — your own AGENTS.md content is never touched. The
+`.crew/` directory is removed **only** with `force=true` (it's irreversible).
+The user-scope dir (`~/.pi/agent/extensions/pi-crew/`) is owned by
+`pi uninstall` and is never touched by `team action=cleanup`.
+
 
 ---
 
