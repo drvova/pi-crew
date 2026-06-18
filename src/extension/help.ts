@@ -22,7 +22,7 @@ export function piTeamsHelp(): string {
 		"- /team-mascot",
 		"- /team-transcript <runId> [taskId]",
 		"- /team-result <runId> [taskId]",
-		"- /team-manager",
+		"- /team-manager — interactive menu (alias: /team-cleanup-menu)",
 		"",
 		"Maintenance:",
 		"- /team-cleanup <runId> [--force]",

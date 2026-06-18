@@ -439,7 +439,11 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 	},
 })
 
-	pi.registerCommand("team-cleanup", { description: "Open a simple pi-crew interactive manager", handler: handleTeamManagerCommand });
+	pi.registerCommand("team-manager", { description: "Open the pi-crew interactive menu (list/run/status/cleanup/manage resources/doctor)", handler: handleTeamManagerCommand });
+	// Backward-compat alias: this command was originally registered as "team-cleanup"
+	// (the interactive menu predates the runId-targeted cleanup action). Keep both so
+	// existing muscle memory + help docs both work.
+	pi.registerCommand("team-cleanup-menu", { description: "Alias for /team-manager (pi-crew interactive menu)", handler: handleTeamManagerCommand });
 
 	pi.registerCommand("team-result", { description: "Open a pi-crew agent result viewer: <runId> [taskId]", getArgumentCompletions: async (argumentPrefix: string) => { const parts = argumentPrefix.trim().split(/\s+/); return parts.length <= 1 ? suggestRunIds(parts[0] ?? "") : suggestTaskIds(parts[0] ?? "", parts[1] ?? ""); }, handler: async (args: string, ctx: ExtensionCommandContext) => {
 		const [runId, rawTaskId] = args.trim().split(/\s+/).filter(Boolean);

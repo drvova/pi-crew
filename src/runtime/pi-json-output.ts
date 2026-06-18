@@ -14,6 +14,10 @@ export interface ParsedPiJsonOutput {
 	usage?: ParsedPiUsage;
 	/** Unified patches extracted from tool_result events (edit tool patch field) */
 	patches?: string[];
+	/** Model/provider error messages extracted from message_end events (e.g.
+	 * "429 ... overloaded"). Used to detect runs that exited 0 but produced
+	 * nothing because the model was rate-limited — see task-runner 429 fix. */
+	errorMessages?: string[];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -90,6 +94,7 @@ export function parsePiJsonOutput(stdout: string): ParsedPiJsonOutput {
 	let jsonEvents = 0;
 	const textEvents: string[] = [];
 	const patches: string[] = [];
+	const errorMessages: string[] = [];
 	let usage: ParsedPiUsage | undefined;
 	for (const line of stdout.split("\n")) {
 		const trimmed = line.trim();
@@ -104,6 +109,9 @@ export function parsePiJsonOutput(stdout: string): ParsedPiJsonOutput {
 		textEvents.push(...extractText(event));
 		// Extract unified patches from tool_result events
 		extractPatch(event, patches);
+		// Extract provider/model error messages from message_end events (429 fix).
+		const errMsg = extractErrorMessage(event);
+		if (errMsg) errorMessages.push(errMsg);
 		const eventUsage = extractUsage(event);
 		if (eventUsage) usage = mergeUsage(usage ?? {}, eventUsage);
 	}
@@ -113,7 +121,22 @@ export function parsePiJsonOutput(stdout: string): ParsedPiJsonOutput {
 		finalText: textEvents.length > 0 ? textEvents[textEvents.length - 1] : undefined,
 		usage,
 		patches: patches.length > 0 ? patches : undefined,
+		errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
 	};
+}
+
+/**
+ * Pull the provider/model error message out of a `message_end` event. The shape
+ * is `{type:"message_end", message:{role:"assistant", content:[], errorMessage:"429 ...", stopReason:"error"}}`.
+ * Returns undefined for events without an errorMessage.
+ */
+function extractErrorMessage(event: unknown): string | undefined {
+	const obj = asRecord(event);
+	if (!obj) return undefined;
+	// message_end events carry the error on the nested message object.
+	const message = asRecord(obj.message) ?? obj;
+	const errorMessage = message.errorMessage;
+	return typeof errorMessage === "string" && errorMessage.trim() ? errorMessage.trim() : undefined;
 }
 
 /**

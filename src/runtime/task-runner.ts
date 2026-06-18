@@ -730,6 +730,18 @@ export async function runTeamTask(
 						stderr: childResult.stderr,
 					}).message;
 				}
+				// 429/rate-limit fix (PI_CREW_TOOLING_429_NOTE.md): a worker can exit
+				// code 0 with NO hard error, but the transcript is full of
+				// `message_end` events with `errorMessage: "429 ... overloaded"` and
+				// empty content. The model never produced a tool call, so the worker
+				// "completed" without doing anything. Detect this: if no error was set
+				// above AND the parsed output carries a retryable model-failure message
+				// AND there is no real output text, surface it as an error so the
+				// model-fallback chain can retry on another model.
+				if (!error && parsedOutput) {
+					const rateLimitErr = detectRetryableModelFailureFromOutput(parsedOutput);
+					if (rateLimitErr) error = rateLimitErr;
+				}
 				persistHeartbeat(true);
 				persistChildProgress({ type: "attempt_finished" }, true);
 				const attempt: ModelAttemptSummary = {
@@ -1336,4 +1348,37 @@ async function resolveTaskScopeModelsPatterns(cwd: string): Promise<string[]> {
 	}
 	if (!scopeModels) return [];
 	return readEnabledModelsPatterns(cwd);
+}
+
+/**
+ * 429/rate-limit detection (PI_CREW_TOOLING_429_NOTE.md).
+ *
+ * A worker can exit code 0 with no hard error, yet the transcript is full of
+ * `message_end` events carrying `errorMessage: "429 ... overloaded"` (or any
+ * retryable model-failure pattern) and empty content arrays. The model never
+ * produced a tool call, so the worker "completed" without doing anything.
+ *
+ * This helper inspects a ParsedPiJsonOutput and, if the run produced only
+ * retryable model-failure messages AND no real output text (no finalText, no
+ * text events, no patches), returns a surfaced error string so the
+ * model-fallback chain (isRetryableModelFailure) can retry on another model.
+ * Returns undefined when the run has real output (the 429s were recovered from)
+ * or when there are no retryable error messages.
+ */
+export function detectRetryableModelFailureFromOutput(parsed: ParsedPiJsonOutput): string | undefined {
+	const messages = parsed.errorMessages;
+	if (!messages || messages.length === 0) return undefined;
+	// Find the first retryable model-failure message (429 / rate-limit / overloaded / 5xx / ...).
+	const retryable = messages.find((m) => isRetryableModelFailure(m));
+	if (!retryable) return undefined;
+	// Did the run actually produce real output despite the transient errors?
+	// If finalText / textEvents / patches exist, the model recovered and we
+	// should NOT mark the run as failed — only flag it when the worker yielded
+	// nothing (the 429-only case from the bug report).
+	const hasRealOutput =
+		(parsed.finalText?.trim().length ?? 0) > 0 ||
+		parsed.textEvents.some((t) => t.trim().length > 0) ||
+		(parsed.patches?.length ?? 0) > 0;
+	if (hasRealOutput) return undefined;
+	return `Model returned only retryable errors and no output: ${retryable}`;
 }
