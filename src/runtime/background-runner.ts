@@ -612,24 +612,44 @@ async function main(): Promise<void> {
 		// NOTE: abortController is already created above (before heartbeat/interrupt guard start)
 		// so it is available here and its signal is passed through to executeTeamRun → child-pi.
 
-		debugLog(`[background-runner] calling executeTeamRun`);
+		debugLog(`[background-runner] dispatching runKind=${manifest.runKind ?? "team-run"}`);
 		let result;
 		try {
-			result = await executeTeamRun({
-				manifest,
-				tasks,
-				team,
-				workflow,
-				agents,
-				executeWorkers,
-				limits: runConfig.limits,
-				runtime,
-				runtimeConfig: runConfig.runtime,
-				skillOverride: manifest.skillOverride,
-				reliability: runConfig.reliability,
-				workspaceId: manifest.ownerSessionId ?? manifest.cwd,
-				signal: abortController.signal,
-			});
+			switch (manifest.runKind ?? "team-run") {
+				case "goal-loop": {
+					// P0/P1: dispatched to runGoalLoop({ goalState, manifest, signal }).
+					// Stub until goal-loop-runner.ts lands — P0a stays self-contained (regression-safe).
+					throw new Error(
+						`runKind="goal-loop" dispatch not yet implemented (planned P0). runId=${manifest.runId}`,
+					);
+				}
+				case "dynamic-workflow": {
+					// P2/P3: dispatched to runDynamicWorkflow({ manifest, workflow, ctx, signal }).
+					// Stub until dynamic-workflow-runner.ts lands — P0a stays self-contained (regression-safe).
+					throw new Error(
+						`runKind="dynamic-workflow" dispatch not yet implemented (planned P2). runId=${manifest.runId}`,
+					);
+				}
+				default: {
+					// Existing "team-run" path — unchanged behavior.
+					result = await executeTeamRun({
+						manifest,
+						tasks,
+						team,
+						workflow,
+						agents,
+						executeWorkers,
+						limits: runConfig.limits,
+						runtime,
+						runtimeConfig: runConfig.runtime,
+						skillOverride: manifest.skillOverride,
+						reliability: runConfig.reliability,
+						workspaceId: manifest.ownerSessionId ?? manifest.cwd,
+						signal: abortController.signal,
+					});
+					break;
+				}
+			}
 			console.log(`[background-runner] executeTeamRun returned, status=${result.manifest.status}`,
 			);
 		} catch (execError) {

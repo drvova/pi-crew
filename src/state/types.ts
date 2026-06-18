@@ -183,6 +183,8 @@ export interface TeamRunManifest {
 	runtimeResolution?: RuntimeResolutionState;
 	/** Effective run config snapshot used by async background workers. Optional for backward compatibility. */
 	runConfig?: unknown;
+	/** Background dispatch discriminator. Default "team-run" runs executeTeamRun; "goal-loop" / "dynamic-workflow" dispatch to their respective runners. Absent = "team-run" for backward compatibility. */
+	runKind?: "team-run" | "goal-loop" | "dynamic-workflow";
 	summary?: string;
 	policyDecisions?: PolicyDecision[];
 }

@@ -227,6 +227,7 @@ export function createRunManifest(params: {
 	goal: string;
 	workspaceMode?: "single" | "worktree";
 	ownerSessionId?: string;
+	runKind?: "team-run" | "goal-loop" | "dynamic-workflow";
 }): { manifest: TeamRunManifest; tasks: TeamTaskState[]; paths: RunPaths } {
 	const paths = createRunPaths(params.cwd);
 	const now = new Date().toISOString();
@@ -249,6 +250,7 @@ export function createRunManifest(params: {
 		eventsPath: paths.eventsPath,
 		artifacts: [],
 		...(params.ownerSessionId ? { ownerSessionId: params.ownerSessionId } : {}),
+		runKind: params.runKind ?? "team-run",
 	};
 	fs.mkdirSync(paths.stateRoot, { recursive: true });
 	fs.mkdirSync(paths.artifactsRoot, { recursive: true });

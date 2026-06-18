@@ -264,6 +264,19 @@ export const TeamToolParams = Type.Object({
 			maximum: 1,
 		}),
 	),
+	runKind: Type.Optional(
+		Type.Union(
+			[
+				Type.Literal("team-run"),
+				Type.Literal("goal-loop"),
+				Type.Literal("dynamic-workflow"),
+			],
+			{
+				description:
+					"Background dispatch discriminator. Default \"team-run\" runs the normal executeTeamRun workflow; \"goal-loop\" (P0/P1) and \"dynamic-workflow\" (P2/P3) dispatch to their respective background runners. Absent = \"team-run\" for backward compatibility.",
+			},
+		),
+	),
 });
 
 export interface TeamToolParamsValue {
@@ -358,4 +371,6 @@ export interface TeamToolParamsValue {
 	budgetWarning?: number;
 	/** Budget abort threshold as a fraction (0-1). Default: 0.95. */
 	budgetAbort?: number;
+	/** Background dispatch discriminator. Default "team-run". "goal-loop"/"dynamic-workflow" dispatch to their runners (P0/P2). */
+	runKind?: "team-run" | "goal-loop" | "dynamic-workflow";
 }
