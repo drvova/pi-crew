@@ -150,12 +150,25 @@ describe("team action=cleanup — project-level uninstall cleanup (Issue #35)", 
 		assert.match(textFromToolResult(r), /pi uninstall npm:pi-crew/);
 	});
 
-	it("rejects non-project scope (user-scope files are owned by pi uninstall)", async () => {
-		const f = makeFixture(true);
-		fixtures.push(f);
-		const r = await handleCleanup(params({ scope: "user" }), ctx(f.cwd));
-		assert.equal(r.isError, true);
-		assert.match(textFromToolResult(r), /operates on the project only/);
+	it("routes scope=user to the user-cleanup handler (no longer rejected)", async () => {
+		// v0.8.13 (Issue #35 follow-up): scope=user now routes to handleUserCleanup
+		// instead of being rejected. The user handler removes pi-crew user-scope
+		// state (~/.pi/agent/extensions/pi-crew/). Verify routing by checking the
+		// output mentions 'User-scope cleanup'.
+		const prevHome = process.env.PI_TEAMS_HOME;
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "crew-route-home-"));
+		process.env.PI_TEAMS_HOME = tempHome;
+		try {
+			const f = makeFixture(true);
+			fixtures.push(f);
+			const r = await handleCleanup(params({ scope: "user" }), ctx(f.cwd));
+			assert.equal(r.isError, false);
+			assert.match(textFromToolResult(r), /User-scope cleanup/);
+		} finally {
+			if (prevHome === undefined) delete process.env.PI_TEAMS_HOME;
+			else process.env.PI_TEAMS_HOME = prevHome;
+			fs.rmSync(tempHome, { recursive: true, force: true });
+		}
 	});
 
 	it("with runId still routes to per-run worktree cleanup (existing behavior preserved)", async () => {

@@ -25,7 +25,7 @@ export function piTeamsHelp(): string {
 		"- /team-manager — interactive menu (alias: /team-cleanup-menu)",
 		"",
 		"Maintenance:",
-		"- /team-cleanup <runId> [--force]",
+		"- /team-cleanup <runId> [--force]  (or scope=project/user for uninstall cleanup)",
 		"- /team-forget <runId> --confirm [--force]",
 		"- /team-prune --keep=20 --confirm",
 		"",

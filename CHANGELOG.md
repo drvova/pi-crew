@@ -2590,3 +2590,41 @@ correctness+error-handling, and performance+architecture audits across 77 source
 - TypeScript: 0 errors
 - Skills: 37/37 PASS
 - New modules: 11 files, 2,267 LOC
+
+## [0.8.13] — user-scope cleanup + install side-effects warning (Issue #35) (2026-06-18)
+
+Follow-up to issue #35's latest comment ("pi-crew leaves behind user-level
+junk"). Two of the three points raised were valid; both addressed.
+
+### `team action=cleanup scope=user` — new user-level cleanup mode
+Removes pi-crew user-scope state that `pi uninstall npm:pi-crew` leaves behind:
+- `~/.pi/agent/extensions/pi-crew/` — pi-crew runtime state (artifacts, state,
+  config.json). Regenerable, always removed.
+- `~/.pi/agent/agents/*.md.bak-<timestamp>-<hex>` — smoke-test backup junk
+  pi-crew's own tests leave behind. NEVER touches real `*.md` agent files
+  (pi-crew can't tell user-authored vs test-copied — only the timestamped
+  `.bak-*` pattern is removed).
+- `~/.pi/agent/pi-crew.json` — global config. Gated on `force=true` (may hold
+  your customized settings).
+
+`dryRun=true` previews; safe by default. Routes via the new `scope=user` flag
+on `team action=cleanup`.
+
+### Install side-effects warning (install.mjs)
+The postinstall script now prints an explicit "What pi-crew writes (and how to
+undo it)" block: AGENTS.md injection (marker-delimited, on `init` only),
+`.crew/` runtime dir, the global config created at install, and the full
+uninstall command sequence (project + user + `pi uninstall`). Nothing is hidden
+behind install — be upfront about side effects.
+
+### README Uninstall section expanded
+Split into Project scope + User scope subsections, with the full 6-step
+uninstall flow and a note that authored agent files are never touched.
+
+### On the third claim (hijacks pi-intercom)
+Still not reproduced. Verified a third time: `grep -rni pi-intercom src/` → 0
+references. `crew-input-router.ts:11` passes slash commands through unchanged.
+The reply on the issue asks again for a concrete repro.
+
+typecheck clean; +6 user-scope cleanup tests + 1 routing test update; full
+suite 2963/0.

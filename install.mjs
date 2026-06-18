@@ -63,3 +63,24 @@ console.log("\nFor local development from a cloned repo:");
 console.log("  pi install .");
 console.log("\nChild workers are enabled by default. For dry runs, set runtime.mode=scaffold or executeWorkers=false.");
 console.log("To force-disable or force-enable workers in a shell, use PI_TEAMS_EXECUTE_WORKERS=0/1.");
+
+// Side-effects warning (Issue #35): be upfront about what pi-crew writes and
+// how to fully uninstall it. Nothing runs on install/registration itself; the
+// writes below only happen when you explicitly invoke `team action=init`.
+console.log("\n--- What pi-crew writes (and how to undo it) ---");
+console.log("pi-crew itself writes nothing on install. The following only happens when you");
+console.log("explicitly run `team action=init` in a project:");
+console.log("  - A marker-delimited block is injected into the project's AGENTS.md.");
+console.log("    (Wrapped in <!-- PI-CREW:GUIDANCE:START/END --> — your content is never touched.)");
+console.log("  - A `.crew/` runtime state dir is created in the project (run history + artifacts).");
+console.log("  - With --copy-builtins: bundled agents/teams/workflows are copied into the project.");
+console.log("This install also created the global config above (`~/.pi/agent/pi-crew.json`).");
+console.log("\nFull uninstall (in order):");
+console.log("  team action=cleanup dryRun=true       # preview what would be removed (project)");
+console.log("  team action=cleanup                    # remove the AGENTS.md guidance block");
+console.log("  team action=cleanup force=true         # also remove the .crew/ project state dir");
+console.log("  team action=cleanup scope=user         # remove pi-crew user-scope junk");
+console.log("                                          #   (~/.pi/agent/extensions/pi-crew/ + test .bak files)");
+console.log("  team action=cleanup scope=user force=true  # also remove ~/.pi/agent/pi-crew.json");
+console.log("  pi uninstall npm:pi-crew               # remove the package itself");
+console.log("See the README 'Uninstall' section for details.");

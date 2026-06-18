@@ -110,10 +110,10 @@ node ./pi-crew/install.mjs   # from local clone
 ### Uninstall
 
 `pi uninstall npm:pi-crew` removes the package, but pi doesn't fire an
-extension uninstall hook, so two things `team action=init` created are left
-behind: the **marker-delimited guidance block in AGENTS.md** and the **`.crew/`
-runtime state directory** (run history, artifacts, worktrees). Reverse them
-explicitly:
+extension uninstall hook, so several things pi-crew created are left behind.
+Reverse them explicitly with `team action=cleanup`. There are **two scopes**:
+
+#### Project scope (reverse `team action=init`)
 
 ```bash
 # 1. (Optional) Preview what would be removed, without writing:
@@ -124,17 +124,38 @@ team action=cleanup
 
 # 3. Remove BOTH the guidance block AND the .crew/ state directory (force):
 team action=cleanup force=true
-
-# 4. Finally, remove the package itself:
-pi uninstall npm:pi-crew
 ```
 
 The guidance block is wrapped in `<!-- PI-CREW:GUIDANCE:START -->` /
-`<!-- PI-CREW:GUIDANCE:END -->` markers, so `team action=cleanup` removes
-**only** that block — your own AGENTS.md content is never touched. The
-`.crew/` directory is removed **only** with `force=true` (it's irreversible).
-The user-scope dir (`~/.pi/agent/extensions/pi-crew/`) is owned by
-`pi uninstall` and is never touched by `team action=cleanup`.
+`<!-- PI-CREW:GUIDANCE:END -->` markers, so cleanup removes **only** that
+block — your own AGENTS.md content is never touched. The `.crew/` directory
+is removed **only** with `force=true` (it's irreversible).
+
+#### User scope (remove user-level state `pi uninstall` leaves behind)
+
+```bash
+# 4. Preview + remove pi-crew user-scope junk:
+team action=cleanup scope=user dryRun=true   # preview
+team action=cleanup scope=user               # remove ~/.pi/agent/extensions/pi-crew/
+                                              #   + pi-crew smoke-test *.bak files
+
+# 5. (Optional) Also remove the global config (holds your settings):
+team action=cleanup scope=user force=true    # also removes ~/.pi/agent/pi-crew.json
+```
+
+This removes the pi-crew state dir (`~/.pi/agent/extensions/pi-crew/`, which
+holds run artifacts + state), the global config (with `force=true`), and the
+`*.md.bak-<timestamp>` smoke-test backup files pi-crew's own tests may leave in
+`~/.pi/agent/agents/`. **Your authored agent files (`*.md`) are never touched**
+— pi-crew can't tell which were user-created vs test-copied, so only the
+clearly-pi-crew `.bak-*` backups are removed.
+
+#### Final step
+
+```bash
+# 6. Remove the package itself:
+pi uninstall npm:pi-crew
+```
 
 
 ---

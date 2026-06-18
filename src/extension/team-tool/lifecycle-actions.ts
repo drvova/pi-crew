@@ -13,7 +13,7 @@ import { RUN_NOT_FOUND_HINT } from "./run-not-found.ts";
 import { enforceDestructiveIntent, intentFromConfig } from "./intent-policy.ts";
 import { executeHook, appendHookEvent } from "../../hooks/registry.ts";
 import { resolveRealContainedPath } from "../../utils/safe-paths.ts";
-import { projectCrewRoot, userCrewRoot } from "../../utils/paths.ts";
+import { projectCrewRoot, userCrewRoot, userPiRoot } from "../../utils/paths.ts";
 import { removeGuidance } from "../../config/markers.ts";
 import * as path from "node:path";
 
@@ -129,16 +129,21 @@ export async function handleCleanup(params: TeamToolParamsValue, ctx: TeamContex
 	// can stay focused on their own logic.
 	const intentError = enforceDestructiveIntent("cleanup", params, ctx.config);
 	if (intentError) return intentError;
-	// Two cleanup modes:
-	//  1. WITH runId    → per-run worktree cleanup (existing behavior).
-	//  2. WITHOUT runId → PROJECT-LEVEL uninstall cleanup: removes the
-	//     AGENTS.md guidance block pi-crew injected (`team action=init`) and
-	//     optionally the `.crew/` state dir. Use this before/after
-	//     `pi uninstall npm:pi-crew` to leave the project pristine.
-	//     Issue #35: pi doesn't fire an uninstall hook for extensions, so this
-	//     mode is the documented way to reverse an init.
+	// Three cleanup modes:
+	//  1. WITH runId              → per-run worktree cleanup (existing behavior).
+	//  2. WITHOUT runId, scope=project (default) → PROJECT-LEVEL uninstall:
+	//     removes the AGENTS.md guidance block + optionally `.crew/`. Reverses
+	//     `team action=init`.
+	//  3. WITHOUT runId, scope=user → USER-LEVEL cleanup: removes pi-crew
+	//     user-scope state that `pi uninstall` leaves behind (config.json,
+	//     `~/.pi/agent/extensions/pi-crew/` state, junk `.bak` agent files
+	//     from pi-crew smoke tests). Issue #35 comment: "pi-crew leaves behind
+	//     user-level junk" — this closes that gap.
 	if (params.runId) {
 		return handleRunCleanup(params, ctx);
+	}
+	if (params.scope === "user") {
+		return handleUserCleanup(params, ctx);
 	}
 	return handleProjectCleanup(params, ctx);
 }
@@ -153,8 +158,8 @@ export async function handleCleanup(params: TeamToolParamsValue, ctx: TeamContex
  *  - `removeGuidance` only touches content between the PI-CREW markers.
  *  - `.crew/` removal requires explicit `force: true` (it holds run history,
  *    artifacts, and worktrees — irreversible). Default is guidance-only.
- *  - The user pi-crew user dir (`~/.pi/agent/extensions/pi-crew/`) is NEVER
- *    touched here — `pi uninstall` owns that; we only touch project state.
+ *  - User-scope cleanup (`scope=user`) is a SEPARATE handler — see
+ *    `handleUserCleanup`.
  */
 function handleProjectCleanup(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const cwd = ctx.cwd;
@@ -240,6 +245,134 @@ function dryRunRemovedIds(guidancePath: string): string[] {
 	} catch {
 		return [];
 	}
+}
+
+/**
+ * User-level cleanup (`scope=user`, no runId). Removes pi-crew user-scope
+ * state that `pi uninstall npm:pi-crew` leaves behind (Issue #35 comment:
+ * "pi-crew leaves behind user-level junk"). Targets ONLY pi-crew-owned paths:
+ *
+ *  1. `~/.pi/agent/extensions/pi-crew/` — pi-crew state dir (artifacts,
+ *     state, config.json). Owned by pi-crew, safe to remove.
+ *  2. `~/.pi/agent/pi-crew.json` — pi-crew global config (only with force).
+ *  3. `~/.pi/agent/agents/*.bak-*` junk files from pi-crew smoke tests
+ *     (pattern: `*.md.bak-<timestamp>-<hex>` — these are pi-crew test
+ *     leftovers, never user data).
+ *
+ * Safety:
+ *  - NEVER removes user-authored agent files (`~/.pi/agent/agents/*.md`)
+ *    because pi-crew cannot tell which were user-created vs test-copied —
+ *    only the timestamped `.bak-*` backups (clearly pi-crew test junk).
+ *  - The state dir removal requires force=true by default is NOT required
+ *    (it's pi-crew's own runtime cache, regenerable), but config.json removal
+ *    IS gated on force=true (it may hold user-customized settings).
+ *  - dryRun=true previews without writing.
+ */
+function handleUserCleanup(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
+	const dryRun = params.dryRun === true;
+	const force = params.force === true;
+	const lines: string[] = ["User-scope cleanup for pi-crew:"];
+
+	// 1. pi-crew user state dir (~/.pi/agent/extensions/pi-crew/) — always safe
+	//    to remove (regenerable runtime cache: artifacts + state). This is the
+	//    bulk of the "user-level junk".
+	const crewStateDir = userCrewRoot();
+	lines.push(`pi-crew user state dir (${crewStateDir}):`);
+	let crewStateBytes = 0;
+	if (fs.existsSync(crewStateDir)) {
+		try {
+			crewStateBytes = dirSize(crewStateDir);
+		} catch { /* best-effort size */ }
+		if (!dryRun) {
+			try { fs.rmSync(crewStateDir, { recursive: true, force: true }); }
+			catch (e) { lines.push(`  - ERROR removing: ${(e as Error).message}`); }
+		}
+		lines.push(`  - ${dryRun ? "would remove" : "removed"}: ${crewStateDir} (${formatBytes(crewStateBytes)})`);
+	} else {
+		lines.push("  - (not present — nothing to do)");
+	}
+
+	// 2. pi-crew global config (~/.pi/agent/pi-crew.json) — gated on force=true
+	//    because it may hold user-customized settings (autonomous profile, model
+	//    overrides, etc.). Default preserves it.
+	const userConfigPath = path.join(userPiRoot(), "pi-crew.json");
+	lines.push("pi-crew global config:");
+	if (!fs.existsSync(userConfigPath)) {
+		lines.push(`  - (not present at ${userConfigPath} — nothing to do)`);
+	} else if (!force) {
+		lines.push(`  - present at ${userConfigPath} (preserved — use force: true to remove; may hold your customized settings)`);
+	} else {
+		if (!dryRun) {
+			try { fs.rmSync(userConfigPath, { force: true }); }
+			catch (e) { lines.push(`  - ERROR removing: ${(e as Error).message}`); }
+		}
+		lines.push(`  - ${dryRun ? "would remove" : "removed"}: ${userConfigPath}`);
+	}
+
+	// 3. pi-crew smoke-test `.bak-*` junk in ~/.pi/agent/agents/. These are
+	//    leftover backups from pi-crew's own smoke tests (pattern:
+	//    `<name>.md.bak-<timestamp>-<hex>`). NEVER touch real `.md` agent files
+	//    (can't tell user-authored vs test-copied).
+	const agentsDir = path.join(userPiRoot(), "agents");
+	lines.push("pi-crew test junk in agents dir:");
+	const bakJunk: string[] = [];
+	if (fs.existsSync(agentsDir)) {
+		try {
+			for (const entry of fs.readdirSync(agentsDir)) {
+				// Only the pi-crew smoke-test backup pattern. Real agent files end in `.md`.
+				if (/^.*\.md\.bak-\d{17,}-[0-9a-f]+$/i.test(entry)) {
+					bakJunk.push(path.join(agentsDir, entry));
+				}
+			}
+		} catch { /* best-effort scan */ }
+	}
+	if (bakJunk.length === 0) {
+		lines.push("  - (no `*.md.bak-*` test backups found — nothing to do)");
+	} else {
+		for (const junk of bakJunk) {
+			if (!dryRun) {
+				try { fs.rmSync(junk, { force: true }); }
+				catch (e) { lines.push(`  - ERROR removing ${path.basename(junk)}: ${(e as Error).message}`); }
+			}
+		}
+		lines.push(`  - ${dryRun ? "would remove" : "removed"}: ${bakJunk.length} backup file(s) (pattern *.md.bak-<timestamp>-<hex>)`);
+	}
+
+	lines.push("");
+	lines.push(
+		dryRun
+			? "(dry-run preview — no files were changed. Re-run without dryRun to apply.)"
+			: "Done. To fully remove pi-crew: also run `team action=cleanup force=true` (project .crew/) + `pi uninstall npm:pi-crew`.",
+	);
+	return result(lines.join("\n"), { action: "cleanup", status: "ok", scope: "user" }, false);
+}
+
+/** Recursively compute a directory's size in bytes (best-effort). */
+function dirSize(dir: string): number {
+	let total = 0;
+	const stack = [dir];
+	while (stack.length > 0) {
+		const cur = stack.pop()!;
+		let entries: string[];
+		try { entries = fs.readdirSync(cur); }
+		catch { continue; }
+		for (const entry of entries) {
+			const full = path.join(cur, entry);
+			try {
+				const stat = fs.statSync(full);
+				if (stat.isDirectory()) stack.push(full);
+				else total += stat.size;
+			} catch { /* skip unreadable */ }
+		}
+	}
+	return total;
+}
+
+function formatBytes(n: number): string {
+	if (n < 1024) return `${n}B`;
+	if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
+	if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+	return `${(n / (1024 * 1024 * 1024)).toFixed(1)}GB`;
 }
 
 /** Per-run worktree cleanup (existing behavior, preserved). */
