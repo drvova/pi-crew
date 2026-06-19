@@ -180,9 +180,34 @@ function handleStateFlip(input: GoalSubActionInput, nextState: GoalLoopStatus, l
 	const eventsPath = `${ctx.cwd}/.crew/state/goals/${goalId}.events.jsonl`;
 	const updated = store.setStatus(goalId, nextState, eventsPath);
 	if (!updated) return result(`Goal '${goalId}' not found.`, { action: "goal", status: "error" }, true);
-	// For `stop`: also cancel the in-flight turn runId if any (§0c C11).
-	// Full handleCancel(currentRunId) integration lands with the run.ts goal-stop path.
-	return result(`Goal ${goalId} ${label} (state='${updated.state}').${updated.currentRunId ? ` In-flight turn ${updated.currentRunId} will be observed at the next turn boundary (cooperative).` : ""}`, { action: "goal", status: "ok", data: { goalId, state: updated.state } }, false);
+	return result(`Goal ${goalId} ${label} (state='${updated.state}').`, { action: "goal", status: "ok", data: { goalId, state: updated.state } }, false);
+}
+
+/**
+ * `goal stop`/`cancel`/`clear`/`reset` — cooperative flag + cancel the in-flight turn (H-5).
+ * Flips GoalLoopState.state='cancelled' so the loop exits at the next turn boundary,
+ * AND calls handleCancel(currentRunId) to kill a running turn immediately. §0c C11.
+ */
+async function handleStop(input: GoalSubActionInput): Promise<ReturnType<typeof result>> {
+	const { params, ctx, store } = input;
+	const goalId = params.config?.goalId as string | undefined;
+	if (!goalId) return result("stop requires config.goalId.", { action: "goal", status: "error" }, true);
+	const eventsPath = `${ctx.cwd}/.crew/state/goals/${goalId}.events.jsonl`;
+	const before = store.load(goalId);
+	if (!before) return result(`Goal '${goalId}' not found.`, { action: "goal", status: "error" }, true);
+	const updated = store.setStatus(goalId, "cancelled", eventsPath)!;
+	// If a turn is mid-flight, cancel it now (not just at the next turn boundary).
+	let cancelMsg = "";
+	if (updated.currentRunId) {
+		try {
+			const { handleCancel } = await import("./cancel.ts");
+			const cancelResult = await handleCancel({ action: "cancel", runId: updated.currentRunId, force: true }, ctx);
+			cancelMsg = ` In-flight turn ${updated.currentRunId} cancel: ${(cancelResult.content[0] as { text?: string } | undefined)?.text ?? "ok"}.`;
+		} catch (error) {
+			cancelMsg = ` (in-flight turn ${updated.currentRunId} cancel failed: ${error instanceof Error ? error.message : String(error)}; the loop will still exit at the next turn boundary.)`;
+		}
+	}
+	return result(`Goal ${goalId} stopped (state='cancelled').${cancelMsg}`, { action: "goal", status: "ok", data: { goalId, state: "cancelled", cancelledRunId: updated.currentRunId } }, false);
 }
 
 /** `team action='goal'` dispatch. */
@@ -204,7 +229,7 @@ export async function handleGoal(params: TeamToolParamsValue, ctx: TeamContext):
 		case "cancel":
 		case "clear":
 		case "reset":
-			return handleStateFlip(input, "cancelled", "stopped");
+			return await handleStop(input);
 		case "step":
 			// P0: step is a status-only stub — single-turn execution lands with P1.
 			return handleStatus(input);
