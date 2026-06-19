@@ -85,6 +85,12 @@ const TEAM_EVENT_TYPES = [
 	"goal.loop_end",
 	"goal.feedback_steered",
 	"goal.state_changed",
+	// Dynamic workflow events (P2) — script-driven orchestration.
+	"dwf.started",
+	"dwf.phase_started",
+	"dwf.phase_completed",
+	"dwf.completed",
+	"dwf.failed",
 ] as const;
 export type TeamEventType = typeof TEAM_EVENT_TYPES[number];
 

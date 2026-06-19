@@ -39,4 +39,17 @@ export interface WorkflowConfig {
 	filePath: string;
 	steps: WorkflowStep[];
 	maxConcurrency?: number;
+	/** P2 dynamic-workflow discriminator. Default "static" (the .workflow.md step-list model).
+	 *  "dynamic" = the workflow is a JS/TS script (.dwf.ts) run via dynamic-workflow-runner.
+	 *  Backward-compatible: absent = "static". */
+	runtime?: "static" | "dynamic";
+	/** For runtime:"dynamic" — relative/absolute path to the .dwf.ts script. Unused for static. */
+	dynamicScript?: string;
+}
+
+/** A dynamic workflow (runtime === "dynamic"). steps is empty — the script is the source of truth. */
+export interface DynamicWorkflowConfig extends WorkflowConfig {
+	runtime: "dynamic";
+	dynamicScript: string;
+	steps: [];
 }

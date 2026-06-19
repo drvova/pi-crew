@@ -624,11 +624,18 @@ async function main(): Promise<void> {
 					);
 				}
 				case "dynamic-workflow": {
-					// P2/P3: dispatched to runDynamicWorkflow({ manifest, workflow, ctx, signal }).
-					// Stub until dynamic-workflow-runner.ts lands — P0a stays self-contained (regression-safe).
-					throw new Error(
-						`runKind="dynamic-workflow" dispatch not yet implemented (planned P2). runId=${manifest.runId}`,
-					);
+					// P2: dispatched to runDynamicWorkflow({ manifest, workflow, signal }).
+					// The workflow config is re-derived from the manifest's workflow name via direct-run helpers.
+					const { runDynamicWorkflow } = await import("./dynamic-workflow-runner.ts");
+					const { allWorkflows, discoverWorkflows } = await import("../workflows/discover-workflows.ts");
+					const wfDiscovery = discoverWorkflows(manifest.cwd);
+					const wf = allWorkflows(wfDiscovery).find((w) => w.name === manifest.workflow);
+					if (!wf || wf.runtime !== "dynamic" || !wf.dynamicScript) {
+						throw new Error(`runKind="dynamic-workflow" but workflow '${manifest.workflow}' is not dynamic (runId=${manifest.runId})`);
+					}
+					const dwfResult = await runDynamicWorkflow({ manifest, workflow: wf as import("../workflows/workflow-config.ts").DynamicWorkflowConfig, signal: abortController.signal });
+					result = dwfResult;
+					break;
 				}
 				default: {
 					// Existing "team-run" path — unchanged behavior.

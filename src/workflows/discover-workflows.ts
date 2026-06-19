@@ -120,11 +120,35 @@ function parseWorkflowFile(filePath: string, source: ResourceSource): WorkflowCo
 
 function readWorkflowDir(dir: string, source: ResourceSource): WorkflowConfig[] {
 	if (!fs.existsSync(dir)) return [];
-	return fs.readdirSync(dir)
+	const staticWorkflows = fs.readdirSync(dir)
 		.filter((entry) => entry.endsWith(".workflow.md"))
 		.map((entry) => parseWorkflowFile(path.join(dir, entry), source))
 		.filter((workflow): workflow is WorkflowConfig => workflow !== undefined)
 		.sort((a, b) => a.name.localeCompare(b.name));
+	// P2: also discover dynamic workflows (*.dwf.ts). A .dwf.ts's default export is a JS orchestrator.
+	const dynamicWorkflows = fs.readdirSync(dir)
+		.filter((entry) => entry.endsWith(".dwf.ts"))
+		.map((entry) => parseDynamicWorkflowFile(path.join(dir, entry), source))
+		.filter((workflow): workflow is WorkflowConfig => workflow !== undefined);
+	return [...staticWorkflows, ...dynamicWorkflows].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** P2: a .dwf.ts is a dynamic workflow. Name = filename stem; script = the file itself. */
+function parseDynamicWorkflowFile(filePath: string, source: ResourceSource): WorkflowConfig | undefined {
+	try {
+		const basename = path.basename(filePath, ".dwf.ts");
+		return {
+			name: basename,
+			description: `Dynamic workflow script (${basename}.dwf.ts).`,
+			source,
+			filePath,
+			steps: [],
+			runtime: "dynamic",
+			dynamicScript: filePath,
+		};
+	} catch {
+		return undefined;
+	}
 }
 
 export function discoverWorkflows(cwd: string): WorkflowDiscoveryResult {

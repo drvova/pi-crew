@@ -250,6 +250,45 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	atomicWriteJson(paths.manifestPath, updatedManifest);
 	registerActiveRun(updatedManifest);
 
+	// P2: dynamic-workflow dispatch — when the resolved workflow is a .dwf.ts (runtime:"dynamic"),
+	// run it via runDynamicWorkflow instead of the static executeTeamRun path. The script
+	// orchestrates subagents via ctx.agent(); only ctx.setResult() reaches the main context.
+	// Placed AFTER manifest creation so runId/paths/artifactsRoot are available.
+	if (!directAgent && (workflow as import("../../workflows/workflow-config.ts").DynamicWorkflowConfig).runtime === "dynamic") {
+		const { runDynamicWorkflow } = await import("../../runtime/dynamic-workflow-runner.ts");
+		// Re-synthesize a dynamic-team (§0c C9) for role resolution.
+		const dwfTeam: import("../../teams/team-config.ts").TeamConfig = {
+			name: `dwf-${manifest.runId.slice(-12)}`,
+			description: `Dynamic workflow run for ${workflow.name}`,
+			source: "dynamic",
+			filePath: "<dynamic-workflow>",
+			roles: [{ name: "worker", agent: params.agent ?? "executor" }],
+			workspaceMode: "single",
+		};
+		const dwfManifest: import("../../state/types.ts").TeamRunManifest = {
+			...updatedManifest,
+			runKind: "dynamic-workflow",
+			team: dwfTeam.name,
+		};
+		atomicWriteJson(paths.manifestPath, dwfManifest);
+		try {
+			const dwfResult = await runDynamicWorkflow({
+				manifest: dwfManifest,
+				workflow: workflow as import("../../workflows/workflow-config.ts").DynamicWorkflowConfig,
+				team: dwfTeam,
+				signal: ctx.signal ?? AbortSignal.timeout(3_600_000),
+				modelOverride: params.model,
+			});
+			return result(
+				`Dynamic workflow '${workflow.name}' completed.\n${dwfResult.manifest.summary ?? ""}`,
+				{ action: "run", status: dwfResult.manifest.status === "failed" ? "error" : "ok", runId: dwfResult.manifest.runId, artifactsRoot: dwfResult.manifest.artifactsRoot },
+				dwfResult.manifest.status === "failed",
+			);
+		} finally {
+			unregisterActiveRun(dwfManifest.runId);
+		}
+	}
+
 	const loadedConfig = loadConfig(resolvedCtx.cwd);
 	// DX (Round 16 F4): surface config errors/warnings instead of silently
 	// proceeding with defaults. Non-blocking: emit a config.warning event so
