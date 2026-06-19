@@ -6,9 +6,10 @@
  *
  * The `ctx` object passed to a `.dwf.ts` script's `export default async function(ctx)`.
  * Capability-locked: exposes ONLY the documented methods (no raw manifest/process/require).
- * The script host (dynamic-workflow-runner.ts) loads the script via vm.runInNewContext
- * with a minimal globals object so the script cannot reach `process`/`require`/`import`
- * directly (§0c C4 — v1 trust boundary, not security boundary; isolated-vm deferred to v1.5).
+ * The script host (dynamic-workflow-runner.ts) loads the script via jiti in plain module
+ * scope with a FROZEN WorkflowCtx. v1 has NO vm sandbox (review H-2): the script CAN
+ * reach `process`/`require`/`import` directly — the frozen ctx is a contract surface,
+ * not a security boundary. `.dwf.ts` = postinstall-equivalent trust. isolated-vm v1.5.
  *
  * `agent()` resolution (§0b G4): 4-tier precedence
  *   1. opts.agent (explicit name) — bypasses team lookup
