@@ -128,6 +128,27 @@ function truncate(s: string, n: number): string {
 }
 
 /**
+ * Round-10 fallback: when judge emits a plain JSON verdict (no event stream),
+ * try to parse the raw stdout as a verdict directly. Some judges configured
+ * with strict JSON-only system prompts emit just the verdict line, e.g.
+ *   {"achieved":true,"reason":"...","evidenceRefs":[...]}
+ * without the usual pi event wrapper. Returns a partial GoalVerdict on success
+ * (caller fills turn/model/evaluatedAt), undefined otherwise.
+ */
+function tryParseDirectVerdict(stdout: string): { achieved: boolean; reason: string; evidenceRefs?: string[] } | undefined {
+	const trimmed = stdout.trim();
+	if (!trimmed.startsWith("{")) return undefined;
+	try {
+		const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+		if (typeof parsed.achieved !== "boolean" || typeof parsed.reason !== "string") return undefined;
+		const refs = Array.isArray(parsed.evidenceRefs) ? parsed.evidenceRefs.filter((r): r is string => typeof r === "string") : undefined;
+		return { achieved: parsed.achieved, reason: parsed.reason, ...(refs ? { evidenceRefs: refs } : {}) };
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * Evaluate whether the goal is achieved, given the turn's evidence.
  * Returns a GoalVerdict. On any failure (non-zero exit, non-JSON, invalid shape),
  * returns a `BLOCKED:`-prefixed verdict so the loop stops (§0c C6 fallback).
@@ -161,6 +182,23 @@ export async function evaluateGoal(input: EvaluateGoalInput): Promise<GoalVerdic
 
 		const parsed = parsePiJsonOutput(result.stdout);
 		const finalText = parsed.finalText ?? "";
+		// Round-10 test fix (real model): parsePiJsonOutput expects pi event stream
+		// ({type:"message_end", message:{role:"assistant", content:[...]}}). But
+		// judges configured with --mode json + a strict JSON-only system prompt
+		// (JUDGE_SYSTEM_PROMPT) sometimes emit the verdict directly without event
+		// wrapping, e.g. a single line: {"achieved":true,"reason":"...","evidenceRefs":[...]}.
+		// Try to parse stdout itself as a verdict JSON before falling back to BLOCKED.
+		const direct = !finalText.trim() ? tryParseDirectVerdict(result.stdout) : undefined;
+		if (direct) {
+			return {
+				turn: input.turn,
+				achieved: direct.achieved,
+				reason: direct.reason,
+				evidenceRefs: direct.evidenceRefs,
+				evaluatorModel: input.model,
+				evaluatedAt,
+			};
+		}
 		if (!finalText.trim()) {
 			return blockedVerdict(input.turn, input.model, evaluatedAt, "judge produced no output");
 		}
