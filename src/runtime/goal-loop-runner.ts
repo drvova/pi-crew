@@ -57,7 +57,7 @@ export interface RunGoalLoopResult {
  * Kept for unit tests of the loop's max_turns exit path. The production loop
  * uses `realGoalEvaluator` (P1) which calls the LLM judge.
  */
-export const stubGoalEvaluator = async (goal: GoalLoopState, _turnRunId: string): Promise<GoalVerdict> => ({
+export const stubGoalEvaluator = async (goal: GoalLoopState, _turnRunId: string, _m?: import("../state/types.ts").TeamRunManifest, _t?: import("../state/types.ts").TeamTaskState[], _s?: AbortSignal): Promise<GoalVerdict> => ({
 	turn: goal.turnsUsed,
 	achieved: false,
 	reason: `not-achieved: stub evaluator (P0). Turn ${goal.turnsUsed}/${goal.maxTurns} completed; P1 will judge against objective + verification.`,
@@ -70,6 +70,7 @@ export type GoalEvaluatorFn = (
 	turnRunId: string,
 	turnManifest: import("../state/types.ts").TeamRunManifest,
 	turnTasks: import("../state/types.ts").TeamTaskState[],
+	signal: AbortSignal,
 ) => Promise<GoalVerdict>;
 
 /**
@@ -83,6 +84,7 @@ export const realGoalEvaluator = async (
 	turnRunId: string,
 	turnManifest: import("../state/types.ts").TeamRunManifest,
 	turnTasks: import("../state/types.ts").TeamTaskState[],
+	signal: AbortSignal,
 ): Promise<GoalVerdict> => {
 	const transcriptPath = deriveTranscriptPath(turnManifest.artifactsRoot, turnTasks);
 	const evidence = bundleEvidence(transcriptPath, undefined);
@@ -95,6 +97,7 @@ export const realGoalEvaluator = async (
 		turn: goal.turnsUsed,
 		cwd: goal.cwd,
 		artifactsRoot: turnManifest.artifactsRoot,
+		signal,
 	});
 };
 
@@ -268,7 +271,7 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 			const updatedBudget = accumulateBudget(goal, created.manifest.runId);
 
 			// ── EVALUATE (P1: real LLM judge; pass turn manifest + tasks for transcript lookup) ──
-			const verdict = await evaluator({ ...goal, budgetUsed: updatedBudget }, created.manifest.runId, turnResult.manifest, turnResult.tasks);
+			const verdict = await evaluator({ ...goal, budgetUsed: updatedBudget }, created.manifest.runId, turnResult.manifest, turnResult.tasks, signal);
 			const historyEntry = { runId: created.manifest.runId, outcome: verdict.achieved ? "achieved" : "not-achieved", learnedAt: new Date().toISOString(), turn: turnIndex };
 			goal = store.patch(goal.goalId, {
 				budgetUsed: updatedBudget,

@@ -537,6 +537,40 @@ async function main(): Promise<void> {
 			const fd = fs.openSync(manifest.eventsPath, "a");
 			try { fs.fsyncSync(fd); } finally { try { fs.closeSync(fd); } catch { /* best-effort */ } }
 		} catch { /* best-effort */ } // FORCE flush so we see this before death
+		// Fix round-4 CRITICAL: goal-loop and dynamic-workflow manifests use SYNTHETIC
+		// team/workflow names not in discoverTeams/discoverWorkflows. The team+workflow
+		// lookup below would throw "Team not found" BEFORE the runKind switch, making the
+		// goal feature unreachable from background. Short-circuit the new runKinds here.
+		process.env.PI_CREW_BACKGROUND_MODE = "1";
+		let earlyResult: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined;
+		let result: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined = earlyResult;
+		if (manifest.runKind === "goal-loop" || manifest.runKind === "dynamic-workflow") {
+			debugLog(`[background-runner] short-circuiting ${manifest.runKind} (synthetic team/workflow)`,
+			);
+			if (manifest.runKind === "goal-loop") {
+				const { runGoalLoop } = await import("./goal-loop-runner.ts");
+				const { GoalStore } = await import("./goal-state-store.ts");
+				const { discoverAgents, allAgents } = await import("../agents/discover-agents.ts");
+				const store = new GoalStore(manifest.cwd);
+				const goalState = store.load(manifest.runId);
+				if (!goalState) throw new Error(`runKind="goal-loop" but GoalLoopState '${manifest.runId}' not found (cwd=${manifest.cwd})`);
+				const goalResult = await runGoalLoop({ goalState, manifest, signal: abortController.signal, deps: { discoverAgents: (c: string) => allAgents(discoverAgents(c)) } });
+				// Fix P1-1: persist terminal status on the goal-loop manifest.
+				const finalGoalManifest: TeamRunManifest = { ...goalResult.manifest, status: "completed", updatedAt: new Date().toISOString() };
+				saveRunManifest(finalGoalManifest);
+				earlyResult = { manifest: finalGoalManifest, tasks: goalResult.tasks };
+			} else {
+				const { runDynamicWorkflow } = await import("./dynamic-workflow-runner.ts");
+				const { allWorkflows, discoverWorkflows } = await import("../workflows/discover-workflows.ts");
+				const wf = allWorkflows(discoverWorkflows(manifest.cwd)).find((w) => w.name === manifest.workflow);
+				if (!wf || wf.runtime !== "dynamic" || !wf.dynamicScript) throw new Error(`runKind="dynamic-workflow" but workflow '${manifest.workflow}' is not dynamic (runId=${manifest.runId})`);
+				const dwfResult = await runDynamicWorkflow({ manifest, workflow: wf as import("../workflows/workflow-config.ts").DynamicWorkflowConfig, signal: abortController.signal });
+				saveRunManifest(dwfResult.manifest);
+				earlyResult = dwfResult;
+			}
+			console.log(`[background-runner] ${manifest.runKind} returned, status=${earlyResult.manifest.status}`);
+		}
+		if (!earlyResult) {
 		debugLog(`[background-runner] calling directTeamAndWorkflowFromRun`,
 		);
 		const direct = directTeamAndWorkflowFromRun(manifest, tasks, agents);
@@ -613,46 +647,10 @@ async function main(): Promise<void> {
 		// so it is available here and its signal is passed through to executeTeamRun → child-pi.
 
 		debugLog(`[background-runner] dispatching runKind=${manifest.runKind ?? "team-run"}`);
-		let result;
 		try {
+			// Fix round-4: goal-loop/dynamic-workflow handled by the short-circuit above.
+			// This switch now only carries the traditional team-run path.
 			switch (manifest.runKind ?? "team-run") {
-				case "goal-loop": {
-					// P0/P1: dispatched to runGoalLoop. The GoalLoopState is persisted at
-					// <crewRoot>/state/goals/<goalId>.json by handleStart; we locate it via the
-					// manifest's runId (the goal-loop manifest's runId IS the goalId by convention
-					// set in handleStart — see team-tool/goal.ts).
-					const { runGoalLoop } = await import("./goal-loop-runner.ts");
-					const { GoalStore } = await import("./goal-state-store.ts");
-					const { discoverAgents, allAgents } = await import("../agents/discover-agents.ts");
-					const store = new GoalStore(manifest.cwd);
-					// The goal-loop manifest's runId is the goalId (handleStart sets manifest.runId = goalId).
-					const goalState = store.load(manifest.runId);
-					if (!goalState) {
-						throw new Error(`runKind="goal-loop" but GoalLoopState '${manifest.runId}' not found (cwd=${manifest.cwd})`);
-					}
-					const goalResult = await runGoalLoop({
-						goalState,
-						manifest,
-						signal: abortController.signal,
-						deps: { discoverAgents: (cwd: string) => allAgents(discoverAgents(cwd)) },
-					});
-					result = { manifest: goalResult.manifest, tasks: goalResult.tasks };
-					break;
-				}
-				case "dynamic-workflow": {
-					// P2: dispatched to runDynamicWorkflow({ manifest, workflow, signal }).
-					// The workflow config is re-derived from the manifest's workflow name via direct-run helpers.
-					const { runDynamicWorkflow } = await import("./dynamic-workflow-runner.ts");
-					const { allWorkflows, discoverWorkflows } = await import("../workflows/discover-workflows.ts");
-					const wfDiscovery = discoverWorkflows(manifest.cwd);
-					const wf = allWorkflows(wfDiscovery).find((w) => w.name === manifest.workflow);
-					if (!wf || wf.runtime !== "dynamic" || !wf.dynamicScript) {
-						throw new Error(`runKind="dynamic-workflow" but workflow '${manifest.workflow}' is not dynamic (runId=${manifest.runId})`);
-					}
-					const dwfResult = await runDynamicWorkflow({ manifest, workflow: wf as import("../workflows/workflow-config.ts").DynamicWorkflowConfig, signal: abortController.signal });
-					result = dwfResult;
-					break;
-				}
 				default: {
 					// Existing "team-run" path — unchanged behavior.
 					result = await executeTeamRun({
@@ -682,8 +680,9 @@ async function main(): Promise<void> {
 			);
 			throw execError;
 		}
-		manifest = result.manifest;
-		tasks = result.tasks;
+		} // close if (!earlyResult) — team-run setup+execute done; earlyResult path skips to here
+		manifest = result!.manifest;
+		tasks = result!.tasks;
 		appendEvent(manifest.eventsPath, {
 			type: "async.completed",
 			runId: manifest.runId,

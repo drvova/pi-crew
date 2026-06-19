@@ -55,16 +55,19 @@ function resolveScriptPath(workflow: DynamicWorkflowConfig, cwd: string): string
 	// (discover-workflows.ts only reads from packageRoot/workflows, userPiRoot/workflows,
 	//  and projectCrewRoot/workflows — so the script already came from an allowed dir,
 	//  but we still validate containment to defeat symlink traversal.)
-	const allowed = [`${crewRoot}/workflows`, workflow.filePath];
-	for (const base of allowed) {
+	// Fix round-4 P2-5: the old logic included `workflow.filePath` as a base, making the
+	// containment check a no-op (base === target). Only check against real allowlist bases.
+	const allowedBases = [`${crewRoot}/workflows`];
+	for (const base of allowedBases) {
 		try {
 			const real = resolveRealContainedPath(base, workflow.filePath);
 			if (real) return real;
 		} catch {
-			// try next base
+			// not contained in this base — try next
 		}
 	}
-	return workflow.filePath; // fall back; discovery already validated provenance.
+	// Not contained in any allowed base — refuse (do NOT fall back to the raw path).
+	throw new Error(`Dynamic workflow '${workflow.filePath}' is outside the allowed workflows directories (${allowedBases.join(", ")}). Refusing to load.`);
 }
 
 /**
@@ -74,6 +77,10 @@ function resolveScriptPath(workflow: DynamicWorkflowConfig, cwd: string): string
 async function loadWorkflowModule(scriptPath: string): Promise<DynamicWorkflowScript> {
 	// jiti is the same loader async-runner.ts uses (resolveTypeScriptLoader). We require it
 	// lazily so this module stays importable in environments without jiti (type-only consumers).
+	// Fix round-4: use createRequire(import.meta.url) so `require` works under the strip-types
+	// loader fallback (Node ≥ 22.6) where bare `require` is not defined in ESM scope.
+	const { createRequire } = await import("node:module");
+	const require = createRequire(import.meta.url);
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const createJiti = require("jiti").default ?? require("jiti");
 	const jiti = createJiti(import.meta.url, { interopDefault: true });
