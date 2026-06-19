@@ -23,7 +23,7 @@ test("synthesizeJudgeAgentConfig applies full C6 lockdown (NOT just tools:[])", 
 	assert.deepEqual(cfg.extensions, []);
 	assert.equal(cfg.inheritProjectContext, false);
 	assert.equal(cfg.inheritSkills, false);
-	assert.equal(cfg.maxTurns, 1);
+	assert.equal(cfg.maxTurns, 3);
 	// systemPrompt must forbid assuming un-shown work + require JSON output.
 	assert.match(cfg.systemPrompt, /Do NOT assume work was done/i);
 	assert.match(cfg.systemPrompt, /JSON/i);

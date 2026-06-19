@@ -73,7 +73,7 @@ export function synthesizeJudgeAgentConfig(): AgentConfig {
 		excludeExtensions: [],
 		inheritProjectContext: false,
 		inheritSkills: false,
-		maxTurns: 1,
+		maxTurns: 3, // Round-10 test fix: maxTurns:1 killed judge before model responded.
 		// §0c C6 lockdown: disableTools pushes `--no-tools` (pi-args.ts). Empty tools:[] is INSUFFICIENT.
 		disabled: undefined, // not used; disableTools is the real lockdown
 		override: undefined,
@@ -143,8 +143,8 @@ export async function evaluateGoal(input: EvaluateGoalInput): Promise<GoalVerdic
 			task,
 			agent,
 			model: input.model,
-			maxTurns: 1,
-			graceTurns: 0,
+			maxTurns: 3,
+			graceTurns: 1,
 			inheritContext: false,
 			excludeContextBash: true,
 			// parentContext intentionally omitted → undefined → judge sees only the task prompt.
