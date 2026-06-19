@@ -18,12 +18,13 @@
  */
 
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 import { appendEvent } from "../state/event-log.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { makeWorkflowCtx, getWorkflowFinalResult } from "./dynamic-workflow-context.ts";
-import { projectCrewRoot } from "../utils/paths.ts";
+import { projectCrewRoot, userPiRoot, packageRoot } from "../utils/paths.ts";
 import type { DynamicWorkflowConfig } from "../workflows/workflow-config.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 
@@ -55,9 +56,14 @@ function resolveScriptPath(workflow: DynamicWorkflowConfig, cwd: string): string
 	// (discover-workflows.ts only reads from packageRoot/workflows, userPiRoot/workflows,
 	//  and projectCrewRoot/workflows — so the script already came from an allowed dir,
 	//  but we still validate containment to defeat symlink traversal.)
-	// Fix round-4 P2-5: the old logic included `workflow.filePath` as a base, making the
-	// containment check a no-op (base === target). Only check against real allowlist bases.
-	const allowedBases = [`${crewRoot}/workflows`];
+	// Fix round-5 P1: the round-4 P2-5 fix over-corrected to a SINGLE base (crewRoot/workflows).
+	// But discoverWorkflows() reads from THREE dirs (builtin, user, project). Use the same bases
+	// so user/builtin dynamic workflows aren't rejected.
+	const allowedBases = [
+		join(projectCrewRoot(cwd), "workflows"),
+		join(userPiRoot(), "workflows"),
+		join(packageRoot(), "workflows"),
+	];
 	for (const base of allowedBases) {
 		try {
 			const real = resolveRealContainedPath(base, workflow.filePath);

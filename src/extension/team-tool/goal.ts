@@ -231,12 +231,18 @@ export async function handleGoal(params: TeamToolParamsValue, ctx: TeamContext):
 		case "reset":
 			return await handleStop(input);
 		case "clear": {
-			// Fix P1-3: `goal clear` removes the goal file entirely (vs stop/cancel which keep it).
-			const goalId = params.config?.goalId as string | undefined;
-			if (!goalId) return result("clear requires config.goalId.", { action: "goal", status: "error" }, true);
-			const removed = store.remove(goalId);
-			if (!removed) return result(`Goal '${goalId}' not found (already cleared?).`, { action: "goal", status: "error" }, true);
-			return result(`Goal '${goalId}' cleared (file removed).`, { action: "goal", status: "ok", data: { goalId, cleared: true } }, false);
+			// Fix P1-3 + round-5 P2: remove the goal file. But refuse if the loop is still
+			// running (would leave a zombie background process). Require stop first.
+			const clearGoalId = params.config?.goalId as string | undefined;
+			if (!clearGoalId) return result("clear requires config.goalId.", { action: "goal", status: "error" }, true);
+			const existing = store.load(clearGoalId);
+			if (!existing) return result(`Goal '${clearGoalId}' not found (already cleared?).`, { action: "goal", status: "error" }, true);
+			if (existing.state === "running" || existing.state === "paused") {
+				return result(`Goal '${clearGoalId}' is still ${existing.state}. Stop it first (team action='goal' subAction='stop' goalId='${clearGoalId}'), then clear.`, { action: "goal", status: "error", data: { goalId: clearGoalId, state: existing.state } }, true);
+			}
+			const removed = store.remove(clearGoalId);
+			if (!removed) return result(`Goal '${clearGoalId}' could not be removed.`, { action: "goal", status: "error" }, true);
+			return result(`Goal '${clearGoalId}' cleared (file removed).`, { action: "goal", status: "ok", data: { goalId: clearGoalId, cleared: true } }, false);
 		}
 		case "step":
 			// P0: step is a status-only stub — single-turn execution lands with P1.

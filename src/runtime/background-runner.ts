@@ -543,7 +543,7 @@ async function main(): Promise<void> {
 		// goal feature unreachable from background. Short-circuit the new runKinds here.
 		process.env.PI_CREW_BACKGROUND_MODE = "1";
 		let earlyResult: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined;
-		let result: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined = earlyResult;
+		let result: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined;
 		if (manifest.runKind === "goal-loop" || manifest.runKind === "dynamic-workflow") {
 			debugLog(`[background-runner] short-circuiting ${manifest.runKind} (synthetic team/workflow)`,
 			);
@@ -569,6 +569,7 @@ async function main(): Promise<void> {
 				earlyResult = dwfResult;
 			}
 			console.log(`[background-runner] ${manifest.runKind} returned, status=${earlyResult.manifest.status}`);
+			result = earlyResult;
 		}
 		if (!earlyResult) {
 		debugLog(`[background-runner] calling directTeamAndWorkflowFromRun`,
