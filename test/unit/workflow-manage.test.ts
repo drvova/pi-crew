@@ -14,6 +14,7 @@ import {
 	handleWorkflowGet,
 	handleWorkflowList,
 	handleWorkflowDelete,
+	handleWorkflowSave,
 } from "../../src/extension/team-tool/workflow-manage.ts";
 
 function tmpCwd(): string {
@@ -129,6 +130,17 @@ test("workflow-delete requires confirm:true + only deletes dynamic workflows ins
 		const ok = handleWorkflowDelete({ action: "workflow-delete", confirm: true, config: { name: "demo" } }, ctx(cwd));
 		assert.equal(ok.isError, false);
 		assert.ok(!fs.existsSync(path.join(cwd, ".crew", "workflows", "demo.dwf.ts")), "file deleted");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("workflow-save REQUIRES confirm:true (H-1 — was unconfirmed arbitrary write)", () => {
+	const cwd = tmpCwd();
+	try {
+		const blocked = handleWorkflowSave({ action: "workflow-save", config: { name: "x", script: CLEAN_SCRIPT } }, ctx(cwd));
+		assert.equal(blocked.isError, true);
+		assert.match((blocked.content[0] as { text: string }).text, /confirm:true/);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}

@@ -32,7 +32,11 @@ function allowedWorkflowDirs(cwd: string): string[] {
 	];
 }
 
-/** Best-effort content validation: reject obvious ACE/exfil patterns (§0c D3). Not a security boundary. */
+/** Best-effort ADVISORY content check (review H-3): trivially bypassable
+ * (require('child'+'_process'), globalThis.process.mainModule.require, dynamic import,
+ *  String.fromCharCode, etc.). This is NOT a security boundary — it catches only
+ *  the most obvious accidental violations. The real boundary is the path-allowlist
+ *  + commit-review trust model. Do NOT rely on this for security. */
 const FORBIDDEN_PATTERNS = [
 	/require\s*\(\s*['"]child_process['"]/,
 	/\bprocess\.exit\s*\(/,
@@ -132,6 +136,11 @@ export function handleWorkflowList(params: TeamToolParamsValue, ctx: TeamContext
 }
 
 export function handleWorkflowSave(params: TeamToolParamsValue, ctx: TeamContext): ReturnType<typeof result> {
+	// H-1 (review): workflow-save writes an arbitrary .dwf.ts (ACE-equivalent) — gate it
+	// via destructive-gate.ts confirm:true (now in DESTRUCTIVE_TEAM_ACTIONS) + re-check here.
+	if (params.confirm !== true) {
+		return result("workflow-save writes an executable .dwf.ts and requires confirm:true (gated by destructive-gate.ts).", { action: "workflow-save", status: "error" }, true);
+	}
 	// workflow-save: persist an ephemeral run's script as a named reusable workflow.
 	// Reads the source from config.script (the caller provides what to save).
 	const name = params.config?.name as string | undefined;

@@ -59,21 +59,27 @@ minimal (`source:'dynamic'`).
 ## Security model (IMPORTANT)
 
 `.dwf.ts` files are **postinstall-equivalent trust** — treat them as `node script.js`.
-The v1 boundary is **capability-locked**, NOT sandboxed:
 
-- `WorkflowCtx` is `Object.freeze()`d and exposes ONLY the documented methods.
-- The script host loads it via `vm.runInNewContext` with a minimal globals object
-  (no `process`/`require`/`import` passthrough).
-- A determined script can still escape via constructor walking. `isolated-vm` (real
-  V8 isolate) is planned for v1.5.
+**v1 boundary (honest):** The `WorkflowCtx` is `Object.freeze()`d and exposes ONLY
+the documented methods — but the script otherwise runs in **plain module scope** with
+full access to `require`/`import`/`process`. There is **no vm sandbox in v1**; the
+script can reach `process`/`require` directly or via constructor walking. The
+"capability-locked ctx" is the documented contract surface, not a security boundary.
+
+- The path-allowlist (`resolveRealContainedPath`) limits **WHERE** scripts load from
+  (`.crew/workflows/`, `<proj>/.pi/teams/workflows/`, `~/.pi/agent/extensions/pi-crew/workflows/`),
+  not what they can do.
+- `isolated-vm` (real V8 isolate) is planned for **v1.5**.
 - **Only place `.dwf.ts` files you have reviewed** in `.crew/workflows/`.
 
-`workflow-create` is an arbitrary-code-execution (ACE) surface and is gated:
-- Requires `confirm:true` (enforced by `destructive-gate.ts` at the tool_call layer).
-- **User-initiated only** — the agent MUST NOT auto-invoke it.
+`workflow-create` and `workflow-save` are arbitrary-code-execution (ACE) surfaces and are gated:
+- Require `confirm:true` (enforced by `destructive-gate.ts` at the tool_call layer).
+- **User-initiated only** — the agent MUST NOT auto-invoke them.
 - Path-allowlisted via `resolveRealContainedPath` (TOCTOU-safe, not `startsWith`).
-- Content validation rejects obvious `require('child_process')`, `process.exit`,
-  and network-import patterns (best-effort).
+- Content validation rejects obvious `require('child_process')`, `process.exit`, and
+  network-import patterns — but this is **advisory only and trivially bypassable**
+  (e.g. `require('child'+'_process')`, `globalThis.process.mainModule.require`).
+  The real boundary is commit-review + the path-allowlist, not the content check.
 
 ## Isolation
 
