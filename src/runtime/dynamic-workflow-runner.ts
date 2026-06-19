@@ -121,7 +121,25 @@ export async function runDynamicWorkflow(input: RunDynamicWorkflowInput): Promis
 
 	try {
 		const script = await loadWorkflowModule(scriptPath);
-		await script(frozenCtx);
+		// Round-11 test fix (runtime): hard timeout on script execution.
+		// Without this, scripts that spawn long-running child processes (e.g., `spawn("pi", ...)`)
+		// hang forever. The ctx.signal.timeout is cooperative only — it fires AbortSignal,
+		// it does NOT kill the script. Promise.race with a hard timeout at least returns an
+		// error so the runner doesn't hang. The spawned child process is leaked, but the
+		// dynamic-workflow returns failure promptly. (v1.5: use Worker threads to actually kill.)
+		const SCRIPT_TIMEOUT_MS = Number.parseInt(process.env.PI_CREW_DWF_SCRIPT_TIMEOUT_MS ?? "", 10) || 600_000; // 10 min default
+		let timeoutHandle: NodeJS.Timeout | undefined;
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			timeoutHandle = setTimeout(() => {
+				reject(new Error(`Dynamic workflow script timed out after ${SCRIPT_TIMEOUT_MS}ms. The script may have spawned a child process that did not exit. Check for spawn/exec calls without proper stdio handling.`));
+			}, SCRIPT_TIMEOUT_MS);
+			timeoutHandle.unref?.();
+		});
+		try {
+			await Promise.race([script(frozenCtx), timeoutPromise]);
+		} finally {
+			if (timeoutHandle) clearTimeout(timeoutHandle);
+		}
 	} catch (error) {
 		logInternalError("dynamic-workflow-runner.run", error, `runId=${manifest.runId}, workflow=${workflow.name}`);
 		appendEvent(eventsPath, { type: "dwf.failed", runId: manifest.runId, data: { error: error instanceof Error ? error.message : String(error) } });
