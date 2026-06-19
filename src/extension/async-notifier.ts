@@ -110,6 +110,16 @@ export function startAsyncRunNotifier(ctx: ExtensionContext, state: AsyncNotifie
 				const current = markDeadAsyncRunIfNeeded(run) ?? run;
 				if (!isFinished(current.status) || state.seenFinishedRunIds.has(current.runId)) continue;
 				state.seenFinishedRunIds.add(current.runId);
+				// Suppress notifications for INTERNAL goal-loop sub-runs.
+				// The outer goal-loop creates a synthetic 'goal-turn' workflow per turn
+				// (see buildTurnWorkflow in goal-loop-runner.ts). These runs are
+				// implementation details of the autonomous loop — the user only cares
+				// about the OUTER goal-loop's status (runKind:'goal-loop'), which has
+				// its own event stream + status command. Without this filter, every
+				// turn that hits e.g. a transient model rate limit triggers an
+				// alarming 'Error: pi-crew run failed' toast for an internal sub-run
+				// the user never started directly.
+				if (current.workflow === "goal-turn" && current.team.startsWith("goal-")) continue;
 				const level = current.status === "completed" ? "info" : current.status === "cancelled" ? "warning" : "error";
 				ctx.ui.notify(`pi-crew run ${current.status}: ${current.runId} (${current.team}/${current.workflow ?? "none"})`, level);
 			}
