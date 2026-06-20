@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { writeArtifact } from "../state/artifact-store.ts";
+import { redactSecretString } from "../utils/redaction.ts";
 import type { VerificationContract, VerificationCommandResult, GreenLevel, ArtifactDescriptor } from "../state/types.ts";
 
 export interface PhaseGateResult {
@@ -271,6 +272,12 @@ export async function executeVerificationCommands(
 
 	// Run phase gates
 	const bundle = await runPhaseGates(gates, cwd, signal, (phaseResult) => {
+		// P1f: redact secrets from verification output BEFORE persisting to the
+		// world-readable artifact file. redactSecretString is best-effort vs
+		// adversarial workers (RFC §6 — Med-High residual). writeArtifact ALSO
+		// redacts (defense-in-depth); this explicit pass sanitizes the raw output
+		// at the source so the in-memory bundle and the summary below are clean.
+		const safeOutput = redactSecretString(phaseResult.output || "");
 		// Write phase artifact immediately for observability
 		const phaseArtifact = writeArtifact(artifactsRoot, {
 			kind: "log",
@@ -284,7 +291,7 @@ export async function executeVerificationCommands(
 				phaseResult.error ? `Error: ${phaseResult.error}` : "",
 				"",
 				"## Output",
-				phaseResult.output || "(no output)",
+				safeOutput || "(no output)",
 			].join("\n"),
 			producer: taskId,
 		});
@@ -297,11 +304,12 @@ export async function executeVerificationCommands(
 		});
 	});
 
-	// Write summary artifact
+	// Write summary artifact. Redact the whole bundle JSON (it embeds the raw
+	// per-phase output strings) BEFORE writeArtifact persists it.
 	const summaryArtifact = writeArtifact(artifactsRoot, {
 		kind: "metadata",
 		relativePath: `verification-gates/${taskId}-summary.json`,
-		content: JSON.stringify(bundle, null, 2),
+		content: redactSecretString(JSON.stringify(bundle, null, 2)),
 		producer: taskId,
 	});
 

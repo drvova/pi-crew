@@ -6,6 +6,36 @@
 // Pattern for PEM private keys (possessive quantifier prevents backtracking)
 export const PEM_PRIVATE_KEY_PATTERN = /-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+PRIVATE KEY-----/g;
 
+// --- P1f (RFC §P1f / §6 STRIDE) — additional anchored, ReDoS-SAFE secret patterns. ---
+// All patterns below are LINEAR-TIME: each uses a single bounded quantifier on a
+// character class (fixed {N} or a plain +) with NO nested quantifiers and NO
+// overlapping alternation. Boundaries are zero-width lookarounds on simple char
+// classes, which are also linear. Do NOT introduce (a+)+-style nesting here.
+//
+// RESIDUAL (documented, Med-High per RFC §6): regex redaction is BEST-EFFORT
+// against an *adversarial* worker that can encode/split/transform secrets
+// (base64, line splits, novel formats, non-pattern env vars). This catches the
+// common/accidental leak; it is NOT a boundary against a determined exfiltrator.
+// Full mitigation ladder: (1) redaction here + at artifact-write; (2) Phase 1.5
+// sanitized-env verification; (3) sandbox (deferred).
+
+// JWT — three base64url segments separated by dots, distinctive "eyJ" headers.
+// Linear: single + on [A-Za-z0-9_-] per segment, no nesting.
+export const JWT_PATTERN = /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
+
+// GitHub PAT (classic + fine-grained prefixes) — fixed 36-char base62 tail.
+// Linear: fixed {36} count on a char class (constant time per match position).
+export const GITHUB_PAT_PATTERN = /(?<![A-Za-z0-9_])gh[pousr]_[A-Za-z0-9]{36}(?![A-Za-z0-9])/g;
+
+// AWS access key id — fixed 16-char uppercase-alphanumeric tail.
+// Linear: fixed {16} count on a char class.
+export const AWS_ACCESS_KEY_PATTERN = /(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}(?![0-9A-Z])/g;
+
+// Optional extras (RFC OQ13) — same ReDoS-safe shape (fixed counts / single +).
+export const SLACK_TOKEN_PATTERN = /(?<![A-Za-z0-9_-])xox[baprs]-[A-Za-z0-9-]{10,}/g;
+export const GOOGLE_API_KEY_PATTERN = /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])/g;
+export const STRIPE_KEY_PATTERN = /(?<![A-Za-z0-9_])sk_live_[0-9a-zA-Z]{24}(?![0-9a-zA-Z])/g;
+
 // Linear-time secret key detection
 // IMPORTANT: This function must maintain linear-time guarantees.
 // The fast-path regex uses simple string alternatives with anchors only (no quantifiers),
@@ -124,8 +154,19 @@ export function redactSecretString(value: string): string {
 	// Replace Authorization headers (non-Bearer format)
 	result = redactAuthHeader(result);
 	
-	// Replace Bearer tokens
+	// Replace Bearer tokens (run before structured-token patterns so a
+	// "Bearer <jwt>" pair is collapsed first; bare tokens are caught below).
 	result = redactBearerTokens(result);
+	
+	// P1f: structured secret tokens (JWT / GitHub PAT / AWS keys + optional
+	// Slack/Google/Stripe). Best-effort vs adversarial workers (see note above).
+	result = result
+		.replace(JWT_PATTERN, "***")
+		.replace(GITHUB_PAT_PATTERN, "***")
+		.replace(AWS_ACCESS_KEY_PATTERN, "***")
+		.replace(SLACK_TOKEN_PATTERN, "***")
+		.replace(GOOGLE_API_KEY_PATTERN, "***")
+		.replace(STRIPE_KEY_PATTERN, "***");
 	
 	// Replace inline secrets: key=value or key:value patterns
 	result = redactInlineSecrets(result);
@@ -134,51 +175,61 @@ export function redactSecretString(value: string): string {
 }
 
 // Linear-time inline secret redaction: token=xxx, api_key=xxx, etc.
+// FIX (P1f): previously O(n^2) — after a non-secret alphanumeric run, the loop did
+// i++ (advance 1 char) and re-scanned from i+1, so a long run was rescanned O(n)
+// times = O(n^2). The P1f ReDoS test (300KB no-dot input) surfaced this pre-existing
+// bug. Now advances past the whole run when it isn't a redactable secret -> O(n).
 function redactInlineSecrets(value: string): string {
 	const result: string[] = [];
 	let i = 0;
-	
+
 	while (i < value.length) {
-		// Look for pattern: word_chars + = or : + non-whitespace_value
-		// Check for secret key followed by = or :
+		// Collect a run of key characters (alphanumeric, underscore, hyphen).
 		let j = i;
-		let keyLen = 0;
-		
-		// Collect key characters (alphanumeric, underscore, hyphen)
 		while (j < value.length && /[a-zA-Z0-9_-]/.test(value[j])) {
 			j++;
-			keyLen++;
 		}
-		
+		const keyLen = j - i;
+
+		let redacted = false;
 		if (keyLen > 0 && j < value.length && (value[j] === '=' || value[j] === ':')) {
-			const key = value.substring(i, i + keyLen);
-			
+			const key = value.substring(i, j);
+
 			// Check if this is a secret key
 			if (isSecretKey(key)) {
 				// Find the value (everything after = or : until space, comma, or end)
 				const sep = value[j];
 				let k = j + 1;
 				let valLen = 0;
-				while (k < value.length && valLen < 500 && value[k] !== ' ' && value[k] !== ',' && value[k] !== ';' && value[k] !== '"' && value[k] !== '"' && value[k] !== '\r' && value[k] !== '\n') {
+				while (k < value.length && valLen < 500 && value[k] !== ' ' && value[k] !== ',' && value[k] !== ';' && value[k] !== '"' && value[k] !== '\r' && value[k] !== '\n') {
 					k++;
 					valLen++;
 				}
-				
+
 				// Only redact if there's actual content
 				if (valLen > 0) {
 					result.push(key);
 					result.push(sep);
 					result.push("***");
 					i = k;
-					continue;
+					redacted = true;
 				}
 			}
 		}
-		
-		result.push(value[i]);
-		i++;
+
+		if (!redacted) {
+			if (keyLen > 0) {
+				// Not a redactable secret — push the WHOLE run and advance past it (O(n)).
+				result.push(value.substring(i, j));
+				i = j;
+			} else {
+				// Single non-key character (space, punctuation, etc.)
+				result.push(value[i]);
+				i++;
+			}
+		}
 	}
-	
+
 	return result.join("");
 }
 
