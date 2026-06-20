@@ -48,17 +48,19 @@ export function isSecretKey(keyName: string): boolean {
 	if (/^(token|apikey|api_key|password|secret|credential|authorization|privatekey|private_key)$/.test(lower)) {
 		return true;
 	}
-	// Linear scan for prefix characters followed by keywords
+	// Linear scan for prefix characters followed by keywords.
+	// FIX (cold-review #1 of Phase 1): use `lower.startsWith(kw, i+1)` + `lower.charAt(...)` to
+	// avoid allocating substring+toLowerCase inside the O(n) loop (was O(n^2) — adversarial
+	// worker emitting `_`×N+`=` stalled 200KB→29s, 500KB→216s). Now O(n).
 	const prefixes = "_.-";
 	const keywords = ["token", "api", "key", "password", "passwd", "secret", "credential", "authorization", "private"];
 
 	for (let i = 0; i < keyName.length; i++) {
 		if (prefixes.includes(keyName[i])) {
-			const remaining = keyName.substring(i + 1).toLowerCase();
 			for (const kw of keywords) {
-				if (remaining.startsWith(kw)) {
-					const afterKw = remaining.substring(kw.length);
-					if (afterKw === "" || prefixes.includes(afterKw[0]) || /[a-zA-Z0-9]/.test(afterKw[0])) {
+				if (lower.startsWith(kw, i + 1)) {
+					const afterCh = lower.charAt(i + 1 + kw.length);
+					if (afterCh === "" || prefixes.includes(afterCh) || /[a-zA-Z0-9]/.test(afterCh)) {
 						return true;
 					}
 				}

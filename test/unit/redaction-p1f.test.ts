@@ -141,4 +141,17 @@ describe("P1f redaction — ReDoS safety (linear-time, no hang)", () => {
 		assert.ok(typeof out === "string");
 		assert.ok(elapsed < 1000, `AWS regex must be linear (took ${elapsed}ms)`);
 	});
+
+	it("REGRESSION (cold-review #1): isSecretKey prefix-scan is O(n), not O(n^2)", () => {
+		// Adversarial worker attack vector: long underscore run + '=' becomes the `key` passed
+		// to isSecretKey via redactInlineSecrets. Before the fix, this was O(n^2):
+		//   100KB -> 4.5s, 200KB -> 29.5s, 500KB -> 216s (verified during review).
+		// After the fix (lower.startsWith(kw, i+1) + charAt, no substring/toLowerCase alloc):
+		//   1MB -> ~240ms (linear).
+		const pathological = "_".repeat(100000) + "=x"; // 100KB underscore run
+		const start = Date.now();
+		redactSecretString(pathological);
+		const elapsed = Date.now() - start;
+		assert.ok(elapsed < 200, `isSecretKey prefix-scan must be O(n) (100KB took ${elapsed}ms; was 4547ms pre-fix)`);
+	});
 });

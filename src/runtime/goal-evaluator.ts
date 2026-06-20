@@ -129,11 +129,11 @@ function buildJudgeTask(input: EvaluateGoalInput): string {
 	}
 	if (input.evidence.toolCalls.length) {
 		lines.push("", "## Tool calls observed in this turn");
-		// P1f (RFC v0.5 §P1f): redact each toolCall's args BEFORE they enter the judge prompt.
-		// NOTE: args are pre-truncated to 80 chars above, so this is effective for SHORT secrets
-		// only (GH PAT 40, AWS 20, inline token=). Long secrets (JWT ~150) are pre-cut and the
-		// 3-segment regex won't match the fragment. The 8 KiB transcript path below catches
-		// long secrets fully (NOT truncated). Best-effort vs adversarial workers (RFC §6 Med-High).
+		// P1f (RFC v0.5 §P1f): redact-then-truncate each toolCall's args BEFORE they enter the judge
+		// prompt. Redaction happens BEFORE truncation, so this path IS effective for both SHORT
+		// secrets (GH PAT 40, AWS 20, inline token=) AND long secrets (JWT ~150) — the secret is
+		// redacted to *** while full, then the result is truncated to 80 chars. (Cold-review #1
+		// confirmed this order is correct/stronger than the v0.5 RFC wording.)
 		const summary = input.evidence.toolCalls.slice(-20).map((c) => {
 			const argsStr = c.args ? ` (args: ${truncate(redactSecretString(JSON.stringify(c.args)), 80)})` : "";
 			return `- ${c.tool}${argsStr}`;
