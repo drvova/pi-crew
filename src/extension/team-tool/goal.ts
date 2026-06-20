@@ -20,6 +20,8 @@ import { appendEvent } from "../../state/event-log.ts";
 import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
 import { GoalStore } from "../../runtime/goal-state-store.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
+import { snapshotManifests } from "../../runtime/verification-integrity.ts";
+import { acquireWorkspaceLock, type WorkspaceLockHandle } from "../../runtime/workspace-lock.ts";
 import type { GoalLoopState, GoalLoopStatus, TeamRunManifest } from "../../state/types.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 
@@ -80,19 +82,48 @@ async function handleStart(input: GoalSubActionInput): Promise<ReturnType<typeof
 		const maxTurns = typeof params.config?.maxTurns === "number" && params.config.maxTurns > 0
 			? params.config.maxTurns
 			: 20; // Claude/Codex parity default
+		// P1d (RFC v0.5 §P1d): budget is REQUIRED. Either an explicit budgetTotal (>=1000, enforced
+		// by schema) OR an explicit budgetUnlimited:true opt-out (audit-logged). No silent unbounded
+		// default — without a cap the loop could spend unboundedly across many turns × workers.
+		const budgetUnlimited = params.config?.budgetUnlimited === true;
+		const hasBudgetTotal = typeof params.budgetTotal === "number" && params.budgetTotal >= 1000;
+		if (!budgetUnlimited && !hasBudgetTotal) {
+			throw new Error("`goal start` requires either config.budgetTotal (>=1000, schema-enforced) OR config.budgetUnlimited:true (audit-logged opt-out). No silent unbounded-spend default.");
+		}
+		const verification = params.config?.verification as { commands: string[]; allowManualEvidence?: boolean; mode?: string } | undefined;
+		const isTextOnly = verification?.mode === "text-only";
+		// P1a (RFC v0.5 §P1a): take manifest-integrity snapshot at start IF verification.commands
+		// declared. For text-only mode (no objective oracle), mark "none-text-only" explicitly so
+		// the runner knows no snapshot guard applies. No auto-detect (B2: auto-detect is a confused
+		// deputy — the user MUST declare verification explicitly).
+		let verificationIntegrity: import("../../state/types.ts").GoalLoopState["verificationIntegrity"];
+		if (isTextOnly || !verification?.commands?.length) {
+			verificationIntegrity = "none-text-only";
+		} else {
+			try {
+				const snap = snapshotManifests(cwd);
+				verificationIntegrity = { snapshot: snap, takenAt: now };
+			} catch (error) {
+				logInternalError("goal.start.integritySnapshot", error, `goalId=${goalId}`);
+				// Non-fatal: proceed without integrity guard (downgraded to text-only behavior).
+				verificationIntegrity = "none-text-only";
+			}
+		}
 		const goalState: import("../../state/types.ts").GoalLoopState = {
 			goalId,
 			ownerSessionId,
 			objective,
 			scope: typeof params.config?.scope === "string" ? params.config.scope : undefined,
-			verification: params.config?.verification as { commands: string[]; allowManualEvidence?: boolean } | undefined,
+			verification,
 			state: "running",
 			maxTurns,
 			turnsUsed: 0,
-			budgetTotal: typeof params.budgetTotal === "number" ? params.budgetTotal : undefined,
+			budgetTotal: hasBudgetTotal ? (params.budgetTotal as number) : undefined,
+			budgetUnlimited: budgetUnlimited || undefined,
 			budgetWarning: typeof params.budgetWarning === "number" ? params.budgetWarning : 0.8,
 			budgetAbort: typeof params.budgetAbort === "number" ? params.budgetAbort : 0.95,
 			budgetUsed: 0,
+			verificationIntegrity,
 			evaluatorModel,
 			workerModel: typeof params.model === "string" ? params.model : undefined,
 			workerAgent: typeof params.config?.workerAgent === "string" ? params.config.workerAgent : undefined,
@@ -235,6 +266,81 @@ async function handleStop(input: GoalSubActionInput): Promise<ReturnType<typeof 
 	return result(`Goal ${goalId} stopped (state='cancelled').${cancelMsg}`, { action: "goal", status: "ok", data: { goalId, state: "cancelled", cancelledRunId: updated.currentRunId } }, false);
 }
 
+/**
+ * `goal resume` (P1b, RFC v0.5 §P1b): promote from P0 stub to real handler.
+ * Resumes a paused OR stuck goal via CAS (state -> "running") + injects the user's
+ * optional hint into nextTurnFeedback + re-spawns the background loop.
+ *
+ * No double-turn-execution: the loop is single-threaded per goal, and any in-flight
+ * turn (from before the pause) completes normally; nextTurnFeedback is read at turn
+ * N+1's composeGoalPrompt, so the hint applies to N+1, not the in-flight turn.
+ *
+ * `goal start`'s workspace-lock ownership is reused: a resumed goal does NOT re-acquire
+ * the lock (the lock was held for the goal's lifetime at start). If the original goal
+ * had released its lock (e.g. it crashed and the lock was reclaimed), the resumed
+ * loop will fail-fast at the first worker turn that needs it — surfaced via events.
+ */
+async function handleResume(input: GoalSubActionInput): Promise<ReturnType<typeof result>> {
+	const { params, ctx, store } = input;
+	const goalId = params.config?.goalId as string | undefined;
+	if (!goalId) return result("resume requires config.goalId.", { action: "goal", status: "error" }, true);
+	const existing = store.load(goalId);
+	if (!existing) return result(`Goal '${goalId}' not found.`, { action: "goal", status: "error" }, true);
+	if (params.force !== true) {
+		const denied = assertGoalOwnership(existing, ctx, "goal");
+		if (denied) return denied;
+	}
+	// Only paused/stuck goals are resumable. (running = already running; terminal states
+	// achieved/max_turns/blocked/cancelled/budget_exceeded are done.)
+	if (existing.state !== "paused" && existing.state !== "stuck") {
+		return result(`Goal '${goalId}' is in state '${existing.state}' — only 'paused' or 'stuck' goals can be resumed.`, { action: "goal", status: "error", data: { goalId, state: existing.state } }, true);
+	}
+	const hint = typeof params.config?.hint === "string" ? params.config.hint.trim() : undefined;
+	const eventsPath = createRunPaths(ctx.cwd, goalId).eventsPath;
+	// CAS: only resume if the state is still what we loaded. A concurrent stop/cancel wins.
+	const updated = store.compareAndSetStatus(goalId, existing.state, "running", eventsPath);
+	if (!updated) {
+		return result(`Goal '${goalId}' state changed concurrently (resume aborted; another actor won the race).`, { action: "goal", status: "error", data: { goalId } }, true);
+	}
+	// Inject the hint as next-turn feedback (applies to turn N+1's worker prompt).
+	let withHint = updated;
+	if (hint) {
+		withHint = store.patch(goalId, { nextTurnFeedback: hint }, eventsPath) ?? updated;
+	}
+	appendEvent(eventsPath, { type: "goal.resumed", runId: goalId, data: { goalId, fromState: existing.state, hint: hint?.slice(0, 200) } });
+	// Re-spawn the background loop. The loop checks goal.state === "running" before each
+	// turn; since we just set it to running, it proceeds.
+	try {
+		const manifest: TeamRunManifest = {
+			schemaVersion: 1,
+			runId: goalId,
+			sessionId: existing.ownerSessionId,
+			team: `goal-${goalId}`,
+			workflow: "goal-loop",
+			goal: existing.objective,
+			status: "queued",
+			workspaceMode: "single",
+			createdAt: existing.createdAt,
+			updatedAt: new Date().toISOString(),
+			cwd: existing.cwd,
+			stateRoot: createRunPaths(existing.cwd, goalId).stateRoot,
+			artifactsRoot: createRunPaths(existing.cwd, goalId).artifactsRoot,
+			tasksPath: createRunPaths(existing.cwd, goalId).tasksPath,
+			eventsPath,
+			artifacts: [],
+			ownerSessionId: existing.ownerSessionId,
+			runKind: "goal-loop",
+		};
+		const spawned = await spawnBackgroundTeamRun(manifest);
+		return result(`Goal ${goalId} resumed from '${existing.state}' (background pid=${spawned.pid ?? 0}).${hint ? ` Hint injected for next turn.` : ""}`, { action: "goal", status: "ok", data: { goalId, state: "running", fromState: existing.state, pid: spawned.pid } }, false);
+	} catch (spawnError) {
+		const msg = spawnError instanceof Error ? spawnError.message : String(spawnError);
+		// Roll back: keep the goal marked running but note the spawn failure.
+		appendEvent(eventsPath, { type: "goal.resume_spawn_failed", runId: goalId, data: { goalId, error: msg } });
+		return result(`Goal ${goalId} state set to 'running' but background re-spawn failed: ${msg}. The goal file is correct; retry 'goal resume' to re-attempt the spawn.`, { action: "goal", status: "error", data: { goalId, spawnFailed: true } }, true);
+	}
+}
+
 /** `team action='goal'` dispatch. */
 export async function handleGoal(params: TeamToolParamsValue, ctx: TeamContext): Promise<ReturnType<typeof result>> {
 	const store = new GoalStore(ctx.cwd);
@@ -248,9 +354,7 @@ export async function handleGoal(params: TeamToolParamsValue, ctx: TeamContext):
 		case "pause":
 			return handleStateFlip(input, "paused", "paused");
 		case "resume":
-			// P0 stub: resume is not yet implemented — warn the user explicitly instead of
-			// silently returning status (round-7 F3: silent no-op misleads users).
-			return result("goal resume is not yet implemented (P1.5). A paused goal's background loop has exited; use 'goal start' with the same objective to re-run, or 'goal stop' to abandon.", { action: "goal", status: "error", data: { subAction: "resume", implemented: false } }, true);
+			return await handleResume(input);
 		case "stop":
 		case "cancel":
 		case "reset":
