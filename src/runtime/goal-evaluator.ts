@@ -14,7 +14,7 @@
  *   - excludeTools:["bash","read","write","edit"] — defense-in-depth.
  *   - inheritContext:false, excludeContextBash:true, parentContext:undefined —
  *     judge must NOT see the parent session's context (bias).
- *   - extensions:[], inheritProjectContext:false, inheritSkills:false, maxTurns:1.
+ *   - extensions:[], inheritProjectContext:false, inheritSkills:false, maxTurns:3.
  *
  * AgentConfig.source:"dynamic" (§0c C7 — "synthetic" is invalid ResourceSource).
  * name:"goal-judge" — safe because it's NOT in PROTECTED_AGENT_NAMES.
