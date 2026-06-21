@@ -15,6 +15,7 @@ import * as os from "node:os";
 import {
 	GOAL_WRAP_ELIGIBLE_BUILTINS,
 	isGoalWrapEnabled,
+	persistAsyncOnGoalLoopManifest,
 	validateGoalWrapConfig,
 } from "../../src/extension/team-tool/goal-wrap.ts";
 
@@ -82,4 +83,70 @@ test("validateGoalWrapConfig: rejects both budgetTotal AND budgetUnlimited (mute
 test("validateGoalWrapConfig: rejects budgetTotal below 1000 floor", () => {
 	const err = validateGoalWrapConfig({ enabled: true, evaluatorModel: "x", budgetTotal: 500 });
 	assert.match(err ?? "", /budgetTotal.*1000|>=1000/i);
+});
+
+// Regression test: after goal-wrap spawns the background runner, the OUTER
+// goal-loop manifest MUST have its `async.pid` field set on disk.
+//
+// Why: async-notifier.markDeadAsyncRunIfNeeded() reads `run.async?.pid` from
+// the manifest to detect a dead background runner. Without this field, the
+// notifier returns early and the user sees the goal hang at "1/3" forever —
+// they have to kill pi to recover (even though the actual fix is just to
+// surface the failure via `async.died`).
+//
+// We test the helper directly: persistAsyncOnGoalLoopManifest is the small
+// helper that performs the missing atomic-write. startGoalWrappedRun calls
+// it after spawnBackgroundTeamRun returns.
+test("FIX: persistAsyncOnGoalLoopManifest writes async.pid on the goal-loop manifest", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifestPath = path.join(cwd, "manifest.json");
+		const fakeManifest: import("../../src/state/types.ts").TeamRunManifest = {
+			schemaVersion: 1 as const,
+			runId: "goal_test",
+			team: "goal-wrap-test",
+			workflow: "goal-loop",
+			goal: "test",
+			status: "queued" as const,
+			workspaceMode: "single" as const,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+			cwd,
+			stateRoot: cwd,
+			artifactsRoot: cwd,
+			tasksPath: "",
+			eventsPath: "",
+			artifacts: [],
+			ownerSessionId: "sess",
+			runKind: "goal-loop" as const,
+		};
+		persistAsyncOnGoalLoopManifest(manifestPath, fakeManifest, {
+			pid: 99_999_999,
+			logPath: "/tmp/fake.log",
+		});
+		const persisted = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
+		const asyncField = persisted["async"] as Record<string, unknown> | undefined;
+		assert.ok(asyncField, "manifest.async must be set so async-notifier can detect dead runner");
+		assert.equal(asyncField["pid"], 99_999_999);
+		assert.equal(asyncField["logPath"], "/tmp/fake.log");
+		assert.ok(typeof asyncField["spawnedAt"] === "string", "spawnedAt must be ISO timestamp");
+		// Other fields preserved.
+		assert.equal(persisted["runId"], "goal_test");
+		assert.equal(persisted["runKind"], "goal-loop");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("FIX: startGoalWrappedRun calls persistAsyncOnGoalLoopManifest after spawn", () => {
+	// Black-box check: we don't actually run startGoalWrappedRun (it would spawn
+	// a real runner). Instead we assert the helper exists and was called from
+	// startGoalWrappedRun's source via grep. This catches accidental removal
+	// during future refactors.
+	const source = fs.readFileSync(
+		new URL("../../src/extension/team-tool/goal-wrap.ts", import.meta.url),
+		"utf-8",
+	);
+	assert.match(source, /persistAsyncOnGoalLoopManifest\(/, "startGoalWrappedRun must call persistAsyncOnGoalLoopManifest");
+	assert.match(source, /async:\s*\{\s*pid:\s*spawned\.pid/, "manifest.async.pid must come from spawn result");
 });

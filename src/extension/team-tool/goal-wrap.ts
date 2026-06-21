@@ -18,6 +18,7 @@
  */
 
 import { createRunPaths, saveRunManifest } from "../../state/state-store.ts";
+import { atomicWriteJson } from "../../state/atomic-write.ts";
 import { appendEvent } from "../../state/event-log.ts";
 import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
 import { GoalStore } from "../../runtime/goal-state-store.ts";
@@ -86,6 +87,27 @@ export function validateGoalWrapConfig(
  * goal-wrap we OVERRIDE that by storing the target workflow name on the GoalLoopState
  * and having the runner use it per turn. (See the `team` field carry-through.)
  */
+/**
+ * Persist `async: { pid, logPath, spawnedAt }` on a goal-loop manifest and write
+ * it atomically to disk. This is the missing piece that makes goal-loop runs
+ * detectable by async-notifier.markDeadAsyncRunIfNeeded — without it, the
+ * notifier returns early on `!run.async` and the goal appears to hang at "1/3"
+ * forever even after the background runner has died.
+ *
+ * Mirrors the normal-run path in run.ts:371-372 which writes the async field on
+ * the team-run manifest via `atomicWriteJson(paths.manifestPath, asyncManifest)`.
+ */
+export function persistAsyncOnGoalLoopManifest(
+	manifestPath: string,
+	manifest: TeamRunManifest,
+	spawned: { pid: number; logPath: string },
+): void {
+	const asyncGoalManifest = {
+		...manifest,
+		async: { pid: spawned.pid, logPath: spawned.logPath, spawnedAt: new Date().toISOString() },
+	};
+	atomicWriteJson(manifestPath, asyncGoalManifest);
+}
 export async function startGoalWrappedRun(
 	params: TeamToolParamsValue,
 	ctx: TeamContext,
@@ -179,6 +201,13 @@ export async function startGoalWrappedRun(
 
 		const spawned = await spawnBackgroundTeamRun(goalLoopManifest);
 		const pid = spawned.pid ?? 0;
+		// FIX: persist async.pid on the OUTER goal-loop manifest (not just goal state).
+		// Without this, async-notifier.markDeadAsyncRunIfNeeded returns early on
+		// `!run.async` and the user sees the goal hang at "1/3" forever even after the
+		// background runner dies (it currently dies silently due to a multi-step
+		// atomic-write bug — see investigation report). Mirrors run.ts:371-372 which
+		// writes asyncManifest = { ...effectiveManifest, async: {...} } to manifestPath.
+		persistAsyncOnGoalLoopManifest(paths.manifestPath, goalLoopManifest, { pid, logPath: spawned.logPath });
 		const withAsync = { ...goalState, async: { pid, logPath: spawned.logPath, spawnedAt: new Date().toISOString() } };
 		store.save(withAsync);
 
