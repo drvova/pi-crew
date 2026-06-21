@@ -60,6 +60,7 @@ import type {
 	CrewToolsConfig,
 	CrewUiConfig,
 	CrewWorktreeConfig,
+	GoalWrapWorkflowConfig,
 	LoadedPiTeamsConfig,
 	PiTeamsAutonomousConfig,
 	PiTeamsAutonomyProfile,
@@ -912,6 +913,43 @@ function parseWorktreeConfig(value: unknown): CrewWorktreeConfig | undefined {
 		: undefined;
 }
 
+/** Parse goalWrap config (RFC v0.5 vision: apply goal completion-guarantee to builtins). */
+function parseGoalWrapConfig(
+	value: unknown,
+): Record<string, GoalWrapWorkflowConfig> | undefined {
+	const obj = asRecord(value);
+	if (!obj) return undefined;
+	const result: Record<string, GoalWrapWorkflowConfig> = {};
+	let hasAny = false;
+	for (const [workflowName, entry] of Object.entries(obj)) {
+		const entryObj = asRecord(entry);
+		if (!entryObj) continue;
+		const parsed: GoalWrapWorkflowConfig = {
+			enabled: parseWithSchema(Type.Boolean(), entryObj.enabled),
+			maxTurns: parseWithSchema(Type.Integer({ minimum: 1, maximum: 50 }), entryObj.maxTurns),
+			evaluatorModel: parseWithSchema(Type.String({ minLength: 1 }), entryObj.evaluatorModel),
+			budgetTotal: parseWithSchema(Type.Integer({ minimum: 1000 }), entryObj.budgetTotal),
+			budgetUnlimited: parseWithSchema(Type.Boolean(), entryObj.budgetUnlimited),
+		};
+		// Parse verification sub-object.
+		const verObj = asRecord(entryObj.verification);
+		if (verObj) {
+			const commands = Array.isArray(verObj.commands)
+				? verObj.commands.filter((c): c is string => typeof c === "string" && c.length > 0)
+				: undefined;
+			const mode = verObj.mode === "text-only" ? "text-only" as const : undefined;
+			if (commands || mode) {
+				parsed.verification = { ...(commands ? { commands } : { commands: [] }), ...(mode ? { mode } : {}) };
+			}
+		}
+		if (Object.values(parsed).some((v) => v !== undefined)) {
+			result[workflowName] = parsed;
+			hasAny = true;
+		}
+	}
+	return hasAny ? result : undefined;
+}
+
 function parseAgentOverride(value: unknown): AgentOverrideConfig | undefined {
 	const obj = asRecord(value);
 	if (!obj) return undefined;
@@ -1232,6 +1270,7 @@ export function parseConfig(raw: unknown): PiTeamsConfig {
 		runtime: parseRuntimeConfig(obj.runtime),
 		control: parseControlConfig(obj.control),
 		worktree: parseWorktreeConfig(obj.worktree),
+		goalWrap: parseGoalWrapConfig(obj.goalWrap),
 		agents: parseAgentsConfig(obj.agents),
 		tools: parseToolsConfig(obj.tools),
 		telemetry: parseTelemetryConfig(obj.telemetry),
