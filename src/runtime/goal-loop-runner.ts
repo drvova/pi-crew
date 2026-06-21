@@ -205,14 +205,23 @@ function resolveGoalTurnWorkflow(goal: GoalLoopState): WorkflowConfig {
  * Synthesize a single-role team (§0c C9) — createRunManifest requires a team.
  * Mirrors direct-run.ts but uses source:"dynamic" (not "builtin") per C7/C9.
  */
-function buildGoalTeam(goal: GoalLoopState): TeamConfig {
+export function buildGoalTeam(goal: GoalLoopState): TeamConfig {
 	const workerAgent = goal.workerAgent ?? "executor";
+	// Round-11 goal-wrap fix: use `workerAgent` as the role NAME (not just the agent
+	// config). The adaptive planner in implementation workflows emits plans with
+	// role names matching the agent config (e.g. "executor"). Previously we used
+	// the fixed name "worker", which caused `parseAdaptivePlan` to reject every
+	// plan (role "executor" not in allowedRoles=["worker"]) and fall through to
+	// the plan_missing fallback. As a result, goal-wrapped implementation
+	// workflows ran only the assess task and never executed the planned
+	// executor/verifier tasks. Use the workerAgent name verbatim so the adaptive
+	// plan's role checks pass.
 	return {
 		name: `goal-${goal.goalId}`,
 		description: `Synthetic team for goal loop ${goal.goalId} (worker=${workerAgent}).`,
 		source: "dynamic",
 		filePath: "<goal-loop>",
-		roles: [{ name: "worker", agent: workerAgent, description: `Worker for goal ${goal.goalId}` }],
+		roles: [{ name: workerAgent, agent: workerAgent, description: `Worker for goal ${goal.goalId}` }],
 		workspaceMode: "single",
 	};
 }
