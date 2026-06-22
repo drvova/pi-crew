@@ -26,7 +26,7 @@
  * Without the fix, this test fails with one of the TDZ errors above.
  * With the fix, it passes — proving the full pi-pipeline load works.
  */
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -110,16 +110,18 @@ test("team-tool via full pi pipeline: handleRun reaches dwf dispatch (RFC 17 fix
 	// this regression test we just confirm handleRun is reachable without
 	// TDZ by calling it through a simpler entry: handleRun via dynamic import.
 	const { runDynamicWorkflow } = await import(
-		path.join(repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string
+		pathToFileURL(path.join(repoRoot, "src/runtime/dynamic-workflow-runner.ts")).href
 	).catch(async () => {
 		// Fallback: run handleRun directly to surface any TDZ in its module graph.
-		const runModule = await import(path.join(repoRoot, "src/extension/team-tool/run.ts") as string);
+		const runModule = await import(pathToFileURL(path.join(repoRoot, "src/extension/team-tool/run.ts")).href);
 		return { runDynamicWorkflow: null, handleRun: runModule.handleRun };
 	});
 
 	// Direct handleRun invocation (catches TDZ in its module graph when loaded
 	// via jiti, even without the team-tool execute wrapper).
-	const runModule = await import(path.join(repoRoot, "src/extension/team-tool/run.ts") as string);
+	// On Windows, absolute paths passed to dynamic import() must be file:// URLs
+	// (Node rejects `D:\...` with ERR_UNSUPPORTED_ESM_URL_SCHEME: protocol 'd:').
+	const runModule = await import(pathToFileURL(path.join(repoRoot, "src/extension/team-tool/run.ts")).href);
 	const handleRun: (...args: unknown[]) => Promise<{ details?: { status?: string }; content?: Array<{ text?: string }> }> = runModule.handleRun;
 	assert.equal(typeof handleRun, "function", "handleRun must be exported");
 

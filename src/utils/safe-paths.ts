@@ -34,14 +34,19 @@ export function resolveContainedPath(baseDir: string, targetPath: string): strin
  * Walks up ancestors until finding one that exists, then joins back down.
  * This handles paths where intermediate directories don't exist yet but
  * their ancestors do (and may use short-name aliases).
+ *
+ * Uses fs.realpathSync.native (canonical long-name form) as the primary
+ * resolver, falling back to non-native realpathSync if .native fails.
  */
 function resolveWindowsCanonical(p: string): string {
 	try {
-		// Use regular realpathSync (not .native) to preserve the input path form.
-		// On Windows CI, .native always returns long-name (runneradmin) while
-		// non-native preserves short-name (RUNNER~1). Using non-native ensures
-		// the returned form matches what os.tmpdir() and mkdtempSync produce.
-		let real = fs.realpathSync(p);
+		// Use the NATIVE realpath to resolve to canonical LONG-NAME form.
+		// On Windows, fs.realpathSync.native resolves 8.3 short-name aliases
+		// (e.g. RUNNER~1) to long-name (runneradmin). This is essential for
+		// containment checks: base (from cwd, often long-name) and target
+		// (from os.tmpdir()/mkdtempSync, often short-name) must normalize to
+		// the SAME form or a contained target is wrongly rejected as "outside".
+		let real = fs.realpathSync.native(p);
 		// Guard against NTFS internal paths (e.g. C:\$Extend\$Deleted)
 		if (real.includes("$Extend") || real.includes("$Deleted")) throw new Error("NTFS internal path");
 		return real;
@@ -56,8 +61,8 @@ function resolveWindowsCanonical(p: string): string {
 		let current = p;
 		while (current !== path.dirname(current)) {
 			try {
-				// Use non-native to preserve input path form
-				let real = fs.realpathSync(current);
+				let real: string;
+				try { real = fs.realpathSync.native(current); } catch { real = fs.realpathSync(current); }
 				// Guard against NTFS internal paths
 				if (real.includes("$Extend") || real.includes("$Deleted")) throw new Error("NTFS internal path");
 				// Found existing ancestor — join with remaining parts in reverse order

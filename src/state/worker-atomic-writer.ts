@@ -40,26 +40,38 @@ const crypto = require("node:crypto");
 
 function isSymlinkSafePath(filePath) {
   try {
-    let currentPath = filePath;
+    // Safe roots: the system temp dir (resolved through any symlinks, e.g.
+    // macOS /var → /private/var) and the current project cwd.
+    var tmpReal;
+    try { tmpReal = fs.realpathSync(require("node:os").tmpdir()); } catch (e2) { tmpReal = require("node:os").tmpdir(); }
+    var cwd = process.cwd();
+    // Accept a symlink ancestor as safe if the resolved target (a) IS a safe
+    // root, (b) is UNDER a safe root (target is a descendant), or (c) is an
+    // ANCESTOR of a safe root (target is a parent dir of a safe root).
+    // Case (c) is essential on macOS: /var → /private/var is an ancestor of
+    // the tmpdir /private/var/folders/…, so it must be allowed.
+    var isSafeAncestor = function (real) {
+      var roots = [tmpReal, cwd];
+      return roots.some(function (root) {
+        return real === root
+          || real.indexOf(root + path.sep) === 0
+          || root.indexOf(real + path.sep) === 0;
+      });
+    };
+    var currentPath = filePath;
     while (currentPath !== path.dirname(currentPath)) {
-      const dir = path.dirname(currentPath);
+      var dir = path.dirname(currentPath);
       try {
-        const stat = fs.lstatSync(dir);
+        var stat = fs.lstatSync(dir);
         if (stat.isSymbolicLink()) {
-          // Accept symlinks under the system temp dir (Linux /tmp, macOS
-          // /var → /private/var) and project dirs; reject others. Mirrors
-          // atomic-write.ts policy for goal-loop paths.
-          const real = fs.realpathSync(dir);
-          const tmpReal = fs.realpathSync(require("node:os").tmpdir());
-          if (!real.startsWith(tmpReal + path.sep) && !real.startsWith(process.cwd() + path.sep) && real !== tmpReal && real !== process.cwd()) {
-            return false;
-          }
+          var real = fs.realpathSync(dir);
+          if (!isSafeAncestor(real)) return false;
         }
-      } catch { /* not found — fine */ }
+      } catch (e3) { /* not found — fine */ }
       currentPath = dir;
     }
     return true;
-  } catch { return true; }
+  } catch (e) { return true; }
 }
 
 function syncAtomicWriteFile(filePath, content) {
