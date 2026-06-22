@@ -115,14 +115,22 @@ export function getBackgroundRunnerCommand(
 	// defaults to ~1.5GB on 64-bit systems, which combined with jiti compilation
 	// and child processes can exhaust system memory.
 	const memoryLimit = "--max-old-space-size=512";
+	// Phase 1.5 #3 (RFC 17): opt-in V8 diagnostic report on fatal error. Writes
+	// a report file next to the manifest when the process dies abnormally.
+	// Crucial for diagnosing the non-deterministic multi-step goal-wrap crash
+	// (commit a9f6e09) — gives us native stack, environment, and load info that
+	// application-level signal handlers cannot capture.
+	const reportFlags = process.env.PI_CREW_BG_REPORT_ON_FATAL === "1" || process.env.PI_TEAMS_BG_REPORT_ON_FATAL === "1"
+		? ["--report-on-fatalerror", "--report-compact", `--report-directory=${path.dirname(runnerPath)}`]
+		: [];
 	if (loader.kind === "jiti") {
 		return {
-			args: [memoryLimit, "--trace-uncaught", "--import", pathToFileURL(loader.path).href, runnerPath, "--cwd", cwd, "--run-id", runId],
+			args: [memoryLimit, ...reportFlags, "--trace-uncaught", "--import", pathToFileURL(loader.path).href, runnerPath, "--cwd", cwd, "--run-id", runId],
 			loader: "jiti",
 		};
 	}
 	return {
-		args: [memoryLimit, "--experimental-strip-types", runnerPath, "--cwd", cwd, "--run-id", runId],
+		args: [memoryLimit, ...reportFlags, "--experimental-strip-types", runnerPath, "--cwd", cwd, "--run-id", runId],
 		loader: "strip-types",
 	};
 }
@@ -209,6 +217,9 @@ export async function spawnBackgroundTeamRun(manifest: TeamRunManifest): Promise
 			// Phase 1.5 #2: verification git-worktree sandbox opt-in (RFC 16).
 			"PI_CREW_VERIFICATION_WORKTREE",
 			"PI_TEAMS_VERIFICATION_WORKTREE",
+			// Phase 1.5 #3: V8 diagnostic report on fatal error (RFC 17 — investigation).
+			"PI_CREW_BG_REPORT_ON_FATAL",
+			"PI_TEAMS_BG_REPORT_ON_FATAL",
 		],
 	});
 	// FIX: removed delete workarounds — with explicit allowlist, these vars

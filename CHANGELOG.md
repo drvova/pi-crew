@@ -4,6 +4,31 @@
 
 Two new features, both built on a shared `runKind` background-dispatch discriminator.
 
+### Phase 1.5 #3: V8 diagnostic report infrastructure + crash investigation closed
+
+`PI_CREW_BG_REPORT_ON_FATAL=1` makes the background goal-loop runner spawn
+with `--report-on-fatalerror --report-compact`. When V8 considers the
+process state fatal, it writes a diagnostic report (native stack, JS stack,
+libuv handles, environment) — crucial info that application-level signal
+handlers cannot capture.
+
+**Investigation result** (RFC 17, 5+ reproduction attempts): the multi-step
+goal-wrap crash does NOT produce a V8 report. Combined with prior findings
+(no signal via strace, no coredump, no OOM, parent process alive) the crash
+signature is consistent with a V8/libuv internal abort that bypasses all
+Node.js reporting mechanisms. Cannot be diagnosed or fixed at the
+application level.
+
+**Decision**: ship with the existing auto-downgrade safety net
+(commit `6de5270`). Multi-step workflows silently run as normal team-runs
+(no goal-wrap layer); single-step workflows (implementation) continue to
+goal-wrap end-to-end. The `--report-on-fatalerror` infrastructure remains
+in place for future investigation if a Node.js version change alters the
+crash behavior.
+
+See `research-findings/goal-workflow/17-PHASE1.5-CRASH-INVESTIGATION-RFC.md`
+for the full 8-attempt investigation log and re-opening criteria.
+
 ### Phase 1.5 #2: git-worktree verification sandbox (closes round-trip + invoked-script tamper)
 
 `PI_CREW_VERIFICATION_WORKTREE=1` runs verification commands in a pristine
