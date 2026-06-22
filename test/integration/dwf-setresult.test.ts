@@ -6,6 +6,7 @@
  * ctx.setResult())" even when the dwf called ctx.setResult(path). This test
  * reproduces the issue at the unit level so the bug is caught by CI.
  */
+import { fileURLToPath } from "node:url";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -13,13 +14,14 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const repoRoot = path.resolve(__dirname, "../..");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(import.meta.url);
+const thisFile = fileURLToPath(import.meta.url);
 
 test("runDynamicWorkflow: dwf calling ctx.setResult(path) is recognized", async () => {
 	const jitiMod = require(path.join(repoRoot, "node_modules/jiti/lib/jiti.cjs"));
 	const createJiti = jitiMod.default ?? jitiMod;
-	const jiti = createJiti(__filename);
+	const jiti = createJiti(thisFile);
 	const dwfMod = await jiti.import(path.join(repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string);
 	const { runDynamicWorkflow } = dwfMod.default ?? dwfMod;
 	assert.equal(typeof runDynamicWorkflow, "function");

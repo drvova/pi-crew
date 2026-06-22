@@ -26,6 +26,7 @@
  * Without the fix, this test fails with one of the TDZ errors above.
  * With the fix, it passes — proving the full pi-pipeline load works.
  */
+import { fileURLToPath } from "node:url";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -33,14 +34,15 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const repoRoot = path.resolve(__dirname, "../..");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(import.meta.url);
+const thisFile = fileURLToPath(import.meta.url);
 
 test("team-tool via full pi pipeline: handleRun reaches dwf dispatch (RFC 17 fix)", async () => {
 	const jitiMod = require(path.join(repoRoot, "node_modules/jiti/lib/jiti.cjs"));
 	const createJiti = jitiMod.default ?? jitiMod;
 
-	const jiti = createJiti(__filename);
+	const jiti = createJiti(thisFile);
 	const factory = await jiti.import(path.join(repoRoot, "index.ts"), { default: true });
 	assert.equal(typeof factory, "function", "index.ts must export default function(pi)");
 

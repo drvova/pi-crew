@@ -266,10 +266,7 @@ export async function ensureCrewDirectory(cwd: string): Promise<void> {
 	const repoRoot = findProjectRoot(cwd);
 	if (repoRoot) {
 		const gitignorePath = safeJoin(repoRoot, ".gitignore");
-		// Lazy-load updateGitignore via dynamic import to dodge the jiti
-		// ESM/CJS interop TDZ race on the static `import { updateGitignore }`
-		// above (issue #28, RFC 17). At this point the module body has fully
-		// evaluated, so the dynamic import resolves to a live binding.
+		// LAZY: dodge the jiti ESM/CJS interop TDZ race on the static `import { updateGitignore }` above (issue #28, RFC 17). At this point the module body has fully evaluated, so the dynamic import resolves to a live binding.
 		const { updateGitignore: updateGitignoreFn } = await import("./gitignore-manager.ts");
 		await updateGitignoreFn(gitignorePath);
 	}

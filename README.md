@@ -61,7 +61,7 @@ background-dispatch discriminator.
   the background, spawns subagents via `ctx.agent()`/`ctx.fanOut()`, holds
   intermediate results in JS variables, and only `ctx.setResult()` reaches the
   main context. `workflow-create`/`-delete` are ACE-gated (`confirm:true`,
-  user-initiated). See [docs/dynamic-workflows.md](docs/dynamic-workflows.md).
+  user-confirmed). See [docs/dynamic-workflows.md](docs/dynamic-workflows.md).
 - **🛡️ Goal-wrap** (RFC v0.5 vision) — apply the goal completion-guarantee to
   existing builtin workflows (`implementation`, `fast-fix`, `default`) via
   per-workflow `.crew/config.json` toggle. Single-step workflows goal-wrap
@@ -72,7 +72,8 @@ background-dispatch discriminator.
   anti-oscillation (`stuck` non-terminal + resumable), budget enforcement
   (required or explicit opt-out), nonce-token feedback sanitization, secret
   redaction at artifact-write (O(n) fix), global worker cap + workspace lock
-  (O_EXCL, startTime-safe). Runtime-verified: B2 confused-deputy defended.
+  (O_EXCL, startTime-safe). B2 confused-deputy (auto-detecting verification
+  commands) refused — user must declare verification explicitly.
 - **🧪 Phase 1.5 fast-follow** — opt-in mitigation toggles for residual risks:
   `PI_CREW_VERIFICATION_SANITIZE_ENV=1` (strip provider secrets from the
   verification subprocess), `PI_CREW_VERIFICATION_WORKTREE=1` (run verification
@@ -144,7 +145,7 @@ background-dispatch discriminator.
 - **Plugin system** — framework-aware context injection (Next.js, Vite, Vitest) via plugin registry
 - **Health scoring** — penalty-based run health with time-series snapshots
 - **Autonomous goal loops** (P0/P1) — `team action='goal'` runs an autonomous multi-turn loop: a worker does a turn, a separate LLM judge evaluates the transcript+evidence against the goal, and on "not-achieved" the reason is fed into the next turn's prompt. Stops on achieved / maxTurns / budget / blocked. Claude-Code-style `/goal`. See `docs/goals.md`.
-- **Dynamic workflows** (P2/P3) — author orchestration as a `.dwf.ts` script (JS loops/branch/cross-review) instead of a static step list. The script runs in the background, calls subagents via `ctx.agent()`/`ctx.fanOut()`, holds intermediate results in JS variables, and only `ctx.setResult()` reaches the main context. `workflow-create`/`-delete` are ACE-gated (`confirm:true`, user-initiated). See `docs/dynamic-workflows.md`.
+- **Dynamic workflows** (P2/P3) — author orchestration as a `.dwf.ts` script (JS loops/branch/cross-review) instead of a static step list. The script runs in the background, calls subagents via `ctx.agent()`/`ctx.fanOut()`, holds intermediate results in JS variables, and only `ctx.setResult()` reaches the main context. `workflow-create`/`-delete`/`-save` require `confirm:true` at the tool-call layer (the only gate — a malicious agent that passes `confirm:true` programmatically bypasses it; this is postinstall-equivalent trust, not a human-in-the-loop dialog). See `docs/dynamic-workflows.md`.
 
 ---
 

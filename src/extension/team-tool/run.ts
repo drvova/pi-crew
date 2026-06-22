@@ -196,10 +196,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		steps: [{ id: "01_agent", role: params.role ?? "agent", task: "{goal}", model: params.model }],
 	} : workflows.find((item) => item.name === workflowName);
 	if (!baseWorkflow) return result(`Workflow '${workflowName}' not found.`, { action: "run", status: "error" }, true);
-	// Lazy-import to dodge the jiti ESM/CJS interop TDZ race on the static
-	// `import { expandParallelResearchWorkflow }` above (issue #28, RFC 17).
-	// At call time the module body has fully evaluated, so the dynamic
-	// import returns a live binding.
+	// LAZY: dodge the jiti ESM/CJS interop TDZ race on the static `import { expandParallelResearchWorkflow }` above (issue #28, RFC 17). At call time the module body has fully evaluated, so the dynamic import returns a live binding.
 	const { expandParallelResearchWorkflow: expandParallelResearch } = await import("../../runtime/parallel-research.ts");
 	const workflow = directAgent ? baseWorkflow : expandParallelResearch(baseWorkflow, resolvedCtx.cwd);
 
@@ -264,16 +261,14 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		].join("\n"), { action: "run", status: "ok" }, false);
 	}
 
-	// Lazy-import to dodge the jiti ESM/CJS interop TDZ race on the static
-	// `import { validateWorkflowForTeam }` above (issue #28, RFC 17).
+	// LAZY: dodge the jiti ESM/CJS interop TDZ race on the static `import { validateWorkflowForTeam }` above (issue #28, RFC 17).
 	const { validateWorkflowForTeam: validateWorkflow } = await import("../../workflows/validate-workflow.ts");
 	const validationErrors = validateWorkflow(workflow, team);
 	if (validationErrors.length > 0) {
 		return result([`Workflow '${workflow.name}' is not valid for team '${team.name}':`, ...validationErrors.map((error) => `- ${error}`)].join("\n"), { action: "run", status: "error" }, true);
 	}
 
-	// Lazy-import to dodge the jiti ESM/CJS interop TDZ race on the static
-	// `import { normalizeSkillOverride }` above (issue #28, RFC 17).
+	// LAZY: dodge the jiti ESM/CJS interop TDZ race on the static `import { normalizeSkillOverride }` above (issue #28, RFC 17).
 	const { normalizeSkillOverride: normalizeSkill } = await import("../../runtime/skill-instructions.ts");
 	const skillOverride = normalizeSkill(params.skill);
 	const { manifest, tasks, paths } = createRunManifest({
