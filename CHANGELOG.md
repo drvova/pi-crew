@@ -1,5 +1,42 @@
 # Changelog
 
+## [v0.9.2] — package cleanup: remove scratch scripts leaked into npm tarball (2026-06-22)
+
+Patch release. **No code changes.** Purely a published-package hygiene fix.
+
+### What was wrong
+
+The `package.json` `files` field includes a root-level `*.mjs` glob, intended
+for the legit `install.mjs` (postinstall script). It accidentally also picked
+up three ad-hoc scratch scripts that were committed at the repo root during
+earlier development:
+
+- `test-tp.mjs` — a 12-line `tool-progress` format smoke print
+- `test-bugs-all.mjs` — an 89-line string-matching bug-fix verifier
+- `test-lastActivityAt.mjs` — a manual `node:test` for a heartbeat fallback
+
+All three shipped in the published npm tarball (v0.9.0 and v0.9.1) even though
+they are not part of `npm test` and have no runtime value for consumers.
+
+### Fix
+
+- `git rm`'d the three scratch scripts. The behavior they checked is covered by
+  the real unit suite (`test/unit/`), which does NOT ship to npm.
+- After the fix, the only `.mjs` in the tarball is the intended `install.mjs`.
+
+### Verification
+
+- tsc: 0
+- `npm pack --dry-run` confirms `install.mjs` is the only `.mjs` shipped
+- regression suite (env-allowlist, goal-p1d-schema): 11/11 pass
+- No behavior change — consumers see no functional difference
+
+### Breaking changes
+
+None.
+
+---
+
 ## [v0.9.1] — Windows essentials fix + cross-platform CI green (2026-06-22)
 
 Patch release. No new features. Fixes a real Windows bug reported by a user,
