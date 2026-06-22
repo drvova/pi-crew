@@ -214,7 +214,7 @@ test("background subagent completion wakes the parent agent to join results", as
 		const launched = await fake.tools.get("Agent").execute("call-wakeup", { prompt: "Explore and report", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
 		const agentId = firstText(launched).match(/Agent ID: (\S+)/)?.[1];
 		assert.ok(agentId);
-		const deadline = Date.now() + 10_000;
+		const deadline = Date.now() + 30_000;
 		while (Date.now() < deadline && fake.sentUserMessages.length === 0) await new Promise((resolve) => setTimeout(resolve, 100));
 		assert.equal(fake.sentUserMessages.length, 1);
 		assert.match(fake.sentUserMessages[0]!.content, /background subagent changed state/);

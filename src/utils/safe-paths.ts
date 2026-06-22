@@ -16,17 +16,53 @@ export function resolveContainedPath(baseDir: string, targetPath: string): strin
 	}
 	const base = path.resolve(baseDir);
 	const resolved = path.isAbsolute(targetPath) ? path.resolve(targetPath) : path.resolve(base, targetPath);
-	// On Windows, paths are case-insensitive and short-name (8.3) aliases may
-	// differ from long-name forms (e.g. C:\Users\RUNNER~1 vs C:\Users\runneradmin).
-	// We normalize both paths to their canonical form by resolving through
-	// realpathSync, walking up ancestors for non-existent paths.
-	const baseNorm = process.platform === "win32" ? resolveWindowsCanonical(base) : base;
-	const resolvedNorm = process.platform === "win32" ? resolveWindowsCanonical(resolved) : resolved;
+	// Normalize BOTH paths to canonical form on ALL platforms. This resolves
+	// symlinks so that a base and target that refer to the same physical dir
+	// via different paths (Windows 8.3 short-name; macOS /var → /private/var)
+	// compare equal. Without this, a legitimately-contained target under an
+	// OS-managed symlink is wrongly rejected as "outside" the base.
+	const baseNorm = resolveCanonicalPath(base);
+	const resolvedNorm = resolveCanonicalPath(resolved);
 	const relative = process.platform === "win32"
 		? path.relative(baseNorm.toLowerCase(), resolvedNorm.toLowerCase())
-		: path.relative(base, resolved);
+		: path.relative(baseNorm, resolvedNorm);
 	if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`Path is outside ${baseDir}: ${targetPath}`);
 	return resolved;
+}
+
+/**
+ * Platform-agnostic canonical path resolution. Resolves symlinks (via
+ * realpathSync) to normalize paths so the same physical location always
+ * yields the same string regardless of how it was referenced.
+ *
+ * - Windows: delegates to resolveWindowsCanonical (canonical LONG-NAME form,
+ *   resolving 8.3 short-name aliases like RUNNER~1 → runneradmin).
+ * - POSIX: uses realpathSync, which resolves system symlinks such as the
+ *   macOS /var → /private/var mapping.
+ *
+ * For non-existent paths (write targets), walks up to the deepest existing
+ * ancestor and joins the remaining components, so the canonical prefix is
+ * still comparable.
+ */
+function resolveCanonicalPath(p: string): string {
+	if (process.platform === "win32") return resolveWindowsCanonical(p);
+	try {
+		return fs.realpathSync(p);
+	} catch {
+		const parts: string[] = [];
+		let current = p;
+		while (current !== path.dirname(current)) {
+			try {
+				const real = fs.realpathSync(current);
+				let acc = real;
+				for (let i = parts.length - 1; i >= 0; i--) acc = path.join(acc, parts[i]);
+				return acc;
+			} catch { /* keep walking up */ }
+			parts.push(path.basename(current));
+			current = path.dirname(current);
+		}
+		return p;
+	}
 }
 
 /**

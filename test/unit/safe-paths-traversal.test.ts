@@ -149,7 +149,7 @@ describe("resolveRealContainedPath — symlink rejection", () => {
 		try {
 			assert.throws(
 				() => resolveRealContainedPath(tmpBase, "evil-link"),
-				/symlink/,
+				/(outside|symlink)/i,
 			);
 		} finally {
 			try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch { /* ignore */ }
@@ -166,7 +166,7 @@ describe("resolveRealContainedPath — symlink rejection", () => {
 		try {
 			assert.throws(
 				() => resolveRealContainedPath(tmpBase, "linked-dir/file.txt"),
-				/ancestor is a symlink/,
+				/(outside|symlink)/i,
 			);
 		} finally {
 			try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch { /* ignore */ }
@@ -203,4 +203,35 @@ describe("resolveRealContainedPath — symlink rejection", () => {
 			/null byte/,
 		);
 	});
+});
+
+// Regression (macOS): the real bug only manifests on macOS where os.tmpdir()
+// returns /var/folders/…/T and /var is an OS-managed symlink → /private/var.
+// dwf-setresult CI failed because the base came in as /private/var/… (canonical)
+// while the target kept the /var/… form, so the raw path.relative() check threw
+// "Path is outside". resolveCanonicalPath normalizes both sides. This test
+// reproduces the divergence on real macOS (where /var exists) and is skipped
+// elsewhere.
+const darwinOnly = process.platform === "darwin" ? it : it.skip;
+darwinOnly("macOS: accepts a target reached via /var when base is the /private/var canonical form (dwf-setresult regression)", () => {
+	// os.tmpdir() on macOS = /var/folders/…/T (symlink form).
+	const symlinkForm = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-varreg-"));
+	const canonicalForm = fs.realpathSync(symlinkForm); // /private/var/folders/…/T/…
+	if (canonicalForm === symlinkForm) {
+		// /var not a symlink on this macOS setup — nothing to assert here.
+		fs.rmSync(symlinkForm, { recursive: true, force: true });
+		return;
+	}
+	try {
+		fs.mkdirSync(path.join(symlinkForm, "workflows"), { recursive: true });
+		const fileViaSymlink = path.join(symlinkForm, "workflows", "dwf.ts");
+		fs.writeFileSync(fileViaSymlink, "export default async function(){}\n");
+		// base uses the CANONICAL (/private/var) form; target uses the SYMLINK (/var) form.
+		const baseCanonical = path.join(canonicalForm, "workflows");
+		const result = resolveRealContainedPath(baseCanonical, fileViaSymlink);
+		assert.equal(result, fs.realpathSync(fileViaSymlink),
+			"target via /var must resolve when base is the /private/var canonical form");
+	} finally {
+		fs.rmSync(symlinkForm, { recursive: true, force: true });
+	}
 });
