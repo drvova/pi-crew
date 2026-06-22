@@ -1,46 +1,46 @@
 # Follow-up Review — pi-crew (2026-05-12, round 2)
 
-Tác giả: Droid (Factory) | Liên quan: `docs/followup-plan-2026-05-12.md`, commit `926e6ee`.
+Author: Droid (Factory) | Related: `docs/followup-plan-2026-05-12.md`, commit `926e6ee`.
 
-Review lại sau khi commit `926e6ee` đã apply các fix B1–B9 + A1–A2 từ `followup-plan-2026-05-12.md`.
+Review after commit `926e6ee` applied the B1–B9 + A1–A2 fixes from `followup-plan-2026-05-12.md`.
 
-## Tóm tắt kết quả
+## Result summary
 
 - `npm run typecheck` → Passed
-- `npm run test:unit` → **1411 tests / 1408 pass / 0 fail / 3 skip** (trước: 1389/1400 với 8 fail bash-on-Windows)
-- `npm run check:lazy-imports` → **FAIL trên Windows** (chi tiết bên dưới)
+- `npm run test:unit` → **1411 tests / 1408 pass / 0 fail / 3 skip** (previously: 1389/1400 with 8 bash-on-Windows failures)
+- `npm run check:lazy-imports` → **FAILS on Windows** (details below)
 
-## Trạng thái từng item
+## Per-item status
 
-| # | Item | Trạng thái | Ghi chú |
+| # | Item | Status | Notes |
 |---|---|---|---|
-| B1 | bash portability | ✅ Done | `resolveShellForScript` + `resolveBashCmd` trong `src/utils/resolve-shell.ts`. Áp dụng `post-checks.ts` + `iteration-hooks.ts`. 8 test fail trước đây pass. |
-| B2 | `worktree-manager.test.ts` | ⚠️ Partial | Có 3 test (branch recovery, reuse, clean leader). Thiếu test `linkNodeModulesIfPresent` reject file. |
+| B1 | bash portability | ✅ Done | `resolveShellForScript` + `resolveBashCmd` in `src/utils/resolve-shell.ts`. Applied to `post-checks.ts` + `iteration-hooks.ts`. The 8 previously failing tests pass. |
+| B2 | `worktree-manager.test.ts` | ⚠️ Partial | Has 3 tests (branch recovery, reuse, clean leader). Missing the `linkNodeModulesIfPresent` reject-file test. |
 | B3 | `artifact-store.test.ts` | ✅ Done | Hash integrity + path traversal + nested dirs. |
-| B4 | lock parity test | ✅ Done | 2 test mới: stale recovery sync+async, active lock throws. |
-| B5 | setup-hook env filter | ⚠️ Partial | `sanitizeEnvSecrets` đã apply. Dùng deny-list `SECRET_KEY_PATTERN` thay vì allow-list như plan đề xuất. |
+| B4 | lock parity test | ✅ Done | 2 new tests: stale recovery sync+async, active lock throws. |
+| B5 | setup-hook env filter | ⚠️ Partial | `sanitizeEnvSecrets` applied. Uses a deny-list `SECRET_KEY_PATTERN` instead of the allow-list proposed in the plan. |
 | B6 | worktree checked-out hint | ✅ Done | try/catch + actionable error message. |
-| B7 | LAZY marker | ✅ Done | Marker tại `team-tool.ts:58`. |
-| B8 | redaction roundtrip | ✅ Done | 3 test (api_key, bearer, on-disk). |
-| B9 | CI grep-check | ❌ Broken on Windows | Script dùng `sed`, fail trên Windows. |
-| A1 | branchExists remote-tracking | ✅ Done | Trả `{ local, remoteOnly }`. |
+| B7 | LAZY marker | ✅ Done | Marker at `team-tool.ts:58`. |
+| B8 | redaction roundtrip | ✅ Done | 3 tests (api_key, bearer, on-disk). |
+| B9 | CI grep-check | ❌ Broken on Windows | Script uses `sed`, fails on Windows. |
+| A1 | branchExists remote-tracking | ✅ Done | Returns `{ local, remoteOnly }`. |
 | A2 | jiti fallback robust | ✅ Done | 3 candidates: `lib/jiti-register.mjs`, `register.mjs`, `dist/register.mjs`. |
-| A3 | test alias cleanup | ⏭️ Skipped | Plan ghi "không khẩn cấp". |
+| A3 | test alias cleanup | ⏭️ Skipped | Plan noted "not urgent". |
 
 ---
 
-## Vấn đề cần xử lý tiếp
+## Issues to address next
 
-### C1 — (Medium, ~10 phút) `scripts/check-lazy-imports.mjs` không chạy được trên Windows
+### C1 — (Medium, ~10 minutes) `scripts/check-lazy-imports.mjs` doesn't run on Windows
 
 **File:** `scripts/check-lazy-imports.mjs`
 
-**Vấn đề:**
-- Script dùng `execSync("sed -n '...' ...")` để đọc dòng trước → `sed` không có trên Windows mặc định.
-- Khi sed fail, mỗi line đi vào `catch` block → `bad.push(line)` → false positive 13 mục.
-- `npm run ci` sẽ luôn fail trên Windows dev local.
+**Problem:**
+- The script uses `execSync("sed -n '...' ...")` to read the preceding line → `sed` isn't available on Windows by default.
+- When sed fails, every line falls into the `catch` block → `bad.push(line)` → 13 false positives.
+- `npm run ci` will always fail on a Windows dev machine.
 
-**Fix đề xuất:** dùng Node thuần thay sed.
+**Proposed fix:** use plain Node instead of sed.
 
 ```js
 import { execSync } from "node:child_process";
@@ -68,15 +68,15 @@ if (bad.length) {
 console.log("All dynamic imports have `// LAZY:` marker.");
 ```
 
-**Test:** chạy `npm run check:lazy-imports` trên cả Linux và Windows → cả 2 expect "All dynamic imports have `// LAZY:` marker."
+**Test:** run `npm run check:lazy-imports` on both Linux and Windows → both should print "All dynamic imports have `// LAZY:` marker."
 
 ---
 
-### C2 — (Medium, ~20 phút) `sanitizeEnvSecrets` dùng deny-list, không đạt mục tiêu defense-in-depth của plan B5
+### C2 — (Medium, ~20 minutes) `sanitizeEnvSecrets` uses a deny-list, not meeting the defense-in-depth goal of plan B5
 
 **File:** `src/utils/env-filter.ts`
 
-**Hiện trạng:**
+**Current state:**
 ```ts
 export function sanitizeEnvSecrets(env: NodeJS.ProcessEnv): Record<string, string> {
 	const filtered: Record<string, string> = {};
@@ -87,15 +87,15 @@ export function sanitizeEnvSecrets(env: NodeJS.ProcessEnv): Record<string, strin
 }
 ```
 
-**Vấn đề:**
-- Deny-list chỉ chặn key matching `SECRET_KEY_PATTERN`. Biến có tên không khớp (vd. `DB_PASS`, `MY_KEY_FOO`, `INTERNAL_TOKEN_LEGACY`) sẽ rò sang setup hook.
-- Plan B5 nguyên thuỷ đề xuất allow-list `["PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "LANG", "PI_*"]` → an toàn hơn nhiều cho user-provided hooks.
+**Problem:**
+- The deny-list only blocks keys matching `SECRET_KEY_PATTERN`. Variables whose names don't match (e.g. `DB_PASS`, `MY_KEY_FOO`, `INTERNAL_TOKEN_LEGACY`) will leak into the setup hook.
+- The original plan B5 proposed an allow-list `["PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "LANG", "PI_*"]` → much safer for user-provided hooks.
 
-**Fix đề xuất:** thêm overload với allow-list, giữ deny-list mặc định cho `buildChildPiSpawnOptions` (backward-compat).
+**Proposed fix:** add an overload with an allow-list, keeping the deny-list as the default for `buildChildPiSpawnOptions` (backward-compat).
 
 ```ts
 export interface SanitizeOptions {
-	allowList?: string[];   // glob-like, hỗ trợ * cuối (vd. "PI_*")
+	allowList?: string[];   // glob-like, supports trailing * (e.g. "PI_*")
 }
 
 export function sanitizeEnvSecrets(env: NodeJS.ProcessEnv, options?: SanitizeOptions): Record<string, string> {
@@ -117,7 +117,7 @@ export function sanitizeEnvSecrets(env: NodeJS.ProcessEnv, options?: SanitizeOpt
 }
 ```
 
-**Apply tại `worktree-manager.ts:runSetupHook`:**
+**Apply at `worktree-manager.ts:runSetupHook`:**
 
 ```ts
 env: sanitizeEnvSecrets(process.env, {
@@ -125,50 +125,50 @@ env: sanitizeEnvSecrets(process.env, {
 }),
 ```
 
-**Test cần thêm:** `test/unit/env-filter.test.ts`:
-- Allow-list pass-through cho key match + reject còn lại.
-- Glob `PI_*` match `PI_HOME`, `PI_CREW_X` nhưng không match `PIPELINE`.
-- Default deny-list giữ behaviour cũ.
+**Tests to add:** `test/unit/env-filter.test.ts`:
+- Allow-list pass-through for matching keys + reject the rest.
+- Glob `PI_*` matches `PI_HOME`, `PI_CREW_X` but not `PIPELINE`.
+- Default deny-list keeps old behavior.
 
 ---
 
-### C3 — (Low, ~10 phút) `resolveShellForScript` chưa xử lý đúng `.cmd/.bat` trên Windows
+### C3 — (Low, ~10 minutes) `resolveShellForScript` doesn't handle `.cmd/.bat` correctly on Windows
 
 **File:** `src/utils/resolve-shell.ts`
 
-**Hiện trạng:**
+**Current state:**
 ```ts
 if (scriptPath.endsWith(".cmd") || scriptPath.endsWith(".bat")) {
 	return { command: scriptPath, args: [] };
 }
 ```
 
-**Vấn đề:**
-- Node ≥ 20 chặn spawn trực tiếp `.bat/.cmd` mà không có `shell: true` (CVE-2024-27980). Đường code `execFileSync/spawn` sẽ throw `EINVAL` hoặc `ENOENT`.
-- Hệ quả: post-check / iteration-hook viết bằng `.cmd/.bat` sẽ fail âm thầm trên Node 20+.
+**Problem:**
+- Node ≥ 20 blocks spawning `.bat/.cmd` directly without `shell: true` (CVE-2024-27980). The `execFileSync/spawn` code path will throw `EINVAL` or `ENOENT`.
+- Consequence: post-check / iteration-hook written as `.cmd/.bat` will fail silently on Node 20+.
 
-**Fix đề xuất:**
+**Proposed fix:**
 ```ts
 if (scriptPath.endsWith(".cmd") || scriptPath.endsWith(".bat")) {
 	return { command: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", scriptPath] };
 }
 ```
 
-**Test cần thêm:** trong `test/unit/resolve-shell.test.ts` (tạo mới):
+**Tests to add:** in `test/unit/resolve-shell.test.ts` (create new):
 - Linux: `.sh` → `{ bash, [path] }`.
 - Windows + `.ps1` → `{ powershell, ["-File", path] }`.
 - Windows + `.cmd` → `{ cmd.exe, ["/d", "/s", "/c", path] }`.
 
 ---
 
-### C4 — (Low, ~15 phút) Thiếu test `linkNodeModulesIfPresent` reject file source (BUG-006 regression guard)
+### C4 — (Low, ~15 minutes) Missing test for `linkNodeModulesIfPresent` rejecting a file source (BUG-006 regression guard)
 
 **File:** `test/unit/worktree-manager.test.ts`
 
-**Vấn đề:**
-- Plan B2 yêu cầu test này nhưng commit chưa thêm. Nếu ai sửa lại `linkNodeModulesIfPresent` mà bỏ check `isDirectory()`, BUG-006 sẽ regression mà không bị test bắt.
+**Problem:**
+- Plan B2 required this test but the commit didn't add it. If someone modifies `linkNodeModulesIfPresent` and removes the `isDirectory()` check, BUG-006 will regress without a test catching it.
 
-**Fix đề xuất:** thêm 1 test (giả định `linkNodeModulesIfPresent` được export hoặc test gián tiếp qua `prepareTaskWorkspace` với `worktree.linkNodeModules=true`):
+**Proposed fix:** add one test (assuming `linkNodeModulesIfPresent` is exported or tested indirectly via `prepareTaskWorkspace` with `worktree.linkNodeModules=true`):
 
 ```ts
 test("prepareTaskWorkspace skips linkNodeModules when source is a file", () => {
@@ -192,21 +192,21 @@ test("prepareTaskWorkspace skips linkNodeModules when source is a file", () => {
 
 ---
 
-### C5 — (Low, ~5 phút) `prepareTaskWorkspace` error message bị ảnh hưởng locale
+### C5 — (Low, ~5 minutes) `prepareTaskWorkspace` error message affected by locale
 
-**File:** `src/worktree/worktree-manager.ts:127-140` (try/catch quanh `worktree add`)
+**File:** `src/worktree/worktree-manager.ts:127-140` (try/catch around `worktree add`)
 
-**Vấn đề:**
-- Regex `/already checked out/` chỉ match khi git chạy với English locale. Trên máy user có `LANG=vi_VN` hoặc Git for Windows với locale khác, message gốc khác → fallback throw error raw.
+**Problem:**
+- The regex `/already checked out/` only matches when git runs with an English locale. On a user machine with `LANG=vi_VN` or Git for Windows with a different locale, the original message differs → falls back to throwing the raw error.
 
-**Fix đề xuất:** force English locale cho git command nội bộ, hoặc mở rộng regex.
+**Proposed fix:** force an English locale for the internal git command, or broaden the regex.
 
-Option A (đơn giản hơn): mở rộng regex
+Option A (simpler): broaden the regex
 ```ts
-if (/already checked out|is already used by worktree|đã được/i.test(msg)) { ... }
+if (/already checked out|is already used by worktree/i.test(msg)) { ... }
 ```
 
-Option B (kiến nghị): force LANG=C trong helper `git()`:
+Option B (recommended): force `LANG=C` in the `git()` helper:
 ```ts
 function git(cwd: string, args: string[]): string {
 	return execFileSync("git", args, {
@@ -216,29 +216,29 @@ function git(cwd: string, args: string[]): string {
 }
 ```
 
-Option B chuẩn hoá toàn bộ output git → cải thiện cả debugging.
+Option B standardizes all git output → also improves debugging.
 
 ---
 
-### C6 — (Info, ~5 phút) `branchExists` remote-only tạo local từ HEAD, có thể "mất" commits của remote
+### C6 — (Info, ~5 minutes) `branchExists` remote-only creates local from HEAD, may "lose" the remote's commits
 
 **File:** `src/worktree/worktree-manager.ts:prepareTaskWorkspace`
 
-**Hiện trạng:**
+**Current state:**
 ```ts
 if (exists.local) {
 	git(repoRoot, ["worktree", "add", worktreePath, branch]);
 } else {
-	git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);  // ← cả remoteOnly và "không tồn tại" đều rơi vào đây
+	git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);  // ← both remoteOnly and "doesn't exist" fall here
 }
 ```
 
-**Vấn đề:**
-- Khi `remoteOnly === true`, plan A1 đề xuất tạo local từ HEAD để tránh divergent tracking. Code hiện tại làm đúng vậy, nhưng:
-  - Người dùng push branch từ máy khác → expect worktree chứa code đó.
-  - Không có log/warning → silent drop.
+**Problem:**
+- When `remoteOnly === true`, plan A1 proposed creating local from HEAD to avoid divergent tracking. The current code does exactly that, but:
+  - The user pushed the branch from another machine → expects the worktree to contain that code.
+  - There's no log/warning → silent drop.
 
-**Fix đề xuất:** emit info event/log khi rơi vào nhánh remoteOnly:
+**Proposed fix:** emit an info event/log when hitting the remoteOnly branch:
 ```ts
 } else {
 	if (exists.remoteOnly) {
@@ -248,42 +248,42 @@ if (exists.local) {
 }
 ```
 
-(Hoặc đẩy lên qua run event nếu có event bus thuận tiện.)
+(Or push it out via a run event if there's a convenient event bus.)
 
 ---
 
-## Ưu tiên thực hiện
+## Implementation priority
 
-| # | Item | Severity | Effort | Khuyến nghị |
+| # | Item | Severity | Effort | Recommendation |
 |---|---|---|---|---|
-| 1 | C1 (lazy-imports cross-platform) | Medium | 10 phút | Sprint hiện tại — chặn CI fail trên Windows |
-| 2 | C2 (allow-list env filter) | Medium | 20 phút | Sprint hiện tại — defense-in-depth |
-| 3 | C3 (.cmd/.bat trên Node 20+) | Low | 10 phút | Sprint hiện tại — đảm bảo B1 thực sự portable |
-| 4 | C4 (test linkNodeModules file source) | Low | 15 phút | Sprint hiện tại — đóng gap regression của B2 |
-| 5 | C5 (git locale-safe error parsing) | Low | 5 phút | Sprint kế tiếp |
-| 6 | C6 (warn khi remote-only branch) | Info | 5 phút | Sprint kế tiếp |
+| 1 | C1 (lazy-imports cross-platform) | Medium | 10 minutes | Current sprint — block CI failure on Windows |
+| 2 | C2 (allow-list env filter) | Medium | 20 minutes | Current sprint — defense-in-depth |
+| 3 | C3 (.cmd/.bat on Node 20+) | Low | 10 minutes | Current sprint — ensure B1 is truly portable |
+| 4 | C4 (test linkNodeModules file source) | Low | 15 minutes | Current sprint — close B2's regression gap |
+| 5 | C5 (git locale-safe error parsing) | Low | 5 minutes | Next sprint |
+| 6 | C6 (warn on remote-only branch) | Info | 5 minutes | Next sprint |
 
-**Tổng effort:** ~65 phút cho batch hardening.
-
----
-
-## Đề xuất commit batches
-
-- **Batch 1 (must-fix CI):** C1 + C3 → 1 PR "scripts/cmd portability fix" (~20 phút).
-- **Batch 2 (security/test):** C2 + C4 → 1 PR "env allow-list + worktree regression test" (~35 phút).
-- **Batch 3 (polish):** C5 + C6 → 1 PR "git locale + remote-only branch hint" (~10 phút).
+**Total effort:** ~65 minutes for the hardening batch.
 
 ---
 
-## Điểm tích cực sau review lần 3
+## Proposed commit batches
 
-- 8 bash-on-Windows test fail trước đây giờ pass 100%.
-- DRY refactor `sanitizeEnvSecrets` (extract từ `child-pi.ts`) tốt.
-- `worktree-manager` resume logic + actionable error rất hữu ích cho UX.
-- Lock parity test cover cả 2 path sync/async (chính xác mục tiêu BUG-004).
-- Artifact hash test verify đúng invariant `sha256(file) == contentHash`.
-- `resolveJitiRegisterPath` giờ chịu được nhiều packaging layout của jiti.
-- `branchExists` upgrade `{local, remoteOnly}` chính xác theo plan A1.
+- **Batch 1 (must-fix CI):** C1 + C3 → 1 PR "scripts/cmd portability fix" (~20 minutes).
+- **Batch 2 (security/test):** C2 + C4 → 1 PR "env allow-list + worktree regression test" (~35 minutes).
+- **Batch 3 (polish):** C5 + C6 → 1 PR "git locale + remote-only branch hint" (~10 minutes).
+
+---
+
+## Positive notes after round 3 review
+
+- The 8 previously failing bash-on-Windows tests now pass 100%.
+- The DRY refactor of `sanitizeEnvSecrets` (extracted from `child-pi.ts`) is good.
+- The `worktree-manager` resume logic + actionable error is very helpful for UX.
+- The lock parity test covers both sync/async paths (exactly the BUG-004 goal).
+- The artifact hash test correctly verifies the invariant `sha256(file) == contentHash`.
+- `resolveJitiRegisterPath` now tolerates various jiti packaging layouts.
+- The `branchExists` upgrade to `{local, remoteOnly}` is accurate per plan A1.
 
 ---
 

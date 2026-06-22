@@ -37,7 +37,7 @@ projected to bring `register-startup.import.p95` to ≤ 250 ms after a
 - Bonus fix: pre-existing `// LAZY:` marker missing in
   `src/runtime/background-runner.ts`
 
-### Sprint 1 — UI mượt rủi ro thấp (6 items)
+### Sprint 1 — Smooth UI, low risk (6 items)
 
 - 1.4 events stamp via `.seq` sequence file
 - 1.5 drop per-agent outputStamp from SnapshotStamps
@@ -47,7 +47,7 @@ projected to bring `register-startup.import.p95` to ≤ 250 ms after a
 - 1.2 drop sync `refreshIfStale` fallback on hot render path
 - 1.10 mascot pause idle — skipped (mascot is splash, not always-on)
 
-### Sprint 2 — Cắt I/O sync hot path (4 items)
+### Sprint 2 — Cut I/O sync hot path (4 items)
 
 - 2.10 cache findRepoRoot lookups (TTL-LRU 30 s)
 - 2.7 lazy-load OTLPExporter, LiveRunSidebar, crash-recovery

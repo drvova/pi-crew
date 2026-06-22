@@ -1,28 +1,28 @@
-# So sánh kiến trúc: pi-subagents3 vs pi-crew
+# Architecture Comparison: pi-subagents3 vs pi-crew
 
-> Ngày: 2026-05-12  
+> Date: 2026-05-12  
 > Source: `@tintinweb/pi-subagents` v0.7.1 (6.082 LOC, 28 files) vs `pi-crew` v0.2.3 (35.809 LOC, ~200+ files)
 
 ---
 
-## 1. Tổng quan
+## 1. Overview
 
-| Tiêu chí | pi-subagents3 | pi-crew |
+| Criterion | pi-subagents3 | pi-crew |
 |---|---|---|
-| **Tác giả** | tintinweb | baphuongna |
-| **Phiên bản** | 0.7.1 | 0.2.3 |
-| **Mục tiêu** | Subagent đơn lẻ (Agent tool) — spawn, resume, steer | Team orchestration — multi-agent workflows, phases, parallel dispatch |
+| **Author** | tintinweb | baphuongna |
+| **Version** | 0.7.1 | 0.2.3 |
+| **Goal** | Single subagent (Agent tool) — spawn, resume, steer | Team orchestration — multi-agent workflows, phases, parallel dispatch |
 | **LOC** | ~6.000 | ~36.000 |
-| **Entry point** | `src/index.ts` (1.885 dòng — monolith) | `index.ts` → `register.ts` (668 dòng) → modular registration |
-| **Kiến trúc** | Đơn giản, trực tiếp, single-agent focus | Layered, event-driven, state-machine based |
+| **Entry point** | `src/index.ts` (1.885 lines — monolith) | `index.ts` → `register.ts` (668 lines) → modular registration |
+| **Architecture** | Simple, direct, single-agent focus | Layered, event-driven, state-machine based |
 | **Peer deps** | pi-ai ≥0.70.5, pi-coding-agent ≥0.70.5, pi-tui ≥0.70.5 | pi-coding-agent (runtime) |
 | **Npm deps** | `@sinclair/typebox`, `croner`, `nanoid` | 0 (zero runtime dependencies) |
 | **Test runner** | vitest | Node built-in `--experimental-strip-types` |
-| **Subprocess model** | **In-process** (tái sử dụng Pi SDK `createAgentSession`) | **Out-of-process** (spawn child Pi instance via `child-pi.ts`) |
+| **Subprocess model** | **In-process** (reuses Pi SDK `createAgentSession`) | **Out-of-process** (spawn child Pi instance via `child-pi.ts`) |
 
 ---
 
-## 2. Kiến trúc cốt lõi
+## 2. Core architecture
 
 ### 2.1 pi-subagents3 — In-process Agent Sessions
 
@@ -45,12 +45,12 @@
 └──────────────────────────────────────────────┘
 ```
 
-**Đặc điểm chính:**
-- Agent chạy **trong cùng process** với parent Pi session
-- Dùng `createAgentSession()` + `session.prompt()` — Pi SDK API trực tiếp
-- Tool filtering, extension binding, skill preloading trong process
-- Event subscription (`session.subscribe()`) để track turns, tool uses, streaming text
-- 1 file `index.ts` khổng lồ chứa gần như toàn bộ logic
+**Key characteristics:**
+- Agent runs **in the same process** as the parent Pi session
+- Uses `createAgentSession()` + `session.prompt()` — direct Pi SDK API
+- Tool filtering, extension binding, skill preloading in-process
+- Event subscription (`session.subscribe()`) to track turns, tool uses, streaming text
+- A single huge `index.ts` file contains nearly all the logic
 
 ### 2.2 pi-crew — Out-of-process Child Workers
 
@@ -77,24 +77,24 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Đặc điểm chính:**
-- Worker chạy **riêng process** — spawn `pi` CLI child process
-- Giao tiếp qua JSON events trên stdout (`--json-output` mode)
+**Key characteristics:**
+- Worker runs **in a separate process** — spawns `pi` CLI child process
+- Communicates via JSON events on stdout (`--json-output` mode)
 - State persistence: JSONL event log, manifest files, atomic writes
-- Kiến trúc phân tán: team → workflow → phases → tasks → workers
-- Tách biệt hoàn toàn: crash recovery, stuck detection, deadletter
+- Distributed architecture: team → workflow → phases → tasks → workers
+- Full isolation: crash recovery, stuck detection, deadletter
 
 ---
 
-## 3. So sánh chi tiết theo module
+## 3. Detailed module-by-module comparison
 
 ### 3.1 Agent Execution
 
-| Khía cạnh | pi-subagents3 | pi-crew |
+| Aspect | pi-subagents3 | pi-crew |
 |---|---|---|
 | **Runtime** | `createAgentSession()` in-process | `spawn("pi", [...])` child process |
-| **Tool access** | Direct — `session.setActiveToolsByName()` | Giới hạn bởi child Pi args |
-| **Context sharing** | `buildParentContext()` — copy conversation | Không share (isolated by design) |
+| **Tool access** | Direct — `session.setActiveToolsByName()` | Limited by child Pi args |
+| **Context sharing** | `buildParentContext()` — copy conversation | None (isolated by design) |
 | **Steering** | `session.steer(message)` — immediate in-process | `child.stdin.write()` — JSON event |
 | **Resume** | `resumeAgent(session, prompt)` — reuse session | Re-spawn child process |
 | **Turn limits** | Soft limit → steer "wrap up" → hard abort | `--max-turns` CLI arg → child exit |
@@ -107,7 +107,7 @@
 
 ### 3.2 Agent Configuration
 
-| Khía cạnh | pi-subagents3 | pi-crew |
+| Aspect | pi-subagents3 | pi-crew |
 |---|---|---|
 | **Built-in agents** | 3: general-purpose, Explore, Plan | 10: explorer, planner, executor, reviewer, verifier, analyst, critic, writer, security-reviewer, test-engineer |
 | **Custom agents** | `.md` files in `.pi/agents/` or `~/.pi/agents/` | `.md` files in `agents/` (project) |
@@ -120,9 +120,9 @@
 
 ### 3.3 Memory / Persistence
 
-| Khía cạnh | pi-subagents3 | pi-crew |
+| Aspect | pi-subagents3 | pi-crew |
 |---|---|---|
-| **Agent memory** | ✅ Persistent MEMORY.md per agent (user/project/local scope) | ❌ Không có built-in agent memory |
+| **Agent memory** | ✅ Persistent MEMORY.md per agent (user/project/local scope) | ❌ No built-in agent memory |
 | **Memory tools** | Injected dynamically based on write capability | N/A |
 | **State persistence** | In-memory AgentRecord + JSON schedule store | Full state machine: manifest.json + events.jsonl + tasks.json |
 | **Crash recovery** | Worktree prune on dispose | Detect interrupted runs, deadletter, stuck-blocked notifications |
@@ -131,9 +131,9 @@
 
 ### 3.4 Scheduling
 
-| Khía cạnh | pi-subagents3 | pi-crew |
+| Aspect | pi-subagents3 | pi-crew |
 |---|---|---|
-| **Scheduling** | ✅ Full scheduler: cron (6-field), interval, one-shot | ❌ Không có scheduling |
+| **Scheduling** | ✅ Full scheduler: cron (6-field), interval, one-shot | ❌ No scheduling |
 | **Cron engine** | `croner` library | N/A |
 | **Persistence** | Session-scoped JSON with PID-locked store | N/A |
 | **Queue bypass** | `bypassQueue: true` for scheduled fires | N/A |
@@ -142,7 +142,7 @@
 
 ### 3.5 Worktree Isolation
 
-| Khía cạnh | pi-subagents3 | pi-crew |
+| Aspect | pi-subagents3 | pi-crew |
 |---|---|---|
 | **Worktree support** | ✅ `createWorktree()` / `cleanupWorktree()` | ✅ Full `worktree-manager.ts` (8.8 KB) |
 | **Branch management** | Auto-branch, auto-commit changes | Branch freshness, reuse, file node_modules skip |
@@ -151,7 +151,7 @@
 
 ### 3.6 Cross-extension Communication
 
-| Khía cạnh | pi-subagents3 | pi-crew |
+| Aspect | pi-subagents3 | pi-crew |
 |---|---|---|
 | **RPC protocol** | ✅ Event bus RPC: ping/spawn/stop | ✅ Event bus RPC: ping/spawn/status/cancel |
 | **Protocol version** | v2 | Versioned |
@@ -160,7 +160,7 @@
 
 ### 3.7 UI / TUI
 
-| Khía cạnh | pi-subagents3 | pi-crew |
+| Aspect | pi-subagents3 | pi-crew |
 |---|---|---|
 | **Agent widget** | `agent-widget.ts` (518 LOC) — overlay | `crew-widget.ts` (16 KB) — sidebar + dashboard |
 | **Conversation viewer** | `conversation-viewer.ts` (243 LOC) | `transcript-viewer.ts` (13.9 KB) — JSONL-based |
@@ -169,11 +169,11 @@
 | **Status bar** | Inline status in overlay | `powerbar-publisher.ts` (8.9 KB) |
 | **Live sidebar** | N/A | `live-run-sidebar.ts` (8.6 KB) |
 | **Notification render** | Custom `renderCall` / `renderResult` | `notification-router.ts` + `notification-sink.ts` |
-| **Context % indicator** | ✅ Token count + context % (colored) + compaction count | ❌ Không có context indicator |
+| **Context % indicator** | ✅ Token count + context % (colored) + compaction count | ❌ No context indicator |
 
 ### 3.8 Settings / Configuration
 
-| Khía cạnh | pi-subagents3 | pi-crew |
+| Aspect | pi-subagents3 | pi-crew |
 |---|---|---|
 | **Settings file** | `.pi/subagents.json` (project) + `~/.pi/agent/subagents.json` (global) | `config.ts` → `.pi/crew-config.json` + `defaults.ts` |
 | **Runtime settings** | maxConcurrent, defaultMaxTurns, graceTurns, defaultJoinMode, schedulingEnabled | maxConcurrent, telemetry, notifications |
@@ -182,122 +182,122 @@
 
 ---
 
-## 4. Tính năng độc đáo
+## 4. Unique features
 
-### pi-subagents3 có nhưng pi-crew không:
+### pi-subagents3 has but pi-crew doesn't:
 
 1. **In-process agent sessions** — Zero subprocess overhead, direct Pi SDK access, shared event loop
-2. **Persistent agent memory** — MEMORY.md per agent với 3 scope (user/project/local), auto-injected tools
-3. **Soft turn limit + grace period** — Steer "wrap up" trước khi hard-abort, configurable grace turns
-4. **Scheduling** — Full cron/interval/one-shot scheduler với croner, session-scoped persistence
-5. **Parent context inheritance** — `inheritContext` fork conversation cho subagent
-6. **Append mode** — Agent chạy như "twin" của parent (kế thừa system prompt + tools)
+2. **Persistent agent memory** — MEMORY.md per agent with 3 scopes (user/project/local), auto-injected tools
+3. **Soft turn limit + grace period** — Steer "wrap up" before hard-aborting, configurable grace turns
+4. **Scheduling** — Full cron/interval/one-shot scheduler with croner, session-scoped persistence
+5. **Parent context inheritance** — `inheritContext` forks the conversation for the subagent
+6. **Append mode** — Agent runs as a "twin" of the parent (inherits system prompt + tools)
 7. **Context % indicator** — Live context window utilization (%), compaction count (↻N)
 8. **Agent memory tools** — Dynamic tool injection based on write capability (read-only vs read-write)
-9. **Skill preloading** — Load skill content directly into system prompt (string[])
-10. **Batch grouping** — 100ms debounce gom nhiều background completions thành 1 notification
-11. **Cancelable nudges** — 200ms hold trước khi gửi notification, get_subagent_result hủy nudge
-12. **Agent creation wizard** — `/agents` → spawn agent để tạo agent config .md file
+9. **Skill preloading** — Load skill content directly into the system prompt (string[])
+10. **Batch grouping** — 100ms debounce batches multiple background completions into 1 notification
+11. **Cancelable nudges** — 200ms hold before sending a notification, get_subagent_result cancels the nudge
+12. **Agent creation wizard** — `/agents` → spawn an agent to create an agent config .md file
 
-### pi-crew có nhưng pi-subagents3 không:
+### pi-crew has but pi-subagents3 doesn't:
 
-1. **Team orchestration** — Multi-agent teams với workflows, phases, parallel dispatch
+1. **Team orchestration** — Multi-agent teams with workflows, phases, parallel dispatch
 2. **Workflow engine** — Declarative workflow definitions (step → agent → gate → next)
 3. **Out-of-process isolation** — Child Pi process, crash-safe, independent event loop
 4. **Full state machine** — manifest.json + tasks.json + events.jsonl, durable persistence
 5. **Crash recovery** — Detect interrupted runs, deadletter queue, stuck-blocked detection
-6. **Mailbox system** — Interactive respond/nudge/ack workflow cho waiting tasks
+6. **Mailbox system** — Interactive respond/nudge/ack workflow for waiting tasks
 7. **Heartbeat monitoring** — `heartbeat-watcher.ts` + gradient-based health tracking
 8. **Observability** — Metrics registry, OTLP exporter, Prometheus exporter
-9. **Run export/import** — Bundle/unbundle runs cho cross-machine sharing
+9. **Run export/import** — Bundle/unbundle runs for cross-machine sharing
 10. **Live session management** — Live IRC, live agent control, live extension bridge
-11. **UI dashboard** — Multi-pane dashboard với agents/capabilities/health/mailbox/progress
-12. **Run snapshot cache** — Efficient state snapshots cho UI rendering
-13. **Delivery coordination** — Overflow recovery, delivery coordinator cho message routing
+11. **UI dashboard** — Multi-pane dashboard with agents/capabilities/health/mailbox/progress
+12. **Run snapshot cache** — Efficient state snapshots for UI rendering
+13. **Delivery coordination** — Overflow recovery, delivery coordinator for message routing
 14. **i18n** — Internationalization support
 15. **Post-checks** — Configurable post-execution verification hooks
-16. **Iteration hooks** — Pre/post iteration hooks cho external integrations
-17. **Model fallback chain** — Multi-model fallback với cost tracking
-18. **Compaction summary** — Context compaction cho long-running agents
+16. **Iteration hooks** — Pre/post iteration hooks for external integrations
+17. **Model fallback chain** — Multi-model fallback with cost tracking
+18. **Compaction summary** — Context compaction for long-running agents
 19. **Task quality scoring** — Automatic quality assessment of task outputs
 20. **Agent capability inventory** — Dynamic tool/skill capability detection
 
 ---
 
-## 5. Phân tích ưu/nhược điểm
+## 5. Pros and cons analysis
 
 ### pi-subagents3
 
-**Ưu điểm:**
-- **Đơn giản**: ~6K LOC, dễ hiểu, dễ maintain
+**Pros:**
+- **Simple**: ~6K LOC, easy to understand and maintain
 - **Performance**: In-process, zero subprocess overhead, shared memory
-- **Tính năng sâu**: Memory, scheduling, context inheritance, turn management rất chi tiết
-- **SDK-first**: Sử dụng Pi SDK trực tiếp, tận dụng tối đa API
-- **Interactive**: Resume, steer, conversation viewer rất mượt
-- **Settings**: Hot-reload, master switch cho features
+- **Deep features**: Memory, scheduling, context inheritance, turn management are very detailed
+- **SDK-first**: Uses the Pi SDK directly, fully leveraging the API
+- **Interactive**: Resume, steer, conversation viewer are very smooth
+- **Settings**: Hot-reload, master switch for features
 
-**Nhược điểm:**
-- **Monolith**: `index.ts` 1.885 dòng — khó maintain, khó test
-- **No team support**: Không có workflow, phases, parallel dispatch
-- **Crash propagation**: Agent crash ảnh hưởng parent process
-- **Limited observability**: Không có metrics, export, monitoring
-- **No run persistence**: Agent record chỉ in-memory (trừ schedule store)
+**Cons:**
+- **Monolith**: `index.ts` 1.885 lines — hard to maintain, hard to test
+- **No team support**: No workflow, phases, parallel dispatch
+- **Crash propagation**: Agent crash affects the parent process
+- **Limited observability**: No metrics, export, monitoring
+- **No run persistence**: Agent record is in-memory only (except the schedule store)
 
 ### pi-crew
 
-**Ưu điểm:**
-- **Kiến trúc mạnh**: Layered, event-driven, state-machine based
-- **Team orchestration**: Workflow engine với phases, parallel, gates
-- **Crash isolation**: Out-of-process workers, child crash không ảnh hưởng parent
+**Pros:**
+- **Strong architecture**: Layered, event-driven, state-machine based
+- **Team orchestration**: Workflow engine with phases, parallel, gates
+- **Crash isolation**: Out-of-process workers, child crash doesn't affect parent
 - **Full persistence**: JSONL event log, manifest, atomic writes
 - **Observability**: Metrics, OTLP, Prometheus, heartbeat monitoring
-- **Modular**: 200+ files, mỗi file một trách nhiệm
+- **Modular**: 200+ files, each file one responsibility
 - **Enterprise features**: Export/import, i18n, compaction, quality scoring
 
-**Nhược điểm:**
-- **Phức tạp**: 36K LOC, learning curve cao
-- **Subprocess overhead**: Mỗi worker spawn riêng process (RAM, startup time)
-- **Không có memory**: Agents không có persistent memory giữa sessions
-- **Không có scheduling**: Không có cron/interval/one-shot
-- **Không có context inheritance**: Workers chạy isolated, không thấy parent context
-- **Không có soft turn limit**: Hard cutoff, không có grace period
-- **Không có interactive steer**: Không thể steer worker sau khi spawn
+**Cons:**
+- **Complex**: 36K LOC, steep learning curve
+- **Subprocess overhead**: Each worker spawns its own process (RAM, startup time)
+- **No memory**: Agents have no persistent memory between sessions
+- **No scheduling**: No cron/interval/one-shot
+- **No context inheritance**: Workers run isolated, can't see parent context
+- **No soft turn limit**: Hard cutoff, no grace period
+- **No interactive steer**: Cannot steer a worker after spawning
 
 ---
 
-## 6. Khuyến nghị
+## 6. Recommendations
 
-### pi-crew nên học từ pi-subagents3:
+### What pi-crew should learn from pi-subagents3:
 
-1. **Persistent agent memory** — MEMORY.md pattern rất giá trị cho long-running projects
-2. **Soft turn limit + grace period** — Elegant hơn hard abort
-3. **Scheduling** — Cron/interval scheduling cho automated tasks
-4. **Context % indicator** — Giúp LLM parent biết subagent còn bao nhiêu room
-5. **Batch notification grouping** — Giảm noise khi nhiều workers complete đồng thời
-6. **In-process mode** (optional) — Cho lightweight tasks không cần process isolation
-7. **Cancelable nudges** — Tránh notification spam
-8. **Agent settings hot-reload** — Thay đổi settings mà không cần restart
+1. **Persistent agent memory** — The MEMORY.md pattern is very valuable for long-running projects
+2. **Soft turn limit + grace period** — More elegant than hard abort
+3. **Scheduling** — Cron/interval scheduling for automated tasks
+4. **Context % indicator** — Helps the parent LLM know how much room the subagent has left
+5. **Batch notification grouping** — Reduces noise when many workers complete simultaneously
+6. **In-process mode** (optional) — For lightweight tasks that don't need process isolation
+7. **Cancelable nudges** — Avoid notification spam
+8. **Agent settings hot-reload** — Change settings without restarting
 
-### pi-subagents3 nên học từ pi-crew:
+### What pi-subagents3 should learn from pi-crew:
 
-1. **Modular architecture** — Tách `index.ts` thành nhiều files
-2. **State persistence** — Durable state thay vì chỉ in-memory
+1. **Modular architecture** — Split `index.ts` into multiple files
+2. **State persistence** — Durable state instead of in-memory only
 3. **Crash recovery** — Detect interrupted runs, deadletter
 4. **Observability** — Metrics, monitoring, health checks
 5. **Team support** — Multi-agent workflows
-6. **Out-of-process option** — Cho heavy tasks cần isolation
+6. **Out-of-process option** — For heavy tasks needing isolation
 7. **Run export/import** — Cross-machine sharing
 
 ---
 
-## 7. Kết luận
+## 7. Conclusion
 
-**pi-subagents3** là một extension **tập trung** — làm rất tốt một việc: spawn và quản lý individual subagents. Nó tận dụng Pi SDK tối đa, in-process, interactive, với những tính năng sâu như memory và scheduling.
+**pi-subagents3** is a **focused** extension — it does one thing very well: spawn and manage individual subagents. It leverages the Pi SDK maximally, in-process, interactive, with deep features like memory and scheduling.
 
-**pi-crew** là một **orchestration platform** — broader scope, mạnh về team workflows, state management, crash recovery, và enterprise features. Nhưng phức tạp hơn nhiều và thiếu một số tính năng "nice-to-have" mà pi-subagents3 có.
+**pi-crew** is an **orchestration platform** — broader scope, strong in team workflows, state management, crash recovery, and enterprise features. But much more complex, and missing some "nice-to-have" features that pi-subagents3 has.
 
-Hai extension **complement** nhau hơn là compete:
-- pi-subagents3 cho **quick, interactive subagent tasks** (code review, exploration, one-off analysis)
-- pi-crew cho **complex, multi-phase team workflows** (full feature implementation, multi-perspective review, parallel research)
+The two extensions **complement** each other more than they compete:
+- pi-subagents3 for **quick, interactive subagent tasks** (code review, exploration, one-off analysis)
+- pi-crew for **complex, multi-phase team workflows** (full feature implementation, multi-perspective review, parallel research)
 
-Một kiến trúc lý tưởng có thể kết hợp: dùng pi-subagents3's in-process execution cho lightweight tasks, và pi-crew's orchestration layer cho complex workflows.
+An ideal architecture might combine both: use pi-subagents3's in-process execution for lightweight tasks, and pi-crew's orchestration layer for complex workflows.

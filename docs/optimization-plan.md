@@ -1,5 +1,7 @@
 # pi-crew Optimization Plan: coding-agent Integration
 
+> **Status note (2026-06-22):** Dated 2026-05-28 — verify against current code before acting. Some items may already be implemented.
+
 **Date:** 2026-05-28  
 **Based on:** 133 coding-agent commits (May 2026), direct source analysis  
 **Goal:** Implement 4 optimization opportunities for pi-crew

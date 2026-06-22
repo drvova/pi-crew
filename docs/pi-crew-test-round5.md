@@ -22,11 +22,11 @@ Error: Failed to run npm root -g: undefined
     at DefaultPackageManager.getNpmInstallPath
 ```
 
-**Root cause identified:** Bug #12 — Fix của Bug #10 đã vô tình strip mất essential env vars!
+**Root cause identified:** Bug #12 — The fix for Bug #10 accidentally stripped out essential env vars!
 
-`buildChildPiSpawnOptions()` dùng `sanitizeEnvSecrets(env, { allowList: [model API keys] })`. Trong allow-list mode, CHỈ những key matching allow-list được giữ lại. Tất cả other keys (PATH, HOME, USER, etc.) bị strip.
+`buildChildPiSpawnOptions()` uses `sanitizeEnvSecrets(env, { allowList: [model API keys] })`. In allow-list mode, ONLY keys matching the allow-list are kept. All other keys (PATH, HOME, USER, etc.) are stripped.
 
-→ Child Pi process không có PATH → không tìm được npm → crash ngay lập tức
+→ The child Pi process has no PATH → cannot find npm → crashes immediately
 
 **Workers spawned successfully (Bug #11 verified ✅):**
 - `worker.spawned: pid=339071, pid=339077` — spawn OK
@@ -65,6 +65,6 @@ Error: Failed to run npm root -g: undefined
 
 ## Next Step
 
-**Restart Pi** để reload với Bug #12 fix. Sau đó test:
+**Restart Pi** to reload with the Bug #12 fix. Then test:
 1. Background async team — verify workers produce output within 60s (not 300s timeout)
 2. Foreground fast-fix team — verify all phases complete

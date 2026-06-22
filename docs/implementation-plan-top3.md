@@ -303,12 +303,12 @@ interface ParsedPr {
 
 **New tool:** `read-issue` / `read-pr`
 ```typescript
-// agents có thể gọi:
-// read({ path: "issue://123" }) → markdown của issue
-// read({ path: "pr://456" }) → markdown của PR
+// agents can call:
+// read({ path: "issue://123" }) → markdown of the issue
+// read({ path: "pr://456" }) → markdown of the PR
 ```
 
-**New slash command:** `/issue` hoặc dùng existing `/crew`:
+**New slash command:** `/issue` or use the existing `/crew`:
 ```
 /crew create-issue "Task failed: fix memory leak in cache" --labels=bug --assignee=me
 /crew link-issue TICKET-123 --task=explorer-1

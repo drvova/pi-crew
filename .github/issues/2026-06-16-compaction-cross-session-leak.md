@@ -3,7 +3,7 @@
 **Status:** Confirmed, root-caused, fix designed (not yet applied)
 **Date:** 2026-06-16
 **Severity:** Medium (correctness — wrong session resumes another session's work)
-**Reported:** User observed it live ("có lỗi khi dùng /compact ở 1 session khác, lại nhận được thông tin session hiện tại")
+**Reported:** User observed it live ("error when running `/compact` in another session — got info from the current session instead")
 **File:** `src/extension/registration/compaction-guard.ts`
 
 ## Symptom
@@ -19,7 +19,7 @@ Observed leak text (Session A's data showing up in Session B):
 ```
 [pi-crew] Context was compacted while crew tasks were still in-flight. Continue the work - do not wait for me.
 - runId=team_20260616085426_ba2f835cc1e2732a (status=running, team=direct-explorer, workflow=direct-agent):
-  Map CHÍNH XÁC hiện trạng kiến trúc agent/config/prompt/tool của pi-crew...
+  Map the agent/config/prompt/tool architecture of pi-crew EXACTLY...
 ```
 
 Plus a second, related error surfacing to the user:

@@ -1,7 +1,7 @@
-# pi-crew Sprint 1 Report — UI mượt rủi ro thấp
+# pi-crew Sprint 1 Report — Low-risk UI smoothness
 
 Date: 2026-05-14
-Branch: `perf/sprint-1` (cắt từ `perf/baseline-bench`)
+Branch: `perf/sprint-1` (cut from `perf/baseline-bench`)
 Status: complete
 
 ## Items shipped

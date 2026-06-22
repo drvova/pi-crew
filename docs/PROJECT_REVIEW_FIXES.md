@@ -1,46 +1,46 @@
-# Review các fix đã áp dụng
+# Review of the fixes applied
 
-> Ngày: 2026-05-18
-> Phiên bản: `pi-crew@0.2.20`
-> Base: PROJECT_REVIEW.md (cùng thư mục) — báo cáo ban đầu.
-> Working tree: 33 file thay đổi (`git diff --stat`), bao gồm cài `@biomejs/biome`, thêm `biome.json`, sửa source + test.
+> Date: 2026-05-18
+> Version: `pi-crew@0.2.20`
+> Base: PROJECT_REVIEW.md (same directory) — the original report.
+> Working tree: 33 files changed (`git diff --stat`), including installing `@biomejs/biome`, adding `biome.json`, fixing source + tests.
 
 ## TL;DR
 
-Đã fix đúng hướng và **toàn bộ test vẫn pass** (1596/1598, 0 fail). Tuy nhiên có **3 lỗi correctness mới do fix tạo ra** và **2 quy ước cần dọn**:
+The fixes go in the right direction and **all tests still pass** (1596/1598, 0 fail). However, there are **3 new correctness bugs introduced by the fixes** and **2 conventions to clean up**:
 
-| ID | File | Mức | Tình trạng |
+| ID | File | Severity | Status |
 |---|---|---|---|
-| **NEW-1** | `src/state/event-log-rotation.ts` (rotateEventLog) | HIGH | `require()` trong ESM → throw silently |
-| **NEW-2** | `src/runtime/task-runner.ts` (M1 transcript per attempt) | HIGH | logic sai, vẫn dùng chung 1 file |
-| **NEW-3** | `src/runtime/task-runner.ts` (M2 transcript cap) | MED | đọc tail không cắt theo dòng → JSONL corrupt; ghi artifact với relativePath cũ |
-| LINT-1 | `src/runtime/task-runner.ts:350` | LOW | `yieldResult` unused (yield logic bị remove?) |
-| LINT-2 | `src/runtime/team-runner.ts:270` | LOW | `runPromise` unused (đăng ký Promise rồi bỏ tham chiếu) |
+| **NEW-1** | `src/state/event-log-rotation.ts` (rotateEventLog) | HIGH | `require()` in ESM → throws silently |
+| **NEW-2** | `src/runtime/task-runner.ts` (M1 transcript per attempt) | HIGH | logic is wrong, still uses a single shared file |
+| **NEW-3** | `src/runtime/task-runner.ts` (M2 transcript cap) | MED | tail read does not cut on line boundaries → corrupt JSONL; writes artifact with the old relativePath |
+| LINT-1 | `src/runtime/task-runner.ts:350` | LOW | `yieldResult` unused (yield logic removed?) |
+| LINT-2 | `src/runtime/team-runner.ts:270` | LOW | `runPromise` unused (registers a Promise then drops the reference) |
 
-Status từng issue gốc:
+Status of each original issue:
 
-| Issue | Status | Ghi chú |
+| Issue | Status | Notes |
 |---|---|---|
-| **H1** event-log overflow | OK | đúng pattern: ưu tiên terminal events, compact + rotate trước khi append |
-| **H2** mailbox lock | OK | dùng `withEventLogLockSync` |
-| **H3** atomic-write fallback symlink | OK | re-check `lstatSync.isSymbolicLink()` trước fallback |
-| **H4** rename `__test__mergeTaskUpdates` | OK | đã đổi tên + giữ alias deprecated |
-| **M1** transcript per attempt | **BROKEN (NEW-2)** | logic không đúng |
-| **M2** transcript cap | **PARTIAL (NEW-3)** | có cap nhưng cắt sai chỗ |
-| **M3** cleanup race-safe stat | OK | dùng `withFileTypes` + try/catch |
-| **M4** runSetupHook full-JSON | OK | thử full trimmed trước, fallback last-line |
-| **M5** symlink fail logging | OK | log lý do, hint Windows non-admin |
-| **M6** final-drain telemetry | OK | log internal error khi override exit |
-| **L1** ESLint/Biome | OK | đã add `@biomejs/biome` + `biome.json` |
-| **L12** rename references | OK | đã mở rộng cho workflow step.role + test fixtures |
+| **H1** event-log overflow | OK | correct pattern: prioritize terminal events, compact + rotate before append |
+| **H2** mailbox lock | OK | uses `withEventLogLockSync` |
+| **H3** atomic-write fallback symlink | OK | re-checks `lstatSync.isSymbolicLink()` before fallback |
+| **H4** rename `__test__mergeTaskUpdates` | OK | renamed + kept deprecated alias |
+| **M1** transcript per attempt | **BROKEN (NEW-2)** | logic is incorrect |
+| **M2** transcript cap | **PARTIAL (NEW-3)** | has a cap but cuts at the wrong place |
+| **M3** cleanup race-safe stat | OK | uses `withFileTypes` + try/catch |
+| **M4** runSetupHook full-JSON | OK | tries full trimmed first, falls back to last-line |
+| **M5** symlink fail logging | OK | logs the reason, hints at Windows non-admin |
+| **M6** final-drain telemetry | OK | logs internal error when overriding exit |
+| **L1** ESLint/Biome | OK | added `@biomejs/biome` + `biome.json` |
+| **L12** rename references | OK | expanded for workflow step.role + test fixtures |
 
 ---
 
-## 1. Bugs mới do fix tạo ra (NEW-*)
+## 1. New bugs introduced by the fixes (NEW-*)
 
-### NEW-1 (HIGH) — `rotateEventLog` dùng `require()` trong ESM
+### NEW-1 (HIGH) — `rotateEventLog` uses `require()` in an ESM module
 
-**File**: `src/state/event-log-rotation.ts` (dòng 124–129)
+**File**: `src/state/event-log-rotation.ts` (lines 124–129)
 
 ```ts
 } catch (error) {
@@ -55,12 +55,12 @@ Status từng issue gốc:
 }
 ```
 
-**Vấn đề**:
-1. Project khai báo `"type": "module"` (ESM). Trong ESM scope, **`require` không tồn tại** → throw `ReferenceError: require is not defined`.
-2. Path `"./internal-error.ts"` sai — file thực tế ở `../utils/internal-error.ts`.
-3. Outer try-catch swallow lỗi → khi `rename` fail, hàm sẽ trả `false` nhưng **không có log nào được ghi**. H1 fix dựa vào rotateEventLog để giảm size; nếu rotate fail im lặng, ta quay lại scenario silent-drop.
+**Problem**:
+1. The project declares `"type": "module"` (ESM). In an ESM scope, **`require` does not exist** → throws `ReferenceError: require is not defined`.
+2. The path `"./internal-error.ts"` is wrong — the file is actually at `../utils/internal-error.ts`.
+3. The outer try-catch swallows the error → when `rename` fails, the function returns `false` but **no log is written**. The H1 fix relies on rotateEventLog to reduce size; if rotate fails silently, we are back to the silent-drop scenario.
 
-**Fix đúng**: import top-of-file giống `compactEventLog` đã làm:
+**Correct fix**: import at the top of the file like `compactEventLog` already does:
 ```ts
 import { logInternalError } from "../utils/internal-error.ts";
 // ...
@@ -69,28 +69,28 @@ import { logInternalError } from "../utils/internal-error.ts";
     return false;
 }
 ```
-Không có circular dependency vì `internal-error.ts` không import từ `state/`.
+There is no circular dependency because `internal-error.ts` does not import from `state/`.
 
 ---
 
-### NEW-2 (HIGH) — Transcript-per-attempt không hoạt động
+### NEW-2 (HIGH) — Transcript-per-attempt does not work
 
-**File**: `src/runtime/task-runner.ts` (dòng 155–158)
+**File**: `src/runtime/task-runner.ts` (lines 155–158)
 
 ```ts
 modelAttempts = [];
 // M1 fix: transcript path per attempt to avoid mixing across fallback attempts.
-const attempt = modelAttempts.length; // 0-based index   ← luôn = 0
+const attempt = modelAttempts.length; // 0-based index   ← always 0
 transcriptPath = `${manifest.artifactsRoot}/transcripts/${task.id}.attempt-${attempt}.jsonl`;
 ```
 
-**Vấn đề**:
-- `modelAttempts = []` vừa khởi tạo rỗng → `modelAttempts.length` **luôn là 0**.
-- `transcriptPath` được set **ngoài** vòng `for (let i = 0; i < attemptModels.length; i++)`.
-- Cả N lần attempt đều ghi vào `transcripts/${task.id}.attempt-0.jsonl` → vẫn mixing y nguyên như trước.
-- Hơn nữa: `parsePiJsonOutput(fs.readFileSync(transcriptPath))` đọc accumulated content → final text/usage vẫn lẫn nhiều attempt.
+**Problem**:
+- `modelAttempts = []` was just initialized empty → `modelAttempts.length` **is always 0**.
+- `transcriptPath` is set **outside** the `for (let i = 0; i < attemptModels.length; i++)` loop.
+- All N attempts write to `transcripts/${task.id}.attempt-0.jsonl` → still mixing exactly like before.
+- Furthermore: `parsePiJsonOutput(fs.readFileSync(transcriptPath))` reads accumulated content → final text/usage is still mixed across attempts.
 
-**Fix đúng**: dùng biến loop `i`, set transcriptPath bên trong vòng for:
+**Correct fix**: use the loop variable `i`, set transcriptPath inside the for loop:
 ```ts
 for (let i = 0; i < attemptModels.length; i++) {
     transcriptPath = `${manifest.artifactsRoot}/transcripts/${task.id}.attempt-${i}.jsonl`;
@@ -100,9 +100,9 @@ for (let i = 0; i < attemptModels.length; i++) {
 
 ---
 
-### NEW-3 (MED) — Transcript cap đọc tail không tôn trọng line boundary
+### NEW-3 (MED) — Transcript cap tail read does not respect line boundaries
 
-**File**: `src/runtime/task-runner.ts` (dòng 294–315)
+**File**: `src/runtime/task-runner.ts` (lines 294–315)
 
 ```ts
 const MAX_TRANSCRIPT_ARTIFACT_BYTES = 5 * 1024 * 1024;
@@ -121,35 +121,35 @@ if (fs.existsSync(transcriptPath)) {
     }
     transcriptArtifact = writeArtifact(manifest.artifactsRoot, {
         kind: "log",
-        relativePath: `transcripts/${task.id}.jsonl`,   // ← tên artifact khác source!
+        relativePath: `transcripts/${task.id}.jsonl`,   // ← artifact name differs from source!
         content: transcriptContent,
         producer: task.id,
     });
 }
 ```
 
-**Vấn đề**:
-1. **JSONL corruption**: tail-read cắt ở offset byte cố định, không cắt theo `\n` → dòng đầu của transcript artifact rất khả năng là **partial JSON line** không parse được. Bất kỳ tool nào replay transcript sẽ skip dòng đầu (mất event quan trọng).
-   - Fix: sau khi đọc, tìm newline đầu tiên, drop bytes trước nó. Hoặc prepend header marker `[truncated head]`.
-2. **`relativePath` không match source file**: nếu NEW-2 fix đúng (`attempt-i.jsonl`), thì artifact đáng lẽ phải tham chiếu tên đó. Hiện tại artifact luôn ghi `transcripts/${task.id}.jsonl` → mất thông tin attempt.
-3. **UTF-8 boundary**: `buf.slice(0, bytesRead).toString('utf-8')` có thể cắt giữa 1 ký tự multi-byte → ký tự đầu thành `\uFFFD`. Nhỏ nhưng đáng nhắc.
-4. **Cap chỉ 5MB** cho artifact, nhưng source `transcriptPath` không bị cap → vẫn có thể grow rất lớn (M2 chỉ giải quyết artifact memory, chưa giải quyết disk).
+**Problem**:
+1. **JSONL corruption**: the tail read cuts at a fixed byte offset, not on a `\n` → the first line of the transcript artifact is very likely a **partial JSON line** that cannot be parsed. Any tool replaying the transcript will skip the first line (losing an important event).
+   - Fix: after reading, find the first newline and drop the bytes before it. Or prepend a header marker `[truncated head]`.
+2. **`relativePath` does not match the source file**: if NEW-2 is fixed correctly (`attempt-i.jsonl`), then the artifact should reference that name. Currently the artifact always writes `transcripts/${task.id}.jsonl` → loses the attempt information.
+3. **UTF-8 boundary**: `buf.slice(0, bytesRead).toString('utf-8')` can cut in the middle of a multi-byte character → the first character becomes `\uFFFD`. Minor but worth noting.
+4. **Cap is only 5MB** for the artifact, but the source `transcriptPath` is not capped → can still grow very large (M2 only solves the artifact memory, not the disk).
 
 ---
 
-## 2. Lint cảnh báo còn lại
+## 2. Remaining lint warnings
 
-Cài `@biomejs/biome` (L1 OK). Khi chạy `npx biome lint` trên các file đã sửa, còn 2 warning:
+Installed `@biomejs/biome` (L1 OK). When running `npx biome lint` on the changed files, 2 warnings remain:
 
 ### LINT-1 — `task-runner.ts:350` `yieldResult` unused
 
 ```ts
 let yieldResult: YieldResult | undefined;
-// ... gán yieldResult = extractYieldResult(yieldEvent);
-// nhưng không đọc lại
+// ... assigns yieldResult = extractYieldResult(yieldEvent);
+// but never read again
 ```
 
-`yieldResult` được gán nhưng không được sử dụng ở đâu phía dưới. Logic yield đang bị "treo". Hoặc remove biến, hoặc dùng nó để override task.result/finalText. Cần xác nhận với owner.
+`yieldResult` is assigned but never used anywhere below. The yield logic is "dangling". Either remove the variable, or use it to override task.result/finalText. Needs confirmation from the owner.
 
 ### LINT-2 — `team-runner.ts:270` `runPromise` unused
 
@@ -157,34 +157,34 @@ let yieldResult: YieldResult | undefined;
 const runPromise = registerRunPromise(manifest.runId);
 ```
 
-`registerRunPromise` có side-effect (đăng ký vào tracker), nhưng tên biến không cần thiết. Có thể đổi thành `void registerRunPromise(manifest.runId);` để biome bỏ qua, hoặc đổi tên `_runPromise`.
+`registerRunPromise` has a side effect (registers into the tracker), but the variable name is unnecessary. You could change it to `void registerRunPromise(manifest.runId);` so biome ignores it, or rename to `_runPromise`.
 
-> Không nên gắn `lint:check` vào CI cho đến khi 2 cảnh báo này được fix, nếu không sẽ noise trên mỗi PR.
+> Do not wire `lint:check` into CI until these 2 warnings are fixed, otherwise it will add noise to every PR.
 
 ---
 
-## 3. Issues GỐC đã fix tốt (chi tiết)
+## 3. Original issues fixed well (details)
 
 ### H1 — Event-log overflow (PASS)
 
-`appendEventInsideLock` đã được sửa hợp lý:
-- Terminal event luôn được append bất kể size.
-- Non-terminal event gặp overflow → `compactEventLog` ngay, nếu vẫn quá thì `rotateEventLog`.
-- `skippedDueToSize` flag chỉ đặt khi cả compact + rotate đều không giảm được size (rất hiếm).
+`appendEventInsideLock` was fixed correctly:
+- Terminal events are always appended regardless of size.
+- Non-terminal events that hit the overflow → `compactEventLog` immediately, and if still too large → `rotateEventLog`.
+- The `skippedDueToSize` flag is only set when both compact + rotate fail to reduce size (very rare).
 
-**Lưu ý nhỏ**:
-- `appendCounter++` vẫn chạy kể cả khi `skippedDueToSize === true`. Không phải lỗi nhưng làm `% 100` rotation kích hoạt sớm hơn 1 chu kỳ — không ảnh hưởng correctness.
-- Seq number vẫn được consume khi skipped → khi consumer thấy "gap" seq họ có thể lo lắng. Có thể đặt `metadata.appended: false` (đã có) để consumer skip an toàn. OK.
-- Phụ thuộc `rotateEventLog` (NEW-1 broken). Khi NEW-1 fail, fallback path là `appendFileSync` vẫn append vào file > 50MB → file ngày càng to.
+**Minor notes**:
+- `appendCounter++` still runs even when `skippedDueToSize === true`. Not a bug but makes the `% 100` rotation trigger one cycle early — does not affect correctness.
+- The seq number is still consumed when skipped → when a consumer sees a "gap" in seq they may worry. You can set `metadata.appended: false` (already present) so consumers skip safely. OK.
+- Depends on `rotateEventLog` (NEW-1 broken). When NEW-1 fails, the fallback path is `appendFileSync` which still appends to a file > 50MB → the file keeps growing.
 
 ### H2 — Mailbox lock (PASS)
 
-Bọc `appendFileSync` trong `withEventLogLockSync`. Hợp lý.
+Wraps `appendFileSync` in `withEventLogLockSync`. Reasonable.
 
-**Lưu ý**:
-- Lock theo `eventsPath` thực ra là theo `mailboxFile(...)`, tức là `inbox.jsonl` và `outbox.jsonl` có lock độc lập. OK cross-process.
-- `withEventLogLockSync` không export trước đó, đã được đổi thành `export function` — chấp nhận được nhưng tên hơi misleading khi dùng cho mailbox. Cân nhắc tách thành `withJsonlAppendLock` chung.
-- Lock chỉ bảo vệ append. Các path khác như `updateMailboxMessageReply` (đã dùng `atomicWriteFile` rewrite) hoặc `validateMailbox` không bị ảnh hưởng.
+**Notes**:
+- The lock by `eventsPath` is actually by `mailboxFile(...)`, i.e., `inbox.jsonl` and `outbox.jsonl` have independent locks. OK for cross-process.
+- `withEventLogLockSync` was not exported before; it was changed to `export function` — acceptable but the name is slightly misleading when used for the mailbox. Consider extracting a generic `withJsonlAppendLock`.
+- The lock only protects append. Other paths like `updateMailboxMessageReply` (which already uses `atomicWriteFile` rewrite) or `validateMailbox` are not affected.
 
 ### H3 — Atomic-write fallback symlink TOCTOU (PASS)
 
@@ -200,7 +200,7 @@ try {
 }
 ```
 
-OK. Lưu ý: outer catch swallow **mọi** lỗi từ `lstatSync`, không chỉ ENOENT. Nếu `lstatSync` fail vì EACCES (permission denied), fallback sẽ proceed mặc dù có thể không an toàn. Có thể narrow xuống `(err as NodeJS.ErrnoException).code === "ENOENT"`.
+OK. Note: the outer catch swallows **all** errors from `lstatSync`, not just ENOENT. If `lstatSync` fails with EACCES (permission denied), the fallback proceeds even though it may not be safe. Could narrow to `(err as NodeJS.ErrnoException).code === "ENOENT"`.
 
 ### H4 — Rename `__test__mergeTaskUpdates` (PASS)
 
@@ -210,29 +210,29 @@ export function mergeTaskUpdatesPreservingTerminal(...) { ... }
 export const __test__mergeTaskUpdates = mergeTaskUpdatesPreservingTerminal;
 ```
 
-Đẹp. Backward compat tốt. Caller bên trong `executeTeamRunCore` cũng cần update — kiểm tra nhanh:
+Nice. Good backward compatibility. The caller inside `executeTeamRunCore` also needs updating — quick check:
 
 ```
 > rg "__test__mergeTaskUpdates" -n src
 src/runtime/team-runner.ts:117:export const __test__mergeTaskUpdates = mergeTaskUpdatesPreservingTerminal;
-src/runtime/team-runner.ts:545: tasks = __test__mergeTaskUpdates(tasks, results);  ← vẫn dùng alias
+src/runtime/team-runner.ts:545: tasks = __test__mergeTaskUpdates(tasks, results);  ← still uses the alias
 ```
 
-Production code vẫn gọi alias `__test__mergeTaskUpdates`. Đề nghị: đổi caller sang `mergeTaskUpdatesPreservingTerminal` để chỉ test file dùng alias.
+Production code still calls the alias `__test__mergeTaskUpdates`. Suggestion: change the caller to `mergeTaskUpdatesPreservingTerminal` so only the test file uses the alias.
 
 ### M3 — Cleanup race-safe stat (PASS)
 
-Dùng `withFileTypes`, bọc `statSync` trong try/catch. OK.
+Uses `withFileTypes`, wraps `statSync` in try/catch. OK.
 
 ### M4 — runSetupHook multi-line JSON (PASS)
 
-Thử `JSON.parse(trimmed)` trước, rồi fallback last-line. OK.
+Tries `JSON.parse(trimmed)` first, then falls back to the last line. OK.
 
-**Lưu ý nhỏ**: hai try/catch lồng nhau bên trong outer try → outer catch (parse error logging) gần như không bao giờ trigger vì inner catch đã swallow. Có thể clean up. Không ảnh hưởng correctness.
+**Minor note**: two nested try/catch inside the outer try → the outer catch (parse error logging) almost never triggers because the inner catch already swallows. Could be cleaned up. Does not affect correctness.
 
 ### M5 — symlink fail logging (PASS)
 
-Log lý do + hint Windows non-admin. Lưu ý indentation hơi lệch (5 tab thay vì 1) — biome auto-format sẽ sửa.
+Logs the reason + a Windows non-admin hint. Note the indentation is slightly off (5 tabs instead of 1) — biome auto-format will fix it.
 
 ### M6 — final-drain telemetry (PASS)
 
@@ -242,22 +242,22 @@ if (forcedFinalDrain && !timeoutError && exitCode !== 0) {
 }
 ```
 
-OK. Đang dùng `logInternalError` (không phải metric counter). Trong tương lai nên emit metric `crew.child.final_drain_force_zero_total` qua MetricRegistry để dashboard đếm — `logInternalError` chỉ là backup observability.
+OK. Uses `logInternalError` (not a metric counter). In the future, emit a metric `crew.child.final_drain_force_zero_total` via MetricRegistry so the dashboard can count it — `logInternalError` is only a backup observability.
 
-**Lưu ý**: indentation block lệch (5 tabs cho if-block trong block 4-tab parent). Biome sẽ flag.
+**Note**: the indentation block is off (5 tabs for the if-block inside a 4-tab parent block). Biome will flag it.
 
 ### L1 — Biome added (PASS)
 
-`@biomejs/biome ^2.4.15` + `biome.json` config tốt:
-- `recommended: true`, indent tab × 4, double quote, semicolons always.
-- Tắt một số rule không phù hợp (`noNonNullAssertion`, `noUselessSwitchCase`, …).
-- `useIgnoreFile: true` đọc `.gitignore`.
+`@biomejs/biome ^2.4.15` + good `biome.json` config:
+- `recommended: true`, indent tab × 4, double quotes, semicolons always.
+- Disables some unsuitable rules (`noNonNullAssertion`, `noUselessSwitchCase`, …).
+- `useIgnoreFile: true` reads `.gitignore`.
 
-**Chưa có**:
-- `npm run lint` script trong `package.json`.
-- CI chưa chạy biome trong `npm run ci`.
+**Still missing**:
+- `npm run lint` script in `package.json`.
+- CI does not run biome in `npm run ci`.
 
-Đề nghị thêm:
+Suggested additions:
 ```json
 "scripts": {
     "lint": "biome lint .",
@@ -266,35 +266,35 @@ OK. Đang dùng `logInternalError` (không phải metric counter). Trong tương
 }
 ```
 
-### L12 — Rename references (PASS, có rủi ro)
+### L12 — Rename references (PASS, with risk)
 
-`updateReferencesForRename` đã mở rộng:
-1. Workflow step.role → rename theo agent rename. **Cảnh báo logic**: `step.role` thực ra là tên role trong team, không phải tên agent. Hai khái niệm khác nhau: agent `coder` có thể được dùng cho role `developer`. Update step.role khi đổi agent name là **sai semantic**, có thể phá vỡ workflow hợp lệ.
-   - Đề nghị: chỉ rename `team.roles[*].agent` (đã làm sẵn trong loop trước), không động vào `step.role`.
-2. Update test fixtures qua regex.
+`updateReferencesForRename` was expanded:
+1. Workflow step.role → renamed along with the agent rename. **Logic warning**: `step.role` is actually the role name within the team, not the agent name. These are two different concepts: agent `coder` can be used for role `developer`. Updating step.role when renaming an agent is **semantically wrong** and can break a valid workflow.
+   - Suggestion: only rename `team.roles[*].agent` (already done in the earlier loop), do not touch `step.role`.
+2. Update test fixtures via regex.
    ```ts
    const agentPattern = new RegExp('(["\'\\`]agent[="\':\\s]*)' + escapeRegex(oldName) + '(["\'\\`]|\\s)', 'g');
    ```
-   - Regex này phức tạp + có template-literal mess, rất dễ false positive/negative. Ví dụ:
-     - Sẽ match `"agent": "coder"` (OK)
-     - Sẽ KHÔNG match `agent: coder` (không quote oldName)
-     - Sẽ false-match nếu một biến tên `agent_other = "coder"`
-   - `escapeRegex` regex: `/[.*+?^${}()|[\\]\\]/g` — đúng (đã verify character class).
-   - **Đề nghị**: test fixture rewrite không nên dùng regex; nếu cần thì parse YAML/markdown frontmatter / TS AST.
-3. `walkTsFiles` đệ quy tất cả `.ts`/`.md` trong test dir. OK nhưng I/O nặng cho rename op.
+   - This regex is complex + has a template-literal mess, very prone to false positives/negatives. For example:
+     - It will match `"agent": "coder"` (OK)
+     - It will NOT match `agent: coder` (oldName without quotes)
+     - It will false-match if there is a variable named `agent_other = "coder"`
+   - The `escapeRegex` regex: `/[.*+?^${}()|[\\]\\]/g` — correct (verified the character class).
+   - **Suggestion**: test fixture rewrites should not use regex; if needed, parse YAML/markdown frontmatter / TS AST.
+3. `walkTsFiles` recursively processes all `.ts`/`.md` in the test dir. OK but I/O-heavy for a rename op.
 
 ---
 
-## 4. Side fixes phụ (không trong scope ban đầu)
+## 4. Incidental side fixes (not in the original scope)
 
-Một số file thay đổi không thuộc 4 batch trên — có vẻ là tổng dọn dẹp:
+Some changed files do not belong to the 4 batches above — appear to be general cleanup:
 
-- `src/extension/team-tool.ts` — đổi `import { … }` thành `import type { … }` cho 2 chỗ lazy-load. Hợp lý (tránh runtime import side-effect).
-- `src/extension/team-tool.ts` — `let nextTasks` → `const nextTasks`. Đúng (không reassign).
-- `src/runtime/team-runner.ts` — `let workflow` → `const workflow`. Đúng.
-- `src/runtime/code-summary.ts`, `manifest-cache.ts`, `prose-compressor.ts`, `result-extractor.ts`, `retry-executor.ts`, `skill-instructions.ts`, `observability/event-to-metric.ts`, `utils/gh-protocol.ts`, `utils/names.ts`, `utils/sse-parser.ts`, `config/markers.ts`, `config/resilient-parser.ts`, `adapters/export-util.ts`, `worktree/cleanup.ts` (M3 + others) — hầu hết là biome auto-fix (formatting / unused imports). Diff stat nhỏ (~1-2 dòng/file).
+- `src/extension/team-tool.ts` — changed `import { … }` to `import type { … }` for 2 lazy-load spots. Reasonable (avoids runtime import side effects).
+- `src/extension/team-tool.ts` — `let nextTasks` → `const nextTasks`. Correct (not reassigned).
+- `src/runtime/team-runner.ts` — `let workflow` → `const workflow`. Correct.
+- `src/runtime/code-summary.ts`, `manifest-cache.ts`, `prose-compressor.ts`, `result-extractor.ts`, `retry-executor.ts`, `skill-instructions.ts`, `observability/event-to-metric.ts`, `utils/gh-protocol.ts`, `utils/names.ts`, `utils/sse-parser.ts`, `config/markers.ts`, `config/resilient-parser.ts`, `adapters/export-util.ts`, `worktree/cleanup.ts` (M3 + others) — mostly biome auto-fixes (formatting / unused imports). Diff stat is small (~1-2 lines/file).
 
-Cần xác minh không phải biome đã làm hỏng logic (đặc biệt là remove `noUnusedImports` rule đã off nhưng các thay đổi `1 deletion` ở `result-extractor.ts`, `skill-instructions.ts`, `sse-parser.ts` rất khả nghi).
+Need to verify biome did not break logic (especially since the `noUnusedImports` rule was turned off but the `1 deletion` changes in `result-extractor.ts`, `skill-instructions.ts`, `sse-parser.ts` are suspicious).
 
 ```bash
 git diff src/runtime/result-extractor.ts src/runtime/skill-instructions.ts src/utils/sse-parser.ts
@@ -310,34 +310,33 @@ npm run test:unit   → 1596 pass / 2 skip / 0 fail / 87s
 npx biome lint <changed files>  → 2 warnings (LINT-1, LINT-2)
 ```
 
-Tests vẫn pass vì:
-- NEW-1 không trigger trong unit tests (rotateEventLog chỉ chạy khi file > 50MB).
-- NEW-2 không có test cụ thể cho transcript-per-attempt collision.
-- NEW-3 không có test cho transcript cap > 5MB.
+Tests still pass because:
+- NEW-1 does not trigger in unit tests (rotateEventLog only runs when the file > 50MB).
+- NEW-2 has no specific test for transcript-per-attempt collision.
+- NEW-3 has no test for a transcript cap > 5MB.
 
 ---
 
-## 6. Khuyến nghị hành động (ưu tiên)
+## 6. Recommended actions (by priority)
 
-1. **Fix NEW-1 ngay**: chuyển `require` → top-level `import { logInternalError } from "../utils/internal-error.ts"`. (1 phút)
-2. **Fix NEW-2**: di chuyển dòng `transcriptPath = ...attempt-${i}...` vào trong vòng `for`. (2 phút)
-3. **Fix NEW-3**: cắt tail theo `\n` boundary; cập nhật `relativePath` artifact match với source filename; prepend marker `[truncated]\n` để consumer biết.
-4. **Thêm unit tests** cho:
+1. **Fix NEW-1 now**: change `require` → top-level `import { logInternalError } from "../utils/internal-error.ts"`. (1 minute)
+2. **Fix NEW-2**: move the `transcriptPath = ...attempt-${i}...` line inside the `for` loop. (2 minutes)
+3. **Fix NEW-3**: cut the tail on the `\n` boundary; update the artifact `relativePath` to match the source filename; prepend a `[truncated]\n` marker so consumers know.
+4. **Add unit tests** for:
    - `rotateEventLog` (rename + create empty)
-   - `appendEvent` với file > 50MB → terminal event vẫn được persist
-   - `appendMailboxMessage` concurrent (spawn 2 worker, kiểm tra không interleave)
-   - Transcript per-attempt (mock 2 attempts, verify 2 file riêng biệt)
+   - `appendEvent` with a file > 50MB → terminal event still persisted
+   - `appendMailboxMessage` concurrent (spawn 2 workers, check no interleaving)
+   - Transcript per-attempt (mock 2 attempts, verify 2 separate files)
    - Atomic-write fallback symlink TOCTOU (mock rename fail + symlink swap)
-5. **Dọn LINT-1, LINT-2** trước khi gắn biome vào CI.
-6. **Đề nghị thêm `lint` script** vào `package.json` + chạy biome trong `ci`.
-7. **Review lại L12**: bỏ logic update `step.role` (sai semantic) hoặc gate qua `--unsafe-rename` flag.
-8. **Re-verify side fixes biome auto-fix** ở `result-extractor.ts`, `skill-instructions.ts`, `sse-parser.ts` (3 file có `-1 deletion` khả nghi).
+5. **Clean up LINT-1, LINT-2** before wiring biome into CI.
+6. **Suggested: add a `lint` script** to `package.json` + run biome in `ci`.
+7. **Re-review L12**: remove the `step.role` update logic (semantically wrong) or gate it behind an `--unsafe-rename` flag.
+8. **Re-verify biome auto-fix side fixes** in `result-extractor.ts`, `skill-instructions.ts`, `sse-parser.ts` (3 files with suspicious `-1 deletion`).
 
 ---
 
-## 7. Kết luận
+## 7. Conclusion
 
-Hướng đi đúng, đa số issue ban đầu đã được giải quyết. Tuy nhiên 3 fix bị **bug logic** (NEW-1, NEW-2, NEW-3) khiến chính tính năng "anti-overflow" và "per-attempt transcript" không hoạt động như mong đợi. Vì tests cũ không cover các đường code này, regression đi qua được suite hiện tại.
+The direction is correct, most of the original issues have been resolved. However, 3 fixes have **logic bugs** (NEW-1, NEW-2, NEW-3) that mean the "anti-overflow" and "per-attempt transcript" features do not work as intended. Because the old tests do not cover these code paths, the regressions pass the current suite.
 
-Sau khi fix 3 bugs trên + bổ sung test, ta sẽ có một codebase chắc chắn hơn đáng kể so với baseline review.
-
+After fixing the 3 bugs above + adding tests, we will have a significantly more robust codebase compared to the baseline review.

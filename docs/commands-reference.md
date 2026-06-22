@@ -1,46 +1,48 @@
 # pi-crew — Slash Commands Reference
 
-Slash commands là thao tác thủ công từ Pi chat. Autonomous tool use qua `team` action là path chính; slash commands dành cho ops/debug.
+Slash commands are manual actions triggered from the Pi chat. Autonomous tool use via the `team` action is the primary path; slash commands are intended for ops and debugging.
 
-## Lệnh chính
+## Main Commands
 
-| Command | Mô tả |
+| Command | Description |
 |---------|-------|
-| `/teams` | Liệt kê teams, agents, workflows, recent runs |
-| `/team-run [options] <goal>` | Chạy team workflow |
-| `/team-orchestrate <planPath>` | Execute từ plan document |
-| `/team-schedule [options]` | Lên lịch recurring run |
+| `/teams` | List teams, agents, workflows, and recent runs |
+| `/team-run [options] <goal>` | Run a team workflow |
+| `/team-orchestrate <planPath>` | Execute from a plan document |
+| `/team-schedule [options]` | Schedule a recurring run |
 | `/team-scheduled` | List scheduled jobs |
-| `/team-cancel <runId>` | Hủy run |
-| `/team-status <runId>` | Xem trạng thái |
-| `/team-summary <runId>` | Xem/ghi summary |
-| `/team-resume <runId>` | Tiếp tục run đã dừng |
-| `/team-search <query>` | BM25 ranked discovery |
-| `/team-graph <runId>` | Load/save/list run graphs |
-| `/team-events <runId>` | Xem event log |
-| `/team-artifacts <runId>` | Xem artifacts |
-| `/team-worktrees <runId>` | Xem worktree metadata |
-| `/team-cleanup <runId>` | Xóa worktrees |
-| `/team-forget <runId>` | Xóa run hoàn toàn |
-| `/team-prune` | Xóa nhiều runs cũ |
-| `/team-export <runId>` | Export run bundle |
-| `/team-import <path>` | Import run bundle |
-| `/team-imports` | Liệt kê imported bundles |
+| `/team-cancel <runId>` | Cancel a run |
+| `/team-status <runId>` | View status |
+| `/team-summary <runId>` | View or write a summary |
+| `/team-resume <runId>` | Resume a stopped run |
+| `/team-search <query>` | BM25-ranked discovery |
+| `/team-graph <runId>` | Load, save, or list run graphs |
+| `/team-events <runId>` | View the event log |
+| `/team-artifacts <runId>` | View artifacts |
+| `/team-worktrees <runId>` | View worktree metadata |
+| `/team-cleanup <runId>` | Remove worktrees |
+| `/team-forget <runId>` | Fully delete a run |
+| `/team-prune` | Delete multiple old runs |
+| `/team-export <runId>` | Export a run bundle |
+| `/team-import <path>` | Import a run bundle |
+| `/team-imports` | List imported bundles |
 | `/team-api <runId> <op>` | State API interop |
-| `/team-metrics [filter]` | Xem metrics |
+| `/team-metrics [filter]` | View metrics |
 | `/team-manager` | Interactive helper |
 | `/team-dashboard` | Live dashboard overlay |
-| `/team-init [options]` | Khởi tạo project layout |
-| `/team-config [options]` | Xem/sửa config |
-| `/team-settings <subcmd>` | Quản lý config keys |
-| `/team-autonomy <subcmd>` | Quản lý delegation |
+| `/team-init [options]` | Initialize the project layout |
+| `/team-config [options]` | View or update config |
+| `/team-settings <subcmd>` | Manage config keys |
+| `/team-autonomy <subcmd>` | Manage delegation |
 | `/team-validate` | Validate resources |
 | `/team-help` | Help text |
-| `/team-doctor` | Chẩn đoán môi trường |
+| `/team-doctor` | Diagnose the environment |
+| **`/team-goal`** | **v0.9.0** Start autonomous goal loop (sub-actions: `start/status/pause/resume/stop/step/clear`) |
+| **`/workflows`** | **v0.9.0** List static + dynamic workflows (`.dwf.ts`) |
 
 ---
 
-## `/team-run` — Chi tiết
+## `/team-run` — Details
 
 ```text
 /team-run <goal>
@@ -52,17 +54,17 @@ Slash commands là thao tác thủ công từ Pi chat. Autonomous tool use qua `
 
 Options:
 
-| Flag | Mô tả |
+| Flag | Description |
 |------|-------|
-| `--team=<name>` | Chọn team (default: `default`) |
-| `--workflow=<name>` | Chọn workflow (default: team's defaultWorkflow) |
-| `--async` | Chạy bất đồng bộ |
-| `--worktree` | Sử dụng worktree isolation |
+| `--team=<name>` | Select a team (default: `default`) |
+| `--workflow=<name>` | Select a workflow (default: the team's defaultWorkflow) |
+| `--async` | Run asynchronously |
+| `--worktree` | Use worktree isolation |
 
-Ví dụ:
+Examples:
 
 ```text
-# Chạy default team
+# Run the default team
 /team-run Investigate failing tests and propose a fix
 
 # Implementation team, async
@@ -74,24 +76,24 @@ Ví dụ:
 
 ---
 
-## `/team-forget` — Xóa run
+## `/team-forget` — Delete a Run
 
 ```text
-/team-forget <runId> --confirm        # Xóa state + artifacts
-/team-forget <runId> --confirm --force # Xóa kể cả dirty worktrees
+/team-forget <runId> --confirm        # Delete state + artifacts
+/team-forget <runId> --confirm --force # Delete even dirty worktrees
 ```
 
-⚠️ Cần `--confirm`. Dirty worktrees được giữ lại trừ khi thêm `--force`.
+⚠️ Requires `--confirm`. Dirty worktrees are kept unless `--force` is also provided.
 
 ---
 
-## `/team-prune` — Dọn dẹp hàng loạt
+## `/team-prune` — Bulk Cleanup
 
 ```text
 /team-prune --keep=20 --confirm
 ```
 
-Giữ lại 20 runs gần nhất, xóa phần còn lại.
+Keeps the 20 most recent runs and deletes the rest.
 
 ---
 
@@ -144,8 +146,8 @@ Giữ lại 20 runs gần nhất, xóa phần còn lại.
 ## `/team-metrics` — Observability
 
 ```text
-/team-metrics                          # Toàn bộ metrics
-/team-metrics crew.task.*              # Filter theo glob pattern
+/team-metrics                          # All metrics
+/team-metrics crew.task.*              # Filter by glob pattern
 ```
 
 ---
@@ -153,9 +155,9 @@ Giữ lại 20 runs gần nhất, xóa phần còn lại.
 ## `/team-config` — Configuration
 
 ```text
-/team-config                           # Xem config hiện tại
-/team-config asyncByDefault=true       # Update key
-/team-config --unset=key.path          # Unset key
+/team-config                           # View current config
+/team-config asyncByDefault=true       # Update a key
+/team-config --unset=key.path          # Unset a key
 /team-config ... --project             # Project scope
 ```
 
@@ -164,63 +166,63 @@ Giữ lại 20 runs gần nhất, xóa phần còn lại.
 ## `/team-settings` — Config Management
 
 ```text
-/team-settings                          # Liệt kê tất cả keys
-/team-settings get limits.maxTurns      # Đọc 1 key
-/team-settings set limits.maxTurns 20   # Ghi key
-/team-settings unset runtime.maxTurns   # Reset về default
-/team-settings path                     # Đường dẫn file config
-/team-settings scope                    # Scope hiện tại (user/project)
+/team-settings                          # List all keys
+/team-settings get limits.maxTurns      # Read a single key
+/team-settings set limits.maxTurns 20   # Write a key
+/team-settings unset runtime.maxTurns   # Reset to default
+/team-settings path                     # Path to the config file
+/team-settings scope                    # Current scope (user/project)
 ```
 
 ### Supported Keys
 
-| Key | Type | Default | Mô tả |
+| Key | Type | Default | Description |
 |-----|------|---------|-------|
-| `asyncByDefault` | boolean | `false` | Chạy async mặc định |
+| `asyncByDefault` | boolean | `false` | Run async by default |
 | `executeWorkers` | boolean | `true` | Spawn child Pi workers |
-| `notifierIntervalMs` | number | `5000` | Polling interval cho async notifications |
+| `notifierIntervalMs` | number | `5000` | Polling interval for async notifications |
 | `runtime.mode` | string | `"auto"` | Runtime: `auto`, `scaffold`, `child-process`, `live-session` |
 | `runtime.maxTurns` | number | — | Max turns per worker |
-| `runtime.graceTurns` | number | — | Grace turns sau max |
-| `runtime.inheritContext` | boolean | — | Workers kế thừa parent context |
-| `runtime.promptMode` | string | — | `replace` hoặc `append` |
+| `runtime.graceTurns` | number | — | Grace turns after max |
+| `runtime.inheritContext` | boolean | — | Workers inherit parent context |
+| `runtime.promptMode` | string | — | `replace` or `append` |
 | `runtime.groupJoin` | string | `"smart"` | Group join: `off`, `group`, `smart` |
 | `runtime.groupJoinAckTimeoutMs` | number | `300000` | Group join ack timeout (ms) |
-| `runtime.requirePlanApproval` | boolean | `false` | Yêu cầu approve plan trước execute |
+| `runtime.requirePlanApproval` | boolean | `false` | Require approving the plan before execution |
 | `runtime.completionMutationGuard` | string | `"warn"` | `off`, `warn`, `fail` |
-| `limits.maxConcurrentWorkers` | number | `1024` | Max workers chạy song song |
+| `limits.maxConcurrentWorkers` | number | `1024` | Max workers running in parallel |
 | `limits.maxTaskDepth` | number | `100` | Max task tree depth |
 | `limits.maxChildrenPerTask` | number | — | Max children per task |
-| `limits.maxRunMinutes` | number | `1440` | Max run duration (phút) |
+| `limits.maxRunMinutes` | number | `1440` | Max run duration (minutes) |
 | `limits.maxRetriesPerTask` | number | `100` | Max retries per task |
 | `limits.maxTasksPerRun` | number | `10000` | Max tasks per run |
 | `limits.heartbeatStaleMs` | number | `86400000` | Heartbeat stale threshold |
-| `control.enabled` | boolean | — | Enable agent control-plane |
+| `control.enabled` | boolean | — | Enable the agent control-plane |
 | `control.needsAttentionAfterMs` | number | — | Attention timeout |
 | `autonomous.profile` | string | `"suggested"` | `manual`, `suggested`, `assisted`, `aggressive` |
-| `autonomous.injectPolicy` | boolean | `true` | Inject policy vào prompt |
-| `autonomous.preferAsyncForLongTasks` | boolean | `false` | Auto-async cho tasks dài |
-| `autonomous.allowWorktreeSuggestion` | boolean | `true` | Gợi ý worktree mode |
+| `autonomous.injectPolicy` | boolean | `true` | Inject policy into the prompt |
+| `autonomous.preferAsyncForLongTasks` | boolean | `false` | Auto-async for long tasks |
+| `autonomous.allowWorktreeSuggestion` | boolean | `true` | Suggest worktree mode |
 | `tools.enableClaudeStyleAliases` | boolean | `true` | Enable Claude-style aliases |
-| `tools.enableSteer` | boolean | `true` | Enable steer tool |
-| `tools.terminateOnForeground` | boolean | `false` | Return terminate từ foreground Agent |
+| `tools.enableSteer` | boolean | `true` | Enable the steer tool |
+| `tools.terminateOnForeground` | boolean | `false` | Return terminate from a foreground Agent |
 | `agents.disableBuiltins` | boolean | `false` | Disable builtin agents |
 | `observability.enabled` | boolean | `false` | Enable metrics collection |
 | `observability.pollIntervalMs` | number | — | Metrics poll interval |
-| `otlp.enabled` | boolean | `false` | Enable OTLP exporter |
+| `otlp.enabled` | boolean | `false` | Enable the OTLP exporter |
 | `otlp.endpoint` | string | — | OTLP endpoint URL |
 | `worktree.setupHook` | string | — | Worktree setup hook command |
-| `worktree.linkNodeModules` | boolean | — | Symlink node_modules into worktree |
-| `worktree.seedPaths` | array | — | Extra paths to seed into worktree |
+| `worktree.linkNodeModules` | boolean | — | Symlink node_modules into the worktree |
+| `worktree.seedPaths` | array | — | Extra paths to seed into the worktree |
 
 ---
 
 ## `/team-autonomy` — Delegation Policy
 
 ```text
-/team-autonomy status                   # Xem trạng thái
-/team-autonomy on                       # Bật autonomous delegation
-/team-autonomy off                      # Tắt
+/team-autonomy status                   # View status
+/team-autonomy on                       # Enable autonomous delegation
+/team-autonomy off                      # Disable
 /team-autonomy manual                   # Profile: manual
 /team-autonomy suggested                # Profile: suggested (default)
 /team-autonomy assisted                 # Profile: assisted
@@ -230,30 +232,30 @@ Giữ lại 20 runs gần nhất, xóa phần còn lại.
 Options:
 
 ```text
-/team-autonomy suggested --prefer-async          # Tự động async cho tasks dài
-/team-autonomy suggested --no-worktree-suggest   # Không gợi ý worktree
+/team-autonomy suggested --prefer-async          # Auto-async for long tasks
+/team-autonomy suggested --no-worktree-suggest   # Do not suggest worktree
 ```
 
 ### Autonomy Profiles
 
-| Profile | Hành vi |
+| Profile | Behavior |
 |---------|---------|
-| `manual` | Không tự động delegate. Chạy khi host agent gọi team tool trực tiếp |
-| `suggested` | Đề xuất khi phù hợp, host agent quyết định (default) |
-| `assisted` | Chủ động delegate cho hầu hết tasks phức tạp |
-| `aggressive` | Luôn delegate, tối đa parallel execution |
+| `manual` | No automatic delegation. Runs only when the host agent calls the team tool directly |
+| `suggested` | Suggests when appropriate; the host agent decides (default) |
+| `assisted` | Proactively delegates most complex tasks |
+| `aggressive` | Always delegates, maximizing parallel execution |
 
 ---
 
 ## `/team-init` — Project Setup
 
 ```text
-/team-init                             # Khởi tạo layout cơ bản
-/team-init --copy-builtins             # Copy builtin resources vào project
-/team-init --copy-builtins --overwrite # Copy và ghi đè
+/team-init                             # Initialize the basic layout
+/team-init --copy-builtins             # Copy builtin resources into the project
+/team-init --copy-builtins --overwrite # Copy and overwrite
 ```
 
-Tạo directories:
+Creates directories:
 
 ```text
 # New projects (.crew/ layout)
@@ -262,7 +264,7 @@ Tạo directories:
 .crew/workflows/
 .crew/imports/
 
-# Legacy (.pi/ layout, khi .pi/ đã tồn tại)
+# Legacy (.pi/ layout, when .pi/ already exists)
 .pi/teams/agents/
 .pi/teams/teams/
 .pi/teams/workflows/
@@ -279,16 +281,16 @@ Tạo directories:
 
 ### Keyboard Shortcuts
 
-| Key | Hành động |
+| Key | Action |
 |-----|-----------|
-| `↑`/`↓` hoặc `j`/`k` | Chọn run |
-| `r` | Reload run list |
+| `↑`/`↓` or `j`/`k` | Select a run |
+| `r` | Reload the run list |
 | `p` | Toggle short/long progress |
-| `Enter` hoặc `s` | Xem status |
-| `a` | Xem artifacts |
-| `u` | Xem summary |
+| `Enter` or `s` | View status |
+| `a` | View artifacts |
+| `u` | View summary |
 | `i` | API read-manifest |
-| `q` hoặc `Esc` | Đóng |
+| `q` or `Esc` | Close |
 
 ---
 
@@ -299,11 +301,11 @@ Tạo directories:
 ```
 
 Flows:
-- Liệt kê resources/runs
-- Chạy team
-- Xem run status
+- List resources/runs
+- Run a team
+- View run status
 - Cleanup worktrees
-- Tạo/sửa agent/team resources
+- Create/edit agent/team resources
 - Doctor check
 
 ---
@@ -314,11 +316,11 @@ Flows:
 /team-validate
 ```
 
-Kiểm tra:
-- Agents, teams, workflows hợp lệ
-- References đúng (agent tồn tại trong team roles)
-- Model hints hợp lệ
-- Workflow steps đúng format
+Checks:
+- Valid agents, teams, and workflows
+- Correct references (the agent exists in team roles)
+- Valid model hints
+- Properly formatted workflow steps
 
 ---
 
@@ -328,13 +330,13 @@ Kiểm tra:
 /team-doctor
 ```
 
-Kiểm tra:
+Checks:
 - cwd, platform, architecture
 - Node.js version
 - `pi --version`
 - `git --version`
-- State paths writable
-- Config parse
+- State paths are writable
+- Config parsing
 - Discovery counts (agents, teams, workflows)
 - Resource validation
 - Current model/provider
@@ -346,7 +348,7 @@ Child Pi smoke test (explicit):
 /team-api team_... doctor smokeChildPi=true
 ```
 
-hoặc qua tool:
+or via the tool:
 
 ```json
 {

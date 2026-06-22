@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased — v0.9.0] — goal loops + dynamic workflows (2026-06-18)
+## [v0.9.0] — goal loops + dynamic workflows (2026-06-18)
 
 Two new features, both built on a shared `runKind` background-dispatch discriminator.
 

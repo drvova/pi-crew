@@ -15,7 +15,7 @@ Use this skill when orchestrating multi-phase tasks across pi-crew teams and wor
 
 ## Role definition
 
-You are the orchestrator — bạn là người điều phối, không phải người thực thi.
+You are the orchestrator — the coordinator, not the executor.
 
 You decompose, dispatch, verify, and iterate. You do NOT edit code directly. If you find yourself opening a file to fix a typo "real quick," stop — spawn a worker instead.
 
@@ -25,35 +25,35 @@ Adapted from oh-my-pi's orchestrate command pattern for pi-crew context.
 
 ### 1. Do not yield until everything is closed
 
-Không trả lại control khi vẫn còn việc chưa xong. Run every phase to completion. The orchestrator owns the full lifecycle — from first dispatch to final green gate.
+Do not yield control while work remains unfinished. Run every phase to completion. The orchestrator owns the full lifecycle — from first dispatch to final green gate.
 
 ### 2. Enumerate the full surface before dispatching
 
-Before writing any task packet, read every referenced file and understand the complete work surface. Liệt kê toàn bộ surface trước khi giao việc — không giao việc khi chưa hiểu hết scope.
+Before writing any task packet, read every referenced file and understand the complete work surface. Enumerate the entire surface before assigning work — do not assign work before you fully understand the scope.
 
 ### 3. Parallelize maximally
 
-Every set of edits with disjoint file scope MUST ship as one batch. Nếu 5 tasks chỉnh 5 file khác nhau và không phụ thuộc nhau, dispatch tất cả cùng lúc. Never serialize what can be parallelized.
+Every set of edits with disjoint file scope MUST ship as one batch. If 5 tasks edit 5 different files and are independent of one another, dispatch all of them at once. Never serialize what can be parallelized.
 
 ### 4. Each task assignment is self-contained
 
-Subagents have no shared context. Mỗi worker chỉ biết những gì bạn ghi trong task packet. Include all necessary context, file paths, constraints, and acceptance criteria in every task.
+Subagents have no shared context. Each worker only knows what you write in the task packet. Include all necessary context, file paths, constraints, and acceptance criteria in every task.
 
 ### 5. Verify after every phase before launching the next
 
-Run appropriate gates between phases: typecheck, tests, lint. Không bỏ qua verification — một phase đỏ không được phép chuyển sang phase tiếp theo.
+Run appropriate gates between phases: typecheck, tests, lint. Do not skip verification — a red phase must not advance to the next phase.
 
 ### 6. Commit policy — green only
 
-Commit after each green phase. Never commit a red tree. Chỉ commit khi tất cả gates pass. If the phase fails, fix it first.
+Commit after each green phase. Never commit a red tree. Only commit when all gates pass. If the phase fails, fix it first.
 
 ### 7. Respawn, do not absorb
 
-If a subagent returns incomplete or broken work, spawn a corrective subagent with a focused fix-up task packet. Không tự sửa lỗi của worker — respawn worker mới để sửa.
+If a subagent returns incomplete or broken work, spawn a corrective subagent with a focused fix-up task packet. Do not fix a worker's mistakes yourself — respawn a new worker to fix them.
 
 ### 8. No scope creep, no scope shrink
 
-Maintain the original scope exactly. Không mở rộng scope vì "thấy thêm việc," cũng không thu hẹp vì "tạm đủ." If scope needs to change, escalate to the requester.
+Maintain the original scope exactly. Do not expand scope because you "spot more work," and do not shrink it because "it's good enough for now." If scope needs to change, escalate to the requester.
 
 ## Workflow (7 steps)
 
@@ -69,7 +69,7 @@ Maintain the original scope exactly. Không mở rộng scope vì "thấy thêm 
 - Materialize the full work surface as ordered phases.
 - For each phase, enumerate: files to touch, workers needed, dependencies on other phases.
 - Phases must be ordered by dependency; tasks within a phase must be independent (disjoint file scope).
-- Write the plan down — không giữ plan trong head.
+- Write the plan down — do not keep the plan in your head.
 
 ### Step 3 — Dispatch phase
 
@@ -117,7 +117,7 @@ If ANY answer is NO → Stop. Complete planning before dispatching.
 
 ## Anti-patterns
 
-These are the behaviours that kill orchestration quality — tránh xa:
+These are the behaviours that kill orchestration quality — avoid them:
 
 | Anti-pattern | Why it's wrong |
 |---|---|

@@ -1,6 +1,6 @@
 # Feature Intake
 
-Mọi implementation prompt phải đi qua intake gate trước khi code changes.
+Every implementation prompt must pass through the intake gate before code changes.
 
 ## Intake Flow
 

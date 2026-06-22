@@ -1,33 +1,33 @@
 # Historical Bug Reports (v0.2.x)
 
-> **Current version: v0.5.22** — See [CHANGELOG.md](../CHANGELOG.md) for all bug fixes.
+> **Current version: v0.9.0** — See [CHANGELOG.md](../CHANGELOG.md) for all bug fixes.
 > This page tracks historical bugs from v0.2.x. All listed bugs are fixed.
 
 ---
 
 # pi-crew v0.2.20 — Bug Report & Fixes
 
-**Ngày:** 2026-05-19  
+**Date:** 2026-05-19  
 **Session:** Comprehensive integration test + root cause analysis  
-**Environment:** linux/x64, Node v22.22.0, Pi CLI v0.75.3, pi-crew v0.2.20
-**Trạng thái:** ✅ 14/14 bugs fixed (commits `de9e8b4` và `5dc794e`)
+**Environment:** linux/x64, Node v22.22.0, Pi CLI v0.75.3, pi-crew v0.2.20  
+**Status:** ✅ 14/14 bugs fixed (commits `de9e8b4` and `5dc794e`)
 
-> **All bugs fixed ✅** — Source code verified. Xem [pi-crew-test-final.md](pi-crew-test-final.md) cho kết quả end-to-end test.
+> **All bugs fixed ✅** — Source code verified. See [pi-crew-test-final.md](pi-crew-test-final.md) for end-to-end test results.
 
 ---
 
-## Bug #1: Background workers "heartbeat dead" — thực chất là MiniMax 429 Rate Limit
+## Bug #1: Background workers "heartbeat dead" — actually a MiniMax 429 Rate Limit
 
 | Field | Value |
 |---|---|
 | **Severity** | 🔴 HIGH |
 | **Status** | ✅ Fixed — 429 now retries with fallback models instead of blocking 300s |
-| **Affected** | Tất cả background/async workers |
-| **Symptom** | Workers timeout sau 300s với "heartbeat dead", zero output |
+| **Affected** | All background/async workers |
+| **Symptom** | Workers time out after 300s with "heartbeat dead", zero output |
 
-### Mô tả
+### Description
 
-Khi chạy `team action='run'` với `async=true` hoặc `Agent(run_in_background=true)`, workers spawn thành công (PID tồn tại) nhưng **timeout sau 300s** với generic error:
+When running `team action='run'` with `async=true` or `Agent(run_in_background=true)`, workers spawn successfully (PID exists) but **time out after 300s** with a generic error:
 ```
 worker.response_timeout: No output for 300000ms
 crew.task.heartbeat_dead: Task 01_assess heartbeat dead.
@@ -35,48 +35,48 @@ crew.task.heartbeat_dead: Task 01_assess heartbeat dead.
 
 ### Root cause
 
-**Đã fix.** Trước đây 429 rate limit không được retry vì:
-1. `RETRYABLE_MODEL_FAILURE_PATTERNS` có `/\b429\b/` nhưng MiniMax trả về `rate_limit_error: usage limit exceeded` (không có số 429 rõ ràng)
-2. 429 được fast-fail trong `child-pi.ts onJsonEvent` thay vì để task-runner xử lý retry với fallback
+**Fixed.** Previously the 429 rate limit was not retried because:
+1. `RETRYABLE_MODEL_FAILURE_PATTERNS` had `/\b429\b/` but MiniMax returns `rate_limit_error: usage limit exceeded` (no clear "429" number)
+2. 429 was fast-failed in `child-pi.ts onJsonEvent` instead of letting the task-runner handle retry with fallback
 
 ### Fix applied
 
-1. **model-fallback.ts**: Thêm `/rate_limit_error/i` vào `RETRYABLE_MODEL_FAILURE_PATTERNS` để nhận diện đúng MiniMax rate limit error
-2. **model-fallback.ts**: Sửa `/\b429\b/` → `/rate.?limit/i` để match nhiều format hơn
-3. **child-pi.ts**: Bỏ fast-fail 429 — để task-runner xử lý retry với model fallback chain
+1. **model-fallback.ts**: Added `/rate_limit_error/i` to `RETRYABLE_MODEL_FAILURE_PATTERNS` to correctly identify the MiniMax rate limit error
+2. **model-fallback.ts**: Changed `/\b429\b/` → `/rate.?limit/i` to match more formats
+3. **child-pi.ts**: Removed the 429 fast-fail — let the task-runner handle retry with the model fallback chain
 
 ### Model fallback chain
 
-Khi model chính bị 429:
-1. Fallback sang `fallbackModels` (nếu có cấu hình)
-2. Fallback sang available models khác trong hệ thống
-3. Nếu không có fallback và retry hết → fail với đúng error message
+When the main model gets a 429:
+1. Fall back to `fallbackModels` (if configured)
+2. Fall back to other available models in the system
+3. If there is no fallback and retries are exhausted → fail with the correct error message
 
-**Cấu hình khuyến nghị:** Thêm `fallbackModels` vào agent config để có nhiều lựa chọn khi model chính bị rate limit.
+**Recommended config:** Add `fallbackModels` to the agent config to have more options when the main model is rate-limited.
 
 ---
 
-## Bug #2: child-pi.ts không phát hiện 429 rate limit error — báo sai "heartbeat dead"
+## Bug #2: child-pi.ts does not detect 429 rate limit error — reports wrong "heartbeat dead"
 
 | Field | Value |
 |---|---|
 | **Severity** | 🔴 HIGH |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Tất cả child Pi workers |
-| **Symptom** | Worker báo generic "No output for 300000ms" thay vì "Provider rate limit: 429" |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | All child Pi workers |
+| **Symptom** | Worker reports generic "No output for 300000ms" instead of "Provider rate limit: 429" |
 
-### Mô tả
+### Description
 
-Pi CLI output JSON events cho 429 errors rất rõ ràng:
+The Pi CLI outputs JSON events for 429 errors very clearly:
 ```json
 {"type":"turn_end","message":{"stopReason":"error","errorMessage":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\"...}}"}}
 ```
 
-Nhưng `child-pi.ts` **không parse error events** — nó chỉ quan tâm đến:
-- `isFinalAssistantEvent()` — để trigger final drain
-- `turn_end` — để đếm turns cho turn limiting
+But `child-pi.ts` **does not parse error events** — it only cares about:
+- `isFinalAssistantEvent()` — to trigger the final drain
+- `turn_end` — to count turns for turn limiting
 
-Kết quả: child-pi thấy output (JSON events), **restart heartbeat timer**, nhưng **không nhận ra đây là error**. Pi block sau 3 retries → heartbeat timeout 300s → generic error message.
+Result: child-pi sees output (JSON events), **restarts the heartbeat timer**, but **does not recognize it as an error**. Pi blocks after 3 retries → heartbeat times out at 300s → generic error message.
 
 ### Code location
 
@@ -84,7 +84,7 @@ Kết quả: child-pi thấy output (JSON events), **restart heartbeat timer**, 
 ```typescript
 onJsonEvent: (event) => {
     restartNoResponseTimer();
-    // Turn-count-based steering: chỉ đếm turns, KHÔNG check errors
+    // Turn-count-based steering: only counts turns, does NOT check errors
     if (event && typeof event === "object" && !Array.isArray(event)) {
         const obj = event as Record<string, unknown>;
         if (obj.type === "turn_end") {
@@ -98,7 +98,7 @@ onJsonEvent: (event) => {
 
 ### Fix
 
-Thêm provider error detection trong `onJsonEvent`:
+Add provider error detection in `onJsonEvent`:
 ```typescript
 let providerError: string | undefined;
 
@@ -115,42 +115,42 @@ if (obj.type === "turn_end" && obj.message?.stopReason === "error") {
 
 ### Impact
 
-Fix này sẽ chuyển error message từ:
+This fix changes the error message from:
 ```
 ❌ "Child Pi produced no new output for 300000ms; process was terminated as unresponsive."
 ```
-Thành:
+to:
 ```
 ✅ "Provider rate limit: 429 rate_limit_error: usage limit exceeded, resets at 2026-05-19T05:00:00Z"
 ```
 
-Và **fail fast** thay vì đợi 300s.
+And it **fails fast** instead of waiting 300s.
 
 ---
 
-## Bug #3: background.log vô dụng — không capture worker output
+## Bug #3: background.log is useless — does not capture worker output
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟠 MEDIUM |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Debugging experience cho tất cả background runs |
-| **Symptom** | background.log chỉ chứa 1 dòng: `[pi-crew] background loader=jiti` |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | Debugging experience for all background runs |
+| **Symptom** | background.log contains only 1 line: `[pi-crew] background loader=jiti` |
 
-### Mô tả
+### Description
 
-Khi background worker fail, log file tại `.crew/state/runs/<id>/background.log` chỉ chứa:
+When a background worker fails, the log file at `.crew/state/runs/<id>/background.log` contains only:
 ```
 [pi-crew] background loader=jiti
 ```
 
-Không có:
+Missing:
 - Worker stdout/stderr
 - Error messages
 - Provider responses
 - Exit codes
 
-### Nguyên nhân
+### Cause
 
 `async-runner.ts` line 130-145:
 ```typescript
@@ -169,22 +169,22 @@ return {
 };
 ```
 
-**stdout/stderr của background-runner** được ghi vào background.log. Nhưng **child Pi workers** (spawn bởi background-runner qua child-pi.ts) **output vào child-pi's pipe**, KHÔNG vào background.log.
+**The stdout/stderr of the background-runner** is written to background.log. But **child Pi workers** (spawned by the background-runner via child-pi.ts) **output to child-pi's pipe**, NOT to background.log.
 
 Flow:
 ```
 background-runner.ts (stdout→logFd, stderr→logFd)
-  → loader=jiti → ghi vào log ✅
+  → loader=jiti → writes to log ✅
   → executeTeamRun()
-    → child-pi.ts spawn child Pi (stdout→pipe, stderr→pipe)
-      → Pi output → child-pi.ts captures →KHÔNG GHI VÀO background.log ❌
+    → child-pi.ts spawns child Pi (stdout→pipe, stderr→pipe)
+      → Pi output → child-pi.ts captures → DOES NOT WRITE TO background.log ❌
 ```
 
 ### Fix
 
-1. **Option A:** Trong `child-pi.ts` hoặc `team-runner.ts`, ghi worker output events vào background.log
-2. **Option B:** Thêm event log entries cho provider errors (đã có event log, nhưng không đủ chi tiết)
-3. **Option C:** Background-runner tee output vào log file
+1. **Option A:** In `child-pi.ts` or `team-runner.ts`, write worker output events to background.log
+2. **Option B:** Add event log entries for provider errors (there is an event log, but not detailed enough)
+3. **Option C:** Background-runner tees output to a log file
 
 ### Key file
 
@@ -194,18 +194,18 @@ pi-crew/src/runtime/async-runner.ts  — buildBackgroundSpawnOptions(), spawnBac
 
 ---
 
-## Bug #4: worker-startup.ts thiếu "rate_limited" classification
+## Bug #4: worker-startup.ts missing "rate_limited" classification
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟡 LOW |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Error classification và reporting |
-| **Symptom** | 429 errors classified là "unknown" thay vì "rate_limited" |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | Error classification and reporting |
+| **Symptom** | 429 errors classified as "unknown" instead of "rate_limited" |
 
-### Mô tả
+### Description
 
-`worker-startup.ts` có `StartupFailureClassification` type:
+`worker-startup.ts` has the `StartupFailureClassification` type:
 ```typescript
 export type StartupFailureClassification = 
     | "trust_required" 
@@ -216,11 +216,11 @@ export type StartupFailureClassification =
     | "unknown";
 ```
 
-Thiếu `"rate_limited"` và `"provider_error"`. Kết quả: 429 errors bị classify là `"unknown"`.
+Missing `"rate_limited"` and `"provider_error"`. Result: 429 errors are classified as `"unknown"`.
 
 ### Fix
 
-Thêm vào type và `classifyStartupFailure` function:
+Add to the type and `classifyStartupFailure` function:
 ```typescript
 export type StartupFailureClassification = 
     | "trust_required" 
@@ -245,18 +245,18 @@ pi-crew/src/runtime/worker-startup.ts  — StartupFailureClassification, classif
 
 ---
 
-## Bug #5: Stale heartbeat notifications sau prune
+## Bug #5: Stale heartbeat notifications after prune
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟡 LOW (cosmetic) |
 | **Status** | Confirmed |
 | **Affected** | User experience |
-| **Symptom** | "Task heartbeat dead" notifications cho runs đã bị xóa |
+| **Symptom** | "Task heartbeat dead" notifications for already-removed runs |
 
-### Mô tả
+### Description
 
-Sau khi chạy `team prune --keep=0 --confirm=true`, background watcher vẫn emit notifications cho runs đã prune:
+After running `team prune --keep=0 --confirm=true`, the background watcher still emits notifications for pruned runs:
 
 ```
 → team prune: Removed 9 runs
@@ -267,23 +267,23 @@ Sau khi chạy `team prune --keep=0 --confirm=true`, background watcher vẫn em
 ... (6+ stale notifications)
 ```
 
-Mỗi notification trigger `get_subagent_result` → trả về "not found".
+Each notification triggers `get_subagent_result` → returns "not found".
 
-### Nguyên nhân
+### Cause
 
-Background watcher duy trì worker health check queue. Khi runs bị prune:
-1. Watcher không deregister ngay
-2. Notifications đã trong queue vẫn emit
-3. Các notifications đến lần lượt, cách nhau vài giây
+The background watcher maintains a worker health-check queue. When runs are pruned:
+1. The watcher does not deregister immediately
+2. Notifications already in the queue still emit
+3. The notifications arrive one by one, a few seconds apart
 
 ### Impact
 
-- Confusing cho user: thấy "heartbeat dead" cho runs không còn tồn tại
-- Wasted context: mỗi notification trigger 1 tool call để verify
+- Confusing for the user: seeing "heartbeat dead" for runs that no longer exist
+- Wasted context: each notification triggers 1 tool call to verify
 
 ### Fix
 
-Background watcher nên check run existence trước khi emit:
+The background watcher should check run existence before emitting:
 ```typescript
 // Before emitting heartbeat_dead:
 if (!runExists(runId)) {
@@ -303,24 +303,24 @@ pi-crew/src/runtime/background-runner.ts — heartbeat monitoring loop
 
 # pi-crew v0.2.20 — Bug Report
 
-**Ngày:** 2026-05-19  
+**Date:** 2026-05-19  
 **Session:** Comprehensive integration test + root cause analysis  
 **Environment:** linux/x64, Node v22.22.0, Pi CLI v0.75.3, pi-crew v0.2.20
 
 ---
 
-## Bug #1: Background workers "heartbeat dead" — thực chất là MiniMax 429 Rate Limit
+## Bug #1: Background workers "heartbeat dead" — actually a MiniMax 429 Rate Limit
 
 | Field | Value |
 |---|---|
 | **Severity** | 🔴 HIGH |
 | **Status** | ✅ Fixed — 429 now retries with fallback models instead of blocking 300s |
-| **Affected** | Tất cả background/async workers |
-| **Symptom** | Workers timeout sau 300s với "heartbeat dead", zero output |
+| **Affected** | All background/async workers |
+| **Symptom** | Workers time out after 300s with "heartbeat dead", zero output |
 
-### Mô tả
+### Description
 
-Khi chạy `team action='run'` với `async=true` hoặc `Agent(run_in_background=true)`, workers spawn thành công (PID tồn tại) nhưng **timeout sau 300s** với generic error:
+When running `team action='run'` with `async=true` or `Agent(run_in_background=true)`, workers spawn successfully (PID exists) but **time out after 300s** with a generic error:
 ```
 worker.response_timeout: No output for 300000ms
 crew.task.heartbeat_dead: Task 01_assess heartbeat dead.
@@ -328,48 +328,48 @@ crew.task.heartbeat_dead: Task 01_assess heartbeat dead.
 
 ### Root cause
 
-**Đã fix.** Trước đây 429 rate limit không được retry vì:
-1. `RETRYABLE_MODEL_FAILURE_PATTERNS` có `/\b429\b/` nhưng MiniMax trả về `rate_limit_error: usage limit exceeded` (không có số 429 rõ ràng)
-2. 429 được fast-fail trong `child-pi.ts onJsonEvent` thay vì để task-runner xử lý retry với fallback
+**Fixed.** Previously the 429 rate limit was not retried because:
+1. `RETRYABLE_MODEL_FAILURE_PATTERNS` had `/\b429\b/` but MiniMax returns `rate_limit_error: usage limit exceeded` (no clear "429" number)
+2. 429 was fast-failed in `child-pi.ts onJsonEvent` instead of letting the task-runner handle retry with fallback
 
 ### Fix applied
 
-1. **model-fallback.ts**: Thêm `/rate_limit_error/i` vào `RETRYABLE_MODEL_FAILURE_PATTERNS` để nhận diện đúng MiniMax rate limit error
-2. **model-fallback.ts**: Sửa `/\b429\b/` → `/rate.?limit/i` để match nhiều format hơn
-3. **child-pi.ts**: Bỏ fast-fail 429 — để task-runner xử lý retry với model fallback chain
+1. **model-fallback.ts**: Added `/rate_limit_error/i` to `RETRYABLE_MODEL_FAILURE_PATTERNS` to correctly identify the MiniMax rate limit error
+2. **model-fallback.ts**: Changed `/\b429\b/` → `/rate.?limit/i` to match more formats
+3. **child-pi.ts**: Removed the 429 fast-fail — let the task-runner handle retry with the model fallback chain
 
 ### Model fallback chain
 
-Khi model chính bị 429:
-1. Fallback sang `fallbackModels` (nếu có cấu hình)
-2. Fallback sang available models khác trong hệ thống
-3. Nếu không có fallback và retry hết → fail với đúng error message
+When the main model gets a 429:
+1. Fall back to `fallbackModels` (if configured)
+2. Fall back to other available models in the system
+3. If there is no fallback and retries are exhausted → fail with the correct error message
 
-**Cấu hình khuyến nghị:** Thêm `fallbackModels` vào agent config để có nhiều lựa chọn khi model chính bị rate limit.
+**Recommended config:** Add `fallbackModels` to the agent config to have more options when the main model is rate-limited.
 
 ---
 
-## Bug #2: child-pi.ts không phát hiện 429 rate limit error — báo sai "heartbeat dead"
+## Bug #2: child-pi.ts does not detect 429 rate limit error — reports wrong "heartbeat dead"
 
 | Field | Value |
 |---|---|
 | **Severity** | 🔴 HIGH |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Tất cả child Pi workers |
-| **Symptom** | Worker báo generic "No output for 300000ms" thay vì "Provider rate limit: 429" |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | All child Pi workers |
+| **Symptom** | Worker reports generic "No output for 300000ms" instead of "Provider rate limit: 429" |
 
-### Mô tả
+### Description
 
-Pi CLI output JSON events cho 429 errors rất rõ ràng:
+The Pi CLI outputs JSON events for 429 errors very clearly:
 ```json
 {"type":"turn_end","message":{"stopReason":"error","errorMessage":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\"...}}"}}
 ```
 
-Nhưng `child-pi.ts` **không parse error events** — nó chỉ quan tâm đến:
-- `isFinalAssistantEvent()` — để trigger final drain
-- `turn_end` — để đếm turns cho turn limiting
+But `child-pi.ts` **does not parse error events** — it only cares about:
+- `isFinalAssistantEvent()` — to trigger the final drain
+- `turn_end` — to count turns for turn limiting
 
-Kết quả: child-pi thấy output (JSON events), **restart heartbeat timer**, nhưng **không nhận ra đây là error**. Pi block sau 3 retries → heartbeat timeout 300s → generic error message.
+Result: child-pi sees output (JSON events), **restarts the heartbeat timer**, but **does not recognize it as an error**. Pi blocks after 3 retries → heartbeat times out at 300s → generic error message.
 
 ### Code location
 
@@ -377,7 +377,7 @@ Kết quả: child-pi thấy output (JSON events), **restart heartbeat timer**, 
 ```typescript
 onJsonEvent: (event) => {
     restartNoResponseTimer();
-    // Turn-count-based steering: chỉ đếm turns, KHÔNG check errors
+    // Turn-count-based steering: only counts turns, does NOT check errors
     if (event && typeof event === "object" && !Array.isArray(event)) {
         const obj = event as Record<string, unknown>;
         if (obj.type === "turn_end") {
@@ -391,7 +391,7 @@ onJsonEvent: (event) => {
 
 ### Fix
 
-Thêm provider error detection trong `onJsonEvent`:
+Add provider error detection in `onJsonEvent`:
 ```typescript
 let providerError: string | undefined;
 
@@ -408,42 +408,42 @@ if (obj.type === "turn_end" && obj.message?.stopReason === "error") {
 
 ### Impact
 
-Fix này sẽ chuyển error message từ:
+This fix changes the error message from:
 ```
 ❌ "Child Pi produced no new output for 300000ms; process was terminated as unresponsive."
 ```
-Thành:
+to:
 ```
 ✅ "Provider rate limit: 429 rate_limit_error: usage limit exceeded, resets at 2026-05-19T05:00:00Z"
 ```
 
-Và **fail fast** thay vì đợi 300s.
+And it **fails fast** instead of waiting 300s.
 
 ---
 
-## Bug #3: background.log vô dụng — không capture worker output
+## Bug #3: background.log is useless — does not capture worker output
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟠 MEDIUM |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Debugging experience cho tất cả background runs |
-| **Symptom** | background.log chỉ chứa 1 dòng: `[pi-crew] background loader=jiti` |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | Debugging experience for all background runs |
+| **Symptom** | background.log contains only 1 line: `[pi-crew] background loader=jiti` |
 
-### Mô tả
+### Description
 
-Khi background worker fail, log file tại `.crew/state/runs/<id>/background.log` chỉ chứa:
+When a background worker fails, the log file at `.crew/state/runs/<id>/background.log` contains only:
 ```
 [pi-crew] background loader=jiti
 ```
 
-Không có:
+Missing:
 - Worker stdout/stderr
 - Error messages
 - Provider responses
 - Exit codes
 
-### Nguyên nhân
+### Cause
 
 `async-runner.ts` line 130-145:
 ```typescript
@@ -462,22 +462,22 @@ return {
 };
 ```
 
-**stdout/stderr của background-runner** được ghi vào background.log. Nhưng **child Pi workers** (spawn bởi background-runner qua child-pi.ts) **output vào child-pi's pipe**, KHÔNG vào background.log.
+**The stdout/stderr of the background-runner** is written to background.log. But **child Pi workers** (spawned by the background-runner via child-pi.ts) **output to child-pi's pipe**, NOT to background.log.
 
 Flow:
 ```
 background-runner.ts (stdout→logFd, stderr→logFd)
-  → loader=jiti → ghi vào log ✅
+  → loader=jiti → writes to log ✅
   → executeTeamRun()
-    → child-pi.ts spawn child Pi (stdout→pipe, stderr→pipe)
-      → Pi output → child-pi.ts captures →KHÔNG GHI VÀO background.log ❌
+    → child-pi.ts spawns child Pi (stdout→pipe, stderr→pipe)
+      → Pi output → child-pi.ts captures → DOES NOT WRITE TO background.log ❌
 ```
 
 ### Fix
 
-1. **Option A:** Trong `child-pi.ts` hoặc `team-runner.ts`, ghi worker output events vào background.log
-2. **Option B:** Thêm event log entries cho provider errors (đã có event log, nhưng không đủ chi tiết)
-3. **Option C:** Background-runner tee output vào log file
+1. **Option A:** In `child-pi.ts` or `team-runner.ts`, write worker output events to background.log
+2. **Option B:** Add event log entries for provider errors (there is an event log, but not detailed enough)
+3. **Option C:** Background-runner tees output to a log file
 
 ### Key file
 
@@ -487,18 +487,18 @@ pi-crew/src/runtime/async-runner.ts  — buildBackgroundSpawnOptions(), spawnBac
 
 ---
 
-## Bug #4: worker-startup.ts thiếu "rate_limited" classification
+## Bug #4: worker-startup.ts missing "rate_limited" classification
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟡 LOW |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Error classification và reporting |
-| **Symptom** | 429 errors classified là "unknown" thay vì "rate_limited" |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | Error classification and reporting |
+| **Symptom** | 429 errors classified as "unknown" instead of "rate_limited" |
 
-### Mô tả
+### Description
 
-`worker-startup.ts` có `StartupFailureClassification` type:
+`worker-startup.ts` has the `StartupFailureClassification` type:
 ```typescript
 export type StartupFailureClassification = 
     | "trust_required" 
@@ -509,11 +509,11 @@ export type StartupFailureClassification =
     | "unknown";
 ```
 
-Thiếu `"rate_limited"` và `"provider_error"`. Kết quả: 429 errors bị classify là `"unknown"`.
+Missing `"rate_limited"` and `"provider_error"`. Result: 429 errors are classified as `"unknown"`.
 
 ### Fix
 
-Thêm vào type và `classifyStartupFailure` function:
+Add to the type and `classifyStartupFailure` function:
 ```typescript
 export type StartupFailureClassification = 
     | "trust_required" 
@@ -538,18 +538,18 @@ pi-crew/src/runtime/worker-startup.ts  — StartupFailureClassification, classif
 
 ---
 
-## Bug #5: Stale heartbeat notifications sau prune
+## Bug #5: Stale heartbeat notifications after prune
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟡 LOW (cosmetic) |
 | **Status** | Confirmed |
 | **Affected** | User experience |
-| **Symptom** | "Task heartbeat dead" notifications cho runs đã bị xóa |
+| **Symptom** | "Task heartbeat dead" notifications for already-removed runs |
 
-### Mô tả
+### Description
 
-Sau khi chạy `team prune --keep=0 --confirm=true`, background watcher vẫn emit notifications cho runs đã prune:
+After running `team prune --keep=0 --confirm=true`, the background watcher still emits notifications for pruned runs:
 
 ```
 → team prune: Removed 9 runs
@@ -560,23 +560,23 @@ Sau khi chạy `team prune --keep=0 --confirm=true`, background watcher vẫn em
 ... (6+ stale notifications)
 ```
 
-Mỗi notification trigger `get_subagent_result` → trả về "not found".
+Each notification triggers `get_subagent_result` → returns "not found".
 
-### Nguyên nhân
+### Cause
 
-Background watcher duy trì worker health check queue. Khi runs bị prune:
-1. Watcher không deregister ngay
-2. Notifications đã trong queue vẫn emit
-3. Các notifications đến lần lượt, cách nhau vài giây
+The background watcher maintains a worker health-check queue. When runs are pruned:
+1. The watcher does not deregister immediately
+2. Notifications already in the queue still emit
+3. The notifications arrive one by one, a few seconds apart
 
 ### Impact
 
-- Confusing cho user: thấy "heartbeat dead" cho runs không còn tồn tại
-- Wasted context: mỗi notification trigger 1 tool call để verify
+- Confusing for the user: seeing "heartbeat dead" for runs that no longer exist
+- Wasted context: each notification triggers 1 tool call to verify
 
 ### Fix
 
-Background watcher nên check run existence trước khi emit:
+The background watcher should check run existence before emitting:
 ```typescript
 // Before emitting heartbeat_dead:
 if (!runExists(runId)) {
@@ -596,24 +596,24 @@ pi-crew/src/runtime/background-runner.ts — heartbeat monitoring loop
 
 # pi-crew v0.2.20 — Bug Report
 
-**Ngày:** 2026-05-19  
+**Date:** 2026-05-19  
 **Session:** Comprehensive integration test + root cause analysis  
 **Environment:** linux/x64, Node v22.22.0, Pi CLI v0.75.3, pi-crew v0.2.20
 
 ---
 
-## Bug #1: Background workers "heartbeat dead" — thực chất là MiniMax 429 Rate Limit
+## Bug #1: Background workers "heartbeat dead" — actually a MiniMax 429 Rate Limit
 
 | Field | Value |
 |---|---|
 | **Severity** | 🔴 HIGH |
 | **Status** | ✅ Fixed — 429 now retries with fallback models instead of blocking 300s |
-| **Affected** | Tất cả background/async workers |
-| **Symptom** | Workers timeout sau 300s với "heartbeat dead", zero output |
+| **Affected** | All background/async workers |
+| **Symptom** | Workers time out after 300s with "heartbeat dead", zero output |
 
-### Mô tả
+### Description
 
-Khi chạy `team action='run'` với `async=true` hoặc `Agent(run_in_background=true)`, workers spawn thành công (PID tồn tại) nhưng **timeout sau 300s** với generic error:
+When running `team action='run'` with `async=true` or `Agent(run_in_background=true)`, workers spawn successfully (PID exists) but **time out after 300s** with a generic error:
 ```
 worker.response_timeout: No output for 300000ms
 crew.task.heartbeat_dead: Task 01_assess heartbeat dead.
@@ -621,48 +621,48 @@ crew.task.heartbeat_dead: Task 01_assess heartbeat dead.
 
 ### Root cause
 
-**Đã fix.** Trước đây 429 rate limit không được retry vì:
-1. `RETRYABLE_MODEL_FAILURE_PATTERNS` có `/\b429\b/` nhưng MiniMax trả về `rate_limit_error: usage limit exceeded` (không có số 429 rõ ràng)
-2. 429 được fast-fail trong `child-pi.ts onJsonEvent` thay vì để task-runner xử lý retry với fallback
+**Fixed.** Previously the 429 rate limit was not retried because:
+1. `RETRYABLE_MODEL_FAILURE_PATTERNS` had `/\b429\b/` but MiniMax returns `rate_limit_error: usage limit exceeded` (no clear "429" number)
+2. 429 was fast-failed in `child-pi.ts onJsonEvent` instead of letting the task-runner handle retry with fallback
 
 ### Fix applied
 
-1. **model-fallback.ts**: Thêm `/rate_limit_error/i` vào `RETRYABLE_MODEL_FAILURE_PATTERNS` để nhận diện đúng MiniMax rate limit error
-2. **model-fallback.ts**: Sửa `/\b429\b/` → `/rate.?limit/i` để match nhiều format hơn
-3. **child-pi.ts**: Bỏ fast-fail 429 — để task-runner xử lý retry với model fallback chain
+1. **model-fallback.ts**: Added `/rate_limit_error/i` to `RETRYABLE_MODEL_FAILURE_PATTERNS` to correctly identify the MiniMax rate limit error
+2. **model-fallback.ts**: Changed `/\b429\b/` → `/rate.?limit/i` to match more formats
+3. **child-pi.ts**: Removed the 429 fast-fail — let the task-runner handle retry with the model fallback chain
 
 ### Model fallback chain
 
-Khi model chính bị 429:
-1. Fallback sang `fallbackModels` (nếu có cấu hình)
-2. Fallback sang available models khác trong hệ thống
-3. Nếu không có fallback và retry hết → fail với đúng error message
+When the main model gets a 429:
+1. Fall back to `fallbackModels` (if configured)
+2. Fall back to other available models in the system
+3. If there is no fallback and retries are exhausted → fail with the correct error message
 
-**Cấu hình khuyến nghị:** Thêm `fallbackModels` vào agent config để có nhiều lựa chọn khi model chính bị rate limit.
+**Recommended config:** Add `fallbackModels` to the agent config to have more options when the main model is rate-limited.
 
 ---
 
-## Bug #2: child-pi.ts không phát hiện 429 rate limit error — báo sai "heartbeat dead"
+## Bug #2: child-pi.ts does not detect 429 rate limit error — reports wrong "heartbeat dead"
 
 | Field | Value |
 |---|---|
 | **Severity** | 🔴 HIGH |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Tất cả child Pi workers |
-| **Symptom** | Worker báo generic "No output for 300000ms" thay vì "Provider rate limit: 429" |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | All child Pi workers |
+| **Symptom** | Worker reports generic "No output for 300000ms" instead of "Provider rate limit: 429" |
 
-### Mô tả
+### Description
 
-Pi CLI output JSON events cho 429 errors rất rõ ràng:
+The Pi CLI outputs JSON events for 429 errors very clearly:
 ```json
 {"type":"turn_end","message":{"stopReason":"error","errorMessage":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\"...}}"}}
 ```
 
-Nhưng `child-pi.ts` **không parse error events** — nó chỉ quan tâm đến:
-- `isFinalAssistantEvent()` — để trigger final drain
-- `turn_end` — để đếm turns cho turn limiting
+But `child-pi.ts` **does not parse error events** — it only cares about:
+- `isFinalAssistantEvent()` — to trigger the final drain
+- `turn_end` — to count turns for turn limiting
 
-Kết quả: child-pi thấy output (JSON events), **restart heartbeat timer**, nhưng **không nhận ra đây là error**. Pi block sau 3 retries → heartbeat timeout 300s → generic error message.
+Result: child-pi sees output (JSON events), **restarts the heartbeat timer**, but **does not recognize it as an error**. Pi blocks after 3 retries → heartbeat times out at 300s → generic error message.
 
 ### Code location
 
@@ -670,7 +670,7 @@ Kết quả: child-pi thấy output (JSON events), **restart heartbeat timer**, 
 ```typescript
 onJsonEvent: (event) => {
     restartNoResponseTimer();
-    // Turn-count-based steering: chỉ đếm turns, KHÔNG check errors
+    // Turn-count-based steering: only counts turns, does NOT check errors
     if (event && typeof event === "object" && !Array.isArray(event)) {
         const obj = event as Record<string, unknown>;
         if (obj.type === "turn_end") {
@@ -684,7 +684,7 @@ onJsonEvent: (event) => {
 
 ### Fix
 
-Thêm provider error detection trong `onJsonEvent`:
+Add provider error detection in `onJsonEvent`:
 ```typescript
 let providerError: string | undefined;
 
@@ -701,42 +701,42 @@ if (obj.type === "turn_end" && obj.message?.stopReason === "error") {
 
 ### Impact
 
-Fix này sẽ chuyển error message từ:
+This fix changes the error message from:
 ```
 ❌ "Child Pi produced no new output for 300000ms; process was terminated as unresponsive."
 ```
-Thành:
+to:
 ```
 ✅ "Provider rate limit: 429 rate_limit_error: usage limit exceeded, resets at 2026-05-19T05:00:00Z"
 ```
 
-Và **fail fast** thay vì đợi 300s.
+And it **fails fast** instead of waiting 300s.
 
 ---
 
-## Bug #3: background.log vô dụng — không capture worker output
+## Bug #3: background.log is useless — does not capture worker output
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟠 MEDIUM |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Debugging experience cho tất cả background runs |
-| **Symptom** | background.log chỉ chứa 1 dòng: `[pi-crew] background loader=jiti` |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | Debugging experience for all background runs |
+| **Symptom** | background.log contains only 1 line: `[pi-crew] background loader=jiti` |
 
-### Mô tả
+### Description
 
-Khi background worker fail, log file tại `.crew/state/runs/<id>/background.log` chỉ chứa:
+When a background worker fails, the log file at `.crew/state/runs/<id>/background.log` contains only:
 ```
 [pi-crew] background loader=jiti
 ```
 
-Không có:
+Missing:
 - Worker stdout/stderr
 - Error messages
 - Provider responses
 - Exit codes
 
-### Nguyên nhân
+### Cause
 
 `async-runner.ts` line 130-145:
 ```typescript
@@ -755,22 +755,22 @@ return {
 };
 ```
 
-**stdout/stderr của background-runner** được ghi vào background.log. Nhưng **child Pi workers** (spawn bởi background-runner qua child-pi.ts) **output vào child-pi's pipe**, KHÔNG vào background.log.
+**The stdout/stderr of the background-runner** is written to background.log. But **child Pi workers** (spawned by the background-runner via child-pi.ts) **output to child-pi's pipe**, NOT to background.log.
 
 Flow:
 ```
 background-runner.ts (stdout→logFd, stderr→logFd)
-  → loader=jiti → ghi vào log ✅
+  → loader=jiti → writes to log ✅
   → executeTeamRun()
-    → child-pi.ts spawn child Pi (stdout→pipe, stderr→pipe)
-      → Pi output → child-pi.ts captures →KHÔNG GHI VÀO background.log ❌
+    → child-pi.ts spawns child Pi (stdout→pipe, stderr→pipe)
+      → Pi output → child-pi.ts captures → DOES NOT WRITE TO background.log ❌
 ```
 
 ### Fix
 
-1. **Option A:** Trong `child-pi.ts` hoặc `team-runner.ts`, ghi worker output events vào background.log
-2. **Option B:** Thêm event log entries cho provider errors (đã có event log, nhưng không đủ chi tiết)
-3. **Option C:** Background-runner tee output vào log file
+1. **Option A:** In `child-pi.ts` or `team-runner.ts`, write worker output events to background.log
+2. **Option B:** Add event log entries for provider errors (there is an event log, but not detailed enough)
+3. **Option C:** Background-runner tees output to a log file
 
 ### Key file
 
@@ -780,18 +780,18 @@ pi-crew/src/runtime/async-runner.ts  — buildBackgroundSpawnOptions(), spawnBac
 
 ---
 
-## Bug #4: worker-startup.ts thiếu "rate_limited" classification
+## Bug #4: worker-startup.ts missing "rate_limited" classification
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟡 LOW |
-| **Status** | New — phát hiện trong quá trình debug Bug #1 |
-| **Affected** | Error classification và reporting |
-| **Symptom** | 429 errors classified là "unknown" thay vì "rate_limited" |
+| **Status** | New — discovered while debugging Bug #1 |
+| **Affected** | Error classification and reporting |
+| **Symptom** | 429 errors classified as "unknown" instead of "rate_limited" |
 
-### Mô tả
+### Description
 
-`worker-startup.ts` có `StartupFailureClassification` type:
+`worker-startup.ts` has the `StartupFailureClassification` type:
 ```typescript
 export type StartupFailureClassification = 
     | "trust_required" 
@@ -802,11 +802,11 @@ export type StartupFailureClassification =
     | "unknown";
 ```
 
-Thiếu `"rate_limited"` và `"provider_error"`. Kết quả: 429 errors bị classify là `"unknown"`.
+Missing `"rate_limited"` and `"provider_error"`. Result: 429 errors are classified as `"unknown"`.
 
 ### Fix
 
-Thêm vào type và `classifyStartupFailure` function:
+Add to the type and `classifyStartupFailure` function:
 ```typescript
 export type StartupFailureClassification = 
     | "trust_required" 
@@ -831,18 +831,18 @@ pi-crew/src/runtime/worker-startup.ts  — StartupFailureClassification, classif
 
 ---
 
-## Bug #5: Stale heartbeat notifications sau prune
+## Bug #5: Stale heartbeat notifications after prune
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟡 LOW (cosmetic) |
 | **Status** | Confirmed |
 | **Affected** | User experience |
-| **Symptom** | "Task heartbeat dead" notifications cho runs đã bị xóa |
+| **Symptom** | "Task heartbeat dead" notifications for already-removed runs |
 
-### Mô tả
+### Description
 
-Sau khi chạy `team prune --keep=0 --confirm=true`, background watcher vẫn emit notifications cho runs đã prune:
+After running `team prune --keep=0 --confirm=true`, the background watcher still emits notifications for pruned runs:
 
 ```
 → team prune: Removed 9 runs
@@ -853,23 +853,23 @@ Sau khi chạy `team prune --keep=0 --confirm=true`, background watcher vẫn em
 ... (6+ stale notifications)
 ```
 
-Mỗi notification trigger `get_subagent_result` → trả về "not found".
+Each notification triggers `get_subagent_result` → returns "not found".
 
-### Nguyên nhân
+### Cause
 
-Background watcher duy trì worker health check queue. Khi runs bị prune:
-1. Watcher không deregister ngay
-2. Notifications đã trong queue vẫn emit
-3. Các notifications đến lần lượt, cách nhau vài giây
+The background watcher maintains a worker health-check queue. When runs are pruned:
+1. The watcher does not deregister immediately
+2. Notifications already in the queue still emit
+3. The notifications arrive one by one, a few seconds apart
 
 ### Impact
 
-- Confusing cho user: thấy "heartbeat dead" cho runs không còn tồn tại
-- Wasted context: mỗi notification trigger 1 tool call để verify
+- Confusing for the user: seeing "heartbeat dead" for runs that no longer exist
+- Wasted context: each notification triggers 1 tool call to verify
 
 ### Fix
 
-Background watcher nên check run existence trước khi emit:
+The background watcher should check run existence before emitting:
 ```typescript
 // Before emitting heartbeat_dead:
 if (!runExists(runId)) {
@@ -887,18 +887,18 @@ pi-crew/src/runtime/background-runner.ts — heartbeat monitoring loop
 
 ---
 
-## Bug #6: Live-session run bị cancel giữa chừng
+## Bug #6: Live-session run cancelled mid-execution
 
 | Field | Value |
 |---|---|
 | **Severity** | 🟠 MEDIUM |
-| **Status** | ✅ Confirmed — no code fix needed; documented as user workflow constraint |
+| **Status** | ✅ Confirmed — no code fix needed; documented as a user workflow constraint |
 | **Affected** | Foreground team runs |
-| **Symptom** | Run cancelled sau khi explore phase hoàn thành, trước execute phase |
+| **Symptom** | Run cancelled after the explore phase completes, before the execute phase |
 
-### Mô tả
+### Description
 
-Fast-fix team chạy live-session:
+A fast-fix team ran in a live-session:
 ```
 04:12:20 live-session.prompt_start 01_explore
 04:12:51 live-session.prompt_done 01_explore (31s, completed)
@@ -907,18 +907,18 @@ Fast-fix team chạy live-session:
 04:12:51 run.cancelled: "This operation was aborted"
 ```
 
-Task `01_explore` hoàn thành thành công, nhưng run bị cancelled trước khi `02_execute` bắt đầu.
+Task `01_explore` completed successfully, but the run was cancelled before `02_execute` started.
 
-### Nguyên nhân có thể
+### Possible causes
 
-1. **Session concurrency limit** — chỉ 1 live-session active, conflict với parallel test operations
+1. **Session concurrency limit** — only 1 active live-session, conflicting with parallel test operations
 2. **User-initiated cancellation** — accidentally triggered
-3. **Workflow phase transition bug** — không trigger next phase sau explore completes
+3. **Workflow phase transition bug** — does not trigger the next phase after explore completes
 
-### Cần thêm investigation
+### Needs further investigation
 
-- Chạy lại fast-fix team đơn lẻ (không concurrent operations)
-- Check live-session-runtime.ts cho phase transition logic
+- Run the fast-fix team standalone (no concurrent operations)
+- Check live-session-runtime.ts for phase-transition logic
 
 ---
 
@@ -926,16 +926,16 @@ Task `01_explore` hoàn thành thành công, nhưng run bị cancelled trước 
 
 | # | Bug | Severity | Status | Category |
 |---|---|---|---|---|
-| 1 | Background workers timeout do MiniMax 429 | 🔴 HIGH | ✅ Fixed — 429 now retries with fallback models via improved RETRYABLE_MODEL_FAILURE_PATTERNS | Code |
-| 2 | child-pi.ts không phát hiện 429, báo sai "heartbeat dead" | 🔴 HIGH | ✅ Fixed — removed fast-fail 429; let task-runner handle retry+fallback | Code |
-| 3 | background.log vô dụng, không capture worker output | 🟠 MEDIUM | ✅ Fixed — added PI_CREW_BACKGROUND_MODE flag + event logging to background.log | Observability |
-| 4 | worker-startup.ts thiếu rate_limited classification | 🟡 LOW | ✅ Fixed — added rate_limited + provider_error to StartupFailureClassification | Code |
-| 5 | Stale heartbeat notifications sau prune | 🟡 LOW | ✅ Fixed — HeartbeatWatcher skips pruned runs via stateRoot existence check | UX |
-| 6 | Live-session foreground run bị cancel khi có concurrent tool calls | 🟠 MEDIUM | ✅ Confirmed — concurrent calls interrupt live-session → outputLength:0 → caller_cancelled. Avoid concurrent team actions during foreground runs. | Runtime |
-| 7 | Async notifier "stale ctx" — dies, không restart sau Pi restart | 🔴 HIGH | ✅ Fixed — swallow stale error, isCurrent guard handles dormancy | Code |
+| 1 | Background workers timeout due to MiniMax 429 | 🔴 HIGH | ✅ Fixed — 429 now retries with fallback models via improved RETRYABLE_MODEL_FAILURE_PATTERNS | Code |
+| 2 | child-pi.ts does not detect 429, reports wrong "heartbeat dead" | 🔴 HIGH | ✅ Fixed — removed 429 fast-fail; let task-runner handle retry+fallback | Code |
+| 3 | background.log useless, does not capture worker output | 🟠 MEDIUM | ✅ Fixed — added PI_CREW_BACKGROUND_MODE flag + event logging to background.log | Observability |
+| 4 | worker-startup.ts missing rate_limited classification | 🟡 LOW | ✅ Fixed — added rate_limited + provider_error to StartupFailureClassification | Code |
+| 5 | Stale heartbeat notifications after prune | 🟡 LOW | ✅ Fixed — HeartbeatWatcher skips pruned runs via stateRoot existence check | UX |
+| 6 | Live-session foreground run cancelled when there are concurrent tool calls | 🟠 MEDIUM | ✅ Confirmed — concurrent calls interrupt live-session → outputLength:0 → caller_cancelled. Avoid concurrent team actions during foreground runs. | Runtime |
+| 7 | Async notifier "stale ctx" — dies, does not restart after Pi restart | 🔴 HIGH | ✅ Fixed — swallow stale error, isCurrent guard handles dormancy | Code |
 | 8 | Background child-process 300s timeout — child Pi hangs, zero output | 🟠 MEDIUM | ✅ Fixed — Root cause found (Bug #10): MINIMAX_API_KEY stripped by sanitizeEnvSecrets(). Allow-list in child-pi.ts preserves model provider API keys. Restart Pi to verify fix. | Code |
-| 9 | Executor hit yield limit — file write không hoàn thành | 🟡 LOW | 🔲 Open — executor hit 3 Yield Reminders and terminated before writing file. Task marked completed but artifact missing. | Runtime |
-| 10 | Child-process silent timeout — MINIMAX_API_KEY bị filter ra khỏi child env | 🔴 HIGH | ✅ Fixed — sanitizeEnvSecrets() strips *API_KEY* vars. Allow-list in buildChildPiSpawnOptions preserves model provider keys (MINIMAX_*, OPENAI_*, etc.). See docs/fixes/bug-010-child-process-api-key-filtered.md | Code |
+| 9 | Executor hit yield limit — file write not completed | 🟡 LOW | 🔲 Open — executor hit 3 Yield Reminders and terminated before writing file. Task marked completed but artifact missing. | Runtime |
+| 10 | Child-process silent timeout — MINIMAX_API_KEY filtered out of child env | 🔴 HIGH | ✅ Fixed — sanitizeEnvSecrets() strips *API_KEY* vars. Allow-list in buildChildPiSpawnOptions preserves model provider keys (MINIMAX_*, OPENAI_*, etc.). See docs/fixes/bug-010-child-process-api-key-filtered.md | Code |
 
 
 | 11 | Background runner "spawn pi ENOENT" — pi binary not in PATH | 🔴 HIGH | ✅ Fixed — added resolvePiCliScript() call for non-Windows platforms in getPiSpawnCommand(). Restart Pi to verify. | Code |
@@ -945,7 +945,7 @@ Task `01_explore` hoàn thành thành công, nhưng run bị cancelled trước 
 ### Priority fix order
 
 1. **Bug #1** — ✅ Fixed — 429 now retried with model fallback chain
-2. **Bug #2** — ✅ Fixed — removed fast-fail 429
+2. **Bug #2** — ✅ Fixed — removed 429 fast-fail
 3. **Bug #3** — ✅ Fixed — worker events now logged to background.log
 4. **Bug #4** — ✅ Fixed — rate_limited + provider_error classification added
 5. **Bug #5** — ✅ Fixed — HeartbeatWatcher skips pruned runs

@@ -182,8 +182,8 @@ For the `subagent-manager.ts` defense-in-depth: spawn a subagent whose `runner` 
 - ✅ Issue reproduced in code (all 11 sites verified)
 - ✅ Root cause identified
 - ✅ Fix plan drafted
-- ❌ **Code changes NOT applied** (per user request: "chưa thực hiện sửa gì cả")
+- ❌ **Code changes NOT applied** (per user request: "nothing has been changed yet")
 - ❌ Tests NOT added
 - ❌ v0.6.2 NOT released
 
-Sẵn sàng apply khi user yêu cầu.
+Ready to apply when requested by the user.

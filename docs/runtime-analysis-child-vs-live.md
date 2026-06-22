@@ -1,66 +1,66 @@
 # pi-crew Runtime Analysis: child-process vs live-session
 
-> Ngày: 2026-05-12  
-> Trạng thái: Phân tích hiệu năng — đề xuất chuyển default runtime
+> Date: 2026-05-12  
+> Status: Performance analysis — proposing a default runtime change
 
 ---
 
-## 1. Vấn đề hiện tại
+## 1. Current problem
 
-pi-crew default runtime là **child-process** — mỗi worker spawn một `pi` CLI child process riêng. Điều này gây:
+pi-crew's default runtime is **child-process** — each worker spawns its own `pi` CLI child process. This causes:
 
 ### 1.1 Memory
 
-| Scenario | child-process | live-session | Tiết kiệm |
+| Scenario | child-process | live-session | Savings |
 |---|---|---|---|
-| 1 worker | ~150 MB thêm | ~15 MB thêm | **135 MB** |
-| 4 workers (parallel) | ~600 MB thêm | ~60 MB thêm | **540 MB** |
-| 8 workers (max cap) | ~1.2 GB thêm | ~120 MB thêm | **~1.1 GB** |
+| 1 worker | ~150 MB added | ~15 MB added | **135 MB** |
+| 4 workers (parallel) | ~600 MB added | ~60 MB added | **540 MB** |
+| 8 workers (max cap) | ~1.2 GB added | ~120 MB added | **~1.1 GB** |
 
-**Parent Pi process đã chiếm ~308 MB.** Thêm 4 child-process workers = **910 MB tổng**, gần 1 GB chỉ để chạy một team. Máy có 8 GB RAM sẽ bắt đầu swap.
+**The parent Pi process already consumes ~308 MB.** Adding 4 child-process workers brings the total to **910 MB**, nearly 1 GB just to run a single team. A machine with 8 GB of RAM will start swapping.
 
 ### 1.2 Startup latency
 
-| Giai đoạn | child-process | live-session |
+| Stage | child-process | live-session |
 |---|---|---|
 | Process spawn | ~300ms | 0 |
 | Node.js bootstrap | ~500ms | 0 |
 | Pi CLI init + load extensions | ~1-2s | 0 |
-| pi-crew register() (chạy lại trong child) | ~200ms | 0 |
+| pi-crew register() (runs again in child) | ~200ms | 0 |
 | createAgentSession() | ~100ms | ~100ms |
 | First LLM token | **2-4s total** | **200-500ms total** |
 
-**Mỗi worker mất 2-4s startup.** Team implementation có 3 phases sequential × 2-4s = **6-12s chỉ để spawn processes**, trước khi bất kỳ công việc nào bắt đầu.
+**Each worker takes 2-4s to start.** A team implementation with 3 sequential phases × 2-4s = **6-12s just to spawn processes**, before any work even begins.
 
 ### 1.3 CPU overhead
 
-- Mỗi child process chạy riêng V8 isolate → riêng JIT compiler, riêng GC
-- `pi-crew register()` chạy **lặp lại** trong mỗi child (load config, register tools, bind extensions)
-- JSON parsing/redaction trên child stdout → CPU cost cho mỗi event
+- Each child process runs a separate V8 isolate → separate JIT compiler, separate GC
+- `pi-crew register()` runs **repeatedly** in each child (load config, register tools, bind extensions)
+- JSON parsing/redaction on child stdout → CPU cost per event
 
 ### 1.4 Complexity
 
-- `child-pi.ts` = 461 dòng chỉ để quản lý subprocess lifecycle
+- `child-pi.ts` = 461 lines just to manage the subprocess lifecycle
 - Hard kill timer (3s), post-exit stdio guard (3s), final drain (5s), response timeout (5 min)
-- Process tree kill (`taskkill /t /f` trên Windows, `kill -pgid` trên Unix)
-- Mock system cho testing (`PI_TEAMS_MOCK_CHILD_PI`)
+- Process tree kill (`taskkill /t /f` on Windows, `kill -pgid` on Unix)
+- Mock system for testing (`PI_TEAMS_MOCK_CHILD_PI`)
 
 ---
 
-## 2. live-session đã sẵn sàng
+## 2. live-session is ready
 
-pi-crew **đã implement** live-session runtime hoàn chỉnh:
+pi-crew **has already implemented** a complete live-session runtime:
 
-- `src/runtime/live-session-runtime.ts` — 600 LOC, feature parity với child-process cho hầu hết use cases
-- `src/runtime/runtime-resolver.ts` — `resolveCrewRuntime()` đã handle auto/live-session/child-process
-- Soft turn limit + grace period (default 5) — **đã có**, y hệt pi-subagents3
-- Tool filtering — `filterActiveTools()` loại recursive tools
+- `src/runtime/live-session-runtime.ts` — 600 LOC, feature parity with child-process for most use cases
+- `src/runtime/runtime-resolver.ts` — `resolveCrewRuntime()` already handles auto/live-session/child-process
+- Soft turn limit + grace period (default 5) — **already present**, identical to pi-subagents3
+- Tool filtering — `filterActiveTools()` removes recursive tools
 - Yield/submit_result — custom tool + JSON event detection
 - Live agent control — steer, resume, real-time tool activity
-- Extension bridge — `buildExtensionBridge()` cho extension-based APIs
+- Extension bridge — `buildExtensionBridge()` for extension-based APIs
 - Health diagnostics — `collectLiveSessionHealth()`, `formatLiveSessionDiagnostics()`
 
-### Cấu hình hiện tại cần set thủ công:
+### Current configuration must be set manually:
 
 ```json
 // .pi/crew-config.json
@@ -71,7 +71,7 @@ pi-crew **đã implement** live-session runtime hoàn chỉnh:
 }
 ```
 
-Hoặc:
+Or:
 ```json
 {
   "runtime": {
@@ -81,15 +81,15 @@ Hoặc:
 }
 ```
 
-**Default hiện tại là `"auto"` KHÔNG có `preferLiveSession`** → luôn fallback về child-process.
+**The current default is `"auto"` WITHOUT `preferLiveSession`** → it always falls back to child-process.
 
 ---
 
-## 3. Đề xuất
+## 3. Proposal
 
-### 3.1 Đổi default: `preferLiveSession: true` khi mode = "auto"
+### 3.1 Change the default: `preferLiveSession: true` when mode = "auto"
 
-`resolveCrewRuntime()` hiện tại:
+Current `resolveCrewRuntime()`:
 
 ```typescript
 // src/runtime/runtime-resolver.ts
@@ -98,10 +98,10 @@ if (requestedMode === "live-session" || (requestedMode === "auto" && config.runt
     if (live.available) return liveCaps(requestedMode);
     // fallback to child-process
 }
-return childCaps(requestedMode);  // ← default: luôn child-process
+return childCaps(requestedMode);  // ← default: always child-process
 ```
 
-**Đề xuất đổi:**
+**Proposed change:**
 
 ```typescript
 if (requestedMode === "live-session" || requestedMode === "auto") {
@@ -113,11 +113,11 @@ if (requestedMode === "live-session" || requestedMode === "auto") {
 }
 ```
 
-**Tức là:** `"auto"` → thử live-session trước, fallback child-process nếu SDK không available. User vẫn có thể force `child-process` nếu muốn.
+**In other words:** `"auto"` → try live-session first, fall back to child-process if the SDK is unavailable. Users can still force `child-process` if they want.
 
-### 3.2 Thêm opt-out cho risky tasks
+### 3.2 Add an opt-out for risky tasks
 
-Task-level flag để force child-process cho tasks cụ thể:
+A task-level flag to force child-process for specific tasks:
 
 ```json
 {
@@ -129,43 +129,43 @@ Task-level flag để force child-process cho tasks cụ thể:
 }
 ```
 
-Tasks có role `executor` hoặc tasks trong worktree → tự dùng child-process.
+Tasks with the `executor` role, or tasks running in a worktree → automatically use child-process.
 
-### 3.3 Lợi ích dự kiến
+### 3.3 Expected benefits
 
-| Metric | Trước (child-process default) | Sau (live-session default) |
+| Metric | Before (child-process default) | After (live-session default) |
 |---|---|---|
 | **4-worker memory** | ~910 MB | ~370 MB |
 | **First token latency** | 2-4s/worker | 200-500ms/worker |
-| **Startup total (3 phases)** | 6-12s | 0.6-1.5s |
+| **Total startup (3 phases)** | 6-12s | 0.6-1.5s |
 | **Steering** | ❌ | ✅ |
 | **Resume** | ❌ | ✅ |
 | **Crash isolation** | ✅ | ❌ (fallback available) |
 | **Parent crash risk** | None | Low (session.abort handles most) |
 
-### 3.4 Rủi ro và cách giảm thiểu
+### 3.4 Risks and mitigations
 
-| Rủi ro | Mức độ | Cách giảm thiểu |
+| Risk | Severity | Mitigation |
 |---|---|---|
-| Agent crash → parent crash | Medium | `try/catch` quanh `session.prompt()`, `AbortController` per-agent, cleanup trên unhandled rejection |
-| Memory pressure (nhiều sessions) | Low | Giữ `maxConcurrent` cap (default 4), limit là đủ |
-| Recursive team calls | Low | `filterActiveTools()` đã loại recursive tools |
-| SDK không available (Pi version cũ) | Low | Auto-fallback về child-process |
-| Unhandled errors trong session | Medium | Global `unhandledRejection` handler per-session |
+| Agent crash → parent crash | Medium | `try/catch` around `session.prompt()`, `AbortController` per-agent, cleanup on unhandled rejection |
+| Memory pressure (many sessions) | Low | Keep the `maxConcurrent` cap (default 4); the limit is sufficient |
+| Recursive team calls | Low | `filterActiveTools()` already removes recursive tools |
+| SDK unavailable (old Pi version) | Low | Auto-fallback to child-process |
+| Unhandled errors in session | Medium | Global `unhandledRejection` handler per-session |
 
 ---
 
-## 4. Kết luận
+## 4. Conclusion
 
-**pi-crew đang dùng runtime quá nặng cho hầu hết use cases.** child-process có crash isolation tuyệt vời nhưng:
+**pi-crew is using an overly heavy runtime for most use cases.** child-process provides excellent crash isolation, but:
 
-- **9x memory** so với live-session
-- **8x startup latency**
-- **Không có steer/resume** — mất khả năng interactive
+- **9× the memory** compared to live-session
+- **8× the startup latency**
+- **No steer/resume** — loses interactive capability
 
-live-session **đã implement sẵn**, chỉ cần đổi default. Crash isolation trade-off chấp nhận được vì:
-1. Pi SDK `createAgentSession()` đã handle大部分 errors
-2. Fallback child-process vẫn available khi cần
-3. Lợi ích (540 MB tiết kiệm, 3s faster startup, steer/resume) vượt trội hơn rủi ro
+live-session **is already implemented**; only the default needs to change. The crash isolation trade-off is acceptable because:
+1. The Pi SDK `createAgentSession()` already handles most errors
+2. A child-process fallback is still available when needed
+3. The benefits (540 MB saved, 3s faster startup, steer/resume) outweigh the risks
 
-**Action:** Đổi `resolveCrewRuntime()` default để `"auto"` prefer live-session, giữ child-process làm fallback.
+**Action:** Change the `resolveCrewRuntime()` default so `"auto"` prefers live-session, keeping child-process as a fallback.

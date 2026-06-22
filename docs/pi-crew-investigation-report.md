@@ -1,19 +1,19 @@
-# pi-crew v0.2.20 — Kết quả khảo sát và phân tích
+# pi-crew v0.2.20 — Investigation Results and Analysis
 
-**Ngày:** 2026-05-19  
-**Môi trường:** linux/x64, Node v22.22.0, Pi CLI v0.75.3  
-**Model:** zai/glm-5.1 (planner, executor, test-engineer), minimax/MiniMax-M2.7-highspeed (explorer, analyst, reviewer, verifier, writer, critic)  
+**Date:** 2026-05-19  
+**Environment:** linux/x64, Node v22.22.0, Pi CLI v0.75.3  
+**Models:** zai/glm-5.1 (planner, executor, test-engineer), minimax/MiniMax-M2.7-highspeed (explorer, analyst, reviewer, verifier, writer, critic)  
 **pi-crew version:** 0.2.20
 
 ---
 
-## 1. Tổng quan kiến trúc pi-crew
+## 1. pi-crew architecture overview
 
-### 1.1 Cấu trúc source code
+### 1.1 Source code structure
 
 ```
 pi-crew/src/
-├── adapters/          — Adapter cho các bên ngoài
+├── adapters/          — Adapters for external systems
 ├── agents/            — Agent discovery & config (10 agents)
 ├── config/            — Configuration, defaults, drift detection
 ├── extension/         — Pi extension registration
@@ -21,16 +21,16 @@ pi-crew/src/
 ├── observability/     — Metrics, correlation, exporters (OTLP, Prometheus)
 ├── prompt/            — Prompt runtime & pipeline
 ├── runtime/           — Core runtime (~30+ files)
-│   ├── async-runner.ts      — Background process spawning với jiti loader
+│   ├── async-runner.ts      — Background process spawning with jiti loader
 │   ├── background-runner.ts — Background entry point, team execution
 │   ├── child-pi.ts          — Child Pi process lifecycle, stdout capture, timeout
 │   ├── child-pi-pool.ts     — Warm pool skeleton (disabled, size=0)
-│   ├── live-session-runtime.ts — Live-session (tái sử dụng parent Pi)
+│   ├── live-session-runtime.ts — Live-session (reuses the parent Pi)
 │   ├── team-runner.ts       — Main team run orchestrator
 │   ├── worker-heartbeat.ts  — Heartbeat state tracking
 │   ├── worker-startup.ts    — Startup failure classification
 │   ├── pi-spawn.ts          — Pi binary resolution & spawn command
-│   ├── pi-args.ts           — Build args cho child Pi workers
+│   ├── pi-args.ts           — Build args for child Pi workers
 │   ├── runtime-resolver.ts  — Resolve live-session vs child-process
 │   ├── crash-recovery.ts    — Crash recovery logic
 │   ├── deadletter.ts        — Dead letter queue
@@ -49,7 +49,7 @@ pi-crew/src/
 
 ### 1.2 Resource inventory
 
-| Resource | Count | Chi tiết |
+| Resource | Count | Details |
 |---|---|---|
 | **Teams** | 6 | default, fast-fix, implementation, parallel-research, research, review |
 | **Workflows** | 6 | default, fast-fix, implementation, parallel-research, research, review |
@@ -59,12 +59,12 @@ pi-crew/src/
 
 ### 1.3 Runtime modes
 
-pi-crew hỗ trợ 2 runtime modes:
+pi-crew supports 2 runtime modes:
 
-| Mode | Mô tả | Ưu điểm | Nhược điểm |
+| Mode | Description | Pros | Cons |
 |---|---|---|---|
-| **live-session** | Tái sử dụng Pi session hiện tại | Nhanh, share provider connection | Không chạy được async/background |
-| **child-process** | Spawn Pi process mới | Chạy được background/async | Cần provider connection riêng |
+| **live-session** | Reuses the current Pi session | Fast, shares the provider connection | Cannot run async/background |
+| **child-process** | Spawns a new Pi process | Can run background/async | Needs its own provider connection |
 
 **Runtime resolution flow:**
 ```
@@ -77,9 +77,9 @@ team action='run' + async=true
 
 ---
 
-## 2. Kết quả test toàn diện
+## 2. Comprehensive test results
 
-### 2.1 Bảng tổng hợp
+### 2.1 Summary table
 
 | Category | Tests | Pass | Fail | Partial |
 |---|---|---|---|---|
@@ -91,13 +91,13 @@ team action='run' + async=true
 | Diagnostics (doctor, validate, help) | 3 | ✅ 3 | 0 | 0 |
 | Portability (export, import) | 2 | ✅ 2 | 0 | 0 |
 | Configuration (settings, autonomy) | 2 | ✅ 2 | 0 | 0 |
-| **Tổng** | **27** | **20** | **6** | **1** |
+| **Total** | **27** | **20** | **6** | **1** |
 
-### 2.2 Chi tiết từng test
+### 2.2 Per-test details
 
 #### ✅ Resource Discovery — 5/5 PASS
 
-| Test | Input | Output | Kết quả |
+| Test | Input | Output | Result |
 |---|---|---|---|
 | `team list` | List all resources | 6 teams, 6 workflows, 10 agents | ✅ |
 | `team get` team | Get team=default | 4 roles (explorer→planner→executor→verifier) | ✅ |
@@ -107,13 +107,13 @@ team action='run' + async=true
 
 #### ✅ Diagnostics — 3/3 PASS
 
-| Test | Input | Output | Kết quả |
+| Test | Input | Output | Result |
 |---|---|---|---|
 | `team doctor` | Full diagnostics | 17/17 checks OK (runtime, filesystem, discovery, validation, drift, schema, async, worktrees) | ✅ |
 | `team validate` | Validate all resources | 10 agents, 6 teams, 6 workflows, 0 issues | ✅ |
 | `team help` | Show help | Full command reference (core, inspection, maintenance, portability, diagnostics) | ✅ |
 
-Doctor checks chi tiết:
+Detailed doctor checks:
 - Runtime: cwd, platform, node, pi, git, config, model — all OK
 - Filesystem: user state, project state, artifacts — all OK
 - Discovery: 10 agents, 6 teams, 6 workflows, 10 model hints — all OK
@@ -124,10 +124,10 @@ Doctor checks chi tiết:
 
 #### ✅ State Management — 6/6 PASS
 
-| Test | Input | Output | Kết quả |
+| Test | Input | Output | Result |
 |---|---|---|---|
 | `team status` | Check run state | Detailed: task graph, events, artifacts, policy decisions | ✅ |
-| `team events` | Get event log | 20+ events từ run.created → task.failed với timestamps | ✅ |
+| `team events` | Get event log | 20+ events from run.created → task.failed with timestamps | ✅ |
 | `team artifacts` | List artifacts | 14 artifacts (prompts, results, metadata, logs, shared) | ✅ |
 | `team summary` | Run overview | Status, goal, tasks, usage summary | ✅ |
 | `team prune` | keep=2, confirm=true | 9 runs pruned, 2 kept, audit trail in prune.jsonl | ✅ |
@@ -135,38 +135,38 @@ Doctor checks chi tiết:
 
 #### ✅ Portability — 2/2 PASS
 
-| Test | Input | Output | Kết quả |
+| Test | Input | Output | Result |
 |---|---|---|---|
 | `team export` | Export completed run | run-export.json + run-export.md created | ✅ |
 | `team import` | Import exported bundle | Bundle imported to .crew/imports/ with README.md | ✅ |
 
 #### ✅ Configuration — 2/2 PASS
 
-| Test | Input | Output | Kết quả |
+| Test | Input | Output | Result |
 |---|---|---|---|
 | `team settings` | Show effective settings | Complete: agent overrides, UI config, autonomous mode | ✅ |
 | `team autonomy` | Show autonomy profile | Profile=suggested, enabled=true, inject policy=true | ✅ |
 
 #### ✅ Planning — 1/1 PASS
 
-| Test | Input | Output | Kết quả |
+| Test | Input | Output | Result |
 |---|---|---|---|
 | `team plan` | goal="Add health-check endpoint" | 4-step plan: explore → plan → execute → verify | ✅ |
 
 #### ❌ Subagent Lifecycle — 0/4 FAIL
 
-| Test | Agent ID | Type | Duration | Output | Kết quả |
+| Test | Agent ID | Type | Duration | Output | Result |
 |---|---|---|---|---|---|
 | Agent(explorer) | agent_mpc423rq_1 | explorer | 305s | Empty | ❌ |
 | Agent(planner) | agent_mpc423rv_2 | planner | 305s | Empty | ❌ |
 | Agent(analyst) | agent_mpc423rw_3 | analyst | 305s | Empty | ❌ |
 | crew_agent(explorer) | agent_mpc423rw_4 | explorer | 305s | Empty | ❌ |
 
-Tất cả đều: spawn thành công (PID tồn tại) → zero output → 305s heartbeat timeout → failed.
+All of them: spawn successfully (PID exists) → zero output → 305s heartbeat timeout → failed.
 
 #### ❌ Team Run Lifecycle — 1 PASS, 2 FAIL, 1 PARTIAL
 
-| Test | Team | Runtime | Kết quả | Chi tiết |
+| Test | Team | Runtime | Result | Details |
 |---|---|---|---|---|
 | implementation async | implementation | child-process | ❌ FAIL | 01_assess heartbeat dead after 300s |
 | `team retry` | — | — | ✅ PASS | Task re-queued successfully |
@@ -175,11 +175,11 @@ Tất cả đều: spawn thành công (PID tồn tại) → zero output → 305s
 
 ---
 
-## 3. Vấn đề nghiêm trọng: `pi --print` bị treo
+## 3. Critical issue: `pi --print` hangs
 
-### 3.1 Mô tả
+### 3.1 Description
 
-**Tất cả 6 background worker failures đều có cùng root cause:** `pi --print` (non-interactive mode) bị treo vô thời hạn.
+**All 6 background worker failures share the same root cause:** `pi --print` (non-interactive mode) hangs indefinitely.
 
 ### 3.2 Reproduce
 
@@ -190,7 +190,7 @@ $ timeout 10 pi --print "say hi"
 EXIT_CODE: 124  (timeout)
 ```
 
-Kết quả: **100% reproducible**. Pi CLI khởi động (in context-mode warning) nhưng block trên provider/model call.
+Result: **100% reproducible**. The Pi CLI starts (prints the context-mode warning) but blocks on the provider/model call.
 
 ### 3.3 Chain of failure
 
@@ -200,36 +200,36 @@ pi-crew background run
   → async-runner.ts: resolve jiti-register.mjs
   → spawn("pi", [...args], { cwd, env })
   → Pi CLI starts, prints "[pi-crew] background loader=jiti"
-  → Pi tries to connect to model provider
+  → Pi tries to connect to the model provider
   → BLOCKS INDEFINITELY — no stdout, no stderr, no error
   → 300,000ms (5 min) heartbeat timeout
   → worker.response_timeout: "No output for 300000ms"
   → task.failed → run.failed
 ```
 
-### 3.4 Tại sao live-session vẫn hoạt động?
+### 3.4 Why does live-session still work?
 
 | Aspect | Live-session | Child-process |
 |---|---|---|
-| Provider connection | **Reuse** parent Pi's connection | Tạo connection mới |
-| Auth context | Share với parent | Phải tự thiết lập |
-| Startup time | Nhanh (no new process) | Chậm (spawn + init) |
-| Background capable | ❌ Không | ✅ Có (nếu provider hoạt động) |
+| Provider connection | **Reuses** the parent Pi's connection | Creates a new connection |
+| Auth context | Shared with parent | Must set up itself |
+| Startup time | Fast (no new process) | Slow (spawn + init) |
+| Background capable | ❌ No | ✅ Yes (if the provider works) |
 
-### 3.5 Nguyên nhân có thể
+### 3.5 Possible causes
 
-| # | Nguyên nhân | Khả năng | Cách verify |
+| # | Cause | Likelihood | How to verify |
 |---|---|---|---|
-| 1 | **API key không inherit** bởi child process env | Cao | Check `sanitizeEnvSecrets()` có filter quá aggressive không |
-| 2 | **Provider endpoint unreachable** từ child process | Trung bình | `curl` đến provider API từ child env |
-| 3 | **Provider rate limiting** (parent + child concurrent) | Trung bình | Check provider response headers |
-| 4 | **jiti loader stall** — TS compilation hangs | Thấp | jiti import thành công (log confirmed) |
+| 1 | **API key not inherited** by the child process env | High | Check whether `sanitizeEnvSecrets()` filters too aggressively |
+| 2 | **Provider endpoint unreachable** from the child process | Medium | `curl` to the provider API from the child env |
+| 3 | **Provider rate limiting** (parent + child concurrent) | Medium | Check provider response headers |
+| 4 | **jiti loader stall** — TS compilation hangs | Low | jiti import succeeded (log confirmed) |
 
-### 3.6 Key files liên quan
+### 3.6 Related key files
 
 ```
 pi-crew/src/runtime/
-├── async-runner.ts       — resolveTypeScriptLoader(), spawn args với --import jiti-register.mjs
+├── async-runner.ts       — resolveTypeScriptLoader(), spawn args with --import jiti-register.mjs
 ├── child-pi.ts           — runChildPi(), response timeout, stdout capture
 │                           buildChildPiSpawnOptions() → { cwd, env: sanitizeEnvSecrets(env) }
 ├── background-runner.ts  — Background entry point
@@ -241,54 +241,54 @@ pi-crew/src/config/defaults.ts
 └── DEFAULT_CHILD_PI.responseTimeoutMs = 5 * 60_000  (300s)
 
 pi-crew/src/utils/env-filter.ts
-└── sanitizeEnvSecrets()  — Filter secret env vars (có thể quá aggressive?)
+└── sanitizeEnvSecrets()  — Filter secret env vars (possibly too aggressive?)
 ```
 
-### 3.7 Khuyến nghị fix
+### 3.7 Recommended fix
 
-1. **Immediate:** Chạy `pi --print "test"` trên terminal để confirm provider connection issue
-2. **Check `sanitizeEnvSecrets()`:** Verify API keys (GOOGLE_API_KEY, MINIMAX_API_KEY, ZAI_API_KEY, etc.) không bị filter
-3. **Thêm error logging:** Capture stderr từ child Pi process vào background.log
-4. **Thêm connection timeout:** Pi CLI nên timeout sau ~30s nếu provider không respond, thay vì block vô hạn
-5. **Test workaround:** Set `PI_TEAMS_MOCK_CHILD_PI=success` để bypass provider call, verify pi-crew logic riêng
+1. **Immediate:** Run `pi --print "test"` in a terminal to confirm the provider connection issue
+2. **Check `sanitizeEnvSecrets()`:** Verify that API keys (GOOGLE_API_KEY, MINIMAX_API_KEY, ZAI_API_KEY, etc.) are not filtered out
+3. **Add error logging:** Capture stderr from the child Pi process into background.log
+4. **Add a connection timeout:** The Pi CLI should time out after ~30s if the provider does not respond, instead of blocking indefinitely
+5. **Test workaround:** Set `PI_TEAMS_MOCK_CHILD_PI=success` to bypass the provider call and verify pi-crew logic in isolation
 
 ---
 
-## 4. Vấn đề phụ: Stale heartbeat notifications sau prune
+## 4. Secondary issue: Stale heartbeat notifications after prune
 
-### 4.1 Mô tả
+### 4.1 Description
 
-Sau khi chạy `team prune`, background watcher vẫn emit "Task heartbeat dead" notifications cho runs đã bị xóa.
+After running `team prune`, the background watcher still emits "Task heartbeat dead" notifications for removed runs.
 
 ### 4.2 Pattern
 
 ```
 team prune --keep=0 --confirm=true   → 9 runs removed
-→ Notification: "agent_mpc423rq_1 heartbeat dead" (run đã prune)
-→ Notification: "agent_mpc423rv_2 heartbeat dead" (run đã prune)
-→ Notification: "agent_mpc423rw_3 heartbeat dead" (run đã prune)
-→ Notification: "agent_mpc423rw_4 heartbeat dead" (run đã prune)
-→ ... (tổng cộng 6+ stale notifications)
+→ Notification: "agent_mpc423rq_1 heartbeat dead" (pruned run)
+→ Notification: "agent_mpc423rv_2 heartbeat dead" (pruned run)
+→ Notification: "agent_mpc423rw_3 heartbeat dead" (pruned run)
+→ Notification: "agent_mpc423rw_4 heartbeat dead" (pruned run)
+→ ... (6+ stale notifications total)
 ```
 
-### 4.3 Nguyên nhân
+### 4.3 Cause
 
-Background watcher duy trì queue của worker health checks. Khi runs bị prune, watcher không deregister ngay — notifications đã trong queue vẫn được emit.
+The background watcher maintains a queue of worker health checks. When runs are pruned, the watcher does not deregister immediately — notifications already in the queue are still emitted.
 
 ### 4.4 Severity: LOW (cosmetic)
 
-### 4.5 Khuyến nghị
+### 4.5 Recommendation
 
-- Background watcher nên check run existence trước khi emit heartbeat alerts
-- Hoặc: watcher nên deregister workers khi runs bị prune
+- The background watcher should check run existence before emitting heartbeat alerts
+- Or: the watcher should deregister workers when runs are pruned
 
 ---
 
-## 5. Vấn đề phụ: Live-session run bị cancel giữa chừng
+## 5. Secondary issue: Live-session run cancelled mid-execution
 
-### 5.1 Mô tả
+### 5.1 Description
 
-Fast-fix team chạy live-session, task `01_explore` hoàn thành thành công nhưng run bị cancelled trước khi `02_execute` bắt đầu.
+A fast-fix team ran in a live-session; task `01_explore` completed successfully but the run was cancelled before `02_execute` started.
 
 ### 5.2 Events
 
@@ -300,55 +300,55 @@ Fast-fix team chạy live-session, task `01_explore` hoàn thành thành công n
 04:12:51 run.cancelled: "This operation was aborted"
 ```
 
-### 5.3 Nguyên nhân có thể
+### 5.3 Possible causes
 
-- Session concurrency limit (chỉ 1 live-session active)
+- Session concurrency limit (only 1 active live-session)
 - User-initiated cancellation
-- Conflict với concurrent test operations
+- Conflict with concurrent test operations
 
 ### 5.4 Severity: MEDIUM
 
 ---
 
-## 6. Tính năng hoạt động ổn định
+## 6. Features working stably
 
-Danh sách các tính năng đã test và hoạt động chính xác:
+A list of features that have been tested and work correctly:
 
 ### Resource Discovery
-- ✅ `team list` — Liệt kê teams, workflows, agents, recent runs
-- ✅ `team get` — Chi tiết team/workflow/agent
-- ✅ `team recommend` — Gợi ý team phù hợp dựa trên goal
-- ✅ `team validate` — Validate tất cả resources
+- ✅ `team list` — Lists teams, workflows, agents, recent runs
+- ✅ `team get` — Details of team/workflow/agent
+- ✅ `team recommend` — Suggests a suitable team based on a goal
+- ✅ `team validate` — Validates all resources
 
 ### Diagnostics
 - ✅ `team doctor` — 17 checks (runtime, filesystem, discovery, drift, schema, async, worktrees)
 - ✅ `team help` — Full command reference
 
 ### State Management
-- ✅ `team status` — Run state với task graph, events, policy decisions
-- ✅ `team events` — Chronological event log chi tiết
-- ✅ `team artifacts` — Liệt kê artifact files (prompts, results, metadata, logs)
+- ✅ `team status` — Run state with task graph, events, policy decisions
+- ✅ `team events` — Detailed chronological event log
+- ✅ `team artifacts` — Lists artifact files (prompts, results, metadata, logs)
 - ✅ `team summary` — Concise run overview
-- ✅ `team prune` — Cleanup runs với audit trail (prune.jsonl)
+- ✅ `team prune` — Cleanup runs with audit trail (prune.jsonl)
 - ✅ `team cancel` — Cancel running/queued runs
 
 ### Portability
-- ✅ `team export` — Export run thành JSON + Markdown
-- ✅ `team import` — Import run bundle, tạo README.md summary
+- ✅ `team export` — Export a run to JSON + Markdown
+- ✅ `team import` — Import a run bundle, create a README.md summary
 
 ### Configuration
 - ✅ `team settings` — Show effective settings (agent overrides, UI, autonomous)
-- ✅ `team autonomy` — Show/set autonomous mode profile
+- ✅ `team autonomy` — Show/set the autonomous mode profile
 
 ### Planning
-- ✅ `team plan` — Tạo execution plan với structured steps
+- ✅ `team plan` — Create an execution plan with structured steps
 
 ### Retry
 - ✅ `team retry` — Re-queue failed tasks
 
 ---
 
-## 7. Configuration hiện tại
+## 7. Current configuration
 
 ### Autonomous Mode
 ```
@@ -381,11 +381,11 @@ DEFAULT_LIVE_SESSION.responseTimeoutMs = 600,000 (10 min)
 
 ---
 
-## 8. Files liên quan
+## 8. Related files
 
-| File | Mô tả |
+| File | Description |
 |---|---|
-| `/home/bom/source/my_pi/pi-crew-test-results.md` | Báo cáo test chi tiết |
+| `/home/bom/source/my_pi/pi-crew-test-results.md` | Detailed test report |
 | `/home/bom/.pi/agent/pi-crew.json` | pi-crew config |
 | `/home/bom/.pi/agent/agents/explorer.md` | Explorer agent config |
 | `/home/bom/.pi/agent/agents/security-reviewer.md` | Security reviewer config |
@@ -397,15 +397,15 @@ DEFAULT_LIVE_SESSION.responseTimeoutMs = 600,000 (10 min)
 
 ## 9. Next Steps
 
-### Ưu tiên cao
-1. **Fix `pi --print` hangs:** Investigate provider connection trong child process
-2. **Check `sanitizeEnvSecrets()`:** Verify không filter API keys cần thiết
-3. **Thêm stderr logging:** Background.log nên capture stderr từ child Pi
+### High priority
+1. **Fix `pi --print` hangs:** Investigate the provider connection in the child process
+2. **Check `sanitizeEnvSecrets()`:** Verify it does not filter out necessary API keys
+3. **Add stderr logging:** background.log should capture stderr from the child Pi
 
-### Ưu tiên trung bình
-4. **Test foreground team to completion:** Verify full workflow lifecycle (explore→plan→execute→verify)
-5. **Stale notification fix:** Background watcher deregister trên prune
+### Medium priority
+4. **Test a foreground team to completion:** Verify the full workflow lifecycle (explore→plan→execute→verify)
+5. **Stale notification fix:** Background watcher deregister on prune
 
-### Ưu tiên thấp
-6. **Configurable heartbeat timeout:** Thay hardcode 300s bằng config value
-7. **Warm pool implementation:** Hiện tại disabled (size=0), cần Pi-side support
+### Low priority
+6. **Configurable heartbeat timeout:** Replace the hardcoded 300s with a config value
+7. **Warm pool implementation:** Currently disabled (size=0), needs Pi-side support

@@ -1,4 +1,4 @@
-# pi-crew Sprint 2 Report — Cắt I/O sync hot path (partial)
+# pi-crew Sprint 2 Report — Cut I/O sync hot path (partial)
 
 Date: 2026-05-14
 Branch: `perf/sprint-2`

@@ -1,7 +1,7 @@
 # Security Issues Report — pi-crew
 
 **Document version:** 3.0  
-**Date:** 2026-06-03 (updated for v0.5.22)  
+**Date:** 2026-06-03 (updated for v0.9.0)  
 **Original Date:** 2026-05-25  
 **Related Issues:** GitHub Issue #16  
 **Severity classification:** Per [OWASP Agent Security](https://github.com/OWASP/www-project-agent-security-for-llm-applications) and [AgentThreatBench](https://github.com/vgudur-dev/AgentThreatBench)
@@ -10,14 +10,14 @@
 
 ## Executive Summary
 
-pi-crew v0.5.22 has undergone **38 rounds of security review**. All known vulnerabilities have been fixed:
+pi-crew v0.9.0 has undergone **38 rounds of security review**. All known vulnerabilities have been fixed:
 
 | Round | Version | Issues Fixed | Severity |
 |-------|---------|-------------|----------|
 | 1-19 | v0.5.5–v0.5.14 | SEC-001 – SEC-007 | CRITICAL → MEDIUM |
 | 20-33 | v0.5.15–v0.5.17 | ReDoS, prototype pollution, path traversal, env leaks | CRITICAL + HIGH |
 | 34-36 | v0.5.18–v0.5.19 | CI exit code, sandbox scope, shell injection, ReDoS regression | HIGH + MEDIUM |
-| 37-38 | v0.5.20–v0.5.22 | Safe-bash bypass, bounded reads, frozen config | HIGH + MEDIUM |
+| 37-38 | v0.5.20–v0.9.0 | Safe-bash bypass, bounded reads, frozen config | HIGH + MEDIUM |
 
 **Total: 3 CRITICAL + 6 HIGH + 3 MEDIUM security issues resolved.**
 
@@ -698,12 +698,12 @@ function assertCustomApiName(api: string): void {
 }
 
 export function registerCustomApi(...): void {
-    assertCustomApiName(api);  // ← Block nếu trùng builtin
+    assertCustomApiName(api);  // ← Block if it collides with a builtin
     customApiRegistry.set(api, {...});
 }
 ```
 
-**Pattern:** Blocklist cho builtin API names, throw error nếu vi phạm.
+**Pattern:** Blocklist for builtin API names; throws an error on violation.
 
 #### B. AgentRegistry — LACKING Protection ❌
 
@@ -714,17 +714,17 @@ export class AgentRegistry {
     readonly #refs = new Map<string, AgentRef>();
     
     register(input: RegisterInput): AgentRef {
-        // ❌ KHÔNG có check trùng với protected names
+        // ❌ No collision check against protected names
         this.#refs.set(ref.id, ref);
         return ref;
     }
     
-    // AgentRef có kind: "main" | "sub" nhưng KHÔNG có "builtin" distinction
-    // → Dynamic agents không được tag để phân biệt với system agents
+    // AgentRef has kind: "main" | "sub" but NO "builtin" distinction
+    // → Dynamic agents are not tagged to distinguish them from system agents
 }
 ```
 
-**Issue:** Giống pi-crew — không có protected name blocklist cho agents.
+**Issue:** Same as pi-crew — no protected-name blocklist for agents.
 
 #### C. sanitizeText — Text Sanitization ✅
 
@@ -734,7 +734,7 @@ export class AgentRegistry {
 export declare function sanitizeText(text: string): string
 ```
 
-**Implementation:** Chỉ sanitize control characters, không phải prompt injection.
+**Implementation:** Only sanitizes control characters, not prompt injection.
 
 ---
 
@@ -749,7 +749,7 @@ A Rust-based Claude Code port/parity project. Contains robust security patterns.
 ```python
 # src/runtime.py
 def bootstrap_session(self, prompt: str, limit: int = 5) -> RuntimeSession:
-    setup_report = run_setup(trusted=True)  # ← Trusted mode bật
+    setup_report = run_setup(trusted=True)  # ← Trusted mode enabled
     system_init_message = build_system_init_message(trusted=True)
 
 # src/system_init.py
@@ -762,7 +762,7 @@ def build_system_init_message(trusted: bool = True) -> str:
     """
 ```
 
-**Pattern:** `trusted` boolean gate cho sensitive operations.
+**Pattern:** `trusted` boolean gate for sensitive operations.
 
 #### B. PermissionMode Enum ✅
 
@@ -785,7 +785,7 @@ fn permission_mode_from_plugin(value: &str) -> Result<PermissionMode, String> {
 }
 ```
 
-**Pattern:** Explicit permission levels với error on unknown.
+**Pattern:** Explicit permission levels with an error on unknown values.
 
 #### C. Source Hint Tracking ✅
 
@@ -796,7 +796,7 @@ fn permission_mode_from_plugin(value: &str) -> Result<PermissionMode, String> {
 class PortingModule:
     name: str
     responsibility: str
-    source_hint: str  # ← Track nguồn gốc: builtin, plugin, skill
+    source_hint: str  # ← Track origin: builtin, plugin, skill
     status: str = 'planned'
 
 def build_execution_registry() -> ExecutionRegistry:
@@ -868,14 +868,14 @@ Contains:
 
 | Pattern | oh-my-pi | claw-code | pi-crew | Recommendation |
 |---------|----------|-----------|---------|----------------|
-| **Builtin name blocklist** | ✅ API registry | ❌ Không có | ❌ **MISSING** | Add to SEC-001 fix |
-| **Source/trust classification** | ❌ Chỉ có sourceId | ✅ `source_hint` | ❌ **MISSING** | Add to SEC-004 fix |
-| **Permission levels** | ❌ Không có | ✅ `PermissionMode` enum | ⚠️ Có nhưng gắn với role | Enhance with claw-code pattern |
-| **Trusted mode** | ❌ Không có | ✅ `trusted=True` | ❌ Không có | Add env-based gating |
-| **Prompt injection sanitize** | ❌ Chỉ text sanitize | ❌ Không có | ❌ **MISSING** | Add OWASP patterns |
-| **Path scope enforcement** | ❌ Không có | ✅ `ToolPermissionContext` | ❌ Không có | Consider for SEC-001 |
-| **Security documentation** | ❌ Không có | ✅ `SECURITY.md` | ❌ Không có | Create `SECURITY.md` |
-| **Denial tracking** | ❌ Không có | ✅ `PermissionDenial` | ❌ Không có | Consider adding |
+| **Builtin name blocklist** | ✅ API registry | ❌ None | ❌ **MISSING** | Add to SEC-001 fix |
+| **Source/trust classification** | ❌ Only sourceId | ✅ `source_hint` | ❌ **MISSING** | Add to SEC-004 fix |
+| **Permission levels** | ❌ None | ✅ `PermissionMode` enum | ⚠️ Present but role-bound | Enhance with claw-code pattern |
+| **Trusted mode** | ❌ None | ✅ `trusted=True` | ❌ None | Add env-based gating |
+| **Prompt injection sanitize** | ❌ Text sanitization only | ❌ None | ❌ **MISSING** | Add OWASP patterns |
+| **Path scope enforcement** | ❌ None | ✅ `ToolPermissionContext` | ❌ None | Consider for SEC-001 |
+| **Security documentation** | ❌ None | ✅ `SECURITY.md` | ❌ None | Create `SECURITY.md` |
+| **Denial tracking** | ❌ None | ✅ `PermissionDenial` | ❌ None | Consider adding |
 
 ---
 
@@ -1025,25 +1025,25 @@ function obfuscateMessages(obfuscator: SecretObfuscator, messages: Message[]): M
 
 **Files:** `rust/crates/runtime/src/permission_enforcer.rs`, `rust/crates/runtime/src/permissions.rs`
 
-Đây là hệ thống permission đầy đủ và chi tiết nhất trong 3 projects:
+This is the most complete and detailed permission system among the three projects:
 
 ```rust
-// PermissionMode — 5 mức độ permission
+// PermissionMode — 5 permission levels
 pub enum PermissionMode {
-    ReadOnly,           // Chỉ đọc, không modify
-    WorkspaceWrite,     // Write trong workspace boundary
-    DangerFullAccess,   // Toàn quyền
-    Prompt,             // Cần confirm từ user
-    Allow,              // Cho phép tất cả (bypass)
+    ReadOnly,           // Read-only, no modifications
+    WorkspaceWrite,     // Write within workspace boundary
+    DangerFullAccess,   // Full access
+    Prompt,             // Requires user confirmation
+    Allow,              // Allow everything (bypass)
 }
 
-// PermissionPolicy — authorization engine đầy đủ
+// PermissionPolicy — full authorization engine
 pub struct PermissionPolicy {
     active_mode: PermissionMode,
     tool_requirements: BTreeMap<String, PermissionMode>,  // Per-tool requirements
-    allow_rules: Vec<PermissionRule>,      // Pattern matching cho phép
-    deny_rules: Vec<PermissionRule>,       // Pattern matching cho chặn
-    ask_rules: Vec<PermissionRule>,          // Cần prompt user
+    allow_rules: Vec<PermissionRule>,      // Allow pattern matching
+    deny_rules: Vec<PermissionRule>,       // Deny pattern matching
+    ask_rules: Vec<PermissionRule>,          // Requires user prompt
     denied_tools: Vec<String>,               // Unconditional denials
 }
 
@@ -1055,7 +1055,7 @@ impl PermissionEnforcer {
     }
     
     pub fn check_file_write(&self, path: &str, workspace_root: &str) -> EnforcementResult {
-        // Workspace boundary enforcement — rất quan trọng!
+        // Workspace boundary enforcement — very important!
     }
     
     pub fn check_bash(&self, command: &str) -> EnforcementResult {
@@ -1064,27 +1064,27 @@ impl PermissionEnforcer {
 }
 
 // PermissionRule — pattern matching syntax: "tool(input_prefix:*)"
-// Ví dụ: "bash(git:*)" → cho phép tất cả git commands
-// Ví dụ: "bash(rm -rf:*)" → deny rm -rf
+// Example: "bash(git:*)" → allow all git commands
+// Example: "bash(rm -rf:*)" → deny rm -rf
 ```
 
-**Key Features của hệ thống claw-code:**
+**Key features of the claw-code system:**
 
 | Feature | Description |
 |---------|-------------|
-| **Tool-specific requirements** | Mỗi tool có required permission riêng |
+| **Tool-specific requirements** | Each tool has its own required permission |
 | **Rule-based allow/deny** | Pattern matching `tool(input)` |
-| **Unconditional denials** | `denied_tools` list — không bypass được |
-| **Workspace boundary** | `check_file_write()` đảm bảo writes không ra ngoài workspace |
-| **Bash classification** | `is_read_only_command()` heuristic cho bash |
-| **Hook overrides** | `PermissionContext` cho phép external override |
-| **Comprehensive tests** | 20+ test cases cho mọi scenario |
+| **Unconditional denials** | `denied_tools` list — cannot be bypassed |
+| **Workspace boundary** | `check_file_write()` ensures writes stay within the workspace |
+| **Bash classification** | `is_read_only_command()` heuristic for bash |
+| **Hook overrides** | `PermissionContext` allows external overrides |
+| **Comprehensive tests** | 20+ test cases for every scenario |
 
-**pi-crew nên adopt:**
-1. `PermissionMode` enum với 5 levels
-2. `PermissionPolicy` với rules cho agent registration
-3. `denied_agents` list (tương tự `denied_tools`)
-4. Workspace boundary cho skill loading
+**pi-crew should adopt:**
+1. `PermissionMode` enum with 5 levels
+2. `PermissionPolicy` with rules for agent registration
+3. `denied_agents` list (similar to `denied_tools`)
+4. Workspace boundary for skill loading
 
 ---
 
@@ -1107,7 +1107,7 @@ function assertCustomApiName(api: string): void {
     }
 }
 
-// Pattern: Assert trước khi register, throw on violation
+// Pattern: Assert before registering, throw on violation
 ```
 
 **pi-crew SEC-001 fix:**
@@ -1133,17 +1133,17 @@ function assertAgentName(name: string): void {
 **File:** `packages/coding-agent/src/system-prompt.ts`
 
 ```typescript
-// ⚠️ KHÔNG có sanitization cho SYSTEM.md content!
+// ⚠️ NO sanitization for SYSTEM.md content!
 export async function loadSystemPromptFiles(options): Promise<string | null> {
     const result = await loadCapability(systemPromptCapability.id, { cwd: resolvedCwd });
-    // result.items[0].content → injected directly vào system prompt
+    // result.items[0].content → injected directly into the system prompt
     return result.items.find(item => item.level === "project")?.content ?? null;
 }
 ```
 
-**Issue:** Giống pi-crew SEC-002 — project-level SYSTEM.md không được sanitize.
+**Issue:** Same as pi-crew SEC-002 — project-level SYSTEM.md is not sanitized.
 
-**Pattern cần fix:** Áp dụng OWASP Agent Memory Guard patterns trước khi inject.
+**Pattern to fix:** Apply OWASP Agent Memory Guard patterns before injecting.
 
 ---
 
@@ -1152,7 +1152,7 @@ export async function loadSystemPromptFiles(options): Promise<string | null> {
 ```typescript
 // src/security/permission-mode.ts
 
-// Từ claw-code:
+// From claw-code:
 export enum PermissionMode {
     ReadOnly = "read_only",
     WorkspaceWrite = "workspace_write",
@@ -1161,7 +1161,7 @@ export enum PermissionMode {
     Allow = "allow",
 }
 
-// Từ oh-my-pi:
+// From oh-my-pi:
 export const PROTECTED_AGENT_NAMES = new Set([
     "executor", "test-engineer", "explorer", "planner",
     "analyst", "critic", "reviewer", "verifier", "writer",
@@ -1173,7 +1173,7 @@ export interface AgentPermissionPolicy {
     deniedAgents: string[];  // Unconditional denials
 }
 
-// Từ claw-code pattern:
+// From the claw-code pattern:
 export const AGENT_REGISTRATION_POLICY: AgentPermissionPolicy = {
     defaultMode: PermissionMode.ReadOnly,
     agentRequirements: {

@@ -1,130 +1,130 @@
-# Phân tích: Chuyển pi-crew hoàn toàn sang in-process execution
+# Analysis: Migrating pi-crew fully to in-process execution
 
-> Ngày: 2026-05-12  
-> Câu hỏi: Nếu chuyển hẳn sang in-process giống pi-subagents3 thì sao?
+> Date: 2026-05-12  
+> Question: What if we move entirely to in-process like pi-subagents3?
 
 ---
 
-## 1. Hiện trạng
+## 1. Current state
 
-pi-crew có **3 runtime modes**, child-process là default:
+pi-crew has **3 runtime modes**, with child-process as the default:
 
 ```
-scaffold      → không chạy workers (dry-run)
-child-process → spawn `pi` CLI subprocess per worker (DEFAULT)
+scaffold      → no workers run (dry-run)
+child-process → spawn a `pi` CLI subprocess per worker (DEFAULT)
 live-session  → createAgentSession() in-process per worker
 ```
 
-### Code liên quan child-process
+### Code related to child-process
 
-| File | LOC | Vai trò |
+| File | LOC | Role |
 |---|---|---|
 | `child-pi.ts` | 461 | Subprocess lifecycle, stdout parsing, kill process tree |
-| `pi-args.ts` | 165 | Build CLI args cho child `pi` process |
-| `pi-spawn.ts` | 167 | Detect `pi` binary path (local/global) |
-| `post-exit-stdio-guard.ts` | 86 | Drain child stdout sau exit, hard kill timer |
-| `async-runner.ts` | 153 | Spawn background team runs ( detached process) |
-| **Tổng** | **1.032** | **Code chỉ dùng cho child-process** |
+| `pi-args.ts` | 165 | Build CLI args for the child `pi` process |
+| `pi-spawn.ts` | 167 | Detect the `pi` binary path (local/global) |
+| `post-exit-stdio-guard.ts` | 86 | Drain child stdout after exit, hard kill timer |
+| `async-runner.ts` | 153 | Spawn background team runs (detached process) |
+| **Total** | **1,032** | **Code only used by child-process** |
 
-### Code liên quan live-session (đã có sẵn)
+### Code related to live-session (already present)
 
-| File | LOC | Vai trò |
+| File | LOC | Role |
 |---|---|---|
 | `live-session-runtime.ts` | 600 | In-process execution, soft turn limit, yield, custom tools |
 | `runtime-resolver.ts` | 92 | Auto-detect available runtime |
 | `task-runner/live-executor.ts` | 95 | Adapter: live-session → task-runner interface |
 
-### Files sử dụng child-process path
+### Files that use the child-process path
 
-- `task-runner.ts` — 8 references, ~120 dòng logic riêng child-process (heartbeat, progress, model retry)
+- `task-runner.ts` — 8 references, ~120 lines of child-process-specific logic (heartbeat, progress, model retry)
 - `register.ts` — `terminateActiveChildPiProcesses()` cleanup
 - `doctor.ts` — diagnose child-process issues
 - `async-runner.ts` — spawn background team runs
 
-### Tests liên quan
+### Related tests
 
 - ~37 test files reference child-process / mock child
-- ~3 test files reference live-session mock
-- Tất cả integration tests dùng `PI_TEAMS_MOCK_CHILD_PI` — **cần rewrite** nếu bỏ child-process
+- ~3 test files reference the live-session mock
+- All integration tests use `PI_TEAMS_MOCK_CHILD_PI` — **would need rewriting** if child-process is dropped
 
 ---
 
-## 2. Nếu chuyển hẳn sang in-process
+## 2. If we move fully to in-process
 
-### 2.1 Những gì ĐƯỢC
+### 2.1 What we GAIN
 
-#### Lợi tức tức thì
+#### Immediate benefits
 
-| Metric | child-process | in-process | Cải thiện |
+| Metric | child-process | in-process | Improvement |
 |---|---|---|---|
-| Memory / worker | ~150 MB | ~15 MB | **10× nhẹ hơn** |
-| 4 workers peak | ~600 MB thêm | ~60 MB thêm | **540 MB tiết kiệm** |
-| Startup / worker | 2-4s | 200-500ms | **8× nhanh hơn** |
-| Team startup (3 phases) | 6-12s overhead | ~1s overhead | **6-12× nhanh hơn** |
-| Steering | ❌ | ✅ | **Tính năng mới** |
-| Resume | ❌ | ✅ | **Tính năng mới** |
-| Context inheritance | ❌ | ✅ (parentContext) | **Tính năng mới** |
-| Live tool activity | ❌ | ✅ | **Tính năng mới** |
+| Memory / worker | ~150 MB | ~15 MB | **10× lighter** |
+| 4 workers peak | ~600 MB added | ~60 MB added | **540 MB saved** |
+| Startup / worker | 2-4s | 200-500ms | **8× faster** |
+| Team startup (3 phases) | 6-12s overhead | ~1s overhead | **6-12× faster** |
+| Steering | ❌ | ✅ | **New feature** |
+| Resume | ❌ | ✅ | **New feature** |
+| Context inheritance | ❌ | ✅ (parentContext) | **New feature** |
+| Live tool activity | ❌ | ✅ | **New feature** |
 | Yield/submit_result | ✅ (JSON event) | ✅ (custom tool) | Parity |
 | Worktree isolation | ✅ | ✅ | Parity |
 
-#### Lợi tức kiến trúc
+#### Architectural benefits
 
-- **Xóa ~1.000 LOC** subprocess management code
-- Đơn giản hóa `task-runner.ts` (bỏ 120 dòng child-process logic)
-- Bỏ `post-exit-stdio-guard.ts`, `pi-spawn.ts`, `pi-args.ts` subprocess overhead
-- Bỏ `responseTimeoutMs`, `hardKillMs`, `postExitStdioGuardMs` — không cần kill process tree
-- **Zero npm dependencies cho execution** (hiện cần `jiti` cho async-runner TypeScript loading)
+- **Delete ~1,000 LOC** of subprocess management code
+- Simplify `task-runner.ts` (remove 120 lines of child-process logic)
+- Remove `post-exit-stdio-guard.ts`, `pi-spawn.ts`, `pi-args.ts` subprocess overhead
+- Remove `responseTimeoutMs`, `hardKillMs`, `postExitStdioGuardMs` — no need to kill a process tree
+- **Zero npm dependencies for execution** (currently requires `jiti` for async-runner TypeScript loading)
 
-### 2.2 Những gì MẤT
+### 2.2 What we LOSE
 
 #### ❌ Process isolation — biggest loss
 
 ```
 child-process:  worker crash → worker dies → parent continues
-in-process:     worker crash → có thể crash parent → toàn bộ team mất
+in-process:     worker crash → can crash parent → entire team lost
 ```
 
-Pi SDK `createAgentSession()` đã handle phần lớn errors, nhưng:
-- **Unhandled promise rejection** trong session
-- **Infinite loop** trong custom tool
-- **OOM** — một session ăn hết memory ảnh hưởng tất cả
-- **Node.js segfault** — rare nhưng khi xảy ra = chết hết
+The Pi SDK `createAgentSession()` handles most errors, but:
+- **Unhandled promise rejection** within a session
+- **Infinite loop** inside a custom tool
+- **OOM** — one session consuming all memory affects everything
+- **Node.js segfault** — rare, but when it happens = total death
 
 #### ❌ Async background team runs
 
-`async-runner.ts` spawn một **detached process** chạy team khi user close terminal. In-process không thể — process chết khi terminal close.
+`async-runner.ts` spawns a **detached process** to run a team when the user closes the terminal. In-process cannot do this — the process dies when the terminal closes.
 
-**Giải pháp:** Giữ `async-runner.ts` riêng cho background runs — nó spawn cả team runner, không phải individual workers.
+**Solution:** Keep `async-runner.ts` specifically for background runs — it spawns the entire team runner, not individual workers.
 
-#### ❌ Depth guard đơn giản
+#### ❌ Simple depth guard
 
-`checkCrewDepth()` đếm `PI_CREW_PARENT_PID` env var. In-process không có process boundary → đếm depth khó hơn. Cần dùng global counter hoặc thread-local.
+`checkCrewDepth()` counts the `PI_CREW_PARENT_PID` env var. In-process has no process boundary → counting depth is harder. A global counter or thread-local equivalent is needed.
 
-#### ❌ 37+ test files cần update
+#### ❌ 37+ test files need updating
 
-Tất cả integration tests dùng `PI_TEAMS_MOCK_CHILD_PI`. Cần chuyển sang `PI_CREW_MOCK_LIVE_SESSION` hoặc viết mock mới.
+All integration tests use `PI_TEAMS_MOCK_CHILD_PI`. They would need to switch to `PI_CREW_MOCK_LIVE_SESSION` or have new mocks written.
 
 #### ❌ `_CrewRuntimeKind` type union
 
-`"scaffold" | "child-process" | "live-session"` → nếu bỏ child-process thì chỉ còn `"scaffold" | "in-process"`. Breaking change cho config.
+`"scaffold" | "child-process" | "live-session"` → if child-process is dropped, only `"scaffold" | "in-process"` remains. Breaking change for config.
 
-### 2.3 Rủi ro cụ thể
+### 2.3 Specific risks
 
-| Rủi ro | Mức độ | Chi tiết |
+| Risk | Severity | Details |
 |---|---|---|
-| Parent crash | **Medium** | Unhandled error in agent session → parent dies. Pi SDK wraps大部分 nhưng không phải 100%. |
-| Memory pressure | **Medium** | 4 in-process sessions + context windows có thể chiếm >500MB trong cùng heap. V8 GC pause. |
-| Extension conflicts | **Low** | In-process extensions có thể conflict (global state, tool registry). Đã có filter nhưng edge cases. |
-| Recursive team calls | **Low** | `team` tool trong agent session → infinite recursion. Đã filter nhưng cần guarantee. |
-| Background runs | **Solved** | Giữ `async-runner.ts` riêng, chỉ spawn 1 detached process cho full team. |
-| Breaking config | **Low** | User đang set `mode: "child-process"` → cần migration path. |
+| Parent crash | **Medium** | Unhandled error in agent session → parent dies. The Pi SDK wraps most of them but not 100%. |
+| Memory pressure | **Medium** | 4 in-process sessions + context windows can consume >500MB within the same heap. V8 GC pauses. |
+| Extension conflicts | **Low** | In-process extensions can conflict (global state, tool registry). Filtering exists but there are edge cases. |
+| Recursive team calls | **Low** | The `team` tool inside an agent session → infinite recursion. Already filtered but a guarantee is needed. |
+| Background runs | **Solved** | Keep `async-runner.ts` separate; it only spawns 1 detached process for the full team. |
+| Breaking config | **Low** | Users currently setting `mode: "child-process"` → need a migration path. |
 
 ---
 
-## 3. Hai hướng đi
+## 3. Two directions
 
-### Hướng A: Bỏ hoàn toàn child-process (giống pi-subagents3)
+### Direction A: Drop child-process entirely (like pi-subagents3)
 
 ```
                  ┌─────────────────────────┐
@@ -140,15 +140,15 @@ Tất cả integration tests dùng `PI_TEAMS_MOCK_CHILD_PI`. Cần chuyển sang
                  └─────────────────────────┘
 ```
 
-**Xóa:** `child-pi.ts`, `pi-args.ts`, `pi-spawn.ts`, `post-exit-stdio-guard.ts` (~879 LOC)  
-**Giữ:** `async-runner.ts` (cho background team runs — spawn 1 process cho cả team, không phải per-worker)  
-**Đổi:** `task-runner.ts` → bỏ child-process branch, chỉ dùng live-session  
-**Đổi:** Tất cả 37+ test files  
+**Delete:** `child-pi.ts`, `pi-args.ts`, `pi-spawn.ts`, `post-exit-stdio-guard.ts` (~879 LOC)  
+**Keep:** `async-runner.ts` (for background team runs — spawns 1 process for the whole team, not per-worker)  
+**Change:** `task-runner.ts` → drop the child-process branch, use only live-session  
+**Change:** All 37+ test files  
 
-**Pros:** Clean architecture, đơn giản nhất, maintenance thấp nhất  
-**Cons:** Mất crash isolation cho per-worker, nhiều test cần rewrite
+**Pros:** Clean architecture, simplest, lowest maintenance  
+**Cons:** Loses per-worker crash isolation; many tests need rewriting
 
-### Hướng B: Live-session default + child-process opt-in (khuyến nghị)
+### Direction B: Live-session default + child-process opt-in (recommended)
 
 ```
                  ┌─────────────────────────────────┐
@@ -162,26 +162,26 @@ Tất cả integration tests dùng `PI_TEAMS_MOCK_CHILD_PI`. Cần chuyển sang
                  └──────────┴───────────────────────┘
 ```
 
-**Đổi:** `runtime-resolver.ts` → `"auto"` prefer live-session  
-**Giữ:** Tất cả child-process code (fallback)  
-**Giữ:** Tất cả tests  
-**Thêm:** Config `"riskyIsolation": true"` cho executor role auto-use child-process  
+**Change:** `runtime-resolver.ts` → `"auto"` prefers live-session  
+**Keep:** All child-process code (as fallback)  
+**Keep:** All tests  
+**Add:** Config `"riskyIsolation": true` so the executor role auto-uses child-process  
 
-**Pros:** Best of both worlds, zero breaking change  
-**Cons:** Vẫn maintain 2 code paths
+**Pros:** Best of both worlds, zero breaking changes  
+**Cons:** Still maintaining 2 code paths
 
 ---
 
-## 4. Khuyến nghị: Hướng B
+## 4. Recommendation: Direction B
 
-**Không nên bỏ child-process hoàn toàn** — quá rủi ro cho production. Thay vào đó:
+**Do not drop child-process entirely** — too risky for production. Instead:
 
-### Bước 1: Đổi default runtime (nhanh, ít rủi ro)
+### Step 1: Change the default runtime (fast, low risk)
 
 ```typescript
 // runtime-resolver.ts
-// Trước: "auto" → luôn child-process
-// Sau:   "auto" → thử live-session, fallback child-process
+// Before: "auto" → always child-process
+// After:  "auto" → try live-session, fall back to child-process
 
 export async function resolveCrewRuntime(config, env) {
     const requestedMode = config.runtime?.mode ?? "auto";
@@ -197,7 +197,7 @@ export async function resolveCrewRuntime(config, env) {
 }
 ```
 
-### Bước 2: Thêm per-role isolation policy
+### Step 2: Add a per-role isolation policy
 
 ```json
 // crew-config.json
@@ -213,38 +213,38 @@ export async function resolveCrewRuntime(config, env) {
 }
 ```
 
-### Bước 3: Observability cho in-process errors
+### Step 3: Observability for in-process errors
 
 ```typescript
-// Wrap session.prompt() với global error handler
+// Wrap session.prompt() with a global error handler
 process.on('unhandledRejection', (err) => {
     logInternalError('live-session.unhandled', err);
     // Don't crash — attempt recovery
 });
 ```
 
-### Lợi tức dự kiến Hướng B
+### Expected benefits of Direction B
 
-| | Hiện tại | Sau Bước 1 | Sau Bước 2 |
+| | Current | After Step 1 | After Step 2 |
 |---|---|---|---|
 | **Default runtime** | child-process | live-session (auto) | live-session + per-role |
-| **Memory (4 workers)** | ~910 MB | ~370 MB | ~450 MB (mix) |
-| **Startup** | 2-4s/worker | 200-500ms/worker | Mix |
+| **Memory (4 workers)** | ~910 MB | ~370 MB | ~450 MB (mixed) |
+| **Startup** | 2-4s/worker | 200-500ms/worker | Mixed |
 | **Crash isolation** | ✅ all | ✅ fallback | ✅ risky roles |
 | **Steering** | ❌ | ✅ | ✅ |
 | **Breaking changes** | — | None | None |
-| **Code xóa** | — | 0 | 0 (giữ fallback) |
-| **Tests cần đổi** | — | 0 | 0 |
+| **Code deleted** | — | 0 | 0 (keep fallback) |
+| **Tests to change** | — | 0 | 0 |
 
 ---
 
-## 5. Kết luận
+## 5. Conclusion
 
-**Không nên chuyển hẳn 100% in-process.** Lý do:
+**Do not move 100% to in-process.** Reasons:
 
-1. **Crash isolation quá quan trọng** cho executor/test-engineer roles — những agent này chạy code, write files, có thể infinite loop
-2. **Background runs cần detached process** — không thể in-process
-3. **37+ test files cần rewrite** — chi phí migration cao
-4. **Breaking change** cho users đang dùng `mode: "child-process"`
+1. **Crash isolation is too important** for executor/test-engineer roles — these agents run code, write files, and can infinite-loop
+2. **Background runs need a detached process** — impossible in-process
+3. **37+ test files need rewriting** — high migration cost
+4. **Breaking change** for users currently using `mode: "child-process"`
 
-**Thay vào đó: Đổi default sang live-session + giữ child-process làm fallback/opt-in.** Đây chính là thiết kế sẵn của `resolveCrewRuntime()` — chỉ cần flip default trong `"auto"` mode. Zero code xóa, zero breaking change, users tự chọn khi cần isolation.
+**Instead: Change the default to live-session + keep child-process as a fallback/opt-in.** This is precisely the design already built into `resolveCrewRuntime()` — just flip the default in `"auto"` mode. Zero code deleted, zero breaking changes, and users choose isolation when they need it.

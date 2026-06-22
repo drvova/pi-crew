@@ -1,5 +1,35 @@
 # pi-crew
 
+> ## ⚠️ IMPORTANT — Read before using
+>
+> **pi-crew is a sub-agent orchestration layer that was developed almost entirely
+> by AI, for the author's own workflow.** It is **not** a hardened, audited
+> product. Here's the honest framing:
+>
+> - **AI-generated code, limited human review.** The vast majority of pi-crew
+>   was written and iterated on by autonomous AI agents. While every change
+>   goes through static review + runtime tests, I (the author) have not
+>   line-by-line verified everything. There will be bugs, edge cases, and
+>   behaviors I haven't anticipated.
+> - **It can spawn processes, run shell commands, and write files on your
+>   behalf.** Dynamic workflows (`.dwf.ts`) and goal loops run with the same
+>   privileges as your Pi session — treat any `.dwf.ts` like `node script.js`
+>   you downloaded from the internet.
+> - **Built for *my* needs, not yours.** This scratches a personal itch. It
+>   likely won't fit every workflow, team setup, or risk tolerance — and
+>   that's fine.
+>
+> **If that sounds too risky, don't use it** — no hard feelings.
+>
+> **If you still want to use it**, the safest path is to **fork it, read the
+>   parts you'll touch, and adapt it to your own setup.** If you find a bug,
+>   a footgun, or a sharp edge, please open an issue or send a note — your
+>   feedback is genuinely appreciated. Thanks. ✌️
+>
+> See also: [SECURITY-ISSUES.md](SECURITY-ISSUES.md),
+> [docs/dynamic-workflows.md](docs/dynamic-workflows.md#security-model-important)
+> (trust model), and the [Known limitations](#known-limitations) section below.
+
 **Coordinate AI agent teams inside [Pi](https://github.com/nicekate/pi-coding-agent).**
 
 pi-crew is a Pi extension that orchestrates autonomous multi-agent workflows — research, implementation, review, testing, and more — with durable state, parallel execution, worktree isolation, and safe defaults.
@@ -9,12 +39,50 @@ npm: pi-crew
 repo: https://github.com/baphuongna/pi-crew
 ```
 
-**v0.8.11**: See [CHANGELOG.md](CHANGELOG.md).
+**v0.9.0**: See [CHANGELOG.md](CHANGELOG.md).
 
-### Highlights (v0.6.4 → v0.8.11)
+### Highlights (v0.6.4 → v0.9.0)
 
 A long arc of **trust, cliff-resilience, and robustness** work. Principle: *build
 trust and cliff-resilience, stay lean, delete before adding.*
+
+#### v0.9.0 — goal loops + dynamic workflows (2026-06-18)
+Two new features, both modeled on Claude Code, built on a shared `runKind`
+background-dispatch discriminator.
+
+- **🎯 Autonomous goal loops** — `team action='goal'` runs a self-directed
+  multi-turn loop: a **worker** does a turn, a separate **LLM judge**
+  (capability-locked, no tools) evaluates the transcript + verification against
+  the objective, and on "not-achieved" the reason is fed into the next turn's
+  prompt. Stops on `achieved` / `maxTurns` / budget / `BLOCKED:` / user `stop`.
+  See [docs/goals.md](docs/goals.md).
+- **📜 Dynamic workflows (`.dwf.ts`)** — author orchestration as a TypeScript
+  script (JS loops/branch/cross-review) instead of a static step list. Runs in
+  the background, spawns subagents via `ctx.agent()`/`ctx.fanOut()`, holds
+  intermediate results in JS variables, and only `ctx.setResult()` reaches the
+  main context. `workflow-create`/`-delete` are ACE-gated (`confirm:true`,
+  user-initiated). See [docs/dynamic-workflows.md](docs/dynamic-workflows.md).
+- **🛡️ Goal-wrap** (RFC v0.5 vision) — apply the goal completion-guarantee to
+  existing builtin workflows (`implementation`, `fast-fix`, `default`) via
+  per-workflow `.crew/config.json` toggle. Single-step workflows goal-wrap
+  end-to-end; multi-step workflows auto-downgrade to a normal team-run because
+  they crash non-deterministically under the V8/libuv event-loop (see [Known
+  limitations](#known-limitations)).
+- **🔐 Phase 1 integrity hardening** (P1a–P1g) — verification bookend snapshots,
+  anti-oscillation (`stuck` non-terminal + resumable), budget enforcement
+  (required or explicit opt-out), nonce-token feedback sanitization, secret
+  redaction at artifact-write (O(n) fix), global worker cap + workspace lock
+  (O_EXCL, startTime-safe). Runtime-verified: B2 confused-deputy defended.
+- **🧪 Phase 1.5 fast-follow** — opt-in mitigation toggles for residual risks:
+  `PI_CREW_VERIFICATION_SANITIZE_ENV=1` (strip provider secrets from the
+  verification subprocess), `PI_CREW_VERIFICATION_WORKTREE=1` (run verification
+  in a pristine git worktree at the T_snap commit SHA),
+  `PI_CREW_BG_REPORT_ON_FATAL=1` (V8 diagnostic report on fatal).
+- **🐛 TDZ fix** (Phase 1.5 #4) — live `team action='run' workflow='<dynamic>'`
+  was failing with a misleading "must export a default async function" error.
+  Root cause was a Temporal Dead Zone race in `team-tool/run.ts` when loaded via
+  the full Pi extension pipeline (`index.ts → … → run.ts`). Fixed by
+  `let`→`var` on the latch + lazy dynamic imports at call sites.
 
 #### v0.8.x — hardening & reliability (2026-06-17)
 - **🛠️ Split-scope install fix (v0.8.11)** — `team` runs no longer crash with
@@ -584,12 +652,51 @@ Stats: **366 source files** (70K lines) · **506 test files** (66K lines) · **4
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common errors, recovery, and error-code reference (E001–E012) |
 | [docs/architecture.md](docs/architecture.md) | Internal architecture + run flow |
 | [docs/runtime-flow.md](docs/runtime-flow.md) | Runtime execution details |
+| [docs/goals.md](docs/goals.md) | **v0.9.0** Autonomous goal loops (`team action='goal'`) |
+| [docs/dynamic-workflows.md](docs/dynamic-workflows.md) | **v0.9.0** `.dwf.ts` script runtime + trust model |
 | [docs/live-mailbox-runtime.md](docs/live-mailbox-runtime.md) | Mailbox + live-session runtime |
 | [docs/publishing.md](docs/publishing.md) | Release & publish process |
 | [docs/next-upgrade-roadmap.md](docs/next-upgrade-roadmap.md) | Future upgrade roadmap |
 | [schema.json](schema.json) | Config JSON schema |
 
 Research docs (not in package): [`docs/pi-crew-research/`](https://github.com/baphuongna/pi-crew/tree/main/docs) — audits, deep research, distillation notes.
+
+---
+
+## Known limitations
+
+This is AI-developed software built for a personal workflow. These are the
+sharp edges I'm aware of — there are almost certainly others I'm not.
+
+- **Multi-step goal-wrap crashes non-deterministically.** Goal-wrapping
+  multi-step builtin workflows (`fast-fix`, `default`) can hit a V8/libuv
+  event-loop race that kills the background process with no signal, no core,
+  and no V8 diagnostic report (8 investigation attempts: gdb, strace, perf,
+  `--report-on-fatalerror`, sync-fs workarounds, worker-thread atomic writer —
+  see `research-findings/goal-workflow/17-PHASE1.5-CRASH-INVESTIGATION-RFC.md`).
+  **Mitigation:** multi-step workflows silently auto-downgrade to a normal
+  team-run (no goal-wrap layer); single-step workflows (`implementation`)
+  goal-wrap end-to-end.
+- **`.dwf.ts` scripts are NOT sandboxed in v1.** The `WorkflowCtx` is
+  `Object.freeze()`d, but the script runs in plain module scope with full
+  `require`/`import`/`process` access (postinstall-equivalent trust).
+  `isolated-vm` (real V8 isolate) is planned for a future release. Only place
+  `.dwf.ts` files you have reviewed. See
+  [docs/dynamic-workflows.md#security-model-important](docs/dynamic-workflows.md#security-model-important).
+- **Editor/agent file caching.** After editing a loaded pi-crew source file,
+  restart the Pi session for changes to take effect (jiti in-memory cache).
+  Editing a `.dwf.ts` in place while a run is mid-flight can serve a stale
+  module body; rename the file or restart Pi to force a fresh load.
+- **Verification integrity is best-effort against adversarial workers.** The
+  bookend snapshot (P1a) and git-worktree sandbox (Phase 1.5 #2, opt-in)
+  raise the bar, but a worker in the same process can still tamper with files
+  outside the snapshot window. Full isolation requires the planned sandbox.
+- **Single maintainer + AI review.** Every change ships after 2+ consecutive
+  clean static-review rounds + runtime tests, but there's no independent human
+  audit. Fork and read before trusting anything that touches your data.
+
+If you hit any of these — or a new one — please
+[open an issue](https://github.com/baphuongna/pi-crew/issues).
 
 ---
 

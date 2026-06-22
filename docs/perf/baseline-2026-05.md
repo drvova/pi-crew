@@ -79,18 +79,18 @@ $env:BASELINE = "test/bench/baseline-2026-05.json"
 
 CPU profile: `.profile/startup-2026-05-14T14-38-20-180Z.cpuprofile` (open in Chrome DevTools → Performance → Load profile).
 
-> `registerMs` thấp hơn bench register-startup vì profile chạy 5 iter trong cùng một process (module cache nóng sau iter 1). Bench `register-startup` mới phản ánh cold-start thực.
+> `registerMs` is lower than the register-startup bench because the profile runs 5 iters in the same process (the module cache is warm after iter 1). The `register-startup` bench is what reflects the actual cold start.
 
-## Sprint targets (so với baseline trên)
+## Sprint targets (vs. the baseline above)
 
-| Metric | Baseline | Target sau khi xong toàn bộ kế hoạch | Sprint kỳ vọng |
+| Metric | Baseline | Target after completing the full plan | Expected sprint |
 |---|---|---|---|
 | register-startup.import.p95 | 655 ms | ≤ 400 ms (lazy) / ≤ 200 ms (bundled) | 2 / 5 |
-| register-startup.register.p95 | 27.5 ms | ≤ 25 ms (giữ nguyên) | — |
-| render-flush.p95 | 0.36 ms | ≤ 0.5 ms (giữ nguyên) | — |
+| register-startup.register.p95 | 27.5 ms | ≤ 25 ms (keep as-is) | — |
+| render-flush.p95 | 0.36 ms | ≤ 0.5 ms (keep as-is) | — |
 | snapshot-cache.cold.p95 | 3.06 ms | ≤ 2.1 ms (-30%) | 1, 2 |
 | snapshot-cache.warm.p95 | 3.06 ms | ≤ 1.5 ms (-50%) | 1, 2 |
-| dashboard FPS khi run đang chạy | n/a | +50% | 3 |
+| dashboard FPS while a run is active | n/a | +50% | 3 |
 | events.jsonl tail 32 KB parse p95 | n/a | < 5 ms | 2 |
 | cancel round-trip | n/a | < 200 ms | 4 |
 
@@ -108,6 +108,6 @@ CPU profile: `.profile/startup-2026-05-14T14-38-20-180Z.cpuprofile` (open in Chr
 
 ## Caveats
 
-- Baseline được ghi trên 1 máy Windows duy nhất. Các máy khác có CPU/disk khác nhau sẽ ra số khác. Khi cần re-baseline (Node major bump, OS upgrade, máy CI khác), copy `results.json → baseline.json` và viết file mới `baseline-<date>.md`.
-- `register-startup` bench tốn ~13 s (20 iter × 600 ms); CI nên giữ. Local có thể `BENCH_ITERS=5` để debug nhanh.
-- Bench không chạy trong `npm test` để giữ test suite nhanh; trigger riêng qua `npm run bench` hoặc CI step riêng.
+- The baseline was recorded on a single Windows machine. Other machines with different CPU/disk will produce different numbers. When you need to re-baseline (Node major bump, OS upgrade, different CI machine), copy `results.json → baseline.json` and write a new file `baseline-<date>.md`.
+- The `register-startup` bench takes ~13 s (20 iters × 600 ms); keep it in CI. Locally you can set `BENCH_ITERS=5` for fast debugging.
+- The bench does not run as part of `npm test` to keep the test suite fast; trigger it separately via `npm run bench` or a dedicated CI step.

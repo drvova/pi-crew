@@ -1,22 +1,22 @@
-# Research: oh-my-pi v15.0.0 — Tính năng có thể áp dụng vào pi-crew
+# Research: oh-my-pi v15.0.0 — Features Applicable to pi-crew
 
 > Date: 2026-05-13
 > Source: `D:/my/my_project/source/oh-my-pi` (v15.0.0)
-> Purpose: Tìm features có thể port vào pi-crew
+> Purpose: Find features that can be ported into pi-crew
 
 ---
 
 ## 1. Feature: Hashline Engine (`hashline/`)
 
-### Mục đích
-Thay thế hoàn toàn hashline cũ bằng engine mới hỗ trợ:
-- Line-level content addressing (hash mỗi dòng)
-- Semantic anchors (không chỉ line number mà hash content)
-- Recovery mode (phục hồi từ crash)
+### Purpose
+Fully replace the old hashline with a new engine supporting:
+- Line-level content addressing (hash each line)
+- Semantic anchors (not just line numbers but content hashes)
+- Recovery mode (recover from crash state)
 - Conflict resolution (3-way merge)
 - Streaming diff output
 
-### Cách hoạt động
+### How it works
 
 **Core types** (`hashline/types.ts`):
 ```typescript
@@ -32,36 +32,36 @@ export type HashlineEdit =
 ```
 
 **Key modules:**
-- `hash.ts` (694→) — Line hashing với bigram index
+- `hash.ts` (694→) — Line hashing with bigram index
 - `parser.ts` (192 lines) — Parse hashline input
-- `apply.ts` (716 lines) — Apply edits với validation
-- `recovery.ts` (72 lines) — Recovery từ crash state
+- `apply.ts` (716 lines) — Apply edits with validation
+- `recovery.ts` (72 lines) — Recovery from crash state
 - `execute.ts` (267 lines) — Execute hashline commands
 - `diff.ts` / `diff-preview.ts` — Streaming diff
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
-**Option A — Dùng trực tiếp (nếu oh-my-pi tách hashline thành package riêng):**
-- Pi-crew cần edit files trong worktree
-- Hashline engine có thể giúp detect conflicts khi nhiều agents edit cùng file
+**Option A — Use directly (if oh-my-pi splits hashline into a separate package):**
+- pi-crew needs to edit files in worktrees
+- The hashline engine could help detect conflicts when multiple agents edit the same file
 
-**Option B — Conflict detection (đã có `conflict-detect.ts` rồi):**
-- Xem feature tiếp theo
+**Option B — Conflict detection (already have `conflict-detect.ts`):**
+- See the next feature
 
-**Effort: HIGH** — hashline strongly coupled với oh-my-pi internals (ToolSession, LSP batch request, etc.)
+**Effort: HIGH** — hashline is strongly coupled to oh-my-pi internals (ToolSession, LSP batch request, etc.)
 
 ### Risk/Dependency
-- Requires oh-my-pi package hoặc fork lại
-- Strong dependency on oh-my-pi tool execution model
+- Requires the oh-my-pi package or a fork
+- Strong dependency on oh-my-pi's tool execution model
 
 ---
 
 ## 2. Feature: Conflict Detection & Resolution (`conflict-detect.ts`)
 
-### Mục đích
-Detect git merge conflicts (<<<<<<, =======, >>>>>>>) trong file content mà không cần extra I/O. Mỗi conflict block được assign stable id, agent có thể resolve bằng cách write vào `conflict://<id>`.
+### Purpose
+Detect git merge conflicts (<<<<<<, =======, >>>>>>>) in file content without extra I/O. Each conflict block is assigned a stable id; the agent can resolve it by writing to `conflict://<id>`.
 
-### Cách hoạt động
+### How it works
 
 ```typescript
 export interface ConflictBlock {
@@ -83,41 +83,41 @@ export interface ConflictBlock {
 ```
 
 **Workflow:**
-1. `read` collects lines từ disk
-2. `scanConflictLines` inspects cho `<<<<<<<` / `=======` / `>>>>>>>` markers
+1. `read` collects lines from disk
+2. `scanConflictLines` inspects for `<<<<<<<` / `=======` / `>>>>>>>` markers
 3. Each completed block → `ConflictHistory` (stable id)
-4. Read output trả về kèm footer với conflict ids
-5. Agent gọi `write({ path: "conflict://<id>", content })` để resolve
+4. Read output returns with a footer containing conflict ids
+5. Agent calls `write({ path: "conflict://<id>", content })` to resolve
 
-**Key insight:** Marker shape phải strict — column-0, exact prefix length, followed by EOL or single space + label.
+**Key insight:** Marker shape must be strict — column-0, exact prefix length, followed by EOL or a single space + label.
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
-**HIGH VALUE cho pi-crew:**
-- Khi nhiều agents edit cùng file trong worktree, có thể xảy ra conflicts
-- Conflict detection giúp agent nhận biết và resolve tự động
+**HIGH VALUE for pi-crew:**
+- When multiple agents edit the same file in a worktree, conflicts can occur
+- Conflict detection lets the agent recognize and resolve them automatically
 
 **Implementation approach:**
 1. Fork `conflict-detect.ts` (license OK — MIT)
-2. Integrate vào pi-crew's file read path
-3. Register conflicts vào `LiveAgentHandle.activity` hoặc artifact store
-4. Provide `conflict://` protocol trong write tool
-5. Add `detect-conflicts` tool cho agents
+2. Integrate into pi-crew's file read path
+3. Register conflicts into `LiveAgentHandle.activity` or the artifact store
+4. Provide a `conflict://` protocol in the write tool
+5. Add a `detect-conflicts` tool for agents
 
-**Effort: MEDIUM** — standalone module, có thể copy + adapt
+**Effort: MEDIUM** — standalone module, can be copied + adapted
 
 ### Risk/Dependency
-- Cần xử lý `conflict://` protocol trong write tool
-- Cần update read tool để detect và report conflicts
+- Need to handle the `conflict://` protocol in the write tool
+- Need to update the read tool to detect and report conflicts
 
 ---
 
 ## 3. Feature: ACP Client Bridge (`acp-client-bridge.ts`)
 
-### Mục đích
-Bridge giữa oh-my-pi internal ClientBridge interface và ACP (Agent Client Protocol) SDK. Cho phép tools (read/write/bash/edit) route qua client khi client có capabilities.
+### Purpose
+A bridge between oh-my-pi's internal ClientBridge interface and the ACP (Agent Client Protocol) SDK. Allows tools (read/write/bash/edit) to route through the client when the client has the capabilities.
 
-### Cách hoạt động
+### How it works
 
 ```typescript
 export interface ClientBridgeCapabilities {
@@ -136,31 +136,31 @@ export interface ClientBridge {
 }
 ```
 
-**Pattern:** Feature detection → conditional implementation. Nếu client không có capability thì fallback sang default implementation.
+**Pattern:** Feature detection → conditional implementation. If the client lacks a capability, fall back to the default implementation.
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
 **LOW-MEDIUM VALUE:**
 
-pi-crew đã có `LiveExtensionBridge` và `LiveAgentControl` — không cần ACP bridge. Tuy nhiên, pattern này hữu ích cho:
+pi-crew already has `LiveExtensionBridge` and `LiveAgentControl` — doesn't need an ACP bridge. However, this pattern is useful for:
 
-1. **pi-crew tool permission system** — Có thể dùng pattern này để check permission trước khi cho phép tool execution
-2. **Cross-extension communication** — `ClientBridge` pattern có thể adapt cho `CrossExtensionRPC`
+1. **pi-crew tool permission system** — Could use this pattern to check permission before allowing tool execution
+2. **Cross-extension communication** — The `ClientBridge` pattern could be adapted for `CrossExtensionRPC`
 
-**Effort: LOW** — chỉ cần học pattern, không cần port code
+**Effort: LOW** — just learn the pattern, no need to port code
 
 ### Risk/Dependency
-- ACP SDK là proprietary (`@agentclientprotocol/sdk`)
-- Pattern có thể apply không cần SDK
+- ACP SDK is proprietary (`@agentclientprotocol/sdk`)
+- The pattern can be applied without the SDK
 
 ---
 
 ## 4. Feature: Todo Helper (`todo.ts`)
 
-### Mục đích
-Slash command helper cho phép agents quản lý todo list trong project. Hỗ trợ subcommands: `done`, `drop`, `rm`, và parsing markdown todo format.
+### Purpose
+A slash command helper that lets agents manage a todo list within a project. Supports subcommands: `done`, `drop`, `rm`, and parses markdown todo format.
 
-### Cách hoạt động
+### How it works
 
 **Tokenize approach:**
 ```typescript
@@ -187,36 +187,36 @@ function tokenize(input: string): string[] {
 - Escape sequences: `\<char>`
 - Whitespace splitting
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
-**HIGH VALUE cho pi-crew:**
+**HIGH VALUE for pi-crew:**
 
-pi-crew có `YieldReminder` và `TaskRunner` — có thể tích hợp todo management:
+pi-crew has `YieldReminder` and `TaskRunner` — can integrate todo management:
 
-1. **Team task tracking** — Workflow tasks có thể represented as todos
-2. **Yield + Todo integration** — Khi agent yields với todo request, có thể parse và update todo list
-3. **Slash command `/crew todo`** — Management interface cho team tasks
+1. **Team task tracking** — Workflow tasks can be represented as todos
+2. **Yield + Todo integration** — When an agent yields with a todo request, can parse and update the todo list
+3. **Slash command `/crew todo`** — Management interface for team tasks
 
 **Implementation approach:**
-1. Fork `todo.ts` helper (279 lines)
-2. Integrate vào `CrewTaskRunner` hoặc `YieldHandler`
-3. Add `/crew todo` slash command
-4. Wire vào `TaskDisplay` component
+1. Fork the `todo.ts` helper (279 lines)
+2. Integrate into `CrewTaskRunner` or `YieldHandler`
+3. Add a `/crew todo` slash command
+4. Wire into the `TaskDisplay` component
 
-**Effort: MEDIUM** — có thể copy module, cần integrate với existing task system
+**Effort: MEDIUM** — can copy the module, needs integration with the existing task system
 
 ### Risk/Dependency
 - Dependency on `todo-write.ts` tool
-- Cần sync với actual task state trong manifest
+- Needs to sync with actual task state in the manifest
 
 ---
 
 ## 5. Feature: Compaction Error Types (`compaction/errors.ts`)
 
-### Mục đích
-Typed error sentinels cho compaction operations. Dùng `instanceof` discrimination thay vì string matching.
+### Purpose
+Typed error sentinels for compaction operations. Uses `instanceof` discrimination instead of string matching.
 
-### Cách hoạt động
+### How it works
 
 ```typescript
 export class CompactionCancelledError extends Error {
@@ -228,18 +228,18 @@ export type CompactionOutcome = "ok" | "cancelled" | "failed";
 ```
 
 **Pattern:**
-- Sentinel class với `name` property readonly
-- Downstream callers dùng `instanceof CompactionCancelledError`
-- Source-agnostic: Esc, extension hook, programmatic abort đều cùng type
+- Sentinel class with a readonly `name` property
+- Downstream callers use `instanceof CompactionCancelledError`
+- Source-agnostic: Esc, extension hook, programmatic abort all share the same type
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
-**MEDIUM VALUE cho pi-crew:**
+**MEDIUM VALUE for pi-crew:**
 
-pi-crew có `YieldResult` và compaction tracking — có thể dùng pattern này:
+pi-crew has `YieldResult` and compaction tracking — can use this pattern:
 
 1. **Typed cancellation errors** — `CrewCancelledError`, `CrewTimeoutError`, `CrewDeadletterError`
-2. **Better error discrimination** — Thay vì string matching, dùng `instanceof`
+2. **Better error discrimination** — Instead of string matching, use `instanceof`
 3. **Error outcome tracking** — `CrewRunOutcome = "ok" | "cancelled" | "failed" | "deadletter"`
 
 **Implementation approach:**
@@ -261,24 +261,24 @@ export class CrewDeadletterError extends Error {
 }
 ```
 
-**Effort: LOW** — chỉ cần create error classes và replace `instanceof Error` checks
+**Effort: LOW** — just create the error classes and replace `instanceof Error` checks
 
 ### Risk/Dependency
-- None — pure TypeScript, có thể copy pattern
-- Cần audit existing error handling để update
+- None — pure TypeScript, can copy the pattern
+- Need to audit existing error handling to update
 
 ---
 
 ## 6. Feature: ACP Agent Session (`acp-agent.ts`)
 
-### Mục đích
-ACP protocol handler trong oh-my-pi. Mở rộng từ `agent-session.ts` với:
+### Purpose
+ACP protocol handler in oh-my-pi. Extends from `agent-session.ts` with:
 - Fork sessions (clone session state)
 - Session list/load/resume
 - Model state management
 - MCP server discovery
 
-### Cách hoạt động
+### How it works
 
 **ACP Protocol types:**
 ```typescript
@@ -289,42 +289,42 @@ type ClientCapabilities (fs, terminal, permission)
 ```
 
 **Key capabilities:**
-- `forkSession` — Clone session với same conversation history
+- `forkSession` — Clone a session with the same conversation history
 - `listSessions` — Enumerate active sessions
-- `loadSession` / `resumeSession` — Restore previous session
+- `loadSession` / `resumeSession` — Restore a previous session
 - `setSessionModel` — Change model mid-session
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
-**HIGH VALUE cho pi-crew:**
+**HIGH VALUE for pi-crew:**
 
-1. **Fork session** — Trong workflow orchestration, có thể fork một agent session để chạy parallel experiments
-2. **Session resume** — Resume a previous run từ manifest/events
-3. **Model switching** — Change model for specific tasks (e.g., cheap model for exploration, expensive model for final generation)
+1. **Fork session** — In workflow orchestration, could fork an agent session to run parallel experiments
+2. **Session resume** — Resume a previous run from manifest/events
+3. **Model switching** — Change model for specific tasks (e.g. cheap model for exploration, expensive model for final generation)
 
 **Current pi-crew state:**
-- pi-crew đã có `ResumeSession` cho team runs (re-spawn child Pi)
-- Nhưng không có in-process session fork
+- pi-crew already has `ResumeSession` for team runs (re-spawn child Pi)
+- But no in-process session fork
 
 **Implementation approach:**
-- `forkLiveAgentSession()` — Clone `LiveAgentHandle` với same conversation
-- Store forked sessions trong `live-agent-manager.ts`
-- Add `fork-session` operation vào `team-tool api`
+- `forkLiveAgentSession()` — Clone `LiveAgentHandle` with the same conversation
+- Store forked sessions in `live-agent-manager.ts`
+- Add a `fork-session` operation to the `team-tool api`
 
-**Effort: HIGH** — cần deep understanding của `LiveSessionHandle` và session state
+**Effort: HIGH** — needs deep understanding of `LiveSessionHandle` and session state
 
 ### Risk/Dependency
 - Requires oh-my-pi internals (AgentSession, ToolSession)
-- pi-crew dùng child Pi process — fork có thể không tương thích
+- pi-crew uses a child Pi process — fork may not be compatible
 
 ---
 
 ## 7. Feature: User Metrics (`stats/src/user-metrics.ts`)
 
-### Mục đích
-Tracking và aggregation của user behavior metrics: edits, tools usage, model selection, cost, session quality.
+### Purpose
+Tracking and aggregation of user behavior metrics: edits, tool usage, model selection, cost, session quality.
 
-### Cách hoạt động
+### How it works
 
 **Database schema:**
 - Sessions table: session_id, start_time, end_time, model, cost
@@ -337,30 +337,30 @@ Tracking và aggregation của user behavior metrics: edits, tools usage, model 
 - Model comparison: cost vs quality per model
 - Session summary: duration, token usage, task completion rate
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
 **MEDIUM VALUE:**
 
-pi-crew đã có `UsageTracker` và `MetricsRegistry` — có thể học:
+pi-crew already has `UsageTracker` and `MetricsRegistry` — can learn from:
 
 1. **Team metrics** — Track team run performance (workflow duration, agent utilization, cost)
 2. **Agent quality scoring** — Rate agent output quality
 3. **Cost tracking** — Per-agent, per-task, per-team cost
 
-**Effort: MEDIUM** — Cần design database schema và API
+**Effort: MEDIUM** — Need to design a database schema and API
 
 ### Risk/Dependency
-- SQLite hoặc separate database
+- SQLite or a separate database
 - Privacy implications (storing user behavior data)
 
 ---
 
 ## 8. Feature: Shell Minimizer (`crates/pi-shell/src/minimizer/`)
 
-### Mục đích
-Tự động minimize command output (loại bỏ noise như progress bars, ANSI codes) để LLM đọc được kết quả clean hơn.
+### Purpose
+Automatically minimize command output (remove noise like progress bars, ANSI codes) so the LLM can read cleaner results.
 
-### Cách hoạt động
+### How it works
 
 **100+ TOML config files:**
 - `cargo.toml` — Filter cargo progress output
@@ -378,63 +378,63 @@ pub struct Minimizer {
 // Filter types: line removal, replacement, truncation
 ```
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
-**HIGH VALUE cho pi-crew:**
+**HIGH VALUE for pi-crew:**
 
-pi-crew agents chạy bash commands — output có thể rất noisy. Minimizer giúp:
-- Agent đọc được clean output
-- Giảm context usage
-- Tập trung vào important information
+pi-crew agents run bash commands — the output can be very noisy. The minimizer helps:
+- Agents read clean output
+- Reduces context usage
+- Focuses on important information
 
 **Implementation approach:**
-1. Fork minimizer engine (Rust) hoặc port sang TypeScript
-2. Integrate vào `TaskRunner` bash execution
-3. Auto-detect command type và apply appropriate filter
+1. Fork the minimizer engine (Rust) or port to TypeScript
+2. Integrate into `TaskRunner` bash execution
+3. Auto-detect command type and apply the appropriate filter
 
-**Effort: HIGH** — Rust code cần rewrite hoặc integration via FFI
+**Effort: HIGH** — Rust code needs rewriting or integration via FFI
 
 ### Risk/Dependency
 - Rust dependency
-- May not be necessary nếu oh-my-pi tách thành standalone tool
+- May not be necessary if oh-my-pi splits it into a standalone tool
 
 ---
 
 ## 9. Feature: MCP Helper (`slash-commands/helpers/mcp.ts`)
 
-### Mục đích
-Helper cho MCP (Model Context Protocol) slash commands. Quản lý MCP server configuration và tool invocation.
+### Purpose
+Helper for MCP (Model Context Protocol) slash commands. Manages MCP server configuration and tool invocation.
 
-### Cách hoạt động
+### How it works
 
-532 lines TypeScript. **Key functions:**
+532 lines of TypeScript. **Key functions:**
 - `resolveMcpServer` — Resolve MCP server config
-- `invokeMcpTool` — Call MCP tool
+- `invokeMcpTool` — Call an MCP tool
 - `listMcpResources` — List available resources
 - `mcpServerStatus` — Check server health
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
 **MEDIUM VALUE:**
 
-pi-crew đã có `McpProxy` trong `live-extension-bridge.ts` — có thể học thêm:
+pi-crew already has `McpProxy` in `live-extension-bridge.ts` — can learn more:
 1. **MCP server lifecycle** — Start/stop MCP servers per team
-2. **MCP tool routing** — Route MCP calls qua team session
+2. **MCP tool routing** — Route MCP calls through the team session
 
-**Effort: LOW** — chỉ cần học pattern, không cần port code
+**Effort: LOW** — just learn the pattern, no need to port code
 
 ### Risk/Dependency
 - MCP protocol knowledge required
-- Có thể reuse existing `buildMcpProxyFromSession`
+- Can reuse the existing `buildMcpProxyFromSession`
 
 ---
 
 ## 10. Feature: Issue-PR Protocol (`internal-urls/issue-pr-protocol.ts`)
 
-### Mục đích
-Protocol handler cho `issue://` và `pr://` internal URLs. Cho phép agents interact với GitHub/GitLab issues và PRs qua unified interface.
+### Purpose
+Protocol handler for `issue://` and `pr://` internal URLs. Lets agents interact with GitHub/GitLab issues and PRs through a unified interface.
 
-### Cách hoạt động
+### How it works
 
 ```typescript
 // Handle URLs like:
@@ -449,16 +449,16 @@ Protocol handler cho `issue://` và `pr://` internal URLs. Cho phép agents inte
 - `comment` — Add comment
 - `close` / `reopen` — State transitions
 
-### Potential apply cho pi-crew
+### Potential application to pi-crew
 
-**HIGH VALUE cho pi-crew:**
+**HIGH VALUE for pi-crew:**
 
-pi-crew workflow agents có thể benefit từ issue/PR integration:
-1. **Task creation** — Create issue từ failed task
-2. **PR review** — Use `pr://` protocol trong review workflow
+pi-crew workflow agents can benefit from issue/PR integration:
+1. **Task creation** — Create an issue from a failed task
+2. **PR review** — Use the `pr://` protocol in the review workflow
 3. **Task linking** — Link workflow tasks to issues
 
-**Effort: MEDIUM** — Cần port `issue-pr-protocol.ts` (577 lines)
+**Effort: MEDIUM** — Need to port `issue-pr-protocol.ts` (577 lines)
 
 ### Risk/Dependency
 - GitHub API authentication
@@ -468,42 +468,42 @@ pi-crew workflow agents có thể benefit từ issue/PR integration:
 
 ## Summary: Recommendations
 
-### Tier 1 — High Value, Medium Effort (Ưu tiên cao)
+### Tier 1 — High Value, Medium Effort (High priority)
 
 | Feature | Why | Effort | Notes |
 |---|---|---|---|
-| **Conflict Detection** | Prevents data loss khi multiple agents edit same file | MEDIUM | Fork `conflict-detect.ts`, add `conflict://` protocol |
+| **Conflict Detection** | Prevents data loss when multiple agents edit the same file | MEDIUM | Fork `conflict-detect.ts`, add `conflict://` protocol |
 | **Typed Crew Errors** | Better error handling, cleaner code | LOW | Create `CrewCancelledError`, `CrewTimeoutError`, `CrewDeadletterError` |
-| **Todo Integration** | Task tracking cho team workflows | MEDIUM | Fork `todo.ts`, integrate với `TaskRunner` |
-| **Issue-PR Protocol** | Link team tasks với GitHub issues | MEDIUM | Port `issue-pr-protocol.ts` |
+| **Todo Integration** | Task tracking for team workflows | MEDIUM | Fork `todo.ts`, integrate with `TaskRunner` |
+| **Issue-PR Protocol** | Link team tasks to GitHub issues | MEDIUM | Port `issue-pr-protocol.ts` |
 
-### Tier 2 — High Value, High Effort (Ưu tiên thấp hơn)
+### Tier 2 — High Value, High Effort (Lower priority)
 
 | Feature | Why | Effort | Notes |
 |---|---|---|---|
-| **Shell Minimizer** | Clean command output cho agents | HIGH | Rust → TypeScript port hoặc FFI |
-| **ACP Fork Session** | Parallel agent experiments | HIGH | Cần deep `LiveSessionHandle` understanding |
+| **Shell Minimizer** | Clean command output for agents | HIGH | Rust → TypeScript port or FFI |
+| **ACP Fork Session** | Parallel agent experiments | HIGH | Needs deep `LiveSessionHandle` understanding |
 | **User Metrics** | Team performance analytics | MEDIUM | Design DB schema, build API |
 
-### Tier 3 — Low Value (Không ưu tiên)
+### Tier 3 — Low Value (Not prioritized)
 
 | Feature | Why | Effort |
 |---|---|---|
-| Hashline Engine | Strongly coupled với oh-my-pi | HIGH |
-| ACP Client Bridge | pi-crew đã có `LiveExtensionBridge` | LOW |
-| MCP Helper | pi-crew đã có `McpProxy` | LOW |
+| Hashline Engine | Strongly coupled to oh-my-pi | HIGH |
+| ACP Client Bridge | pi-crew already has `LiveExtensionBridge` | LOW |
+| MCP Helper | pi-crew already has `McpProxy` | LOW |
 
 ---
 
 ## Next Steps
 
-1. **Conflict Detection** — Start với porting `conflict-detect.ts` vì nó standalone và high-value
-2. **Typed Errors** — Quick win, chỉ cần create error classes
-3. **Todo Integration** — Long-term, cần integrate với workflow engine
+1. **Conflict Detection** — Start with porting `conflict-detect.ts` because it's standalone and high-value
+2. **Typed Errors** — Quick win, just create the error classes
+3. **Todo Integration** — Long-term, needs integration with the workflow engine
 
-## Files cần đọc thêm
+## Files to read further
 
-- `packages/coding-agent/src/tools/conflict-detect.ts` (toàn bộ)
-- `packages/coding-agent/src/tools/todo-write.ts` (dependency của todo.ts)
-- `packages/coding-agent/src/session/agent-session.ts` (phần fork/resume session)
-- `crates/pi-shell/src/minimizer/engine.rs` (nếu muốn port shell minimizer)
+- `packages/coding-agent/src/tools/conflict-detect.ts` (entire file)
+- `packages/coding-agent/src/tools/todo-write.ts` (dependency of todo.ts)
+- `packages/coding-agent/src/session/agent-session.ts` (the fork/resume session part)
+- `crates/pi-shell/src/minimizer/engine.rs` (if you want to port the shell minimizer)

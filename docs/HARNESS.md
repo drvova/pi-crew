@@ -1,11 +1,12 @@
 # Harness
 
-pi-crew là một Pi extension cho multi-agent orchestration. Harness này giúp
-agents và humans phối hợp phát triển pi-crew một cách reliable, inspectable,
-và dễ steer.
+pi-crew is a Pi extension for multi-agent orchestration. This harness helps
+agents and humans collaborate on developing pi-crew in a reliable, inspectable,
+and easy-to-steer way.
 
-Product là pi-crew chính nó. Harness là môi trường operating để agents hiểu
-product, classify work, track decisions, và validate changes.
+The product is pi-crew itself. The harness is the operating environment that
+helps agents understand the product, classify work, track decisions, and
+validate changes.
 
 ## Mental Model
 
@@ -36,26 +37,26 @@ Human intent (issue, prompt, request)
   Next intent
 ```
 
-Mỗi task có 2 outputs:
+Each task has 2 outputs:
 1. **Product delta**: code changes, test changes, API shape, config changes
 2. **Harness delta**: docs, decisions, test matrix updates, backlog items
 
 ## Source Hierarchy
 
-Agents đọc theo thứ tự:
+Agents read in this order:
 
-1. `AGENTS.md` — operating rules và important paths
-2. `docs/HARNESS.md` — file này, collaboration model
-3. `docs/FEATURE_INTAKE.md` — trước khi biến request thành work
+1. `AGENTS.md` — operating rules and important paths
+2. `docs/HARNESS.md` — this file, the collaboration model
+3. `docs/FEATURE_INTAKE.md` — before turning a request into work
 4. `docs/product/` — current product contract
 5. `docs/ARCHITECTURE.md` — implementation shape
-6. `docs/stories/` — active và completed stories
+6. `docs/stories/` — active and completed stories
 7. `docs/TEST_MATRIX.md` — proof status
 8. `docs/decisions/` — why important choices were made
 
 ## Validation Ladder
 
-pi-crew đã có validation commands:
+pi-crew already has validation commands:
 
 | Level | Command | What it proves |
 |-------|---------|----------------|
@@ -68,14 +69,14 @@ Agents **must not** claim validation passes without running the actual command.
 
 ## Growth Rule
 
-Harness grows từ friction. Khi agent:
-- Bị confused về expected behavior
-- Phải repeat manual reasoning
-- Thiếu validation command
-- Discover missing rule
-- Thấy recurring failure pattern
+The harness grows from friction. When an agent:
+- Gets confused about expected behavior
+- Has to repeat manual reasoning
+- Lacks a validation command
+- Discovers a missing rule
+- Sees a recurring failure pattern
 
-→ Agent must improve harness directly hoặc propose trong `docs/HARNESS_BACKLOG.md`.
+→ The agent must improve the harness directly or propose changes in `docs/HARNESS_BACKLOG.md`.
 
 ## Working Conventions
 

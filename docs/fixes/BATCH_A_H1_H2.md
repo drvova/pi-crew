@@ -2,22 +2,22 @@
 
 Date: 2026-05-18
 
-## H1: Event-log silent loss khi vượt MAX_EVENTS_BYTES (50MB)
+## H1: Event-log silent loss when exceeding MAX_EVENTS_BYTES (50MB)
 
 ### File
 `src/state/event-log.ts`
 
-### Vấn đề
-Khi file event log vượt 50MB, event bị bỏ ngay (kể cả terminal event) nhưng `appendCounter` không tăng → compact không được kích hoạt.
+### Problem
+When the event log file exceeds 50MB, events are dropped immediately (including terminal events) but `appendCounter` is not incremented → compaction is never triggered.
 
-### Fix đã áp dụng
-Trong `appendEventInsideLock`:
+### Fix applied
+In `appendEventInsideLock`:
 
-1. **Ưu tiên terminal events**: kiểm tra `isTerminal = TERMINAL_EVENT_TYPES.has(fullEvent.type)` trước
-2. **Non-terminal events vượt limit** → gọi `compactEventLog()` ngay (không đợi counter % 100)
-3. **Sau compact vẫn vượt limit** → gọi `rotateEventLog()`
-4. **Chỉ bỏ qua event** khi non-terminal event còn vượt limit sau compact+rotate
-5. **Terminal events luôn được persist** bất kể size
+1. **Prioritize terminal events**: check `isTerminal = TERMINAL_EVENT_TYPES.has(fullEvent.type)` first
+2. **Non-terminal events exceeding the limit** → call `compactEventLog()` immediately (don't wait for counter % 100)
+3. **If still over the limit after compaction** → call `rotateEventLog()`
+4. **Only drop the event** when a non-terminal event is still over the limit after compaction + rotation
+5. **Terminal events are always persisted** regardless of size
 
 ```ts
 const isTerminal = TERMINAL_EVENT_TYPES.has(fullEvent.type);
@@ -47,21 +47,21 @@ npm run typecheck  # PASSED
 
 ---
 
-## H2: Mailbox appendFileSync không lock cross-process
+## H2: Mailbox appendFileSync has no cross-process lock
 
 ### File
 `src/state/mailbox.ts`
 
-### Vấn đề
-`appendMailboxMessage` dùng `fs.appendFileSync` không nguyên tử trên Windows.
+### Problem
+`appendMailboxMessage` uses `fs.appendFileSync`, which is not atomic on Windows.
 
-### Fix đã áp dụng
-Import và bọc append trong `withEventLogLockSync`:
+### Fix applied
+Import and wrap the append in `withEventLogLockSync`:
 
 ```ts
 import { withEventLogLockSync } from "./event-log.ts";
 
-// Trong appendMailboxMessage:
+// In appendMailboxMessage:
 withEventLogLockSync(mailboxFile(manifest, complete.direction, complete.taskId), () => {
     fs.appendFileSync(mailboxFile(manifest, complete.direction, complete.taskId), `${JSON.stringify(redactSecrets(complete))}\n`, "utf-8");
 });
