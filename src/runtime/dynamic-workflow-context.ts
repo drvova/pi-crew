@@ -287,10 +287,18 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				// Round-13 P0-3: when a schema is provided, append a JSON-output instruction so
 				// the model returns parseable JSON instead of prose. Schema name is intentionally
 				// generic — we don't reveal TypeBox internal types.
+				//
+				// Smoke-test fix: when BOTH schema AND an explicit call.systemPrompt are set,
+				// the call.systemPrompt is the caller's intended persona (e.g. a JSON-verdict
+				// judge). It MUST be used as the base for the JSON instruction — otherwise the
+				// role's persona leaks through and the model returns prose, failing schema
+				// validation. Previously call.systemPrompt was silently dropped when a schema
+				// was present, which confused models into returning text like "hello".
 				if (call.schema !== undefined) {
+					const base = call.systemPrompt ?? effectiveAgent.systemPrompt;
 					effectiveAgent = {
 						...effectiveAgent,
-						systemPrompt: composeSchemaSystemPrompt(effectiveAgent.systemPrompt, call.schema),
+						systemPrompt: composeSchemaSystemPrompt(base, call.schema),
 					};
 				} else if (call.systemPrompt !== undefined) {
 					effectiveAgent = { ...effectiveAgent, systemPrompt: call.systemPrompt };
