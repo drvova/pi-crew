@@ -243,12 +243,13 @@ export function createSafeTempDir(base: string, prefix: string): string {
 }
 
 export function buildPiWorkerArgs(input: BuildPiWorkerArgsInput): BuildPiWorkerArgsResult {
-	// Process-identity marker (round fix: distinguish sub-agent child-pi from main session).
-	// `--crew-subagent` is a leading argv flag so `ps`/`pgrep` show it at a glance, and
-	// downstream diagnostics (doctor --zombies) can match it without reading /proc/<pid>/environ.
-	// Pi itself ignores unknown flags, so this is safe even if a future Pi version doesn't recognize it.
-	// The companion env var PI_CREW_KIND=subagent is the machine-readable signal used by doctor.
-	const args = ["--crew-subagent", "--mode", "json", "-p"];
+	// NOTE: do NOT add an argv flag like `--crew-subagent` here. Pi uses a strict
+	// option parser and REJECTS unknown flags with a non-zero exit, which would
+	// break every ctx.agent() call. The authoritative sub-agent identity signal
+	// is the PI_CREW_KIND=subagent ENV var (set below) — the zombie scanner and
+	// doctor --zombies read it from /proc/<pid>/environ. The user's main session
+	// never sets it, so it can never be matched as a sub-agent.
+	const args = ["--mode", "json", "-p"];
 	if (input.sessionEnabled === false) args.push("--no-session");
 
 	const resolvedModel = input.model ?? input.agent.model;

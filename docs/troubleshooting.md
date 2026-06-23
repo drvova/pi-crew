@@ -167,9 +167,11 @@ team action='doctor' focus='zombies'
 ```
 
 This is **read-only**. It matches ONLY processes carrying the authoritative
-`PI_CREW_KIND=subagent` marker (set by every child-pi spawn) whose
+`PI_CREW_KIND=subagent` env marker (set by every child-pi spawn) whose
 `PI_CREW_PARENT_PID` is no longer alive. Your main session never carries the
-marker, so it can never appear in the list.
+marker, so it can never appear in the list. (The marker is an env var, not an
+argv flag — pi's strict option parser rejects unknown flags, so we can't use
+a `--crew-subagent` CLI flag.)
 
 To kill a confirmed zombie: `kill <PID>` (the OS reaps it). The scanner never
 kills on your behalf.

@@ -26,13 +26,19 @@ function fakeAgent(): AgentConfig {
 	};
 }
 
-test("buildPiWorkerArgs: prepends --crew-subagent as the FIRST argv flag", () => {
+test("buildPiWorkerArgs: does NOT add an unknown argv flag (pi rejects unknown options)", () => {
 	const { args } = buildPiWorkerArgs({ task: "do thing", agent: fakeAgent() });
-	assert.equal(args[0], "--crew-subagent", "first argv flag must be the sub-agent marker so ps shows it");
-	assert.ok(args.includes("--mode"), "regular flags still present after the marker");
+	// Regression guard: an earlier fix tried to prepend `--crew-subagent`, but pi's
+	// strict option parser exits non-zero on unknown flags, breaking every agent call.
+	assert.ok(!args.includes("--crew-subagent"), "must not add argv flags pi does not recognize");
+	assert.equal(args[0], "--mode", "argv starts with the standard --mode flag");
 });
 
-test("buildPiWorkerArgs: sets PI_CREW_KIND=subagent in the child env", () => {
+test("buildPiWorkerArgs: sets PI_CREW_KIND=subagent in the child env (authoritative marker)", () => {
+	// NOTE: we deliberately do NOT add an argv flag. Pi rejects unknown flags
+	// (Error: Unknown option) and exits non-zero, which would break every
+	// ctx.agent() call. The ENV var is the sole authoritative signal; the
+	// zombie scanner reads it from /proc/<pid>/environ.
 	const { env } = buildPiWorkerArgs({ task: "do thing", agent: fakeAgent() });
 	assert.equal(env.PI_CREW_KIND, "subagent", "PI_CREW_KIND=subagent is the authoritative machine marker");
 });

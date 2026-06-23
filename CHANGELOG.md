@@ -67,10 +67,12 @@ A heuristic-based zombie "cleanup" had killed a live interactive main `pi`
 session by accident (uptime/RSS/orphan heuristics match a main session just
 as readily as a real orphaned sub-agent). Fixed authoritatively:
 
-- **`PI_CREW_KIND=subagent`** env marker + **`--crew-subagent`** leading argv
-  flag, set by `buildPiWorkerArgs` (`src/runtime/pi-args.ts`) on every child-pi
-  spawn. A main session carries NEITHER, so it can never be matched as a
-  sub-agent.
+- **`PI_CREW_KIND=subagent`** env marker, set by `buildPiWorkerArgs`
+  (`src/runtime/pi-args.ts`) on every child-pi spawn. A main session does NOT
+  carry it, so it can never be matched as a sub-agent. (An earlier draft also
+  added a `--crew-subagent` argv flag — removed because pi's strict option
+  parser rejects unknown flags and exits non-zero, which silently broke every
+  `ctx.agent()` call. The env var alone is the authoritative signal.)
 - **`src/runtime/zombie-scanner.ts`** (new): read-only scanner that matches
   ONLY processes with `PI_CREW_KIND=subagent` AND a dead `PI_CREW_PARENT_PID`.
   Never matches a main session. Never kills.
