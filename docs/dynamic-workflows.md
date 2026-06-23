@@ -58,6 +58,9 @@ Slash command: `/workflows` lists all workflows (static + dynamic).
 | `ctx.renderTemplate(name, vars)` | Render a built-in plan template. |
 | `ctx.vars` | Script-local variables. |
 | `ctx.phase(title)` | Mark the start of a named workflow phase. Emits `dwf.phase_started` (and `dwf.phase_completed` for the previous phase, if any) to the run's events.jsonl. Idempotent on the same title. Phase events let downstream consumers (UI, log readers) group agents by logical phase. |
+| `ctx.log(message)` | **round-14.** Append a workflow-level log line. Stringifies non-strings, keeps a bounded in-memory copy (capped at 1000), and always emits a `dwf.log` event (`{message}`) to `events.jsonl`. |
+| `ctx.budget` | **round-14.** Frozen `{total, spent(), remaining()}` token-budget surface. `total` is `null` when unbounded (default). `ctx.agent()` auto-rejects with `ok:false` (`"workflow token budget exhausted"`) once exhausted. `spent()` accumulates each agent run's reported usage. Set via `workflow.maxTokenBudget` or the run `tokenBudget` param. |
+| `ctx.args<T>()` | **round-14.** Typed workflow arguments (sourced from `manifest.args`, passed via the run `args` param). Defaults to `{}`. Narrow with a generic: `ctx.args<{target:string}>()`. |
 | `ctx.setResult(artifactPath, meta?)` | Mark the final result. ONLY this reaches the main context. |
 
 `ctx.agent({role})` resolves the role to an `AgentConfig` via 4-tier precedence:
@@ -77,6 +80,68 @@ minimal (`source:'dynamic'`).
   the cap; the events log is the durable source of truth).
 - The runner auto-closes the last open phase when the script returns, so
   `dwf.completed` is always preceded by a matching `dwf.phase_completed`.
+
+### Log API (round-14 P1-3)
+
+`ctx.log(message)` appends a workflow-level log line. It stringifies non-string
+values (`JSON.stringify`), keeps a bounded in-memory copy (capped at **1000**
+entries), and always emits a durable `dwf.log` event (`{message}`) to the run's
+`events.jsonl`. The events log is the source of truth; the in-memory buffer is
+only for convenience/bounded telemetry.
+
+```ts
+ctx.log("scan complete");
+ctx.log({ findings: 3, warnings: [] }); // stringified to '{"findings":3,"warnings":[]}'
+```
+
+### Token budget (round-14 P1-2)
+
+`ctx.budget` is a frozen `{total, spent(), remaining()}` surface. When a
+per-workflow token budget is set, `ctx.agent()` auto-rejects with `ok:false`
+(`"workflow token budget exhausted"`) once exhausted — **before** spawning a
+child worker, so no tokens are wasted past the limit.
+
+- `total` is `null` (unbounded) by default; `remaining()` is `Infinity` then.
+- `spent()` accumulates each `ctx.agent()` run's reported `usage.input + usage.output`.
+- Set it via the workflow's `maxTokenBudget` field, or the run `tokenBudget` param
+  (the param overrides the workflow value).
+
+```ts
+if (ctx.budget.total !== null && ctx.budget.remaining() < 500) {
+  ctx.log("approaching budget limit");
+}
+```
+
+### Typed args (round-14 P1-5)
+
+`ctx.args<T>()` returns typed workflow arguments (sourced from `manifest.args`,
+passed via the run `args` param). Defaults to `{}` when unset. Narrow with a
+generic so the rest of your script is type-checked:
+
+```ts
+const { target, retries } = ctx.args<{ target: string; retries: number }>();
+```
+
+### Authoring types / IDE IntelliSense (round-14 P1-1)
+
+For TypeScript IntelliSense in `.dwf.ts` scripts, import the authoring types from
+the package's `./workflow` export (`types/dwf.d.ts`):
+
+```ts
+import type { WorkflowCtx } from "pi-crew/workflow";
+
+export default async function run(ctx: WorkflowCtx): Promise<void> {
+  ctx.phase("scan");
+  ctx.log("starting");
+  const res = await ctx.agent({ role: "explorer", prompt: "survey" });
+  const { target } = ctx.args<{ target: string }>();
+  ctx.setResult(res.artifactPath ?? "", { target });
+}
+```
+
+The package self-references via its `exports` map, so this resolves from within
+any project that depends on `pi-crew`. The interfaces mirror the runtime types in
+`src/runtime/dynamic-workflow-context.ts` (authoring-only — no runtime values).
 
 ## Security model (IMPORTANT)
 

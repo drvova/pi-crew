@@ -39,6 +39,7 @@
     "docs/",
     "tsconfig.json",
     "schema.json",
+    "types/",
     "CHANGELOG.md",
     "LICENSE",
     "NOTICE.md"
@@ -63,7 +64,10 @@
     "smoke:release": "node scripts/release-smoke.mjs"
   },
   "exports": {
-    "./schema.json": "./schema.json"
+    "./schema.json": "./schema.json",
+    "./workflow": {
+      "types": "./types/dwf.d.ts"
+    }
   },
   "pi": {
     "extensions": [

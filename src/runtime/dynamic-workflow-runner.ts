@@ -37,6 +37,8 @@ export interface RunDynamicWorkflowInput {
 	signal: AbortSignal;
 	concurrency?: number;
 	modelOverride?: string;
+	/** round-14 P1-2: per-workflow token budget. Overrides workflow.maxTokenBudget. */
+	tokenBudget?: number;
 }
 
 export interface RunDynamicWorkflowResult {
@@ -148,6 +150,8 @@ export async function runDynamicWorkflow(input: RunDynamicWorkflowInput): Promis
 		signal,
 		team: input.team,
 		modelOverride: input.modelOverride,
+		tokenBudget: input.tokenBudget ?? workflow.maxTokenBudget,
+		args: manifest.args,
 	});
 
 	// Freeze the ctx so the script cannot add/override capability methods (§0c C4).

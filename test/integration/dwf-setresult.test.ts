@@ -485,3 +485,163 @@ test("round-12 integration: dwf calling ctx.phase() emits correct events; runner
 	}
 });
 
+
+// ---------------------------------------------------------------------------
+// round-14 integration tests: ctx.log + ctx.args (P1-3 / P1-5)
+// ---------------------------------------------------------------------------
+
+interface Round14Args {
+	repoRoot: string;
+	thisFile: string;
+	createJiti: (...args: unknown[]) => { import(p: string): Promise<unknown> };
+	tmpCwd: string;
+	dwfPath: string;
+	artifactPath: string;
+	runId: string;
+	eventsPath: string;
+	manifest: Record<string, unknown>;
+	workflow: Record<string, unknown>;
+	team: Record<string, unknown>;
+}
+
+function makeRound14Fixture(name: string, args?: unknown): Round14Args {
+	const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+	const require = createRequire(import.meta.url);
+	const thisFile = fileURLToPath(import.meta.url);
+	const jitiMod = require(path.join(repoRoot, "node_modules/jiti/lib/jiti.cjs"));
+	const createJiti = (jitiMod as { default?: unknown }).default ?? jitiMod;
+
+	const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), `pi-crew-dwf-r14-${name}-`));
+	fs.mkdirSync(path.join(tmpCwd, ".crew", "workflows"), { recursive: true });
+	const artifactPath = path.join(tmpCwd, "result.txt");
+	const dwfPath = path.join(tmpCwd, ".crew", "workflows", `r14-${name}.dwf.ts`);
+	const runId = `team_dwf_r14_${name}_${Date.now()}`;
+	const stateRoot = path.join(tmpCwd, "state");
+	fs.mkdirSync(stateRoot, { recursive: true });
+	const eventsPath = path.join(stateRoot, "events.jsonl");
+	fs.writeFileSync(eventsPath, "");
+
+	const manifest: Record<string, unknown> = {
+		schemaVersion: 1,
+		runId,
+		team: "test-team",
+		workflow: `r14-${name}`,
+		goal: "round-14 test",
+		status: "running",
+		workspaceMode: "single",
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		cwd: tmpCwd,
+		stateRoot,
+		artifactsRoot: path.join(tmpCwd, "artifacts"),
+		tasksPath: path.join(stateRoot, "tasks.json"),
+		eventsPath,
+		artifacts: [],
+	};
+	if (args !== undefined) manifest.args = args;
+
+	const workflow = {
+		name: `r14-${name}`,
+		description: "round-14 test",
+		source: "project",
+		filePath: dwfPath,
+		steps: [],
+		runtime: "dynamic",
+		dynamicScript: dwfPath,
+	};
+	const team = {
+		name: "test-team",
+		description: "test",
+		source: "dynamic",
+		filePath: "<test>",
+		roles: [{ name: "worker", agent: "executor" }],
+		workspaceMode: "single",
+	};
+
+	return {
+		repoRoot,
+		thisFile,
+		createJiti: createJiti as Round14Args["createJiti"],
+		tmpCwd,
+		dwfPath,
+		artifactPath,
+		runId,
+		eventsPath,
+		manifest,
+		workflow,
+		team,
+	};
+}
+
+test("round-14 integration: dwf calling ctx.log() produces dwf.log events", async () => {
+	const fx = makeRound14Fixture("log");
+	try {
+		fs.writeFileSync(
+			fx.dwfPath,
+			`export default async function run(ctx) {
+  ctx.log("scan complete");
+  ctx.log({ findings: 3 });
+  ctx.setResult(${JSON.stringify(fx.artifactPath)});
+}
+`,
+		);
+		fs.writeFileSync(fx.artifactPath, "logged\n");
+
+		const jiti = fx.createJiti(fx.thisFile);
+		const dwfMod = (await jiti.import(
+			path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts"),
+		)) as { default?: { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> } };
+		const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> });
+		const result = (await runDynamicWorkflow({
+			manifest: fx.manifest,
+			workflow: fx.workflow,
+			team: fx.team,
+			signal: AbortSignal.timeout(5000),
+		})) as { manifest: { status: string } };
+
+		assert.equal(result.manifest.status, "completed");
+		const eventLines = fs.readFileSync(fx.eventsPath, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { type: string; data?: { message?: string } });
+		const logEvents = eventLines.filter((e) => e.type === "dwf.log");
+		assert.equal(logEvents.length, 2, "two dwf.log events emitted");
+		assert.equal(logEvents[0]?.data?.message, "scan complete");
+		assert.equal(logEvents[1]?.data?.message, '{"findings":3}');
+	} finally {
+		fs.rmSync(fx.tmpCwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 integration: dwf calling ctx.args<T>() reads typed args from manifest", async () => {
+	const fx = makeRound14Fixture("args", { target: "src/lib.ts", retries: 2 });
+	try {
+		fs.writeFileSync(
+			fx.dwfPath,
+			`export default async function run(ctx) {
+  const args = ctx.args();
+  ctx.log("target=" + args.target + " retries=" + args.retries);
+  ctx.setResult(${JSON.stringify(fx.artifactPath)});
+}
+`,
+		);
+		// Pre-write the result artifact the way the phase/setResult fixtures do.
+		fs.writeFileSync(fx.artifactPath, "args-test\n");
+
+		const jiti = fx.createJiti(fx.thisFile);
+		const dwfMod = (await jiti.import(
+			path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts"),
+		)) as { default?: { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> } };
+		const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> });
+		const result = (await runDynamicWorkflow({
+			manifest: fx.manifest,
+			workflow: fx.workflow,
+			team: fx.team,
+			signal: AbortSignal.timeout(5000),
+		})) as { manifest: { status: string } };
+
+		assert.equal(result.manifest.status, "completed");
+		const eventLines = fs.readFileSync(fx.eventsPath, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { type: string; data?: { message?: string } });
+		const logEvents = eventLines.filter((e) => e.type === "dwf.log");
+		assert.equal(logEvents[0]?.data?.message, "target=src/lib.ts retries=2", "ctx.args() read the manifest args end-to-end");
+	} finally {
+		fs.rmSync(fx.tmpCwd, { recursive: true, force: true });
+	}
+});

@@ -91,6 +91,7 @@ const TEAM_EVENT_TYPES = [
 	"dwf.phase_completed",
 	"dwf.completed",
 	"dwf.failed",
+	"dwf.log",
 ] as const;
 export type TeamEventType = typeof TEAM_EVENT_TYPES[number];
 

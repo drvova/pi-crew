@@ -602,7 +602,7 @@ async function main(): Promise<void> {
 				const { allWorkflows, discoverWorkflows } = await import("../workflows/discover-workflows.ts");
 				const wf = allWorkflows(discoverWorkflows(manifest.cwd)).find((w) => w.name === manifest.workflow);
 				if (!wf || wf.runtime !== "dynamic" || !wf.dynamicScript) throw new Error(`runKind="dynamic-workflow" but workflow '${manifest.workflow}' is not dynamic (runId=${manifest.runId})`);
-				const dwfResult = await runDynamicWorkflow({ manifest, workflow: wf as import("../workflows/workflow-config.ts").DynamicWorkflowConfig, signal: abortController.signal });
+				const dwfResult = await runDynamicWorkflow({ manifest, workflow: wf as import("../workflows/workflow-config.ts").DynamicWorkflowConfig, signal: abortController.signal, tokenBudget: wf.maxTokenBudget });
 				saveRunManifest(dwfResult.manifest);
 				earlyResult = dwfResult;
 			}

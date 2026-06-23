@@ -1,5 +1,82 @@
 # Changelog
 
+## [v0.9.7] — round-14 (P1 DX + observability) (2026-06-23)
+
+Four additive P1 features land in this round — **authoring types**, **per-workflow
+token budget**, **log API**, and **typed args**. **Backward compatible** — existing
+DWF scripts continue to work unchanged. New behavior is opt-in.
+
+### Feature 1 — Authoring Types / IDE IntelliSense (P1-1)
+
+**Files:** `types/dwf.d.ts` (new) + `package.json` (`./workflow` export)
+
+A `.dwf.ts` script can now import the `WorkflowCtx` (and supporting) types from
+the package's `./workflow` export for full TypeScript IntelliSense:
+
+```ts
+import type { WorkflowCtx } from "pi-crew/workflow";
+export default async function run(ctx: WorkflowCtx): Promise<void> { /* ... */ }
+```
+
+- New file: `types/dwf.d.ts` — named exports mirroring the runtime types
+  (`WorkflowCtx`, `AgentCallOpts`, `AgentResult`, `WorkflowBudget`, ...).
+- `package.json` gains `"./workflow": { "types": "./types/dwf.d.ts" }` and ships
+  the `types/` directory.
+- New test: `test/unit/dwf-authoring-types.test.ts` — compiles a sample `.dwf.ts`
+  against the export (positive + negative `@ts-expect-error` check).
+
+### Feature 2 — Per-Workflow Token Budget (P1-2)
+
+**Files:** `src/runtime/dynamic-workflow-context.ts` + dispatch wiring
+
+`ctx.budget` is a frozen `{total, spent(), remaining()}` surface. When a
+per-workflow token budget is set, `ctx.agent()` auto-rejects with `ok:false`
+(`"workflow token budget exhausted"`) **before** spawning a child worker. `spent()`
+accumulates each run's reported `usage.input + usage.output`.
+
+- `total` is `null` (unbounded) by default; `remaining()` is `Infinity` then.
+- New `MakeWorkflowCtxOptions.tokenBudget`, `WorkflowConfig.maxTokenBudget`,
+  `RunDynamicWorkflowInput.tokenBudget`, and the `team run` `tokenBudget` param
+  (param overrides the workflow value).
+- Budget check + accumulation wired into `ctx.agent()`; budget object passed
+  through `run.ts` and `background-runner.ts`.
+- Tests: 7 unit cases (default null, set total, spent/remaining, exhaustion,
+  accumulation from the mock's `{input:10,output:5}`, frozen check).
+
+### Feature 3 — Log API (P1-3)
+
+**Files:** `src/state/contracts.ts` + `src/runtime/dynamic-workflow-context.ts`
+
+`ctx.log(message)` appends a workflow-level log line: stringifies non-strings,
+keeps a bounded in-memory copy (capped at **1000**), and always emits a durable
+`dwf.log` event (`{message}`) to the run's `events.jsonl`.
+
+- New event type `"dwf.log"` in `TEAM_EVENT_TYPES` (non-terminal).
+- New runner-only `getWorkflowLogs(ctx)` accessor (mirrors `getWorkflowPhaseState`).
+- Tests: 4 unit cases (append, stringify, event emission, 1000-cap) + 1
+  integration case (end-to-end through `runDynamicWorkflow`).
+
+### Feature 4 — Typed Args (P1-5)
+
+**Files:** `src/runtime/dynamic-workflow-context.ts` + `src/state/types.ts` +
+`src/schema/team-tool-schema.ts` + `src/state/state-store.ts` + dispatch wiring
+
+`ctx.args<T>()` returns typed workflow arguments (sourced from `manifest.args`,
+passed via the run `args` param). Defaults to `{}` when unset.
+
+- New `TeamRunManifest.args`, `MakeWorkflowCtxOptions.args`, `createRunManifest`
+  `args` param, and the `team run` `args` schema field (`Type.Unsafe`, any JSON
+  value — avoids `any`).
+- The runner reads `manifest.args` and forwards it to `makeWorkflowCtx`.
+- Tests: 3 unit cases (default `{}`, typed object, array) + 1 integration case
+  (reads `manifest.args` end-to-end).
+
+### Other
+
+- Version bumped `0.9.7` → `0.9.8`.
+- `docs/dynamic-workflows.md`: API table rows + Log/Budget/Args/Authoring-types
+  sections.
+
 ## [v0.9.7] — round-13 (P0 AST determinism + structured output + abort cleanup) (2026-06-23)
 
 Three P0 features land in this round. **Backward compatible** — existing DWF

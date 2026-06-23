@@ -17,6 +17,7 @@ import {
 	makeWorkflowCtx,
 	getWorkflowFinalResult,
 	getWorkflowPhaseState,
+	getWorkflowLogs,
 	classifyReviewOutcome,
 } from "../../src/runtime/dynamic-workflow-context.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
@@ -458,6 +459,220 @@ test("round-12 ctx.phase(title): 100-cap bounds in-memory phases[] but events st
 		const events = readEvents(manifest.eventsPath);
 		const phaseStarted = events.filter((e) => e.type === "dwf.phase_started");
 		assert.equal(phaseStarted.length, 105, "events still emit past the cap");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+// ---------------------------------------------------------------------------
+// round-14 P1-2: ctx.budget — per-workflow token budget
+// ---------------------------------------------------------------------------
+
+test("round-14 ctx.budget: total is null by default (unbounded)", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		assert.equal(ctx.budget.total, null, "no tokenBudget → total is null (unbounded)");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.budget: total reflects opts.tokenBudget", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, tokenBudget: 500 });
+		assert.equal(ctx.budget.total, 500);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.budget: spent() starts at 0", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, tokenBudget: 500 });
+		assert.equal(ctx.budget.spent(), 0);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.budget: remaining() is Infinity when total is null", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		assert.equal(ctx.budget.remaining(), Infinity);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.budget: remaining() = total - spent when set", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, tokenBudget: 500 });
+		assert.equal(ctx.budget.remaining(), 500);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.budget: agent() returns ok:false when budget exhausted (total=0)", async () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		// tokenBudget: 0 → total=0, remaining()=0 → exhausted before first spawn (no mock needed).
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1, tokenBudget: 0 });
+		const res = await ctx.agent({ role: "executor", prompt: "say hi", maxTurns: 1 });
+		assert.equal(res.ok, false, "exhausted budget must reject the call without spawning");
+		assert.match(res.error ?? "", /budget exhausted/);
+		assert.equal(res.durationMs, 0);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.budget: after an agent run, spent accumulates from reported usage", async () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const savedMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+		const savedAllow = process.env.PI_CREW_ALLOW_MOCK;
+		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+		process.env.PI_CREW_ALLOW_MOCK = "1";
+		try {
+			const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1, tokenBudget: 100000 });
+			assert.equal(ctx.budget.spent(), 0, "spent starts at 0");
+			const res = await ctx.agent({ role: "executor", prompt: "say hi", maxTurns: 1 });
+			assert.equal(res.ok, true, "mock agent should succeed");
+			// The json-success mock reports usage {input:10, output:5}.
+			assert.equal(ctx.budget.spent(), 15, "spent accumulates input(10)+output(5)");
+			assert.equal(ctx.budget.remaining(), 100000 - 15);
+		} finally {
+			if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+			else process.env.PI_TEAMS_MOCK_CHILD_PI = savedMock;
+			if (savedAllow === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+			else process.env.PI_CREW_ALLOW_MOCK = savedAllow;
+		}
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.budget: is frozen (immutable surface)", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, tokenBudget: 100 });
+		assert.ok(Object.isFrozen(ctx.budget), "budget object is frozen");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+// ---------------------------------------------------------------------------
+// round-14 P1-3: ctx.log — workflow-level log API
+// ---------------------------------------------------------------------------
+
+test("round-14 ctx.log('hello'): appends to in-memory logs", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		ctx.log("hello");
+		assert.deepEqual(getWorkflowLogs(ctx), ["hello"]);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.log({a:1}): stringifies non-string messages", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		ctx.log({ a: 1 });
+		assert.deepEqual(getWorkflowLogs(ctx), ['{"a":1}']);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.log: emits dwf.log event with the message in data", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		ctx.log("a log line");
+		ctx.log({ nested: true });
+		const events = readEvents(manifest.eventsPath);
+		const logEvents = events.filter((e) => e.type === "dwf.log");
+		assert.equal(logEvents.length, 2, "one dwf.log event per ctx.log call");
+		assert.equal(logEvents[0]?.data?.message, "a log line");
+		assert.equal(logEvents[1]?.data?.message, '{"nested":true}');
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.log: 1000-cap bounds in-memory logs but events still flow", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		for (let i = 0; i < 1001; i++) {
+			ctx.log(`line-${i}`);
+		}
+		assert.equal(getWorkflowLogs(ctx)?.length, 1000, "in-memory logs capped at 1000");
+		const events = readEvents(manifest.eventsPath);
+		const logEvents = events.filter((e) => e.type === "dwf.log");
+		assert.equal(logEvents.length, 1001, "events still emit past the cap");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+// ---------------------------------------------------------------------------
+// round-14 P1-5: ctx.args — typed workflow arguments
+// ---------------------------------------------------------------------------
+
+test("round-14 ctx.args(): returns {} by default when no args provided", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		assert.deepEqual(ctx.args(), {});
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.args<T>(): returns the typed value passed via opts.args", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, args: { foo: "bar", count: 3 } });
+		const args = ctx.args<{ foo: string; count: number }>();
+		assert.equal(args.foo, "bar");
+		assert.equal(args.count, 3);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-14 ctx.args(): accepts non-object args (e.g. an array)", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, args: ["a", "b"] });
+		const args = ctx.args<string[]>();
+		assert.deepEqual(args, ["a", "b"]);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}

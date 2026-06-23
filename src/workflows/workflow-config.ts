@@ -45,6 +45,9 @@ export interface WorkflowConfig {
 	runtime?: "static" | "dynamic";
 	/** For runtime:"dynamic" — relative/absolute path to the .dwf.ts script. Unused for static. */
 	dynamicScript?: string;
+	/** For runtime:"dynamic" — per-workflow token budget. When set, ctx.agent() auto-rejects with
+	 *  ok:false once exhausted. Accumulated from each agent run's reported usage. */
+	maxTokenBudget?: number;
 }
 
 /** A dynamic workflow (runtime === "dynamic"). steps is empty — the script is the source of truth. */

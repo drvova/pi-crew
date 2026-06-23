@@ -281,6 +281,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		workspaceMode: params.workspaceMode,
 		ownerSessionId: ctx.sessionId,
 		runKind: params.runKind,
+		args: params.args,
 	});
 	const goalArtifact = writeArtifact(paths.artifactsRoot, {
 		kind: "prompt",
@@ -323,6 +324,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 					team: dwfTeam,
 					signal: ctx.signal ?? AbortSignal.timeout(3_600_000),
 					modelOverride: params.model,
+					tokenBudget: params.tokenBudget ?? (workflow as import("../../workflows/workflow-config.ts").DynamicWorkflowConfig).maxTokenBudget,
 				});
 			} catch (runnerError) {
 				// Round-11 runtime fix: persist manifest with status=failed when runner throws

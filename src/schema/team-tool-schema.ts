@@ -289,6 +289,20 @@ export const TeamToolParams = Type.Object({
 			},
 		),
 	),
+	tokenBudget: Type.Optional(
+		Type.Number({
+			description:
+				"Per-workflow token budget for dynamic-workflow runs. When set, ctx.agent() auto-rejects with ok:false once exhausted. Accumulated from each agent run's reported usage. Overrides workflow.maxTokenBudget.",
+			minimum: 0,
+		}),
+	),
+	args: Type.Optional(
+		// round-14 P1-5: typed workflow arguments. Type.Any() generates an empty {} schema
+		// (matches any JSON value) which is strict-provider friendly — no array type union.
+		// Description lives in the JSDoc / TeamToolParamsValue below to avoid the
+		// "description-only schema" strict-provider check.
+		Type.Any(),
+	),
 });
 
 export interface TeamToolParamsValue {
@@ -393,4 +407,8 @@ export interface TeamToolParamsValue {
 	budgetAbort?: number;
 	/** Background dispatch discriminator. Default "team-run". "goal-loop"/"dynamic-workflow" dispatch to their runners (P0/P2). */
 	runKind?: "team-run" | "goal-loop" | "dynamic-workflow";
+	/** Per-workflow token budget for dynamic-workflow runs (round-14 P1-2). */
+	tokenBudget?: number;
+	/** Typed workflow arguments for .dwf.ts scripts, accessible via ctx.args<T>() (round-14 P1-5). */
+	args?: unknown;
 }

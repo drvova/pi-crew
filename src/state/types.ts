@@ -185,6 +185,8 @@ export interface TeamRunManifest {
 	runConfig?: unknown;
 	/** Background dispatch discriminator. Default "team-run" runs executeTeamRun; "goal-loop" / "dynamic-workflow" dispatch to their respective runners. Absent = "team-run" for backward compatibility. */
 	runKind?: "team-run" | "goal-loop" | "dynamic-workflow";
+	/** round-14 P1-5: typed workflow arguments accessible in .dwf.ts scripts via ctx.args<T>(). Any JSON value; default {} when unset. */
+	args?: unknown;
 	summary?: string;
 	policyDecisions?: PolicyDecision[];
 }

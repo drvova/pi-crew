@@ -82,6 +82,16 @@ export interface AgentResult {
 	durationMs?: number;
 }
 
+/** round-14 P1-2: per-workflow token budget. Frozen read-only surface exposed as ctx.budget. */
+export interface WorkflowBudget {
+	/** Configured budget, or null when unbounded. */
+	total: number | null;
+	/** Tokens consumed so far (accumulated from each ctx.agent() run's usage). */
+	spent(): number;
+	/** Tokens remaining; Infinity when total is null. */
+	remaining(): number;
+}
+
 export interface WorkflowCtx {
 	cwd: string;
 	runId: string;
@@ -110,6 +120,16 @@ export interface WorkflowCtx {
 	 *  title is a no-op. Phase titles are in-memory only; the events log is the
 	 *  durable source of truth for phase boundaries. */
 	phase(title: string): void;
+	/** round-14 P1-3: append a workflow-level log line. Persists to events.jsonl
+	 *  as a `dwf.log` event and keeps a bounded in-memory copy (capped at 1000). */
+	log(message: unknown): void;
+	/** round-14 P1-2: per-workflow token budget. ctx.agent() auto-rejects with
+	 *  ok:false once exhausted. */
+	budget: WorkflowBudget;
+	/** round-14 P1-5: typed workflow arguments. Reads the value passed via
+	 *  MakeWorkflowCtxOptions.args (sourced from manifest.args). Defaults to {}
+	 *  when unset. */
+	args<T = unknown>(): T;
 	semaphore: Semaphore;
 	/** Abort signal (cancel/stop). */
 	signal: AbortSignal;
@@ -120,6 +140,10 @@ export interface MakeWorkflowCtxOptions {
 	signal: AbortSignal;
 	team?: TeamConfig;
 	modelOverride?: string;
+	/** round-14 P1-2: per-workflow token budget. null/undefined = unbounded. */
+	tokenBudget?: number | null;
+	/** round-14 P1-5: typed workflow arguments (sourced from manifest.args). Defaults to {}. */
+	args?: unknown;
 }
 
 /**
@@ -180,6 +204,20 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 	// The events log is the durable source of truth for phase boundaries.
 	let phaseState: { currentPhase: string | undefined; phases: string[] } = { currentPhase: undefined, phases: [] };
 	let phaseCapWarned = false;
+	// round-14 P1-2/P1-3/P1-5: closure-scoped runtime state shared by budget/log/args.
+	// Mirrors the pi-dynamic-workflows RuntimeState pattern (workflow.ts:state).
+	const wfState: { spent: number; logs: string[]; args: unknown } = {
+		spent: 0,
+		logs: [],
+		args: opts.args ?? {},
+	};
+	// round-14 P1-2: frozen budget surface. The closures read wfState.spent so the
+	// object stays live after Object.freeze(ctx). total is a snapshot primitive.
+	const budget = Object.freeze({
+		total: opts.tokenBudget ?? null,
+		spent: () => wfState.spent,
+		remaining: () => (opts.tokenBudget == null ? Infinity : Math.max(0, opts.tokenBudget - wfState.spent)),
+	} satisfies WorkflowBudget);
 
 	const ctx: WorkflowCtx = {
 		cwd: manifest.cwd,
@@ -191,6 +229,11 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 			await semaphore.acquire();
 			const started = Date.now();
 			try {
+				// round-14 P1-2: budget check BEFORE spawning. When the per-workflow token
+				// budget is exhausted, reject the call without consuming a child worker.
+				if (budget.total !== null && budget.remaining() <= 0) {
+					return { ok: false, text: "", error: "workflow token budget exhausted", durationMs: 0 };
+				}
 				const agentConfig = resolveAgentForRole(call.role, {
 					explicitAgent: call.agent,
 					team: opts.team,
@@ -231,6 +274,9 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 					return { ok: false, text: "", error: childResult.error ?? `exit ${childResult.exitCode}`, durationMs: Date.now() - started };
 				}
 				const parsed = parsePiJsonOutput(childResult.stdout);
+				// round-14 P1-2: accumulate this run's token usage into the workflow budget.
+				// Covers both the success and schema-mismatch paths (both report parsed.usage).
+				wfState.spent += (parsed.usage?.input ?? 0) + (parsed.usage?.output ?? 0);
 				let text = parsed.finalText ?? "";
 				// Round-11 test fix: parsePiJsonOutput only extracts text from pi event stream
 				// ({type:"message_end", message:{role:"assistant", content:[...]}}). When the
@@ -416,6 +462,24 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				data: { phase: title },
 			});
 		},
+		budget,
+		log(message: unknown): void {
+			// round-14 P1-3: stringify non-strings, keep a bounded in-memory copy, and
+			// always emit a dwf.log event (the events log is the durable source of truth).
+			const text = typeof message === "string" ? message : JSON.stringify(message);
+			if (wfState.logs.length < 1000) {
+				wfState.logs.push(text);
+			}
+			appendEvent(manifest.eventsPath, {
+				type: "dwf.log",
+				runId: manifest.runId,
+				data: { message: text },
+			});
+		},
+		args<T = unknown>(): T {
+			// round-14 P1-5: typed workflow args sourced from manifest (via opts.args).
+			return wfState.args as T;
+		},
 	};
 
 	// Attach the final-result slot via a non-enumerable getter so the runner can read it
@@ -430,6 +494,12 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 		get: () => phaseState,
 		enumerable: false,
 	});
+	// round-14 P1-3: in-memory log buffer is read-only from the runner; the script can only
+	// append via ctx.log(message). The events log remains the durable source of truth.
+	Object.defineProperty(ctx, "__logs", {
+		get: () => wfState.logs,
+		enumerable: false,
+	});
 	return ctx;
 }
 
@@ -441,6 +511,12 @@ export function getWorkflowFinalResult(ctx: WorkflowCtx): { artifactPath: string
 /** Read the in-memory phase state set by the script (runner-only; not part of the public ctx surface). */
 export function getWorkflowPhaseState(ctx: WorkflowCtx): { currentPhase: string | undefined; phases: string[] } | undefined {
 	return (ctx as unknown as { __phaseState?: { currentPhase: string | undefined; phases: string[] } }).__phaseState;
+}
+
+/** Read the in-memory log buffer appended by ctx.log() (runner-only; not part of the public ctx surface).
+ *  Capped at 1000 entries — the events log (dwf.log) is the durable source of truth. */
+export function getWorkflowLogs(ctx: WorkflowCtx): string[] | undefined {
+	return (ctx as unknown as { __logs?: string[] }).__logs;
 }
 
 /** Compose the agent task: prompt + optional dependency-input context block. */
