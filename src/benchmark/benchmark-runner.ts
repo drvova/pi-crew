@@ -46,9 +46,13 @@ function validateCommand(command: string): void {
   // execution without any shell metacharacter (e.g. `npx --yes evil-package`
   // or `node -e "require('fs')…"`). Use `npm test`/`npm run …` instead of raw
   // `node`/`npx` in benchmark task definitions.
-  const allowlist = /^(pytest|grep|npm test|cargo test|cargo clippy) /;
+  // `echo` is allowed because the metachar blocker (validateGateCommand) rejects
+  // command substitution (`$(...)`, backticks), so `echo $(evil)` cannot run;
+  // bare `echo …` only prints. It's the canonical exit-0 command used in
+  // benchmark fixtures across Linux/macOS/Windows(sh).
+  const allowlist = /^(pytest|grep|npm test|cargo test|cargo clippy|echo) /;
   if (!allowlist.test(command)) {
-    throw new Error(`Command not allowed: ${command}. Only pytest, grep, npm test, cargo test/clippy allowed.`);
+    throw new Error(`Command not allowed: ${command}. Only pytest, grep, npm test, cargo test/clippy, echo allowed.`);
   }
   
   // Block shell metacharacters after command name

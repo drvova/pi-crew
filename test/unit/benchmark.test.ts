@@ -33,10 +33,11 @@ test("runBenchmark command judge: fails for commands not in allowlist", async ()
 		id: "t2",
 		name: "command task",
 		prompt: "run",
-		judges: [{ type: "command", command: "echo done", description: "Echoes done" }],
+		judges: [{ type: "command", command: "ls -la", description: "Lists files" }],
 	};
 	const result = await runBenchmark(task);
-	// 'echo' is not in allowlist, so judge should fail (not pass)
+	// 'ls' is not in the allowlist (pytest|grep|npm test|cargo test|cargo clippy|echo),
+	// so the judge should fail validation (not pass).
 	assert.equal(result.passed, false);
 });
 
@@ -90,7 +91,7 @@ test("runBenchmark records durationMs", async () => {
 		id: "t7",
 		name: "timing",
 		prompt: "x",
-		judges: [{ type: "command", command: "grep --help", description: "Npx help" }],
+		judges: [{ type: "command", command: "echo ok", description: "Npx help" }],
 	};
 	const result = await runBenchmark(task);
 	assert.ok(result.durationMs >= 0);
@@ -116,7 +117,7 @@ test("runBenchmark cost defaults to 0", async () => {
 		id: "t9",
 		name: "cost",
 		prompt: "x",
-		judges: [{ type: "command", command: "grep --help", description: "Help" }],
+		judges: [{ type: "command", command: "echo ok", description: "Help" }],
 	};
 	const result = await runBenchmark(task);
 	assert.equal(result.cost, 0);
@@ -124,9 +125,9 @@ test("runBenchmark cost defaults to 0", async () => {
 
 test("runBenchmarkSuite filters by taskType", async () => {
 	const tasks: BenchmarkTask[] = [
-		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "grep --help", description: "A" }], taskType: "unit" },
-		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "grep --help", description: "B" }], taskType: "integration" },
-		{ id: "c", name: "C", prompt: "p", judges: [{ type: "command", command: "grep --help", description: "C" }], taskType: "unit" },
+		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "A" }], taskType: "unit" },
+		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "B" }], taskType: "integration" },
+		{ id: "c", name: "C", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "C" }], taskType: "unit" },
 	];
 	const suite = await runBenchmarkSuite(tasks, ["unit"]);
 	assert.equal(suite.results.length, 2);
@@ -134,8 +135,8 @@ test("runBenchmarkSuite filters by taskType", async () => {
 
 test("runBenchmarkSuite runs all tasks without taskTypes filter", async () => {
 	const tasks: BenchmarkTask[] = [
-		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "grep --help", description: "A" }], taskType: "unit" },
-		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "grep --help", description: "B" }], taskType: "integration" },
+		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "A" }], taskType: "unit" },
+		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "B" }], taskType: "integration" },
 	];
 	const suite = await runBenchmarkSuite(tasks);
 	assert.equal(suite.results.length, 2);
@@ -143,8 +144,8 @@ test("runBenchmarkSuite runs all tasks without taskTypes filter", async () => {
 
 test("runBenchmarkSuite computes total counts", async () => {
 	const tasks: BenchmarkTask[] = [
-		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "grep --help", description: "A" }] },
-		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "grep --help", description: "B" }] },
+		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "A" }] },
+		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "B" }] },
 	];
 	const suite = await runBenchmarkSuite(tasks);
 	assert.equal(suite.totalFailed, 0);

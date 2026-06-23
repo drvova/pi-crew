@@ -1,5 +1,34 @@
 # Changelog
 
+## [v0.9.4] — fix macOS CI: benchmark allowlist + cross-platform fixtures (2026-06-23)
+
+Patch fix for a CI failure introduced in v0.9.3 (caught by the macOS CI job,
+which the v0.9.3 release unfortunately did not wait for — lesson learned).
+
+### What was wrong
+
+The v0.9.3 benchmark test fixtures used `grep --help` as a benign exit-0
+command. GNU grep (Linux) exits 0, but **BSD grep (macOS) does not support
+`--help`** and exits 2 — so `runBenchmarkSuite computes total counts` failed
+on macOS CI (`2 !== 0`). Local Linux verification missed this.
+
+### Fix
+
+- `benchmark-runner.ts`: added `echo` to the command allowlist. Safe because the
+  shell-metachar blocker already rejects command substitution (`$(…)`, backticks),
+  so `echo $(evil)` cannot execute; bare `echo …` only prints. `echo` is the
+  canonical cross-platform exit-0 command.
+- `test/unit/benchmark.test.ts`: fixtures switched from `grep --help` → `echo ok`
+  (exits 0 on Linux/macOS/Windows-sh). The "not in allowlist" test now uses `ls`
+  (genuinely disallowed).
+
+### Process note
+
+This is the release where the project re-commits to: **tag/publish ONLY after
+the full OS matrix CI (ubuntu/windows/macos) is green.** v0.9.3 was published
+mid-CI-run; the package itself is correct (the broken file is test-only and
+not shipped), but the repo CI went red. v0.9.4 restores green CI.
+
 ## [v0.9.3] — security hardening + crash-diagnostics (code review 2026-06-23)
 
 Patch release addressing findings from a full codebase code review
