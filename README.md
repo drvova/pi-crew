@@ -39,12 +39,64 @@ npm: pi-crew
 repo: https://github.com/baphuongna/pi-crew
 ```
 
-**v0.9.0**: See [CHANGELOG.md](CHANGELOG.md).
+**v0.9.4 / v0.9.5**: See [CHANGELOG.md](CHANGELOG.md).
 
-### Highlights (v0.6.4 → v0.9.0)
+### Highlights (v0.6.4 → v0.9.5)
 
 A long arc of **trust, cliff-resilience, and robustness** work. Principle: *build
 trust and cliff-resilience, stay lean, delete before adding.*
+
+#### v0.9.5 — fix "team run hangs forever at 25%" (2026-06-23)
+Two coupled runtime bugs caused recurring "run stuck at 25% (1/4)" failures
+across 4+ consecutive review/fast-fix runs. The combined symptom: scheduler
+appears to stop responding right after the first task (explorer) finishes, no
+progress to task 2, and `team action='status'` returns "Run not found" with
+**no diagnostic trail** to investigate. Manual `kill` of the parent `pi`
+process was the only workaround.
+
+- **🩹 Bug X (proximate cause)** — `purgeStaleActiveRunIndex`
+  (`src/runtime/crash-recovery.ts`) destroyed a run's `stateRoot` based on a
+  **frozen** `entry.updatedAt` (set once at registration, never refreshed).
+  Any long-running legitimate async run (≥5 min) whose worker had exited
+  lost its entire durable state. `saveRunTasks()` then silently no-op'd on
+  the missing dir, and the workflow could never advance. Fix: corroborate
+  liveness via the on-disk `manifest.updatedAt` AND the team-level
+  `heartbeat.json`; keep `stateRoot` on cancel so runs stay queryable and
+  resumable.
+- **🩹 Bug Y (root cause — why the scheduler died in the first place)** —
+  `src/runtime/background-runner.ts` redirected only `console.log` /
+  `console.error` to the log file. The first post-detach `console.debug`
+  call from `team-runner.ts:242` (inside `mergeTaskUpdatesPreservingTerminal`
+  → "Skipping stale merge") hit the disconnected stdout pipe → unhandled
+  `EPIPE` → process exit. Prior investigators concluded (incorrectly) that
+  the cause was a native crash, because diagnostic `[DIAG]` handlers never
+  fired on the EPIPE. Fix: extend the console redirect to `console.debug` /
+  `console.warn`, and wrap `fs.writeSync` in try-catch so any log-write
+  failure can never crash the scheduler.
+- **🧪 Regression coverage** — 7 new tests: 3 in
+  `test/unit/crash-recovery-purge-liveness.test.ts` (fresh-manifest-kept,
+  orphan-cancelled-preserved, fresh-heartbeat-kept) + 4 in
+  `test/unit/background-runner-console-redirect.test.ts` (drift-detector
+  pattern that exercises undefined / valid / EBADF / post-toggle logFd).
+- **📖 See [CHANGELOG.md](CHANGELOG.md) for full details**, including
+  why prior attempts to diagnose the hang kept destroying the only
+  evidence (Bug X nuked the stateRoot before anyone could read the EPIPE
+  crash in Bug Y).
+
+> **Recovering a stuck run from v0.9.4 or earlier:** the `stateRoot` for
+> those runs is already gone. Re-dispatch the workflow — new runs are
+> fully protected.
+
+#### v0.9.4 — macOS CI fixture (2026-06-23)
+- **🧪 BSD-vs-GNU grep fix** — benchmark test fixtures used
+  `grep --help` (exits 0 on GNU/Linux, exits 2 on BSD/macOS). Switched
+  the exit-0 fixture to `echo ok`; the not-in-allowlist fixture is now
+  `ls`. CI matrix is now green on all 3 OSes.
+- **📌 Process note** — this release re-commits to: **tag/publish ONLY
+  after the full OS matrix CI is green.** v0.9.3 was published mid-CI-run
+  (the macOS job hadn't finished); the package itself was correct (the
+  broken file is test-only and not shipped), but the repo CI went red.
+  v0.9.4 restores green CI. v0.9.5 follows the same discipline.
 
 #### v0.9.0 — goal loops + dynamic workflows (2026-06-18)
 Two new features, both modeled on Claude Code, built on a shared `runKind`

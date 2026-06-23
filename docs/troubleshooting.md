@@ -74,6 +74,32 @@ team action='cancel' runId=…    # cancel a truly-dead run
 
 The error message explains the heartbeat mechanism + remediation.
 
+### "Run not found" but `team list` shows it / scheduler appears frozen at 25%
+
+**Symptom:** an async `team action='run'` (e.g. a review) gets through the
+first task (e.g. explorer), then the scheduler appears to stop responding.
+`team action='status' runId=…` returns `Run not found`; the run's
+`stateRoot` (in `<project>/.crew/state/runs/<runId>/`) is missing. TUI
+progress shows the run stuck at the same task percentage forever, and the
+only workaround was killing the parent `pi` process.
+
+**This was the v0.9.4 symptom** caused by two coupled runtime bugs:
+
+- **Bug X** (proximate): `purgeStaleActiveRunIndex` destroyed the
+  `stateRoot` of long-running legitimate async runs based on a frozen
+  `entry.updatedAt` (set at registration, never refreshed).
+- **Bug Y** (root cause): the bg-runner crashed with an unhandled `EPIPE`
+  on the first `console.debug` after the parent detached its stdio pipes.
+
+**Fixed in v0.9.5** (see [CHANGELOG.md](../CHANGELOG.md#v095--fix-team-run-hangs-forever-at-25-2026-06-23)).
+With the fix, a long-running run is no longer falsely purged, and even if the
+bg-runner dies, the `stateRoot`, `background.log`, `events.jsonl`, and
+`heartbeat.json` survive — runs stay queryable and resumable.
+
+**Recovering a stuck run from v0.9.4 or earlier:** the `stateRoot` for
+those runs is already gone (Bug X nuked it). Re-dispatch the workflow. New
+runs on v0.9.5+ are fully protected.
+
 ## Model fallback exhausted
 
 **Symptom:** `All N candidates exhausted (tried: a → b → c)`.

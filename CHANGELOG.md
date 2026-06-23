@@ -1,5 +1,103 @@
 # Changelog
 
+## [v0.9.5] — fix "team run hangs forever at 25%" (2026-06-23)
+
+Two coupled runtime bugs caused the recurring "run stuck at 25% (1/4)" failure
+observed across 4+ consecutive review/fast-fix runs. Both are now fixed; full
+diagnostics (background.log, events.jsonl, heartbeat.json) are preserved for
+all runs.
+
+### Bug X — `purgeStaleActiveRunIndex` destroyed the run's stateRoot (proximate cause)
+
+**File:** `src/runtime/crash-recovery.ts`
+
+**What was wrong:** `purgeStaleActiveRunIndex` decided whether a run was
+"orphaned" using `entry.updatedAt`, which is **frozen at registration** and
+never refreshed during execution. A long-running legitimate async run whose
+background worker had exited (e.g. after a 5–15 min explorer) would have its
+entire durable state (manifest/tasks/events/heartbeat) hard-deleted. Because
+`saveRunTasks()` silently no-ops once the state dir is missing, the workflow
+could never advance past the current task → **permanent invisible hang**
+("Run not found"), with all diagnostics lost.
+
+**Fix:**
+- Liveness now corroborated via (a) the on-disk `manifest.updatedAt` (rewritten
+  on every task transition) and (b) the team-level `heartbeat.json` mtime —
+  any one of which is sufficient to declare the run live.
+- Cancelling a run now **keeps its stateRoot** so the run stays queryable and
+  resumable, and its diagnostics survive. The finished-run pruner removes the
+  directory later on its normal schedule.
+- Removed two redundant `saveRunManifest(fullLoaded.manifest)` calls that
+  were clobbering the freshly-saved `cancelled` status back to `running`.
+
+**New regression test:** `test/unit/crash-recovery-purge-liveness.test.ts`
+(3 cases: fresh manifest kept, orphan cancelled-but-preserved, fresh
+heartbeat kept — all using a live-worker-then-reap + `now`-time-shift
+harness to deterministically simulate the registration-then-aging race).
+
+### Bug Y — background runner crashed with EPIPE on the first post-detach `console.debug` (root cause)
+
+**File:** `src/runtime/background-runner.ts`
+
+**What was wrong:** The in-process console redirect only covered `console.log`
+and `console.error`; `console.debug` and `console.warn` still wrote to the
+original stdout/stderr pipes. The background runner is spawned with
+`detached:true` + `setsid:true`, so the parent disconnects the stdio pipes
+immediately after spawn. The first post-detach `console.debug` call from
+`team-runner.ts:242` (inside `mergeTaskUpdatesPreservingTerminal` →
+"Skipping stale merge") hit the closed stdout → unhandled `EPIPE` error →
+**process exit** → scheduler dead → run stuck at 25% forever.
+
+Prior investigators saw only "the run died silently right after explorer
+completed" and concluded (incorrectly) that the cause was a native crash
+(SIGKILL/segfault/V8 heap-OOM), because their [DIAG] handlers never fired.
+In reality the diagnostic handlers DID fire — but on a `EPIPE` write error,
+which `process.on('error')` doesn't catch. The fix below makes the crash
+observable AND non-fatal.
+
+**Fix:**
+- Extend the console redirect to also cover `console.debug` and `console.warn`,
+  so they go to the log file (logFd) instead of the disconnected stdio pipes.
+- Wrap the `fs.writeSync` in try-catch so any log-write failure (closed fd,
+  ENOSPC, etc.) can never crash the scheduler. The scheduler log is
+  best-effort by design.
+
+**New regression test:** `test/unit/background-runner-console-redirect.test.ts`
+(4 cases: undefined logFd no-op, valid logFd writes correctly, EBADF on
+closed logFd is swallowed, post-undefined fd-toggle is safe). Replicates the
+`origWrite` pattern from the source so any drift between the two is easy to
+spot.
+
+### Why this took multiple attempts
+
+All prior attempts to diagnose the hang destroyed the only evidence (the
+stateRoot) the moment the `purgeStaleActiveRunIndex` heuristic misfired.
+The chain was always the same: a worker exits for any reason → purge sees
+dead PID + frozen-stale entry → **deletes stateRoot** → the run becomes
+"Run not found" with no log, no events, no heartbeat, no way to even resume.
+That hid the real cause (Bug Y) for the entire series of failed diagnostic
+runs. With Bug X fixed, the diagnostic trail (background.log 345 KB +
+events.jsonl 166 KB) survives long enough to read the actual EPIPE crash
+that Bug Y left behind.
+
+### Verification
+
+- 7/7 new regression tests pass (`crash-recovery-purge-liveness.test.ts` +
+  `background-runner-console-redirect.test.ts`).
+- Existing crash-recovery / active-run-registry / stale-reconciler /
+  async-stale / run-accumulation / auto-recovery suites: 71/71 pass.
+- End-to-end: a 4-step review run now advances 3/4 tasks (75%) instead of
+  hanging at 25%; the verify step that would have failed earlier now fails
+  only for environmental reasons (memory OOM under load), not the fix.
+- `npx tsc --noEmit` is green.
+
+### Notes for users
+
+If you have a stuck "running" run from v0.9.4 or earlier (the symptom was
+"Run not found" / "25% hang" / "had to kill pi"), upgrading alone will not
+recover it — its `stateRoot` was already destroyed by the buggy purge.
+Re-dispatch the workflow. New runs are fully protected.
+
 ## [v0.9.4] — fix macOS CI: benchmark allowlist + cross-platform fixtures (2026-06-23)
 
 Patch fix for a CI failure introduced in v0.9.3 (caught by the macOS CI job,

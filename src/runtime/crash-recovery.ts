@@ -1,10 +1,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { MetricRegistry } from "../observability/metric-registry.ts";
 import { appendEvent, scanSequence } from "../state/event-log.ts";
 import { recordFromTask, upsertCrewAgent } from "./crew-agent-records.ts";
 import { withRunLockSync } from "../state/locks.ts";
-import { loadRunManifestById, saveRunManifest, saveRunTasks, updateRunStatus } from "../state/state-store.ts";
+import { loadRunManifestById, saveRunTasks, updateRunStatus } from "../state/state-store.ts";
 import type { TeamTaskState } from "../state/types.ts";
 import { isWorkerHeartbeatStale } from "./worker-heartbeat.ts";
 import type { ManifestCache } from "./manifest-cache.ts";
@@ -216,6 +217,43 @@ function tryRemoveRunDirectories(entry: { stateRoot: string; cwd: string }): voi
 }
 
 /**
+ * Age (ms) of the team-level heartbeat file for a run. The team-runner writes
+ * `<stateRoot>/heartbeat.json` periodically while a workflow is executing
+ * (startTeamHeartbeat), so a fresh heartbeat is strong evidence the run is alive
+ * even when its recorded PID check is inconclusive or its active-run-index
+ * entry's `updatedAt` was frozen at registration. Returns Infinity when absent.
+ */
+function heartbeatAgeMs(entry: { stateRoot: string }, now: number): number {
+	try {
+		const mtime = fs.statSync(path.join(entry.stateRoot, "heartbeat.json")).mtimeMs;
+		return Number.isFinite(mtime) ? now - mtime : Infinity;
+	} catch {
+		return Infinity;
+	}
+}
+
+/**
+ * True if there is recent evidence the run is (or was very recently) alive, so
+ * it must NOT be purged. Any one of these signals is sufficient:
+ *   - on-disk `manifest.updatedAt` fresher than `staleThresholdMs` (rewritten on
+ *     every task transition / status change), and/or
+ *   - team-level `heartbeat.json` fresher than `staleThresholdMs`.
+ * `entry.updatedAt` is intentionally NOT consulted: it is frozen at
+ * registration and never refreshed during execution, which previously caused
+ * long-running legitimate runs to be falsely purged — destroying their
+ * stateRoot, and because saveRunTasks() silently no-ops once the state dir is
+ * gone, hanging the workflow permanently at the current task with no
+ * recoverable state ("Run not found").
+ */
+function hasRecentLifeEvidence(entry: { stateRoot: string }, manifestUpdatedAt: string | undefined, now: number, staleThresholdMs: number): boolean {
+	const manifestMs = manifestUpdatedAt ? new Date(manifestUpdatedAt).getTime() : NaN;
+	if (Number.isFinite(manifestMs) && now - manifestMs <= staleThresholdMs) return true;
+	const hbAge = heartbeatAgeMs(entry, now);
+	if (Number.isFinite(hbAge) && hbAge <= staleThresholdMs) return true;
+	return false;
+}
+
+/**
  * Purge the global active-run-index of entries whose manifest is no longer active.
  *
  * Note: This function only cleans user-level active run entries.
@@ -244,7 +282,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 		}
 
 		// 3. Read manifest status
-		let manifest: { status?: string; async?: { pid?: number }; ownerSessionId?: string } | undefined;
+		let manifest: { status?: string; updatedAt?: string; async?: { pid?: number }; ownerSessionId?: string } | undefined;
 		try {
 			manifest = JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8"));
 		} catch {
@@ -262,46 +300,52 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 			continue;
 		}
 
-		// 5. Still "running" — check if worker PID is dead and no heartbeat
+		// 5. Still "running" with an async worker PID — only purge when the worker
+		// is actually dead AND there is no recent evidence of life. We must NOT
+		// rely solely on `entry.updatedAt` (frozen at registration) nor on a single
+		// dead-PID reading: a long-running worker (e.g. a 15-minute explorer)
+		// legitimately keeps the run "running" while periodically rewriting the
+		// on-disk manifest.updatedAt and heartbeat.json. Falsely purging such a run
+		// destroys its stateRoot, and because saveRunTasks() silently no-ops once
+		// the state dir is gone, the workflow then hangs permanently at the
+		// current task with no recoverable state ("Run not found"). When we do mark
+		// a run cancelled here, we KEEP its stateRoot so the run stays queryable/
+		// resumable and its diagnostics survive; the finished-run pruner removes
+		// the directory later on its normal schedule.
 		if (manifest?.status === "running" && manifest.async?.pid !== undefined) {
 			const pidAlive = checkProcessLiveness(manifest.async.pid).alive;
-			if (!pidAlive) {
-				// Check age — if manifest hasn't been updated in > threshold, it's stale
-				const updatedAt = new Date(entry.updatedAt).getTime();
-				if (Number.isFinite(updatedAt) && now - updatedAt > staleThresholdMs) {
-					// Dead PID + stale update → cancel the manifest and unregister
-					try {
-						const fullLoaded = loadRunManifestById(entry.cwd, entry.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
-						if (fullLoaded) {
-							const now_iso = new Date(now).toISOString();
-							const repairedTasks = fullLoaded.tasks.map((task) => {
-								if (task.status === "running" || task.status === "queued" || task.status === "waiting") {
-									return { ...task, status: "cancelled" as const, finishedAt: now_iso, error: "Orphaned run: worker process dead and no recent activity" };
-								}
-								return task;
-							});
-							saveRunTasks(fullLoaded.manifest, repairedTasks);
-							for (const task of repairedTasks) { try { upsertCrewAgent(fullLoaded.manifest, recordFromTask(fullLoaded.manifest, task, "scaffold")); } catch { /* non-critical */ } }
-							updateRunStatus(fullLoaded.manifest, "cancelled", "Orphaned run: worker process dead and no recent activity");
-							saveRunManifest(fullLoaded.manifest);
-							void terminateLiveAgentsForRun(fullLoaded.manifest.runId, "cancelled", appendEvent, fullLoaded.manifest.eventsPath).catch((error) => logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`));
-						}
-					} catch {
-						// Best-effort manifest cleanup
+			if (!pidAlive && !hasRecentLifeEvidence(entry, manifest.updatedAt, now, staleThresholdMs)) {
+				// Dead PID + no recent life evidence → cancel the manifest and unregister
+				try {
+					const fullLoaded = loadRunManifestById(entry.cwd, entry.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
+					if (fullLoaded) {
+						const now_iso = new Date(now).toISOString();
+						const repairedTasks = fullLoaded.tasks.map((task) => {
+							if (task.status === "running" || task.status === "queued" || task.status === "waiting") {
+								return { ...task, status: "cancelled" as const, finishedAt: now_iso, error: "Orphaned run: worker process dead and no recent activity" };
+							}
+							return task;
+						});
+						saveRunTasks(fullLoaded.manifest, repairedTasks);
+						for (const task of repairedTasks) { try { upsertCrewAgent(fullLoaded.manifest, recordFromTask(fullLoaded.manifest, task, "scaffold")); } catch { /* non-critical */ } }
+						updateRunStatus(fullLoaded.manifest, "cancelled", "Orphaned run: worker process dead and no recent activity");
+						void terminateLiveAgentsForRun(fullLoaded.manifest.runId, "cancelled", appendEvent, fullLoaded.manifest.eventsPath).catch((error) => logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`));
 					}
-					unregisterActiveRun(entry.runId);
-					tryRemoveRunDirectories(entry);
-					purged.push(entry.runId);
-					continue;
+				} catch {
+					// Best-effort manifest cleanup
 				}
+				unregisterActiveRun(entry.runId);
+				purged.push(entry.runId);
+				continue;
 			}
 		}
 
-		// 6. "running" but no async worker PID — possible orphaned run where manifest
-		// was never updated after worker exit. Check updatedAt age.
+		// 6. "running" but no async worker PID — possible orphaned run where the
+		// manifest was never updated to a terminal status after the worker exited.
+		// Uses the same life-evidence corroboration as condition 5; the stateRoot is
+		// kept on cancel so the run stays queryable/resumable with diagnostics.
 		if (manifest?.status === "running" && manifest.async === undefined) {
-			const updatedAt = new Date(entry.updatedAt).getTime();
-			if (Number.isFinite(updatedAt) && now - updatedAt > staleThresholdMs) {
+			if (!hasRecentLifeEvidence(entry, manifest.updatedAt, now, staleThresholdMs)) {
 				try {
 					const fullLoaded = loadRunManifestById(entry.cwd, entry.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 					if (fullLoaded && fullLoaded.manifest.status === "running") {
@@ -315,14 +359,12 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 						saveRunTasks(fullLoaded.manifest, repairedTasks);
 						for (const task of repairedTasks) { try { upsertCrewAgent(fullLoaded.manifest, recordFromTask(fullLoaded.manifest, task, "scaffold")); } catch { /* non-critical */ } }
 						updateRunStatus(fullLoaded.manifest, "cancelled", "Orphaned run: no async worker and no manifest update in over " + Math.round(staleThresholdMs / 60000) + " minutes");
-						saveRunManifest(fullLoaded.manifest);
 						void terminateLiveAgentsForRun(fullLoaded.manifest.runId, "cancelled", appendEvent, fullLoaded.manifest.eventsPath).catch((error) => logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`));
 					}
 				} catch {
 					// Best-effort
 				}
 				unregisterActiveRun(entry.runId);
-				tryRemoveRunDirectories(entry);
 				purged.push(entry.runId);
 				continue;
 			}

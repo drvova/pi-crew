@@ -323,11 +323,28 @@ async function main(): Promise<void> {
 			const origWrite =
 				(_prefix: string) =>
 				(data: unknown, ...args: unknown[]) => {
+					// FIX: Never let the in-process console redirect crash the background
+					// runner. If logFd is missing/invalid or the write fails, swallow the
+					// error silently — losing one debug line is far better than killing the
+					// scheduler (a previous version only redirected console.log/error, so
+					// console.debug/.warn still wrote to the original stdout/stderr pipe
+					// which is closed after the parent detaches, producing EPIPE → process
+					// crash mid-workflow → runs hang at 25% forever).
+					if (logFd === undefined) return;
 					const msg = [data, ...args].map(String).join(" ") + "\n";
-					fs.writeSync(logFd!, msg);
+					try {
+						fs.writeSync(logFd, msg);
+					} catch {
+						/* best-effort: never crash the scheduler over a log write */
+					}
 				};
 			console.log = origWrite("OUT");
 			console.error = origWrite("ERR");
+			// FIX: Also redirect console.debug and console.warn — otherwise they still
+			// hit the original stdout/stderr pipe, which is closed once the parent
+			// process detaches, causing EPIPE unhandled errors that kill the scheduler.
+			console.debug = origWrite("DBG");
+			console.warn = origWrite("WARN");
 			// FIX: Close logFd on process exit to prevent file descriptor leak
 			process.on("exit", () => {
 				try {
@@ -558,8 +575,11 @@ async function main(): Promise<void> {
 			debugLog(`[background-runner] short-circuiting ${manifest.runKind} (synthetic team/workflow)`,
 			);
 			if (manifest.runKind === "goal-loop") {
+		// LAZY: defer dynamic import of ./goal-loop-runner.ts to its call site.
 				const { runGoalLoop } = await import("./goal-loop-runner.ts");
+		// LAZY: defer dynamic import of ./goal-state-store.ts to its call site.
 				const { GoalStore } = await import("./goal-state-store.ts");
+		// LAZY: defer dynamic import of ../agents/discover-agents.ts to its call site.
 				const { discoverAgents, allAgents } = await import("../agents/discover-agents.ts");
 				const store = new GoalStore(manifest.cwd);
 				const goalState = store.load(manifest.runId);
@@ -576,7 +596,9 @@ async function main(): Promise<void> {
 				saveRunManifest(finalGoalManifest);
 				earlyResult = { manifest: finalGoalManifest, tasks: goalResult.tasks };
 			} else {
+		// LAZY: defer dynamic import of ./dynamic-workflow-runner.ts to its call site.
 				const { runDynamicWorkflow } = await import("./dynamic-workflow-runner.ts");
+		// LAZY: defer dynamic import of ../workflows/discover-workflows.ts to its call site.
 				const { allWorkflows, discoverWorkflows } = await import("../workflows/discover-workflows.ts");
 				const wf = allWorkflows(discoverWorkflows(manifest.cwd)).find((w) => w.name === manifest.workflow);
 				if (!wf || wf.runtime !== "dynamic" || !wf.dynamicScript) throw new Error(`runKind="dynamic-workflow" but workflow '${manifest.workflow}' is not dynamic (runId=${manifest.runId})`);
