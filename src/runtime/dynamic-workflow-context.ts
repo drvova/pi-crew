@@ -33,6 +33,7 @@ import { writeArtifact } from "../state/artifact-store.ts";
 import { appendEvent } from "../state/event-log.ts";
 import { appendMailboxMessage, readMailbox } from "../state/mailbox.ts";
 import { renderPlanTemplate } from "./plan-templates.ts";
+import { prepareAgentWorktree, cleanupAgentWorktree } from "../worktree/worktree-manager.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { randomBytes } from "node:crypto";
 import type { TSchema } from "@sinclair/typebox";
@@ -68,6 +69,14 @@ export interface AgentCallOpts {
 	 *  structured `error` and undefined `structured` field. Forward-compatible: when
 	 *  undefined, behavior is identical to the regex-based extractor. */
 	schema?: TSchema;
+	/** round-17 P2-4: spawn this agent in an isolated git worktree.
+	 *  Useful when parallel agents modify files concurrently (avoids conflicts). The
+	 *  worktree is created from HEAD, the agent runs there, and on completion the
+	 *  diff is captured as an artifact before cleanup. Default false.
+	 *  If worktree creation fails (no git repo, dirty leader), the agent runs in the
+	 *  normal cwd and a warning is logged via ctx.log(). Backward compatible —
+	 *  omitting it is identical to `false`. */
+	worktree?: boolean;
 }
 
 export interface AgentResult {
@@ -237,6 +246,10 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 		async agent(call: AgentCallOpts): Promise<AgentResult> {
 			await semaphore.acquire();
 			const started = Date.now();
+			// round-17 P2-4: declared before the try so the finally can clean it up
+			// regardless of which return/throw path is taken.
+			let worktreePath: string | undefined;
+			let worktreeBranch: string | undefined;
 			try {
 				// round-14 P1-2: budget check BEFORE spawning. When the per-workflow token
 				// budget is exhausted, reject the call without consuming a child worker.
@@ -266,8 +279,29 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 					effectiveAgent = { ...effectiveAgent, systemPrompt: call.systemPrompt };
 				}
 				const task = composeAgentTask(call);
+
+				// round-17 P2-4: worktree isolation per agent. When requested, spawn the
+				// agent in an isolated git worktree so parallel file-modifying agents
+				// don't clobber each other. Falls back to the normal cwd (with a warning)
+				// when worktree creation is unavailable (no git repo, dirty leader).
+				let agentCwd = manifest.cwd;
+				if (call.worktree === true) {
+					const wt = prepareAgentWorktree(
+						manifest,
+						`dwf-agent-${Date.now()}-${randomBytes(4).toString("hex")}`,
+					);
+					if (wt?.worktreePath) {
+						agentCwd = wt.cwd;
+						worktreePath = wt.worktreePath;
+						worktreeBranch = wt.branch;
+						ctx.log(`worktree: agent isolated at ${wt.worktreePath}`);
+					} else {
+						ctx.log("worktree: creation unavailable — falling back to normal cwd");
+					}
+				}
+
 				const childResult = await runChildPi({
-					cwd: manifest.cwd,
+					cwd: agentCwd,
 					task,
 					agent: effectiveAgent,
 					model: call.model ?? opts.modelOverride ?? agentConfig.model,
@@ -329,6 +363,16 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				logInternalError("dynamic-workflow-context.agent", error, `runId=${manifest.runId}`);
 				return { ok: false, text: "", error: error instanceof Error ? error.message : String(error), durationMs: Date.now() - started };
 			} finally {
+				// round-17 P2-4: clean up the worktree after the agent completes (success
+				// OR failure). Captures the diff as an artifact before removal. Best-effort
+				// — a leak must never crash the workflow.
+				if (worktreePath) {
+					try {
+						cleanupAgentWorktree(manifest, worktreePath, worktreeBranch);
+					} catch (cleanupError) {
+						logInternalError("dynamic-workflow-context.worktree-cleanup", cleanupError, `worktreePath=${worktreePath}`);
+					}
+				}
 				semaphore.release();
 			}
 		},

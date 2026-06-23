@@ -47,6 +47,13 @@ export interface AgentCallOpts {
 	systemPrompt?: string;
 	/** Round-13: optional TypeBox schema. When set, output is validated; mismatch yields ok:false. */
 	schema?: { readonly [key: string]: unknown };
+	/** round-17 P2-4: spawn this agent in an isolated git worktree. Useful when
+	 *  parallel agents modify files concurrently (avoids conflicts). The worktree
+	 *  is created from HEAD, the agent runs there, and on completion the diff is
+	 *  captured as an artifact before cleanup. Default false. If worktree creation
+	 *  fails (no git repo, dirty leader), the agent runs in the normal cwd with a
+	 *  warning. Backward compatible — omitting it is identical to `false`. */
+	worktree?: boolean;
 }
 
 export interface AgentResult {

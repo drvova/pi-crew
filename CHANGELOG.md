@@ -1,5 +1,55 @@
 # Changelog
 
+## [v0.9.7] — round-17 (P2-4 worktree isolation per agent) (2026-06-23)
+
+P2-4 feature: `ctx.agent({worktree: true})` spawns the agent in an isolated
+git worktree so parallel file-modifying agents don't conflict. Fully backward
+compatible — `worktree` defaults to false, so existing calls are unchanged.
+
+### Implementation
+
+**New helpers** in `src/worktree/worktree-manager.ts`:
+- `prepareAgentWorktree(manifest, opts)` — creates a worktree from HEAD on a
+  unique branch; returns `{path, branch}` or `undefined` when the cwd is not a
+  git repo (graceful fallback).
+- `cleanupAgentWorktree(manifest, worktreePath, branch?)` — removes the
+  worktree dir + branch, and captures a git diff as a side artifact when the
+  worktree has changes (for audit/merge).
+
+**`ctx.agent()` integration** in `src/runtime/dynamic-workflow-context.ts`:
+- New `worktree?: boolean` field on `AgentCallOpts`.
+- When true, the agent runs with the worktree path as its cwd.
+- Cleanup always runs (success, failure, or agent error) — no worktree leaks.
+- Non-git cwd or creation failure → fall back to normal cwd + `ctx.log()`
+  warning; the agent still runs.
+
+### Why worktrees for DWF
+
+DWF scripts commonly fan out parallel agents that each modify files (e.g.
+fixing different modules). Without isolation they race on the working tree.
+`worktree: true` gives each agent its own checkout; the diff is captured as
+an artifact for later merge.
+
+### Tests (8 new, 60 total in dynamic-workflow-context.test.ts)
+- prepareAgentWorktree creates an isolated worktree
+- cleanupAgentWorktree removes dir + branch (no leak)
+- cleanupAgentWorktree captures a diff artifact when there are changes
+- prepareAgentWorktree returns undefined for non-git cwd (graceful fallback)
+- ctx.agent({worktree:true}) isolates + cleans up (mock)
+- ctx.agent({worktree:false}) uses normal cwd (backward compat)
+- ctx.agent({worktree:true}) falls back gracefully + warns in non-git cwd
+- ctx.agent({worktree:true}) cleans up even when the agent fails
+
+### Docs
+- `docs/dynamic-workflows.md` — worktree option in API table + example
+- `types/dwf.d.ts` — `worktree?: boolean` on AgentCallOpts
+- `package.json` — bumped 1.0.0 → 1.0.1 (patch, additive opt-in)
+
+### Out of scope (future rounds)
+- P2-2 VM sandbox — waiting for `isolated-vm` v1.5 (vm.createContext is not
+  a real security boundary)
+- P2-3 Resume/checkpoint — round-18 candidate (large effort)
+
 ## [v0.9.7] — round-16 (P2-1 pipeline primitive) (2026-06-23)
 
 Adds **`ctx.pipeline(items, ...stages)`** — a multi-stage transform primitive for

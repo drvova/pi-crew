@@ -8,6 +8,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { execSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Type } from "@sinclair/typebox";
@@ -20,6 +21,7 @@ import {
 	getWorkflowLogs,
 	classifyReviewOutcome,
 } from "../../src/runtime/dynamic-workflow-context.ts";
+import { prepareAgentWorktree, cleanupAgentWorktree } from "../../src/worktree/worktree-manager.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 import type { AgentCallOpts } from "../../src/runtime/dynamic-workflow-context.ts";
 
@@ -835,6 +837,212 @@ test("ctx.pipeline — execution bounded by workflow concurrency", async () => {
 		assert.ok(maxInFlight <= 2, `maxInFlight ${maxInFlight} must not exceed concurrency 2`);
 		assert.ok(maxInFlight >= 2, `maxInFlight ${maxInFlight} should reach the concurrency limit`);
 	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+// ---------------------------------------------------------------------------
+// round-17 P2-4: worktree isolation per agent
+// ---------------------------------------------------------------------------
+
+/** Initialize a clean git repo (with an initial commit) in `cwd`. */
+function initGitRepo(cwd: string): void {
+	execSync("git init -q", { cwd, encoding: "utf-8" });
+	execSync("git config user.email test@test.test", { cwd, encoding: "utf-8" });
+	execSync("git config user.name test", { cwd, encoding: "utf-8" });
+	fs.writeFileSync(path.join(cwd, "README.md"), "init\n");
+	execSync("git add -A", { cwd, encoding: "utf-8" });
+	execSync("git commit -q -m init", { cwd, encoding: "utf-8" });
+}
+
+/** Escape a path for use in a RegExp. */
+function escapeRe(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+test("round-17 P2-4: prepareAgentWorktree creates an isolated worktree (cwd === worktreePath)", () => {
+	const cwd = tmpCwd();
+	try {
+		initGitRepo(cwd);
+		const manifest = fakeManifest(cwd);
+		const wt = prepareAgentWorktree(manifest, "agent-1");
+		assert.ok(wt, "should return a PreparedTaskWorkspace in a git repo");
+		assert.ok(wt?.worktreePath, "worktreePath should be set");
+		// The cwd returned is the value ctx.agent() passes to runChildPi.
+		assert.equal(wt?.cwd, wt?.worktreePath, "cwd === worktreePath (the value passed to runChildPi)");
+		assert.equal(typeof wt?.branch, "string");
+		assert.ok(fs.existsSync(wt!.worktreePath!), "worktree directory should exist on disk");
+		// git must know about the worktree.
+		const list = execSync("git worktree list", { cwd, encoding: "utf-8" });
+		assert.match(list, new RegExp(escapeRe(wt!.worktreePath!)), "git worktree list contains the worktree");
+		cleanupAgentWorktree(manifest, wt!.worktreePath!, wt!.branch);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-17 P2-4: cleanupAgentWorktree removes the worktree dir + branch (no leak)", () => {
+	const cwd = tmpCwd();
+	try {
+		initGitRepo(cwd);
+		const manifest = fakeManifest(cwd);
+		const wt = prepareAgentWorktree(manifest, "agent-clean");
+		assert.ok(wt?.worktreePath && wt?.branch);
+		const branch = wt!.branch!;
+		const wtPath = wt!.worktreePath!;
+		// Branch exists before cleanup.
+		const branchesBefore = execSync("git branch --list", { cwd, encoding: "utf-8" });
+		assert.match(branchesBefore, new RegExp(escapeRe(branch)), "branch exists before cleanup");
+		cleanupAgentWorktree(manifest, wtPath, branch);
+		// Worktree directory gone.
+		assert.ok(!fs.existsSync(wtPath), "worktree directory removed after cleanup");
+		// Only the leader remains in `git worktree list`.
+		const list = execSync("git worktree list", { cwd, encoding: "utf-8" }).trim().split("\n");
+		assert.equal(list.length, 1, `only the leader worktree should remain, got: ${list.join(" | ")}`);
+		// Ephemeral branch deleted.
+		const branchesAfter = execSync("git branch --list", { cwd, encoding: "utf-8" });
+		assert.doesNotMatch(branchesAfter, new RegExp(escapeRe(branch)), "ephemeral branch deleted after cleanup");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-17 P2-4: cleanupAgentWorktree captures a diff artifact when the worktree has changes", () => {
+	const cwd = tmpCwd();
+	try {
+		initGitRepo(cwd);
+		const manifest = fakeManifest(cwd);
+		const wt = prepareAgentWorktree(manifest, "agent-diff");
+		assert.ok(wt?.worktreePath);
+		// Simulate the agent modifying a TRACKED file in the worktree (git diff only
+		// shows tracked changes; untracked files aren't included).
+		fs.writeFileSync(path.join(wt!.worktreePath!, "README.md"), "modified by agent\n");
+		cleanupAgentWorktree(manifest, wt!.worktreePath!, wt!.branch);
+		// A diff artifact should have been written under artifactsRoot/wf.
+		const wfDir = path.join(manifest.artifactsRoot, "wf");
+		assert.ok(fs.existsSync(wfDir), "wf artifact dir created");
+		const diffFiles = fs.readdirSync(wfDir).filter((f) => f.startsWith("worktree-diff-"));
+		assert.ok(diffFiles.length > 0, `a worktree-diff artifact should be written, found: ${diffFiles.join(", ")}`);
+		const content = fs.readFileSync(path.join(wfDir, diffFiles[0]), "utf-8");
+		assert.match(content, /README\.md/, "diff artifact records the modified file");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-17 P2-4: prepareAgentWorktree returns undefined for non-git cwd (graceful fallback)", () => {
+	const cwd = tmpCwd();
+	try {
+		const manifest = fakeManifest(cwd);
+		const wt = prepareAgentWorktree(manifest, "agent-1");
+		assert.equal(wt, undefined, "non-git cwd → undefined (caller falls back to normal cwd)");
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-17 P2-4: ctx.agent({worktree:true}) isolates the agent and cleans up after (mock)", async () => {
+	const cwd = tmpCwd();
+	const savedMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const savedAllow = process.env.PI_CREW_ALLOW_MOCK;
+	try {
+		initGitRepo(cwd);
+		const manifest = fakeManifest(cwd);
+		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+		process.env.PI_CREW_ALLOW_MOCK = "1";
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const res = await ctx.agent({ role: "executor", prompt: "edit files", worktree: true });
+		assert.equal(res.ok, true, "agent should succeed in a worktree (mock child-pi)");
+		// The worktree isolation log was emitted (proves the worktree path was computed).
+		const logs = getWorkflowLogs(ctx) ?? [];
+		assert.ok(logs.some((l) => l.includes("worktree: agent isolated at")), `expected worktree isolation log, got: ${logs.join(" | ")}`);
+		// No worktree directory leak: only the leader remains in `git worktree list`.
+		const list = execSync("git worktree list", { cwd, encoding: "utf-8" }).trim().split("\n");
+		assert.equal(list.length, 1, `no worktree should remain after agent completes, got: ${list.join(" | ")}`);
+		// No leftover agent branches.
+		const branches = execSync("git branch --list", { cwd, encoding: "utf-8" });
+		assert.doesNotMatch(branches, /pi-crew\/.+\/dwf-agent-/, "no leftover dwf-agent branches");
+	} finally {
+		if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		else process.env.PI_TEAMS_MOCK_CHILD_PI = savedMock;
+		if (savedAllow === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = savedAllow;
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-17 P2-4: ctx.agent({worktree:false}) uses normal cwd — no worktree created (backward compat)", async () => {
+	const cwd = tmpCwd();
+	const savedMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const savedAllow = process.env.PI_CREW_ALLOW_MOCK;
+	try {
+		initGitRepo(cwd);
+		const manifest = fakeManifest(cwd);
+		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+		process.env.PI_CREW_ALLOW_MOCK = "1";
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		// worktree omitted → default false → normal cwd, no isolation.
+		const res = await ctx.agent({ role: "executor", prompt: "hi" });
+		assert.equal(res.ok, true, "agent should succeed (mock)");
+		const logs = getWorkflowLogs(ctx) ?? [];
+		assert.ok(!logs.some((l) => l.includes("worktree:")), `no worktree log expected, got: ${logs.join(" | ")}`);
+		// git worktree list unchanged — only the leader.
+		const list = execSync("git worktree list", { cwd, encoding: "utf-8" }).trim().split("\n");
+		assert.equal(list.length, 1, "no worktree created when worktree not requested");
+	} finally {
+		if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		else process.env.PI_TEAMS_MOCK_CHILD_PI = savedMock;
+		if (savedAllow === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = savedAllow;
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-17 P2-4: ctx.agent({worktree:true}) falls back gracefully in a non-git cwd + warns", async () => {
+	const cwd = tmpCwd();
+	const savedMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const savedAllow = process.env.PI_CREW_ALLOW_MOCK;
+	try {
+		const manifest = fakeManifest(cwd);
+		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+		process.env.PI_CREW_ALLOW_MOCK = "1";
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const res = await ctx.agent({ role: "executor", prompt: "hi", worktree: true });
+		assert.equal(res.ok, true, "agent should still run after falling back to the normal cwd");
+		const logs = getWorkflowLogs(ctx) ?? [];
+		assert.ok(logs.some((l) => l.includes("worktree: creation unavailable")), `expected fallback warning log, got: ${logs.join(" | ")}`);
+	} finally {
+		if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		else process.env.PI_TEAMS_MOCK_CHILD_PI = savedMock;
+		if (savedAllow === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = savedAllow;
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+test("round-17 P2-4: ctx.agent({worktree:true}) cleans up the worktree even when the agent fails", async () => {
+	const cwd = tmpCwd();
+	const savedMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const savedAllow = process.env.PI_CREW_ALLOW_MOCK;
+	try {
+		initGitRepo(cwd);
+		const manifest = fakeManifest(cwd);
+		// Mock that returns a non-zero exit (agent "fails").
+		process.env.PI_TEAMS_MOCK_CHILD_PI = "retryable-failure";
+		process.env.PI_CREW_ALLOW_MOCK = "1";
+		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const res = await ctx.agent({ role: "executor", prompt: "fail", worktree: true });
+		assert.equal(res.ok, false, "agent should report failure");
+		// The worktree must still be cleaned up (no leak) even on the failure path.
+		const list = execSync("git worktree list", { cwd, encoding: "utf-8" }).trim().split("\n");
+		assert.equal(list.length, 1, `no worktree should remain after a failed agent, got: ${list.join(" | ")}`);
+		const branches = execSync("git branch --list", { cwd, encoding: "utf-8" });
+		assert.doesNotMatch(branches, /pi-crew\/.+\/dwf-agent-/, "no leftover dwf-agent branches on failure path");
+	} finally {
+		if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		else process.env.PI_TEAMS_MOCK_CHILD_PI = savedMock;
+		if (savedAllow === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = savedAllow;
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });

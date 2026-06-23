@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
@@ -7,6 +8,7 @@ import { projectCrewRoot } from "../utils/paths.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
+import { writeArtifact } from "../state/artifact-store.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 
 export interface PreparedTaskWorkspace {
@@ -458,5 +460,97 @@ export function captureWorktreeDiff(worktreePath: string): string {
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return `Failed to capture worktree diff: ${message}`;
+	}
+}
+
+/**
+ * round-17 P2-4: Create an isolated git worktree for a single DWF agent call.
+ *
+ * Lightweight — does NOT require a TeamTaskState and does NOT depend on
+ * `manifest.workspaceMode === "worktree"` (DWF manifests use `single`). It
+ * reuses the same internal helpers as `prepareTaskWorkspace` (git, findGitRoot,
+ * assertCleanLeader, pruneStaleWorktrees, sanitizeBranchPart,
+ * linkNodeModulesIfPresent) but with a minimal, task-free signature.
+ *
+ * Returns `undefined` when worktree creation is unavailable (no git repo, dirty
+ * leader, git error) so the caller (`ctx.agent`) can fall back gracefully.
+ */
+export function prepareAgentWorktree(
+	manifest: TeamRunManifest,
+	agentId: string,
+): PreparedTaskWorkspace | undefined {
+	try {
+		const repoRoot = findGitRoot(manifest.cwd);
+		const loadedConfig = loadConfig(manifest.cwd);
+		if (loadedConfig.config.requireCleanWorktreeLeader !== false) assertCleanLeader(repoRoot);
+		const sanitizedRunId = manifest.runId.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^-+|-+$/g, "") || "run";
+		const worktreeRoot = path.join(projectCrewRoot(manifest.cwd), DEFAULT_PATHS.state.worktreesSubdir, sanitizedRunId);
+		fs.mkdirSync(worktreeRoot, { recursive: true });
+		const sanitizedAgentId = sanitizeBranchPart(agentId);
+		const worktreePath = path.join(worktreeRoot, sanitizedAgentId);
+		const branch = `pi-crew/${sanitizedRunId}/${sanitizedAgentId}`;
+		pruneStaleWorktrees(repoRoot);
+		git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
+		const nodeModulesLinked = loadedConfig.config.worktree?.linkNodeModules === true
+			? linkNodeModulesIfPresent(repoRoot, worktreePath)
+			: false;
+		return { cwd: worktreePath, worktreePath, branch, nodeModulesLinked };
+	} catch {
+		// Graceful fallback: no git repo, dirty leader, or git error → run normally.
+		return undefined;
+	}
+}
+
+/**
+ * round-17 P2-4: Remove a DWF agent worktree after the agent completes.
+ *
+ * Captures the worktree diff as an artifact before removal (best-effort), then
+ * removes the worktree, deletes the ephemeral branch, and prunes stale refs.
+ * NEVER throws — cleanup failures are logged via `logInternalError` so a
+ * worktree/branch leak never crashes a workflow.
+ */
+export function cleanupAgentWorktree(manifest: TeamRunManifest, worktreePath: string, branch?: string): void {
+	// Capture diff as artifact (best-effort).
+	try {
+		const diff = captureWorktreeDiff(worktreePath);
+		if (diff.trim() && !diff.startsWith("Failed to capture worktree diff")) {
+			writeArtifact(manifest.artifactsRoot, {
+				kind: "diff",
+				relativePath: `wf/worktree-diff-${Date.now()}-${randomBytes(2).toString("hex")}.diff`,
+				content: diff,
+				producer: "dynamic-workflow",
+			});
+		}
+	} catch (error) {
+		logInternalError("worktree.agent-cleanup.diff", error, `worktreePath=${worktreePath}`);
+	}
+	// Remove worktree (best-effort). Try git first, then fall back to fs.rm.
+	try {
+		const repoRoot = findGitRoot(manifest.cwd);
+		git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+	} catch (error) {
+		logInternalError("worktree.agent-cleanup.remove", error, `worktreePath=${worktreePath}`);
+		try {
+			fs.rmSync(worktreePath, { recursive: true, force: true });
+		} catch (rmError) {
+			logInternalError("worktree.agent-cleanup.rm", rmError, `worktreePath=${worktreePath}`);
+		}
+	}
+	// Delete the ephemeral agent branch (best-effort) to avoid accumulation across
+	// many agent calls. The diff is already captured above; the branch holds no value.
+	if (branch) {
+		try {
+			const repoRoot = findGitRoot(manifest.cwd);
+			git(repoRoot, ["branch", "-D", branch]);
+		} catch (error) {
+			logInternalError("worktree.agent-cleanup.branch", error, `branch=${branch}`);
+		}
+	}
+	// Prune stale worktree refs (best-effort).
+	try {
+		const repoRoot = findGitRoot(manifest.cwd);
+		git(repoRoot, ["worktree", "prune"]);
+	} catch (error) {
+		logInternalError("worktree.agent-cleanup.prune", error, `worktreePath=${worktreePath}`);
 	}
 }

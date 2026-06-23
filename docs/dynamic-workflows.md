@@ -49,7 +49,7 @@ Slash command: `/workflows` lists all workflows (static + dynamic).
 
 | Method | Purpose |
 |---|---|
-| `ctx.agent({role, prompt, model?, skill?, maxTurns?, inputs?, schema?})` | Spawn one agent, await `{ok, text, structured, artifactPath, usage}`. Concurrency enforced by `ctx.semaphore`. `schema?` (round-13) is a TypeBox schema — when set, output is validated and mismatch yields `ok:false`. |
+| `ctx.agent({role, prompt, model?, skill?, maxTurns?, inputs?, schema?, worktree?})` | Spawn one agent, await `{ok, text, structured, artifactPath, usage}`. Concurrency enforced by `ctx.semaphore`. `schema?` (round-13) is a TypeBox schema — when set, output is validated and mismatch yields `ok:false`. `worktree?` (round-17) spawns the agent in an isolated git worktree (default false; falls back to normal cwd + warning in a non-git repo). |
 | `ctx.fanOut(items, limit, fn)` | Bounded parallel fan-out (wraps `mapConcurrent`). |
 | `ctx.pipeline(items, ...stages)` | **round-16.** Multi-stage pipeline: each item passes through all stages sequentially; different items run concurrently (bounded by `ctx.semaphore`). A failed stage yields `null` for that item (logged via `ctx.log`) and other items continue. Aborts propagate. Returns `(TResult\|null)[]`. |
 | `ctx.review(taskId, reviewerRole?)` | Run a reviewer; parse `{outcome, feedback}`. |
