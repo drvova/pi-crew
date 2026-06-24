@@ -39,9 +39,9 @@ npm: pi-crew
 repo: https://github.com/baphuongna/pi-crew
 ```
 
-**v0.9.4 / v0.9.5**: See [CHANGELOG.md](CHANGELOG.md).
+**v0.9.4 / v0.9.5 / v0.9.8**: See [CHANGELOG.md](CHANGELOG.md).
 
-### Highlights (v0.6.4 → v0.9.5)
+### Highlights (v0.6.4 → v0.9.8)
 
 A long arc of **trust, cliff-resilience, and robustness** work. Principle: *build
 trust and cliff-resilience, stay lean, delete before adding.*
@@ -198,6 +198,9 @@ background-dispatch discriminator.
 - **Health scoring** — penalty-based run health with time-series snapshots
 - **Autonomous goal loops** (P0/P1) — `team action='goal'` runs an autonomous multi-turn loop: a worker does a turn, a separate LLM judge evaluates the transcript+evidence against the goal, and on "not-achieved" the reason is fed into the next turn's prompt. Stops on achieved / maxTurns / budget / blocked. Claude-Code-style `/goal`. See `docs/goals.md`.
 - **Dynamic workflows** (P2/P3) — author orchestration as a `.dwf.ts` script (JS loops/branch/cross-review) instead of a static step list. The script runs in the background, calls subagents via `ctx.agent()`/`ctx.fanOut()`, holds intermediate results in JS variables, and only `ctx.setResult()` reaches the main context. `ctx.phase()` marks logical phases; **round-14** adds `ctx.log()` (durable `dwf.log` events), `ctx.budget` (per-workflow token budget that auto-rejects `ctx.agent()` when exhausted), and `ctx.args<T>()` (typed workflow arguments). TypeScript IntelliSense is available via `import type { WorkflowCtx } from "pi-crew/workflow"`. `workflow-create`/`-delete`/`-save` require `confirm:true` at the tool-call layer (the only gate — a malicious agent that passes `confirm:true` programmatically bypasses it; this is postinstall-equivalent trust, not a human-in-the-loop dialog). See `docs/dynamic-workflows.md`.
+- **Strict SKILL.md validation** (L3, v0.9.8) — skills with malformed frontmatter (missing/malformed `name`/`description`, type mismatches) now **fail-fast at discovery** with visible diagnostics, instead of silently producing broken behavior at runtime. HYBRID policy: HARD on required fields, SOFT (warn) on unknown props for forward-compat. Surfaced via `buildSkillValidationDiagnostics()`.
+- **Durable event replay** (L1, v0.9.8) — `RunEventBus.onWithReplay()` catches up a re-subscribing dashboard/overlay with events it missed during transient absence (toggle, reconnect), replaying from the durable JSONL log with seq-based dedup. No information loss even if the live subscriber was briefly gone.
+- **Lossless-by-default output handling** (L4, v0.9.8) — worker output thresholds sized from measured data (100% of real outputs fit without compaction); when compaction is unavoidable it keeps head+tail (preserves closing code fences/headings) instead of head-only truncation. No more `[pi-crew compacted N chars]` markers eating the end of a worker's result.
 
 ---
 
@@ -467,6 +470,10 @@ pi-crew survives Pi's context compaction. When the context is compacted (auto or
 ```
 Context compacted. 1 pi-crew run(s) still in-flight — use team status to continue.
 ```
+
+**Durable event replay** (v0.9.8, L1): even if a dashboard/overlay is briefly gone during compaction or a reconnect, `RunEventBus.onWithReplay()` catches it up with the events it missed, replaying from the durable JSONL log with seq-based dedup — no information loss. (The dashboard wires this up per-run; the primitive is available for any subscriber.)
+
+**Lossless-by-default worker output** (v0.9.8, L4): output-handling thresholds are sized from measured real data (100% of real worker outputs fit without any compaction). When compaction *is* unavoidable, it keeps head+tail instead of head-only truncation, so closing code fences and headings survive — no more `[pi-crew compacted N chars]` markers eating the end of a result.
 
 ### Plan-level human-in-the-loop (HITL)
 

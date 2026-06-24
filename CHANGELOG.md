@@ -1,5 +1,67 @@
 # Changelog
 
+## [v0.9.8] — deer-flow learning integration: L1/L2/L3/L4 (2026-06-24)
+
+Four improvements distilled from researching [bytedance/deer-flow](https://github.com/bytedance/deer-flow) and the wider Pi-ecosystem (pi-boomerang, pi-subagents, pi-dynamic-workflows). Each was calibrated against real pi-crew code (the research over-reported gaps — several patterns pi-crew already does *better* than deer-flow) and sized from measured data, not guesses.
+
+### L3 — Strict SKILL.md frontmatter validation (commit 5348c47)
+
+Malformed skills now **fail-fast at discovery** instead of silently producing broken behavior at runtime. New `src/skills/validate.ts` validates frontmatter against the `ALLOWED_SKILL_PROPS` whitelist using a **HYBRID policy**:
+
+- **HARD errors** (missing/malformed `name` or `description`, type mismatches) → skill excluded from `discoverSkills()`.
+- **SOFT warnings** (unknown props like `origin`/`triggers`, missing `name` derived from directory) → skill kept, surfaced via `getLastDiscoveryDiagnostics()` / `buildSkillValidationDiagnostics()`.
+
+Replaces the fragile line-prefix parser (broke on multi-line folded scalars `description: >`, quoted strings, nested YAML) with the `yaml` package (^2.9.0, already transitive, added as direct dep — zero install cost). Back-compat preserved: missing `name` derives from the directory; no-frontmatter skills still load with empty description.
+
+**Bonus value**: pre-flight on the real environment surfaced 2 user skills that were silently broken (`agent-browser`: `allowed-tools` wrong type; `spike-wrap-up`: `<>` in description).
+
+### L2 — Data-driven keybinding dispatch (commit 35fc3c6)
+
+Replaced the 30-line imperative `if (includes(...))` chain in `dashboardActionForKey` with a single `for (const b of BINDINGS)` loop driven by a declarative `BINDINGS[]` table. Adding a key now means editing ONE place (the table) instead of two (table + dispatch) — removes the DRY violation that caused table-vs-dispatch drift. `KEY_RESERVED` is now exported and derived.
+
+Behavior is **provably identical** to the old chain: a golden-snapshot parity test asserts every `(data, activePane)` pair returns the same action (~190 pairs). Pane-scoped bindings (`mailbox-detail`, `health-*`) precede their generic competitors so first-match-wins reproduces old precedence.
+
+The `inTextInput` guard from the original plan was **intentionally skipped** — overlays are mutually exclusive and each handles its own input (`mailbox-compose-overlay.ts` captures every single-char key), so there is no leak path. Documented in the commit.
+
+### L1 — RunEventBus.onWithReplay catch-up primitive (commit a2a478b)
+
+Closes the transient-subscriber-absence gap: when an overlay/widget is disposed and recreated (toggle, reconnect), live events emitted in that window are lost as notification triggers. `onWithReplay(runId, eventsPath, lastSeenSeq, callback)` replays missed events from the durable JSONL log before attaching the live listener, then dedups via `metadata.seq` so each event fires exactly once.
+
+Unlike deer-flow's 256-event RAM ring buffer (lost on crash), this reuses pi-crew's existing `readEventsCursor` — O(new bytes) via byte-offset incremental reads, monotonic seq, tail-capped. Strictly better: survives crashes, bounded memory. `RunEventPayload` gains optional `seq`; `emitFromTeamEvent` stamps it.
+
+The **primitive is landed + fully tested** (7 cases: replay order, dedup race, transient live-only, cursor bound, sinceSeq filter, missing-log fallback, unsubscribe). Dashboard wiring (switching `onAny()` → `onWithReplay()` per-run) is deferred — the dashboard subscribes across multiple runs and needs a subscription-model refactor; state isn't lost during absence anyway (`run-snapshot-cache` rebuilds from disk, TTL 1500ms).
+
+### L4 — Data-driven output thresholds + head/tail compaction (commit 463d08d)
+
+Worker output was being truncated at 3 points with thresholds sized by guess, not data. Measured 27 real result artifacts: **max 9226 bytes, median 8272, 100% under 16KB**. The old thresholds cut **62% of real outputs** (head-only, no recovery path). This change sizes thresholds from that data and switches compaction from head-only to head+tail so closing markdown structure (code fences, headings) survives.
+
+| Threshold | Before | After |
+|---|---|---|
+| `maxAssistantTextChars` | 8192 | **16384** |
+| `maxToolResultChars` | 1024 | **8192** |
+| `maxCompactContentChars` | 4096 | **8192** |
+| `maxToolInputChars` | 2048 | **4096** |
+| `readIfSmall` (3 inconsistent values) | 24K/40K/80K | **single 32KB** |
+| Compaction shape | head-only | **head(75%)+tail(25%)** |
+
+**Why not caveman-shrink** (the alternative considered): tested it on the same 27 artifacts — only 3.9% compression (vs 42% on prose fixtures) because pi-crew output is code-citation-heavy with little prose to strip, AND it has a real data-loss bug (`funccall` protected-pattern eats sentinel placeholders for the `identifier (inline-code)` pattern, corrupting 24/27 files with null bytes, 127 inline codes lost). caveman's *concept* (detect/validate) is worth borrowing but its engine doesn't fit pi-crew's content type. Threshold-only wins on the data.
+
+### Tests & verification
+
+- 10 new L4 tests, 25 L3 validator tests, 7 L1 replay tests, 7 L2 parity tests.
+- `npm run typecheck` + `check:lazy-imports` green.
+- End-to-end team-run smoke tests confirm all 4 features load and run without crash.
+- Real-world smoke scripts at `test/manual/l{1,2,3}-*-smoke.mjs`.
+- Research artifacts at `source/deer-flow/.research/` + `.crew/research/worker-output-handling.md`.
+
+### Backward compatibility
+
+All four changes are additive or behavior-preserving:
+- L3: valid skills unaffected; only malformed ones now excluded (was: silent breakage).
+- L2: golden-snapshot parity test proves identical dispatch.
+- L1: new method added; existing `on`/`onAny`/`emit` unchanged.
+- L4: outputs that fit (100% of measured real outputs) are unchanged; only oversized ones now keep head+tail instead of head-only.
+
 ## [v0.9.7] — round-18 + process-safety fix (2026-06-23)
 
 P2-3 feature: durable checkpoint + resume for dynamic-workflow runs. When a `.dwf.ts`
