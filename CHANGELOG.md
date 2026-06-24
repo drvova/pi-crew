@@ -85,6 +85,32 @@ as readily as a real orphaned sub-agent). Fixed authoritatively:
 - 8 new unit tests in `test/unit/zombie-scanner.test.ts`, including a
   regression test asserting the current (main-session) process is never matched.
 
+### Known issues (real-world smoke testing, 2026-06-24)
+
+Three bugs were caught by real `team action='run'` smoke tests that the unit
+suite missed (units don't shell out to the real `pi` binary). Two are fixed;
+one is a pre-existing race logged for a follow-up.
+
+- **Fixed: `--crew-subagent` argv flag broke every `ctx.agent()` call.** Pi's
+  strict option parser exits non-zero on unknown flags. The marker is now the
+  `PI_CREW_KIND=subagent` ENV var only.
+- **Fixed: `ctx.agent({schema, systemPrompt})` silently dropped `systemPrompt`.**
+  The round-13 schema branch used the resolved role persona as the base for the
+  JSON-output instruction, ignoring the caller's explicit persona. Models then
+  returned prose and failed schema validation. Fix: `call.systemPrompt` is now
+  preferred as the base when both are set.
+- **Open: `ctx.agent({disableTools: true})` returns `exit null`.** Pre-existing
+  race in `src/runtime/child-pi.ts` between the `final-drain` timer and natural
+  process exit. When pi runs with `--no-tools` it emits `message_end`/`agent_end`
+  very fast (no tool rounds); the final-drain timer fires SIGTERM and the exit
+  handler sees `code=null` before `forcedFinalDrain` is set, so exitCode is NOT
+  overridden to 0. Repros only when the parent exits promptly after the call
+  resolves (keep the parent alive 10s and exitCode comes back 0). NOT a
+  regression from round-12..18 — the disableTools path is untouched by them.
+  Workaround for DWF scripts: omit `disableTools` (the schema + systemPrompt
+  path now produces validated JSON without it). Fix candidate: treat a
+  `code=null` exit while `finalDrainTimer` is armed as a forced final drain.
+
 ## [v0.9.7] — round-17 (P2-4 worktree isolation per agent) (2026-06-23)
 
 P2-4 feature: `ctx.agent({worktree: true})` spawns the agent in an isolated

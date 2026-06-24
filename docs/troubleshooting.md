@@ -181,3 +181,22 @@ kills on your behalf.
 Before `PI_CREW_KIND`, a heuristic zombie "cleanup" killed a live main session
 by accident. The marker makes sub-agent identity authoritative rather than
 guessed. See `src/runtime/zombie-scanner.ts` and `.crew/knowledge.md`.
+
+## `ctx.agent({disableTools: true})` returns `exit null`
+
+Pre-existing race in `src/runtime/child-pi.ts` (not a round-12..18 regression).
+When pi runs with `--no-tools` it emits `message_end`/`agent_end` very fast
+(no tool rounds), and the final-drain timer fires SIGTERM before
+`forcedFinalDrain` is set — so the exit handler sees `code=null` instead of
+the usual `0` override.
+
+Repros only when the parent exits promptly after the call resolves. Keeping
+the parent alive ~10s after the `runChildPi` promise resolves returns
+`exitCode=0` as expected.
+
+**Workaround for DWF scripts**: omit `disableTools`. The schema + systemPrompt
+path (round-13) now produces validated JSON without it.
+
+**Fix candidate** (not yet implemented): treat a `code=null` exit while
+`finalDrainTimer` is armed as a forced final drain, so exitCode is overridden
+to 0. See CHANGELOG known-issues for the full repro matrix.
