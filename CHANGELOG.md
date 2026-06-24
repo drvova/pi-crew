@@ -85,11 +85,11 @@ as readily as a real orphaned sub-agent). Fixed authoritatively:
 - 8 new unit tests in `test/unit/zombie-scanner.test.ts`, including a
   regression test asserting the current (main-session) process is never matched.
 
-### Known issues (real-world smoke testing, 2026-06-24)
+### Real-world smoke testing findings (2026-06-24)
 
 Three bugs were caught by real `team action='run'` smoke tests that the unit
-suite missed (units don't shell out to the real `pi` binary). Two are fixed;
-one is a pre-existing race logged for a follow-up.
+suite missed (units don't shell out to the real `pi` binary). **All three are
+now fixed.**
 
 - **Fixed: `--crew-subagent` argv flag broke every `ctx.agent()` call.** Pi's
   strict option parser exits non-zero on unknown flags. The marker is now the
@@ -99,17 +99,21 @@ one is a pre-existing race logged for a follow-up.
   JSON-output instruction, ignoring the caller's explicit persona. Models then
   returned prose and failed schema validation. Fix: `call.systemPrompt` is now
   preferred as the base when both are set.
-- **Open: `ctx.agent({disableTools: true})` returns `exit null`.** Pre-existing
-  race in `src/runtime/child-pi.ts` between the `final-drain` timer and natural
-  process exit. When pi runs with `--no-tools` it emits `message_end`/`agent_end`
-  very fast (no tool rounds); the final-drain timer fires SIGTERM and the exit
-  handler sees `code=null` before `forcedFinalDrain` is set, so exitCode is NOT
-  overridden to 0. Repros only when the parent exits promptly after the call
-  resolves (keep the parent alive 10s and exitCode comes back 0). NOT a
-  regression from round-12..18 — the disableTools path is untouched by them.
-  Workaround for DWF scripts: omit `disableTools` (the schema + systemPrompt
-  path now produces validated JSON without it). Fix candidate: treat a
-  `code=null` exit while `finalDrainTimer` is armed as a forced final drain.
+- **Fixed: `ctx.agent({disableTools: true, maxTurns: 1})` returned `exit null`.**
+  Root cause (found via Phase-0 diagnostic instrumentation) was NOT the
+  final-drain race originally hypothesised — it was an erroneous
+  `killProcessTree` call in the steer-injection path. When `maxTurns` was
+  reached on a `turn_end` event, the code wrote a "wrap up" steer to
+  `child.stdin`; Node's `writable.write()` returns `false` on normal
+  backpressure, which the code mis-treated as a fatal injection failure and
+  killed the worker mid-answer (answer was in stdout; exit came back `null`).
+  The `disableTools` correlation was a red herring — the real trigger was
+  `maxTurns:1` hitting on the first turn. Fix: steer injection is now
+  ADVISORY — a `write() === false` or non-writable stdin is logged, not fatal;
+  the hard-abort at `maxTurns + graceTurns` remains the safety net for genuine
+  runaways. Verified: maxTurns=1 × 10 real-binary runs now 10/10 exit=0 (was
+  ~60% fail pre-fix). Regression guard: `test/unit/child-pi-steer-backpressure.test.ts`
+  (source-contract checks + opt-in real-binary smoke via `PI_CREW_SMOKE=1`).
 
 ## [v0.9.7] — round-17 (P2-4 worktree isolation per agent) (2026-06-23)
 

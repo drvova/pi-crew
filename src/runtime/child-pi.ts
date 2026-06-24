@@ -715,20 +715,27 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 								if (maxTurns !== undefined && !softLimitReached && turnCount >= maxTurns) {
 									softLimitReached = true;
 									// Inject steer via stdin to tell child to wrap up.
-									// If stdin is not writable or the write fails (backpressure/closed),
-									// the steer cannot be injected and the agent could run indefinitely.
-									// Kill the process tree in that case to enforce the turn limit.
+									// Steer injection is ADVISORY: it asks the worker to wrap up. The real
+									// enforcement is the hard-abort at maxTurns + graceTurns (below). So a
+									// failed/non-writable stdin must NOT kill the worker — that destroys a
+									// valid answer already in stdout (Phase-0 root cause of the
+									// disableTools/maxTurns:1 exit-null bug). Just log + let the hard-abort
+									// path handle a genuinely runaway worker.
 									if (child.stdin?.writable) {
 										const steerPayload = JSON.stringify({ type: "steer", message: "You have reached your turn limit. Wrap up immediately — provide your final answer now." }) + "\n";
 										const writeSucceeded = child.stdin.write(steerPayload);
 										if (!writeSucceeded) {
-											logInternalError("child-pi.steer-backpressure", new Error("stdin write returned false during steer injection; buffer full"), `pid=${child.pid}`);
-											steerInjectionFailed = true;
-											killProcessTree(child.pid, child);
+											// Normal Node backpressure: the payload is buffered and will flush on
+											// 'drain'. NOT a failure — do NOT kill the worker. The steer is
+											// advisory; if the worker ignores it and runs past maxTurns +
+											// graceTurns, the hard-abort below terminates it.
+											logInternalError("child-pi.steer-backpressure", new Error("stdin write returned false (normal backpressure); steer buffered, worker NOT killed"), `pid=${child.pid}`);
 										}
 									} else {
-										logInternalError("child-pi.steer-not-writable", new Error("stdin not writable when attempting steer injection"), `pid=${child.pid}`);
-										killProcessTree(child.pid, child);
+										// stdin closed (worker already finished) or otherwise unwritable.
+										// Also advisory — the worker is done or nearly done; let it exit
+										// naturally. Hard-abort remains the safety net for true runaways.
+										logInternalError("child-pi.steer-not-writable", new Error("stdin not writable when attempting steer injection (worker may be done); worker NOT killed"), `pid=${child.pid}`);
 									}
 								} else if (maxTurns !== undefined && softLimitReached && turnCount >= maxTurns + (graceTurns ?? 5)) {
 									// Hard abort — terminate after grace turns
@@ -983,6 +990,9 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			const finalExitCode = forcedFinalDrain && !timeoutError ? 0 : exitCode;
 				const wasGraceAborted = softLimitReached && turnCount >= (maxTurns ?? 0) + (graceTurns ?? 5);
 				const wasParentAborted = abortDueToParentSignal && !wasGraceAborted;
+				// steerInjectionFailed is now always false (Phase-1 fix: steer backpressure
+				// is logged, not fatal). The steerError branch is retained for safety in
+				// case a future change reintroduces a fatal steer path.
 				const steerError = steerInjectionFailed ? "Steer injection failed due to stdin backpressure; process killed" : undefined;
 				settle({ exitCode: finalExitCode, stdout, stderr, ...(timeoutError ? { error: timeoutError.error } : {}), ...(steerError ? { error: steerError } : {}), aborted: wasGraceAborted || wasParentAborted, steered: softLimitReached && !wasGraceAborted, exitStatus: { exitCode: finalExitCode, cancelled: abortRequested, timedOut: responseTimeoutHit, killed: hardKilled, cleanupErrors, finalDrainMs } });
 			});

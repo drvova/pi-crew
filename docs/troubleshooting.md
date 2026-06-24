@@ -182,21 +182,14 @@ Before `PI_CREW_KIND`, a heuristic zombie "cleanup" killed a live main session
 by accident. The marker makes sub-agent identity authoritative rather than
 guessed. See `src/runtime/zombie-scanner.ts` and `.crew/knowledge.md`.
 
-## `ctx.agent({disableTools: true})` returns `exit null`
+## `ctx.agent({disableTools: true})` — historical `exit null` (FIXED)
 
-Pre-existing race in `src/runtime/child-pi.ts` (not a round-12..18 regression).
-When pi runs with `--no-tools` it emits `message_end`/`agent_end` very fast
-(no tool rounds), and the final-drain timer fires SIGTERM before
-`forcedFinalDrain` is set — so the exit handler sees `code=null` instead of
-the usual `0` override.
-
-Repros only when the parent exits promptly after the call resolves. Keeping
-the parent alive ~10s after the `runChildPi` promise resolves returns
-`exitCode=0` as expected.
-
-**Workaround for DWF scripts**: omit `disableTools`. The schema + systemPrompt
-path (round-13) now produces validated JSON without it.
-
-**Fix candidate** (not yet implemented): treat a `code=null` exit while
-`finalDrainTimer` is armed as a forced final drain, so exitCode is overridden
-to 0. See CHANGELOG known-issues for the full repro matrix.
+Previously, `ctx.agent({disableTools: true, maxTurns: 1})` could return
+`exit null` because the steer-injection code mis-treated normal Node stdin
+backpressure (`write() === false`) as a fatal failure and `killProcessTree`'d
+the worker mid-answer. **Fixed**: steer injection is now advisory — a
+backpressure return or non-writable stdin is logged, not fatal; the
+hard-abort at `maxTurns + graceTurns` remains the safety net for genuine
+runaways. The `disableTools` correlation was a red herring — the real trigger
+was `maxTurns:1` hitting on the first turn. See CHANGELOG "Real-world smoke
+testing findings" and `test/unit/child-pi-steer-backpressure.test.ts`.
