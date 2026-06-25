@@ -29,6 +29,12 @@ const WIDE_RANGES: Array<[number, number]> = [
 	[0x274C, 0x274C], [0x274E, 0x274E], [0x2753, 0x2755], [0x2757, 0x2757],
 	[0x2763, 0x2764], [0x2795, 0x2797], [0x27A1, 0x27A1], [0x27B0, 0x27B0],
 	[0x27BF, 0x27BF],
+	// Geometric Shapes / Misc Symbols-Arrows emoji that pi-tui upstream counts as
+	// width=2 (RGI emoji). Mismatch here caused the "Rendered line N exceeds
+	// terminal width (160 > 159)" TUI crash: pi-crew truncated to width 159 by
+	// its own (mismatched) measure, then Box padded to 159 chars, but pi-tui
+	// re-measured the padded line at 160 because ⬜ counts as 2 upstream.
+	[0x2B1B, 0x2B1C], // ⬛ BLACK LARGE SQUARE, ⬜ WHITE LARGE SQUARE
 	[0x1F300, 0x1F9FF], // Misc Symbols, Emoticons, Transport, Map, Supplement
 	[0x1FA00, 0x1FAFF], // Symbols Extended-A
 	[0x1F000, 0x1F02F], // Mahjong, Dominos
