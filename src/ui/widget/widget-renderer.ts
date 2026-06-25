@@ -17,6 +17,13 @@ import type { WidgetRun } from "./widget-types.ts";
 
 const MAX_AGENTS_DISPLAY = 3;
 const FINISHED_LINGER_MAX_AGE = 1;
+/** Default terminal width when caller doesn't pass one explicitly. Keep <= 116
+ * (the same default used elsewhere in pi-crew tool renderers) so we never paint
+ * a line wider than the smallest expected TUI. Callers SHOULD pass the real
+ * width when known (via ctx.width || process.stdout.columns). */
+export const DEFAULT_WIDGET_WIDTH = 100;
+/** Cap per-component text so a single field cannot blow past width on its own. */
+export const TASK_DESC_MAX = 60;
 const ERROR_LINGER_MAX_AGE = 2;
 const ERROR_STATUSES = new Set(["failed", "cancelled", "stopped", "needs_attention"]);
 
@@ -37,7 +44,7 @@ export function widgetHeader(runs: WidgetRun[], runningGlyph: string, maxLines =
 
 // ── Line builder ──────────────────────────────────────────────────────
 
-export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedRuns?: WidgetRun[], notificationCount = 0): string[] {
+export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedRuns?: WidgetRun[], notificationCount = 0, width = DEFAULT_WIDGET_WIDTH): string[] {
 	const runs = providedRuns ?? [];
 	if (!runs.length) return [];
 
@@ -58,7 +65,7 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 		const runGlyph = iconForStatus(run.status, { runningGlyph });
 		const phaseLine = snapshot ? formatPhaseProgressLine(computePhaseProgress(snapshot.tasks)) : "";
 		const progressPart = phaseLine || `${completed}/${agents.length} done`;
-		lines.push(`├─ ${runGlyph} ${shortRunLabel(run)} · ${progressPart} · ${run.runId.slice(-8)}`);
+		lines.push(truncate(`├─ ${runGlyph} ${shortRunLabel(run)} · ${progressPart} · ${run.runId.slice(-8)}`, width));
 
 		const liveForRun = listLiveAgents().filter((a) => a.runId === run.runId);
 
@@ -67,8 +74,9 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 			const name = liveHandle?.agent ?? agent.agent;
 			const icon = agent.status === "completed" ? "✓" : agent.status === "failed" ? "✗" : agent.status === "needs_attention" ? "⚠" : "▪";
 			const stats = agentStats(agent, liveHandle);
-			const desc = liveHandle?.description ?? agent.role;
-			lines.push(`│  ├─ ${icon} ${name} · ${desc}${stats ? ` · ${stats}` : ""}`);
+			const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
+			const _finished = truncate(`│  ├─ ${icon} ${name} · ${desc}${stats ? ` · ${stats}` : ""}`, width);
+			lines.push(_finished);
 		}
 
 		const visibleAgents = activeAgents.slice(0, MAX_AGENTS_DISPLAY);
@@ -79,13 +87,15 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
 			const stats = agentStats(agent, liveHandle);
 			const name = liveHandle?.agent ?? agent.agent;
-			const desc = liveHandle?.description ?? agent.role;
-			lines.push(`│  ${branch} ${agentGlyph} ${name}${desc ? ` · ${desc}` : ` · ${agent.role}`}`);
-			lines.push(`│     ⊶ ${agentActivity(agent, liveHandle)}${stats ? ` · ${stats}` : ""}`);
+			const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
+			const _activeMain = truncate(`│  ${branch} ${agentGlyph} ${name}${desc ? ` · ${desc}` : ` · ${agent.role}`}`, width);
+			lines.push(_activeMain);
+			const _activity = truncate(`│     ⊶ ${agentActivity(agent, liveHandle)}${stats ? ` · ${stats}` : ""}`, width);
+			lines.push(_activity);
 		}
 
 		if (activeAgents.length > MAX_AGENTS_DISPLAY) {
-			lines.push(`│  └─ … +${activeAgents.length - MAX_AGENTS_DISPLAY} more agents`);
+			lines.push(truncate(`│  └─ … +${activeAgents.length - MAX_AGENTS_DISPLAY} more agents`, width));
 		}
 
 		if (lines.length >= maxLines) break;

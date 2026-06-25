@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.9.10] — TUI widget overflow fix (2026-06-25)
+
+A background `pi-crew` foreground run crashed the host Pi process with `uncaughtException: Rendered line 241 exceeds terminal width (160 > 159)` originating in upstream `@earendil-works/pi-tui`. Root cause: `buildWidgetLines` in `src/ui/widget/widget-renderer.ts` composed task sub-lines (`│     ⊶ <activity> · <stats>`) without a width parameter and without truncating, so any task whose `description` carried wide chars (e.g. the pi-audit result text `| S7: pi-audit security test | ⬜ pending | |`, ~40 chars) plus prefix + stats could push past terminal width by a single column. The fix is **purely additive defense-in-depth** — no rendering semantics change:
+
+- `buildWidgetLines` gains a `width = DEFAULT_WIDGET_WIDTH` parameter (default 100); every `lines.push(\`...\`)` for run header, finished-agent, active-agent, activity sub-line, and "+N more agents" passes through the existing `truncate()` helper (already imported from `src/utils/visual.ts`).
+- Defense-in-depth: `description` is also pre-truncated to 60 chars (mirroring the existing `agentActivity` cap) so a single field cannot blow past `width` on its own.
+- New exported `getRenderWidth(width?)` helper resolves render width in priority order: explicit arg → `process.stdout.columns` → `DEFAULT_WIDGET_WIDTH`. Removes the previously hardcoded `100` fallback at the `setExtensionWidget` call site.
+- New `TASK_DESC_MAX = 60` constant exported for downstream consumers.
+- New test suite `test/unit/widget-truncate.test.ts` (7 tests): every line ≤ `width`, 200-char description guard, monotone in width, default fallback, `getRenderWidth` priority order + invalid-input handling.
+
+The crew run itself is a child process and continues independently of the host Pi UI — the crash only kills the TUI; `.crew/runs/<id>/` artifacts are still produced and visible via `team status` after Pi restart. The host Pi loads extensions once at startup and does not hot-reload, so the fix is effective for any **new** Pi session.
+
 ## [v0.9.9] — gajae-code distillation (4 P0) + notification race fix (2026-06-25)
 
 Six changes: four high-impact/low-effort features distilled from researching [Yeachan-Heo/gajae-code](https://github.com/Yeachan-Heo/gajae-code) (full report: `research-findings/gajae-code-distill.md`), plus a fix for a redundant-notification bug the leader directly hit while running that research. Each was calibrated against real pi-crew code — two reported "gaps" turned out to be patterns pi-crew already implements (prompt-level stablePrefix, detached spawning), and four areas where pi-crew is already superior were deliberately left untouched (crash-recovery byte-offset cursor, declarative workflow + semaphores, run-snapshot-cache, event sourcing).

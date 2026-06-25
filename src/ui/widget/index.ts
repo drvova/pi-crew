@@ -18,13 +18,30 @@ import { spinnerBucket, spinnerFrame } from "../spinner.ts";
 import { runEventBus } from "../run-event-bus.ts";
 import { DEFAULT_UI } from "../../config/defaults.ts";
 import { activeWidgetRuns, statusSummary } from "./widget-model.ts";
-import { buildWidgetLines, colorWidgetLine, renderLines } from "./widget-renderer.ts";
+import { buildWidgetLines, colorWidgetLine, renderLines, DEFAULT_WIDGET_WIDTH, TASK_DESC_MAX } from "./widget-renderer.ts";
 import type { CrewWidgetModel, CrewWidgetState, WidgetRun } from "./widget-types.ts";
 
 // Re-export types and helpers for backward compatibility
 export type { WidgetRun, CrewWidgetModel, CrewWidgetState } from "./widget-types.ts";
 export { activeWidgetRuns, statusSummary } from "./widget-model.ts";
-export { buildWidgetLines as buildCrewWidgetLines, widgetHeader } from "./widget-renderer.ts";
+export { buildWidgetLines as buildCrewWidgetLines, widgetHeader, DEFAULT_WIDGET_WIDTH, TASK_DESC_MAX } from "./widget-renderer.ts";
+
+/**
+ * Resolve the real render width for widget lines, in priority order:
+ *   1. explicit `width` argument (e.g. from caller that already knows terminal width)
+ *   2. `process.stdout.columns` (works in Node when stdout is a TTY)
+ *   3. `DEFAULT_WIDGET_WIDTH` (100) — last-resort fallback so we never paint
+ *      a line wider than the smallest expected TUI.
+ *
+ * Callers SHOULD pass the width they already hold (e.g. `WidgetRender.render(width)`
+ * in this file already receives one). This helper exists for paths that don't.
+ */
+export function getRenderWidth(width?: number): number {
+	if (Number.isFinite(width) && width! > 0) return Math.floor(width!);
+	const stdoutCols = (globalThis as { process?: { stdout?: { columns?: number } } }).process?.stdout?.columns;
+	if (Number.isFinite(stdoutCols) && stdoutCols! > 0) return Math.floor(stdoutCols!);
+	return DEFAULT_WIDGET_WIDTH;
+}
 export { notificationBadge } from "./widget-formatters.ts";
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -103,7 +120,7 @@ class CrewWidgetComponent implements WidgetComponent {
 		const runningGlyph = spinnerFrame("widget-header");
 
 		if (this.cacheSignature !== signature || width !== this.cachedWidth || this.cachedTheme !== this.theme) {
-			this.cachedBaseLines = buildWidgetLines(this.model.cwd, 0, this.model.maxLines, runs, this.model.notificationCount ?? 0).map((line, index) => {
+			this.cachedBaseLines = buildWidgetLines(this.model.cwd, 0, this.model.maxLines, runs, this.model.notificationCount ?? 0, width).map((line, index) => {
 				if (index === 0 && line.length > 0) return `${runningGlyph}${line.slice(1)}`;
 				return line;
 			});
@@ -150,7 +167,7 @@ export function updateCrewWidget(
 	}
 
 	const runs = activeWidgetRuns(ctx.cwd, manifestCache, snapshotCache, preloadedManifests, workspaceId);
-	const lines = buildWidgetLines(ctx.cwd, state.frame, maxLines, runs, state.notificationCount ?? 0);
+	const lines = buildWidgetLines(ctx.cwd, state.frame, maxLines, runs, state.notificationCount ?? 0, getRenderWidth());
 	const placement = config?.widgetPlacement ?? DEFAULT_UI.widgetPlacement;
 
 	ctx.ui.setStatus(STATUS_KEY, lines.length ? statusSummary(runs) : undefined);
