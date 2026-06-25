@@ -241,6 +241,54 @@ function modelFromRegistry(modelRegistry: unknown, modelId: string | undefined):
 	}
 }
 
+/**
+ * Round 18: when agent declares `model: false`, the inherited `parentModel`
+ * (= `ctx.model` from Pi runtime, set via `team-tool.ts:541/655`) is the
+ * session's SAVED model. That saved model can be stale (e.g. a previous
+ * session used claude-sonnet-4-5 and saved it as session.model; the new
+ * session actually runs on minimax-M3 displayed in the footer). If the
+ * saved model has no auth in `modelRegistry`, the worker fails immediately
+ * with "No API key found" before reaching any fallback candidate.
+ *
+ * This helper prefers the saved model when it is in the auth-available
+ * registry; otherwise falls back to the first auth-available registry
+ * model (e.g. minimax/MiniMax-M3, zai/glm-5.2); otherwise returns the
+ * raw `parentModel` unchanged so the caller surfaces E008.
+ */
+export function resolveParentModelFromRegistry(
+	modelRegistry: unknown,
+	rawParentModel: unknown,
+): string | undefined {
+	const raw = typeof rawParentModel === "string" ? rawParentModel.trim() : undefined;
+	if (raw) {
+		const candidate = raw.includes("/")
+			? raw
+			: (() => {
+				const m = modelFromRegistry(modelRegistry, raw);
+				if (m && typeof m === "object" && "fullId" in m) {
+					return String((m as { fullId?: unknown }).fullId ?? raw);
+				}
+				return undefined;
+			})();
+		if (candidate && modelFromRegistry(modelRegistry, candidate)) return candidate;
+	}
+	const registry = modelRegistry as { getAvailable?: () => unknown[] } | undefined;
+	if (registry && typeof registry.getAvailable === "function") {
+		try {
+			const available = registry.getAvailable();
+			if (Array.isArray(available) && available.length > 0) {
+				const first = available[0] as { provider?: unknown; id?: unknown } | undefined;
+				if (first && typeof first.provider === "string" && typeof first.id === "string") {
+					return `${first.provider}/${first.id}`;
+				}
+			}
+		} catch {
+			// ignore — fall through to raw
+		}
+	}
+	return raw;
+}
+
 /** Communication intensity by role (caveman-inspired token optimization) */
 const ROLE_INTENSITY: Record<string, "lite" | "full" | "ultra"> = {
 	explorer: "ultra",
@@ -473,7 +521,8 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			});
 			await (resourceLoader as { reload?: () => Promise<void> }).reload?.();
 		}
-		const modelRouting = buildConfiguredModelRouting({ overrideModel: input.modelOverride, stepModel: input.step.model, teamRoleModel: input.teamRoleModel, agentModel: input.agent.model, fallbackModels: input.agent.fallbackModels, parentModel: input.parentModel, modelRegistry: input.modelRegistry, cwd: input.manifest.cwd, scopeModelsPatterns: await resolveScopeModelsPatterns(input.manifest.cwd) });
+		const effectiveParentModel = resolveParentModelFromRegistry(input.modelRegistry, input.parentModel);
+		const modelRouting = buildConfiguredModelRouting({ overrideModel: input.modelOverride, stepModel: input.step.model, teamRoleModel: input.teamRoleModel, agentModel: input.agent.model, fallbackModels: input.agent.fallbackModels, parentModel: effectiveParentModel, modelRegistry: input.modelRegistry, cwd: input.manifest.cwd, scopeModelsPatterns: await resolveScopeModelsPatterns(input.manifest.cwd) });
 		const resolvedModel = modelFromRegistry(input.modelRegistry, modelRouting.candidates[0] ?? modelRouting.requested) ?? input.parentModel;
 		// Phase 4: MCP proxy — will be determined after session creation
 		// (we check parent's MCP tools and share connections when available)
