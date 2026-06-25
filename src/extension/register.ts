@@ -60,6 +60,7 @@ import {
 	SubagentManager,
 	readPersistedSubagentRecord,
 } from "../subagents/manager.ts";
+import { BatchBarrier, type BatchMember } from "../runtime/batch-barrier.ts";
 import { terminateActiveChildPiProcesses } from "../subagents/spawn.ts";
 import {
 	type CrewWidgetState,
@@ -638,6 +639,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		!cleanedUp &&
 		currentCtx === ctx &&
 		sessionGeneration === ownerGeneration;
+	const batchBarrier = new BatchBarrier();
 	const subagentManager = new SubagentManager(
 		4,
 		(record) => {
@@ -679,6 +681,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			const agentType = record.type;
 			const agentDescription = record.description;
 			const agentRunId = record.runId;
+			const agentBatchId = record.batchId;
 			setTimeout(() => {
 				if (cleanedUp) return;
 				const fresh = subagentManager.getRecord(agentId);
@@ -689,6 +692,47 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				if (fresh?.resultConsumed || persisted?.resultConsumed) return;
 				if (!isOwnerSessionCurrent(fresh?.ownerSessionGeneration ?? ownerGen))
 					return;
+				// Rule 1 (batch coalescing): if this agent belongs to a batch, never
+				// emit an individual notification. Instead record its terminal state
+				// in the barrier; emit ONE consolidated notification only when ALL
+				// members are terminal. Suppressed members wait silently.
+				if (agentBatchId) {
+					const member: BatchMember = {
+						id: agentId,
+						description: agentDescription,
+						type: agentType,
+						status: agentStatus,
+					};
+					const snap = batchBarrier.markTerminal(agentBatchId, member);
+					if (snap.allDone && !snap.notified) {
+						batchBarrier.markNotified(agentBatchId);
+						const roster = snap.terminal
+							.map(
+								(m) =>
+									`- ${m.id} [${m.status}] (${m.type ?? "agent"}): ${m.description ?? ""}`,
+							)
+							.join("\n");
+						const joinInstruction = [
+							`All ${snap.terminal.length} background subagents in batch "${agentBatchId}" have finished.`,
+							"Members:",
+							roster,
+							"",
+							`Call get_subagent_result for each agent_id above, read the outputs, then continue the user's original task.`,
+						].join("\n");
+						sendAgentWakeUp(pi, joinInstruction);
+						notifyOperator({
+							id: `subagent-batch:${agentBatchId}:completed`,
+							severity: "info",
+							source: "subagent-completed",
+							runId: agentRunId,
+							title: `pi-crew batch "${agentBatchId}" complete (${snap.terminal.length} agents).`,
+							body: `Members: ${snap.terminal.map((m) => m.id).join(", ")}`,
+						});
+					}
+					// Either we just emitted the consolidated notify, or we are still
+					// waiting for other members — in both cases do NOT emit individual.
+					return;
+				}
 				const metadata = JSON.stringify(
 					{
 						id: agentId,
@@ -2072,6 +2116,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		ownerSessionGeneration: captureSessionGeneration,
 		startForegroundRun: (ctx, runner, runId) =>
 			startForegroundRun(ctx as ExtensionContext, runner, runId),
+		batchBarrier,
 	});
 	time("register.tools");
 

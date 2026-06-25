@@ -519,3 +519,93 @@ test("Rule 2: notify is suppressed when leader pre-consumes via wait:true (case 
 		await removeDirWithRetry(cwd);
 	}
 });
+
+test("Rule 1: batch coalesces completion into a single notification (no wait)", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-rule1-batch-"));
+	fs.mkdirSync(path.join(cwd, ".crew"));
+	const previousExecute = process.env.PI_TEAMS_EXECUTE_WORKERS;
+	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const previousAllowMock = process.env.PI_CREW_ALLOW_MOCK;
+	const previousCrewRole = process.env.PI_CREW_ROLE;
+	const previousTeamsRole = process.env.PI_TEAMS_ROLE;
+	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
+	process.env.PI_CREW_ALLOW_MOCK = "1";
+	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+	delete process.env.PI_CREW_ROLE;
+	delete process.env.PI_TEAMS_ROLE;
+	let fake: ReturnType<typeof createFakePi> | undefined;
+	try {
+		fake = createFakePi();
+		registerPiTeams(fake.api as never);
+		const ctx = fakeCtx(cwd) as never;
+		// Launch 3 background agents sharing batch_id "batchX", WITHOUT joining.
+		await fake.tools.get("Agent").execute("rule1-a", { prompt: "Task A", description: "A", subagent_type: "explorer", run_in_background: true, batch_id: "batchX" }, undefined, undefined, ctx);
+		await fake.tools.get("Agent").execute("rule1-b", { prompt: "Task B", description: "B", subagent_type: "explorer", run_in_background: true, batch_id: "batchX" }, undefined, undefined, ctx);
+		await fake.tools.get("Agent").execute("rule1-c", { prompt: "Task C", description: "C", subagent_type: "explorer", run_in_background: true, batch_id: "batchX" }, undefined, undefined, ctx);
+		// Wait for the consolidated notification. The barrier emits exactly ONE
+		// wake-up only after all 3 reach terminal.
+		const deadline = Date.now() + 30_000;
+		while (Date.now() < deadline && fake.sentUserMessages.length === 0) await new Promise((resolve) => setTimeout(resolve, 100));
+		// Allow a grace window to detect any stray second notification.
+		const graceDeadline = Date.now() + 2000;
+		while (Date.now() < graceDeadline) await new Promise((resolve) => setTimeout(resolve, 100));
+		assert.equal(fake.sentUserMessages.length, 1, "exactly ONE consolidated notification for the whole batch");
+		const notify = fake.sentUserMessages[0]!.content;
+		assert.match(notify, /All 3 background subagents in batch "batchX"/);
+		assert.match(notify, /Call get_subagent_result/);
+	} finally {
+		fake?.api.events.emit("session_shutdown", {});
+		if (previousExecute === undefined) delete process.env.PI_TEAMS_EXECUTE_WORKERS;
+		else process.env.PI_TEAMS_EXECUTE_WORKERS = previousExecute;
+		if (previousMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		else process.env.PI_TEAMS_MOCK_CHILD_PI = previousMock;
+		if (previousAllowMock === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = previousAllowMock;
+		if (previousCrewRole === undefined) delete process.env.PI_CREW_ROLE;
+		else process.env.PI_CREW_ROLE = previousCrewRole;
+		if (previousTeamsRole === undefined) delete process.env.PI_TEAMS_ROLE;
+		else process.env.PI_TEAMS_ROLE = previousTeamsRole;
+		await removeDirWithRetry(cwd);
+	}
+});
+
+test("Rule 1: no batch_id preserves individual notification (default behavior)", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-rule1-nobatch-"));
+	fs.mkdirSync(path.join(cwd, ".crew"));
+	const previousExecute = process.env.PI_TEAMS_EXECUTE_WORKERS;
+	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const previousAllowMock = process.env.PI_CREW_ALLOW_MOCK;
+	const previousCrewRole = process.env.PI_CREW_ROLE;
+	const previousTeamsRole = process.env.PI_TEAMS_ROLE;
+	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
+	process.env.PI_CREW_ALLOW_MOCK = "1";
+	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+	delete process.env.PI_CREW_ROLE;
+	delete process.env.PI_TEAMS_ROLE;
+	let fake: ReturnType<typeof createFakePi> | undefined;
+	try {
+		fake = createFakePi();
+		registerPiTeams(fake.api as never);
+		const ctx = fakeCtx(cwd) as never;
+		// Single background agent, no batch_id -> individual notification.
+		await fake.tools.get("Agent").execute("rule1-nobatch", { prompt: "Task", description: "Solo", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		const deadline = Date.now() + 30_000;
+		while (Date.now() < deadline && fake.sentUserMessages.length === 0) await new Promise((resolve) => setTimeout(resolve, 100));
+		assert.equal(fake.sentUserMessages.length, 1);
+		assert.match(fake.sentUserMessages[0]!.content, /background subagent changed state/);
+		assert.doesNotMatch(fake.sentUserMessages[0]!.content, /batch/);
+	} finally {
+		fake?.api.events.emit("session_shutdown", {});
+		if (previousExecute === undefined) delete process.env.PI_TEAMS_EXECUTE_WORKERS;
+		else process.env.PI_TEAMS_EXECUTE_WORKERS = previousExecute;
+		if (previousMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		else process.env.PI_TEAMS_MOCK_CHILD_PI = previousMock;
+		if (previousAllowMock === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = previousAllowMock;
+		if (previousCrewRole === undefined) delete process.env.PI_CREW_ROLE;
+		else process.env.PI_CREW_ROLE = previousCrewRole;
+		if (previousTeamsRole === undefined) delete process.env.PI_TEAMS_ROLE;
+		else process.env.PI_TEAMS_ROLE = previousTeamsRole;
+		await removeDirWithRetry(cwd);
+	}
+});

@@ -15,6 +15,7 @@ async function handleTeamTool(params: Parameters<typeof HandleTeamToolFn>[0], ct
 }
 import { checkSubagentSpawnPermission, currentCrewRole } from "../../runtime/role-permission.ts";
 import { readPersistedSubagentRecord, savePersistedSubagentRecord, type SubagentManager, type SubagentSpawnOptions } from "../../subagents/manager.ts";
+import type { BatchBarrier } from "../../runtime/batch-barrier.ts";
 import { loadConfig } from "../../config/config.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
 import { __test__subagentSpawnParams, formatSubagentRecord, readSubagentRunResult, refreshPersistedSubagentRecord, subagentToolResult } from "./subagent-helpers.ts";
@@ -32,6 +33,9 @@ type OnUpdate = (chunk: { content: { type: "text"; text: string }[] }) => void;
 export interface SubagentToolRegistrationOptions {
 	ownerSessionGeneration?: () => number;
 	startForegroundRun?: (ctx: unknown, runner: (signal?: AbortSignal) => Promise<void>, runId?: string) => void;
+	/** Rule 1 batch barrier. When present, agents spawned with a batchId are
+	 * registered here so their completion notifications are coalesced. */
+	batchBarrier?: BatchBarrier;
 }
 
 export function registerSubagentTools(pi: ExtensionAPI, subagentManager: SubagentManager, options: SubagentToolRegistrationOptions = {}): void {
@@ -53,6 +57,7 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 			skill: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String()), Type.Boolean()], { description: "Skill name(s) to inject for this subagent, or false to disable selected/default skills." })),
 			max_turns: Type.Optional(Type.Number({ description: "Reserved for live-session subagents; child-process runtime may ignore this." })),
 			run_in_background: Type.Optional(Type.Boolean({ description: "Run in background and return an agent ID immediately." })),
+			batch_id: Type.Optional(Type.String({ description: "Optional batch grouping id. Background agents sharing the same batch_id receive ONE consolidated completion notification when ALL members finish (instead of N individual notifications). Use this when launching several background agents in one turn and you do not join them immediately. Omit for the default individual-notification behavior." })),
 		}) as never,
 		async execute(_id, params, signal, onUpdate, ctx) {
 			// Diagnostic: detect pre-aborted signal before spawn
@@ -71,6 +76,10 @@ export function registerSubagentTools(pi: ExtensionAPI, subagentManager: Subagen
 			const ctxWithSession = withSessionId(ctx);
 			const runner = async (currentOptions: SubagentSpawnOptions, childSignal?: AbortSignal) => handleTeamTool({ action: "run", agent: currentOptions.type, goal: currentOptions.prompt, model: currentOptions.model, skill: currentOptions.skill, async: currentOptions.background, config: currentOptions.maxTurns ? { runtime: { maxTurns: currentOptions.maxTurns } } : undefined } as TeamToolParamsValue, { ...ctxWithSession, signal: childSignal, ...(options.startForegroundRun ? { startForegroundRun: (runRunner: (sig?: AbortSignal) => Promise<void>, runId?: string) => options.startForegroundRun!(ctxWithSession, runRunner, runId) } : {}) });
 			const record = subagentManager.spawn(spawnOptions, runner, spawnOptions.background ? undefined : signal);
+			// Rule 1: register batch membership so completions can be coalesced.
+			if (spawnOptions.batchId && spawnOptions.background) {
+				options.batchBarrier?.register(spawnOptions.batchId, record.id, { description: record.description, type: record.type });
+			}
 			if (spawnOptions.background || record.status === "queued") {
 				// Phase 1.1a: Terminate turn for background queued — no LLM follow-up needed.
 				// Phase 1.6: Record was terminated for telemetry.

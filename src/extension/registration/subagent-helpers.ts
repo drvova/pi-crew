@@ -98,5 +98,6 @@ export function __test__subagentSpawnParams(params: Record<string, unknown>, ctx
 		model: typeof params.model === "string" && params.model.trim() ? params.model.trim() : undefined,
 		skill: parseSkillParam(params.skill),
 		maxTurns: typeof params.max_turns === "number" && Number.isFinite(params.max_turns) ? params.max_turns : undefined,
+		batchId: typeof params.batch_id === "string" && params.batch_id.trim() ? params.batch_id.trim() : undefined,
 	};
 }

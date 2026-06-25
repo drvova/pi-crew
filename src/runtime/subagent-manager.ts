@@ -27,6 +27,9 @@ export interface SubagentSpawnOptions {
 	skill?: string | string[] | false;
 	maxTurns?: number;
 	ownerSessionGeneration?: number;
+	/** Optional batch grouping id (Rule 1). Agents sharing a batchId coalesce
+	 * completion notifications into one. undefined => individual (default). */
+	batchId?: string;
 }
 
 export interface SubagentRecord {
@@ -45,6 +48,8 @@ export interface SubagentRecord {
 	skill?: string | string[] | false;
 	background: boolean;
 	ownerSessionGeneration?: number;
+	/** Batch grouping id (Rule 1). undefined => individual notification. */
+	batchId?: string;
 	stuckNotified?: boolean;
 	blockedAt?: number;
 	promise?: Promise<void>;
@@ -255,6 +260,7 @@ export class SubagentManager {
 			skill: options.skill,
 			background: options.background,
 			ownerSessionGeneration: options.ownerSessionGeneration,
+			batchId: options.batchId,
 		};
 		this.records.set(record.id, record);
 		this.cwdByRecord.set(record.id, options.cwd);
