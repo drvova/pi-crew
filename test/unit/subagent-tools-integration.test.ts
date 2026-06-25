@@ -176,7 +176,17 @@ test("registered Agent tool can run a background subagent and join its result", 
 		assert.match(firstText(persisted), /MOCK.*JSON success for explorer/);
 		assert.equal(readPersistedSubagentRecord(cwd, agentId)?.resultConsumed, true);
 		restarted.api.events.emit("session_shutdown", {});
-		assert.equal(fake.sentMessages.length, 0, "wait=true marks result consumed and suppresses duplicate follow-up notification");
+		// Rule 2 regression guard: leader joined via get_subagent_result(wait:true)
+		// BEFORE the completion callback's deferred notify could fire, so the
+		// notify MUST be suppressed. Assert sentUserMessages (the real channel).
+		// The old assertion checked sentMessages (always 0 unconditionally),
+		// masking the bug.
+		const _notifyDeadline = Date.now() + 2000;
+		while (Date.now() < _notifyDeadline && fake.sentUserMessages.length === 0) {
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+		assert.equal(fake.sentUserMessages.length, 0, "wait=true (pre-consume) suppresses the completion follow-up notification");
+		assert.equal(fake.sentMessages.length, 0, "no legacy sendMessage notify either");
 	} finally {
 		fake?.api.events.emit("session_shutdown", {});
 		if (previousExecute === undefined) delete process.env.PI_TEAMS_EXECUTE_WORKERS;
@@ -409,3 +419,103 @@ test("get_subagent_result after restart fails fast for unrecoverable running rec
 	}
 });
 
+
+// ─── Rule 2 regression tests (consume-race fix) ───────────────────────────────
+// Background: onComplete fires inside record.promise IIFE `finally`, BEFORE the
+// promise resolves. A leader calling get_subagent_result(wait:true) sets
+// resultConsumed=true only AFTER the promise resolves (in a microtask). The fix
+// defers notify emission to a setTimeout(0) macrotask and rechecks resultConsumed
+// (in-memory + persisted) so a leader that already joined gets NO redundant
+// notification. These tests pin both sides of that invariant.
+
+test("Rule 2: notify still fires when leader does NOT pre-consume (case 1 sanity)", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-rule2-notify-"));
+	fs.mkdirSync(path.join(cwd, ".crew"));
+	const previousExecute = process.env.PI_TEAMS_EXECUTE_WORKERS;
+	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const previousAllowMock = process.env.PI_CREW_ALLOW_MOCK;
+	const previousCrewRole = process.env.PI_CREW_ROLE;
+	const previousTeamsRole = process.env.PI_TEAMS_ROLE;
+	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
+	process.env.PI_CREW_ALLOW_MOCK = "1";
+	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+	delete process.env.PI_CREW_ROLE;
+	delete process.env.PI_TEAMS_ROLE;
+	let fake: ReturnType<typeof createFakePi> | undefined;
+	try {
+		fake = createFakePi();
+		registerPiTeams(fake.api as never);
+		const ctx = fakeCtx(cwd) as never;
+		await fake.tools.get("Agent").execute("rule2-notify", { prompt: "Explore and report", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		// Leader does NOT call get_subagent_result — waits for notify instead.
+		const deadline = Date.now() + 30_000;
+		while (Date.now() < deadline && fake.sentUserMessages.length === 0) await new Promise((resolve) => setTimeout(resolve, 100));
+		assert.equal(fake.sentUserMessages.length, 1, "legitimate completion notify still fires when leader has not consumed");
+		assert.match(fake.sentUserMessages[0]!.content, /background subagent changed state/);
+	} finally {
+		fake?.api.events.emit("session_shutdown", {});
+		if (previousExecute === undefined) delete process.env.PI_TEAMS_EXECUTE_WORKERS;
+		else process.env.PI_TEAMS_EXECUTE_WORKERS = previousExecute;
+		if (previousMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		else process.env.PI_TEAMS_MOCK_CHILD_PI = previousMock;
+		if (previousAllowMock === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = previousAllowMock;
+		if (previousCrewRole === undefined) delete process.env.PI_CREW_ROLE;
+		else process.env.PI_CREW_ROLE = previousCrewRole;
+		if (previousTeamsRole === undefined) delete process.env.PI_TEAMS_ROLE;
+		else process.env.PI_TEAMS_ROLE = previousTeamsRole;
+		await removeDirWithRetry(cwd);
+	}
+});
+
+test("Rule 2: notify is suppressed when leader pre-consumes via wait:true (case 2 explicit)", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-rule2-suppress-"));
+	fs.mkdirSync(path.join(cwd, ".crew"));
+	const previousExecute = process.env.PI_TEAMS_EXECUTE_WORKERS;
+	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	const previousAllowMock = process.env.PI_CREW_ALLOW_MOCK;
+	const previousCrewRole = process.env.PI_CREW_ROLE;
+	const previousTeamsRole = process.env.PI_TEAMS_ROLE;
+	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
+	process.env.PI_CREW_ALLOW_MOCK = "1";
+	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+	delete process.env.PI_CREW_ROLE;
+	delete process.env.PI_TEAMS_ROLE;
+	let fake: ReturnType<typeof createFakePi> | undefined;
+	try {
+		fake = createFakePi();
+		registerPiTeams(fake.api as never);
+		const agentTool = fake.tools.get("Agent");
+		const resultTool = fake.tools.get("get_subagent_result");
+		const ctx = fakeCtx(cwd) as never;
+		const launched = await agentTool.execute("rule2-suppress-launch", { prompt: "Explore with tool", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		const agentId = firstText(launched).match(/Agent ID: (\S+)/)?.[1];
+		assert.ok(agentId);
+		// Leader joins IMMEDIATELY — this marks resultConsumed=true inside the
+		// microtask that follows record.promise resolution. The deferred notify
+		// (setTimeout 0 macrotask) must observe resultConsumed=true and suppress.
+		const joined = await resultTool.execute("rule2-suppress-join", { agent_id: agentId, wait: true, verbose: true }, undefined, undefined, ctx);
+		assert.match(firstText(joined), /Status: completed/);
+		assert.equal(readPersistedSubagentRecord(cwd, agentId)?.resultConsumed, true);
+		// Drain any pending deferred notify macrotasks.
+		const notifyDeadline = Date.now() + 2000;
+		while (Date.now() < notifyDeadline && fake.sentUserMessages.length === 0) {
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+		assert.equal(fake.sentUserMessages.length, 0, "pre-consume via wait:true suppresses the completion notification");
+		assert.equal(fake.sentMessages.length, 0, "no legacy sendMessage notify either");
+	} finally {
+		fake?.api.events.emit("session_shutdown", {});
+		if (previousExecute === undefined) delete process.env.PI_TEAMS_EXECUTE_WORKERS;
+		else process.env.PI_TEAMS_EXECUTE_WORKERS = previousExecute;
+		if (previousMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
+		else process.env.PI_TEAMS_MOCK_CHILD_PI = previousMock;
+		if (previousAllowMock === undefined) delete process.env.PI_CREW_ALLOW_MOCK;
+		else process.env.PI_CREW_ALLOW_MOCK = previousAllowMock;
+		if (previousCrewRole === undefined) delete process.env.PI_CREW_ROLE;
+		else process.env.PI_CREW_ROLE = previousCrewRole;
+		if (previousTeamsRole === undefined) delete process.env.PI_TEAMS_ROLE;
+		else process.env.PI_TEAMS_ROLE = previousTeamsRole;
+		await removeDirWithRetry(cwd);
+	}
+});

@@ -56,7 +56,10 @@ import { createManifestCache } from "../runtime/manifest-cache.ts";
 import { CrewScheduler } from "../runtime/scheduler.ts";
 import { loadRunManifestById, updateRunStatus } from "../state/state-store.ts";
 import type { TeamRunManifest } from "../state/types.ts";
-import { SubagentManager } from "../subagents/manager.ts";
+import {
+	SubagentManager,
+	readPersistedSubagentRecord,
+} from "../subagents/manager.ts";
 import { terminateActiveChildPiProcesses } from "../subagents/spawn.ts";
 import {
 	type CrewWidgetState,
@@ -651,22 +654,48 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					durationMs: record.durationMs,
 				});
 			}
-			if (!record.background || record.resultConsumed) return;
+			if (!record.background) return;
 			if (!isOwnerSessionCurrent(record.ownerSessionGeneration)) return;
 			if (
-				record.status === "completed" ||
-				record.status === "failed" ||
-				record.status === "cancelled" ||
-				record.status === "blocked" ||
-				record.status === "error"
-			) {
+				record.status !== "completed" &&
+				record.status !== "failed" &&
+				record.status !== "cancelled" &&
+				record.status !== "blocked" &&
+				record.status !== "error"
+			)
+				return;
+			// Rule 2 (consume-race fix): this callback fires from inside the
+			// record.promise IIFE `finally` block — BEFORE the promise resolves,
+			// i.e. before a leader calling `get_subagent_result(wait:true)` can
+			// set resultConsumed=true. The old synchronous guard always saw
+			// resultConsumed=false here. Defer emission to a MACROTASK
+			// (setTimeout, NOT queueMicrotask): macrotasks run only after the
+			// microtask queue drains — which includes the leader's
+			// `await record.promise` continuation that marks resultConsumed=true.
+			// Then recheck in-memory + persisted before emitting.
+			const agentId = record.id;
+			const ownerGen = record.ownerSessionGeneration;
+			const agentStatus = record.status;
+			const agentType = record.type;
+			const agentDescription = record.description;
+			const agentRunId = record.runId;
+			setTimeout(() => {
+				if (cleanedUp) return;
+				const fresh = subagentManager.getRecord(agentId);
+				const persisted = currentCtx
+					? readPersistedSubagentRecord(currentCtx.cwd, agentId)
+					: undefined;
+				// Leader already joined the result -> suppress redundant notify.
+				if (fresh?.resultConsumed || persisted?.resultConsumed) return;
+				if (!isOwnerSessionCurrent(fresh?.ownerSessionGeneration ?? ownerGen))
+					return;
 				const metadata = JSON.stringify(
 					{
-						id: record.id,
-						status: record.status,
-						type: record.type,
-						runId: record.runId,
-						description: record.description,
+						id: agentId,
+						status: agentStatus,
+						type: agentType,
+						runId: agentRunId,
+						description: agentDescription,
 					},
 					null,
 					2,
@@ -677,19 +706,18 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					"```json",
 					metadata,
 					"```",
-					`Call get_subagent_result with agent_id="${record.id}" now, read the output, then continue the user's original task without waiting for another user prompt.`,
+					`Call get_subagent_result with agent_id="${agentId}" now, read the output, then continue the user's original task without waiting for another user prompt.`,
 				].join("\n");
 				sendAgentWakeUp(pi, joinInstruction);
 				notifyOperator({
-					id: `subagent:${record.id}:${record.status}`,
-					severity:
-						record.status === "completed" ? "info" : "warning",
+					id: `subagent:${agentId}:${agentStatus}`,
+					severity: agentStatus === "completed" ? "info" : "warning",
 					source: "subagent-completed",
-					runId: record.runId,
-					title: `pi-crew subagent ${record.id} ${record.status}.`,
-					body: `Use get_subagent_result with agent_id=${record.id} for output.`,
+					runId: agentRunId,
+					title: `pi-crew subagent ${agentId} ${agentStatus}.`,
+					body: `Use get_subagent_result with agent_id=${agentId} for output.`,
 				});
-			}
+			}, 0);
 		},
 		1000,
 		(event, payload) => {
