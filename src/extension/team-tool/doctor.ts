@@ -28,27 +28,47 @@ function firstOutputLine(stdout: string | null | undefined, stderr: string | nul
 	return output.split(/\r?\n/).find((line) => line.trim().length > 0)?.trim() ?? "available";
 }
 
+// Round 29 optimization: memoize spawnSync probe results at module level.
+// The probes (git --version, pi --version) are stable for the process
+// lifetime, and spawnSync on a node script can cost 1-2s. Without the
+// cache, each buildTeamDoctorReport() call would pay that cost, and a
+// file with 12 tests would take 20s+ even with empty cwd. The cache is
+// safe: a doctor check is informational, and a stale ok=true would
+// self-correct on the next process restart.
+const commandExistsCache = new Map<string, { ok: boolean; detail: string }>();
 function commandExists(command: string, args: string[]): { ok: boolean; detail: string } {
+	const cacheKey = `${command} ${args.join(" ")}`;
+	const cached = commandExistsCache.get(cacheKey);
+	if (cached) return cached;
+	let result: { ok: boolean; detail: string };
 	try {
 		const output = spawnSync(command, args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
 		if (output.error) {
-			return { ok: false, detail: output.error.message };
+			result = { ok: false, detail: output.error.message };
+		} else if (output.status !== 0) {
+			result = { ok: false, detail: firstOutputLine(output.stdout, output.stderr) || `status ${output.status}` };
+		} else {
+			result = { ok: true, detail: firstOutputLine(output.stdout, output.stderr) };
 		}
-		if (output.status !== 0) {
-			return { ok: false, detail: firstOutputLine(output.stdout, output.stderr) || `status ${output.status}` };
-		}
-		return { ok: true, detail: firstOutputLine(output.stdout, output.stderr) };
 	} catch (error) {
-		return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+		result = { ok: false, detail: error instanceof Error ? error.message : String(error) };
 	}
+	commandExistsCache.set(cacheKey, result);
+	return result;
 }
 
+let piCommandExistsCache: { ok: boolean; detail: string } | undefined;
 function piCommandExists(): { ok: boolean; detail: string } {
+	if (piCommandExistsCache) return piCommandExistsCache;
 	const spec = getPiSpawnCommand(["--version"]);
 	const output = commandExists(spec.command, spec.args);
-	if (!output.ok) return output;
+	if (!output.ok) {
+		piCommandExistsCache = output;
+		return piCommandExistsCache;
+	}
 	const executable = spec.command === "pi" ? "pi" : `${spec.command} ${spec.args[0] ?? ""}`.trim();
-	return { ok: true, detail: `${output.detail} (${executable})` };
+	piCommandExistsCache = { ok: true, detail: `${output.detail} (${executable})` };
+	return piCommandExistsCache;
 }
 
 function checkWritableDir(dir: string): { ok: boolean; detail: string } {
@@ -119,12 +139,18 @@ export interface TeamDoctorReport {
 }
 
 export function buildTeamDoctorReport(input: TeamDoctorReportInput): TeamDoctorReport {
+	// Discover once — used in both Drift and Discovery sections. Walking the
+	// filesystem 3x (agents/teams/workflows) is the dominant cost of this
+	// function; calling it twice doubles the cost. Round 29 optimization.
+	const discoveredAgentsAll = allAgents(discoverAgents(input.cwd));
+	const discoveredTeamsAll = allTeams(discoverTeams(input.cwd));
+	const discoveredWorkflowsAll = allWorkflows(discoverWorkflows(input.cwd));
 	// Compute drift once — reused in both Drift section and return value
 	const driftResult = detectDrift(
 		{
-			agents: allAgents(discoverAgents(input.cwd)).map((a) => a.name),
-			teams: allTeams(discoverTeams(input.cwd)).map((t) => t.name),
-			workflows: allWorkflows(discoverWorkflows(input.cwd)).map((w) => w.name),
+			agents: discoveredAgentsAll.map((a) => a.name),
+			teams: discoveredTeamsAll.map((t) => t.name),
+			workflows: discoveredWorkflowsAll.map((w) => w.name),
 		},
 		loadConfig(input.cwd).config,
 	);
@@ -153,14 +179,11 @@ export function buildTeamDoctorReport(input: TeamDoctorReportInput): TeamDoctorR
 			];
 		}),
 		section("Discovery", () => {
-			const discoveredAgents = allAgents(discoverAgents(input.cwd));
-			const discoveredTeams = allTeams(discoverTeams(input.cwd));
-			const discoveredWorkflows = allWorkflows(discoverWorkflows(input.cwd));
-			const agentModelHints = discoveredAgents.filter((agent) => agent.model || agent.fallbackModels?.length).length;
+			const agentModelHints = discoveredAgentsAll.filter((agent) => agent.model || agent.fallbackModels?.length).length;
 			return [
-				{ label: "agents", ok: true, detail: `${discoveredAgents.length} discovered` },
-				{ label: "teams", ok: true, detail: `${discoveredTeams.length} discovered` },
-				{ label: "workflows", ok: true, detail: `${discoveredWorkflows.length} discovered` },
+				{ label: "agents", ok: true, detail: `${discoveredAgentsAll.length} discovered` },
+				{ label: "teams", ok: true, detail: `${discoveredTeamsAll.length} discovered` },
+				{ label: "workflows", ok: true, detail: `${discoveredWorkflowsAll.length} discovered` },
 				{ label: "resource model hints", ok: true, detail: `${agentModelHints} agents declare model/fallback preferences` },
 			];
 		}),

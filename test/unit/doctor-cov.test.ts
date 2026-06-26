@@ -1,11 +1,31 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { buildTeamDoctorReport, type TeamDoctorReportInput, type TeamDoctorReport } from "../../src/extension/team-tool/doctor.ts";
+
+// Round 29 optimization: use a fresh empty temp cwd per test file run.
+// Previously this used cwd: "/tmp" which forced discoverX() to walk the
+// entire /tmp tree on every test (12 tests × ~2s = 24s). The tests don't
+// care about discovered resources, only the report text, so an empty dir
+// is semantically equivalent and dramatically faster.
+let tmpCwd: string;
+let tmpConfig: string;
+
+before(() => {
+	tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-doctor-cov-"));
+	tmpConfig = path.join(tmpCwd, "pi-crew.yaml");
+});
+
+after(() => {
+	try { fs.rmSync(tmpCwd, { recursive: true, force: true }); } catch { /* best-effort */ }
+});
 
 function makeInput(overrides?: Partial<TeamDoctorReportInput>): TeamDoctorReportInput {
 	return {
-		cwd: "/tmp",
-		configPath: "/tmp/pi-crew.yaml",
+		cwd: tmpCwd,
+		configPath: tmpConfig,
 		configErrors: [],
 		configWarnings: [],
 		validationErrors: 0,
