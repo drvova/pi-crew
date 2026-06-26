@@ -1,5 +1,61 @@
 # Changelog
 
+## [v0.9.12] — stage-chain compression pipeline (P0-A) with monotonic-shrink safety (2026-06-26)
+
+The output-handling & compression area had several ad-hoc truncation / cleaning functions, each with its own quirks (`appendBoundedTail`, `stream-preview`, `iteration-hooks`, `async-runner`, `compactString`, `readIfSmall`, `chain-runner`). This release introduces a composable **stage-chain compression pipeline** so that future clean-up stages (ANSI strip, blank-line collapse, deduplication, truncation, …) can be added once and reused at every call site, and so that ALL compaction is forced through a single **monotonic-shrink gate** that mathematically cannot expand its input.
+
+### Features
+
+- **`src/runtime/compact-pipeline.ts` — stage-chain with monotonic-shrink gate** — `ICompactStage { id, apply(text): string }`, `applyCompactPipeline(text, stages) -> { text, applied }`. A stage is applied only if its output is no longer than its input (gate: `next.length <= text.length`); expanding stages are silently dropped and their id is not recorded in `applied`. This is the safety property that prevents the family of L4 caveman-shrink bugs (24/27 artifacts null-byte-corrupted by a regex-based shrink that expanded in some cases — see `.crew/knowledge.md` §"L4 output-handling"). Ported from Hypa's `GenericOutputCompressor.cs:18-51`.
+- **Four concrete stages in `src/runtime/compact-stages/`** — `AnsiStripStage` (CSI color/cursor codes, fast-path when no `\x1b` present), `BlankCollapseStage` (collapses 3+ consecutive newlines to a single blank line; configurable `minConsecutive`), `DeduplicateStage` (collapses CONSECUTIVE duplicate lines, preserves `\r\n` endings; opt-in only — unsafe for assistant prose), `TruncationStage` (parameterized marker verb/separators so the SAME class serves both `compactString`'s "compacted ... chars" wording and `readIfSmall`'s "truncated ... chars" wording).
+- **`compactString` refactored onto the pipeline** — default pipeline is `[TruncationStage(maxChars, { preserveImportant })]`. Plain-text inputs with no ANSI / blank runs / consecutive duplicates pass through bit-identically (L4 backward-compat — marker wording unchanged when no important lines and no noise). The P0-B important-line preservation still works through the pipeline.
+- **`readIfSmall` refactored onto the pipeline with noise stripping** — artifact files (which frequently contain ANSI color codes + blank-line noise from npm/cargo/jest output captured to disk) now pass through `[AnsiStripStage, BlankCollapseStage, TruncationStage]` before the result is returned. Plain-text fixtures remain bit-identical (L4 backward-compat).
+
+### Deferred to a future release
+
+Five other truncation points in the codebase were intentionally NOT ported to the pipeline in this release — each has call-site-specific semantics that warrant their own migration:
+
+| Code point | Current behavior | Migration scope |
+|---|---|---|
+| `appendBoundedTail` (`child-pi.ts`) | Tail-only accumulator, 256KB byte cap | Live-streaming chunked input; needs a streaming-friendly stage API |
+| `stream-preview.ts:114` | Tail-only live preview, 16KB | Live UI preview; ANSI strip is a feature but the tail-only semantics are UI-specific |
+| `iteration-hooks.ts:105` | Head-only, newline-snapped, 8KB | Hook output is small (single command); pattern is deliberately different |
+| `async-runner.ts:293` | Head+marker, stops capturing at 256KB stderr | Detached-process stderr; capture-stop semantics need a separate stage |
+| `chain-runner.ts:515` | Head-only array cap, 20/50 items | Array compaction (not string); pipeline operates on strings |
+
+These are tracked for a future v0.9.13+ cleanup. The P0-A infrastructure makes the migration mechanical (each is a ~30 LOC refactor once the per-point design is settled).
+
+### Tests
+
+- New real-function suite `compact-pipeline-real.test.ts` (23 tests, calling the REAL exported pipeline, stages, `compactString`, `readIfSmall`):
+  - **Monotonic-shrink gate (critical safety property)**: an expanding stage is silently dropped; an equal-length stage is accepted; chained stages with mixed expand/shrink produce a deterministic `applied[]`.
+  - **Malformed-stage defense**: non-string output, missing `apply` are skipped (pipeline never throws on bad input).
+  - **AnsiStripStage**: CSI color/cursor codes stripped; idempotent; fast-path on text without `\x1b`.
+  - **BlankCollapseStage**: 3+ newlines collapsed to 2; 1-2 newlines preserved; configurable threshold.
+  - **DeduplicateStage**: consecutive duplicates collapsed; non-adjacent duplicates preserved; `\r\n` endings preserved.
+  - **TruncationStage**: default marker matches `compactString` wording; truncated marker + `\n\n` headSeparator matches `readIfSmall` wording; rejects non-positive `maxChars`.
+  - **Pipeline integration**: `compactString` on plain text is bit-identical to pre-P0-A wording (L4 backward-compat); important-line preservation still works; monotonic-shrink holds across the boundary window. `readIfSmall` strips ANSI before truncating (assert: no `\x1b` in result); collapses blank-line noise before truncating; plain-text input is bit-identical to pre-P0-A wording.
+  - **Pipeline observability**: `compactString` returns a plain string (not a `PipelineResult`) — `applied[]` is internal; future dashboard wiring is a separate task.
+- 119 output-handling + child-pi/task-output-context importer tests pass (was 96 in v0.9.11 — added 23 P0-A suite); `tsc --noEmit` clean.
+
+### Verification
+
+```
+npx tsc --noEmit                                                  -> clean (exit 0)
+node --test test/unit/compact-pipeline-real.test.ts               -> 23 tests, 0 fail
+node --test (full Sprint 1+2+P0-A regression set, 8 files)        -> 119 tests, 0 fail
+node --test (all child-pi/task-output-context importer tests)     -> 118 tests, 0 fail
+```
+
+The full integration suite (incl. slow E2E / mocked-child-pi) was not re-run in this release window; the targeted unit + importer set covering every changed symbol is green.
+
+### Lessons learned during this work
+
+- **Parameter-property syntax** (`constructor(private readonly x = 3) { }`) is **NOT** supported by Node's `--experimental-strip-types` mode used by pi-crew's test runner. Sprint 3 originally hit a `SyntaxError: TypeScript parameter property is not supported in strip-only mode` that crashed every test file importing the affected module (not just the failing test). Field declaration + constructor assignment is the portable shape — documented inline in `BlankCollapseStage` so the next contributor doesn't re-introduce it.
+- **Delegation is not free**. The first P0-B and P0-A team-run attempts both failed at the executor stage (exploration without code production) despite 800K+ tokens of work. Direct implementation, with the spec written by the leader, was strictly faster and cheaper. Lesson: for tightly-scoped, well-specified refactors where the leader holds the full context, delegate only the verification (or skip delegation entirely).
+
+---
+
 ## [v0.9.11] — harden output-handling: fix UTF-8 corruption, dead-code path resolution, compaction expansion, and stderr secret leakage (2026-06-26)
 
 A code-review + security-review + verifier pass on the output-handling & compression code path surfaced 4 correctness bugs and 1 medium-severity security gap. This release fixes all of them and replaces the test "mirror" anti-pattern (tests re-implemented the algorithm locally instead of calling the real functions) with real-function tests, so the passing suite now actually guards the shipped code.

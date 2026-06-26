@@ -11,7 +11,8 @@ import { DEFAULT_CHILD_PI } from "../config/defaults.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { attachPostExitStdioGuard, trySignalChild } from "./post-exit-stdio-guard.ts";
 import { redactJsonLine, redactSecretString } from "../utils/redaction.ts";
-import { splitWithImportantLines } from "./important-line-classifier.ts";
+import { applyCompactPipeline } from "./compact-pipeline.ts";
+import { TruncationStage } from "./compact-stages/index.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { registerChildProcess, unregisterChildProcess } from "../extension/crew-cleanup.ts";
 import { classifyProcessCrash } from "./crash-classification.ts";
@@ -411,25 +412,18 @@ export function compactString(
 	// head-only slice left unclosed ``` fences that downstream parsers and
 	// output-validator.ts flagged as "output may be truncated". Head gets 75%
 	// (opening structure + bulk of content); tail gets 25% (closing structure).
-	// P0-B: middle slice is scanned for important diagnostic lines (error,
-	// file:line, HTTP 4xx/5xx, compiler codes) which are preserved between
-	// head and tail within a 15% slack budget. When no important lines are
-	// picked the marker wording stays bit-identical to the pre-P0-B format
-	// (L4 regression safety).
-	const { head, tail, importantLines, baseDropped } = splitWithImportantLines(value, maxChars, opts);
-	let result: string;
-	if (importantLines.length === 0) {
-		result = `${head}\n...[pi-crew compacted ${baseDropped} chars, head+tail preserved]...\n${tail}`;
-	} else {
-		const joined = importantLines.join("\n");
-		const remaining = value.length - head.length - tail.length - joined.length;
-		result = `${head}\n...[pi-crew compacted ${baseDropped} chars, head+tail + ${importantLines.length} important lines preserved, ${remaining} chars remaining dropped]...\n${joined}\n${tail}`;
-	}
-	// Monotonic-shrink guard (BUG-3): for inputs just barely over maxChars,
-	// head+marker+tail can be LARGER than the input (marker is ~57 chars).
-	// Compaction must never expand — return the original verbatim in that case.
-	if (result.length >= value.length) return value;
-	return result;
+	// P0-A: compose the value through the stage-chain compression pipeline.
+	// The default pipeline is just [TruncationStage] (single-stage, equivalent
+	// to the pre-P0-A implementation) so plain text with no ANSI / no blank
+	// runs / no consecutive duplicates produces bit-identical output (L4
+	// regression safety). Callers that want noise stripping can opt into
+	// additional stages via the pipeline — but compactString's caller surface
+	// keeps the simple `(value, maxChars, opts)` signature.
+	// P0-B: the TruncationStage scans the middle slice for important diagnostic
+	// lines (error, file:line, HTTP 4xx/5xx, compiler codes) and preserves them
+	// within a 15% slack budget. The `preserveImportant` opt propagates here.
+	const result = applyCompactPipeline(value, [new TruncationStage(maxChars, { preserveImportant: opts.preserveImportant })]);
+	return result.text;
 }
 
 export function compactValue(value: unknown): unknown {
