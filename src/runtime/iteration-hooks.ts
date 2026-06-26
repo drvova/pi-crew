@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
+import { HeadSnapStage } from "./compact-stages/index.ts";
 import { resolveShellForScript } from "../utils/resolve-shell.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { DENIED_METRIC_NAMES } from "./metric-parser.ts";
@@ -99,23 +100,6 @@ function notFiredResult(): HookResult {
 }
 
 /**
- * Truncate a buffer to the given byte limit, snapping to the last newline
- * boundary for UTF-8 safety.
- */
-function truncateToLimit(buf: Buffer, limit: number): Buffer {
-	if (buf.byteLength <= limit) return buf;
-
-	const slice = buf.subarray(0, limit);
-	// Find the last newline within the truncated region
-	const lastNewline = slice.lastIndexOf("\n");
-	if (lastNewline >= 0) {
-		return slice.subarray(0, lastNewline);
-	}
-	// No newline found — return the full slice
-	return slice;
-}
-
-/**
  * Check if a script path exists and is executable.
  */
 function isScriptRunnable(scriptPath: string): boolean {
@@ -196,13 +180,17 @@ export async function runIterationHook(
 			const durationMs = Date.now() - startTime;
 
 			const rawStdout = Buffer.concat(stdoutChunks);
-			const truncatedStdout = truncateToLimit(rawStdout, MAX_STDOUT_BYTES);
+			// Sprint 5: refactored onto HeadSnapStage. Convert to UTF-8 string once,
+			// then apply the byte-cap stage with newline-snap so partial lines
+			// never appear in the captured preview. HeadSnapStage is byte-cap-safe
+			// (walks back partial UTF-8 sequences at the cut boundary).
+			const stdoutText = new HeadSnapStage({ maxBytes: MAX_STDOUT_BYTES }).apply(rawStdout.toString("utf-8"));
 
 			const rawStderr = Buffer.concat(stderrChunks);
 
 			resolve({
 				fired: true,
-				stdout: truncatedStdout.toString("utf-8"),
+				stdout: stdoutText,
 				stderr: rawStderr.toString("utf-8"),
 				exitCode: code,
 				timedOut: killed,

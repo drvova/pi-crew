@@ -3,6 +3,7 @@
 // Used by the UI layer to show partial results before task completion.
 
 import type { ParsedPiUsage } from "./pi-json-output.ts";
+import { TAIL_CAPTURE_STREAM_STAGE } from "./compact-stages/index.ts";
 
 export interface ToolCallPreview {
 	toolName: string;
@@ -111,7 +112,13 @@ export function feedJsonEvent(preview: StreamPreview, event: unknown): boolean {
 		const text = extractTextFromContent(message?.content ?? obj.content);
 		if (text) {
 			const appended = preview.textBuffer.length > 0 ? preview.textBuffer + "\n" + text : text;
-			preview.textBuffer = appended.length > MAX_TEXT_BUFFER ? appended.slice(appended.length - MAX_TEXT_BUFFER) : appended;
+			// Sprint 5: refactored onto the stage-chain. TAIL_CAPTURE_STREAM_STAGE
+			// is a 16_384-char tail-capture stage with no marker (the UI shows
+			// raw text without a prefix). It is bit-equivalent to the inline
+			// `appended.slice(appended.length - MAX_TEXT_BUFFER)` for inputs at
+			// or below the cap (returns verbatim) and equivalent for over-cap
+			// inputs (returns last MAX_TEXT_BUFFER chars).
+			preview.textBuffer = TAIL_CAPTURE_STREAM_STAGE.apply(appended);
 		}
 		modified = true;
 	}
@@ -119,7 +126,7 @@ export function feedJsonEvent(preview: StreamPreview, event: unknown): boolean {
 	// Detect direct text/final output
 	if (typeof obj.text === "string" && obj.text.trim()) {
 		const appended = preview.textBuffer.length > 0 ? preview.textBuffer + "\n" + obj.text : obj.text;
-		preview.textBuffer = appended.length > MAX_TEXT_BUFFER ? appended.slice(appended.length - MAX_TEXT_BUFFER) : appended;
+		preview.textBuffer = TAIL_CAPTURE_STREAM_STAGE.apply(appended);
 		modified = true;
 	}
 

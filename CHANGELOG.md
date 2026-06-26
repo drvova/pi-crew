@@ -1,6 +1,46 @@
 # Changelog
 
-## [v0.9.13] — tee-recovery for truncated shared artifacts (P1-A) (2026-06-26)
+## [v0.9.10 (continued)] — migrate deferred truncation points through the stage-chain (Sprint 5) (2026-06-26)
+
+The Sprint 3 v0.9.10 (continued) entry listed 5 truncation points deferred from the P0-A stage-chain refactor. This release migrates 3 of them and defers 2 more with explicit reasons.
+
+### Features
+
+- **`TailCaptureStage`** (`src/runtime/compact-stages/tail-capture-stage.ts`) — keeps the last N chars/bytes, prepends an optional marker when truncation fires. Two cap modes: `maxChars` (UTF-8 safe) or `maxBytes` (legacy byte cap with UTF-8 boundary snap). Mutually exclusive caps; positive finite values required.
+- **`HeadSnapStage`** (`src/runtime/compact-stages/head-snap-stage.ts`) — keeps the first N bytes, optionally snapping to the last newline within the head region. Byte cap (not char cap) to preserve the original memory-budget semantic. UTF-8 boundary safety: walks back partial multi-byte sequences at the cut point. `snapToNewline: false` disables the snap.
+- **`TAIL_CAPTURE_STREAM_STAGE` singleton** — exported 16_384-char tail-capture with no marker for `stream-preview.ts` textBuffer.
+- **`appendBoundedTail` refactored** (child-pi.ts:52) — delegates to `TailCaptureStage` with dynamic marker `[pi-crew captured output truncated to last X KiB]` computed from `maxBytes`. Behavior bit-identical to pre-Sprint-5.
+- **`stream-preview.ts` textBuffer truncation refactored** (lines 114, 122) — delegates to `TAIL_CAPTURE_STREAM_STAGE`. Both call sites in `feedJsonEvent` now use the stage. Behavior bit-identical to pre-Sprint-5 inline `.slice(appended.length - MAX_TEXT_BUFFER)`.
+- **`iteration-hooks.ts` `truncateToLimit` removed** — replaced by inline `new HeadSnapStage({ maxBytes: MAX_STDOUT_BYTES }).apply(rawStdout.toString("utf-8"))` at the call site. Eliminates the Buffer → string → Buffer round-trip. Behavior preserved.
+
+### Deferred (still not migrated — with reasons)
+
+- **`async-runner.ts` stderr "stop capturing" semantic** (lines 280-330) — chunk-by-chunk state machine: chunks accumulate up to `STDERR_CAPTURE_LIMIT` (256KB), then further chunks are DROPPED ENTIRELY with a single truncation marker. Fundamentally stateful flow, not a transform-on-string. Migrating would require a chunk-stream pipeline that no other call site needs.
+- **`chain-runner.ts` array caps** (lines ~503-520) — operate on arrays of mixed-shape objects, not strings. The string-only pipeline abstraction doesn't apply. Existing `.slice()` calls are simple and correct; migrating would be ceremony without value.
+
+### Tests
+
+- New real-function suite `test/unit/deferred-truncation-migration.test.ts` (31 tests, calling REAL exported stages):
+  - **TailCaptureStage**: char/byte cap under/over boundary; UTF-8 boundary snap; marker behavior (prepended ONLY when truncating); singleton behavior; constructor validation.
+  - **HeadSnapStage**: byte cap; newline-snap to last `\n` in head region; `snapToNewline: false` disables snap; UTF-8 boundary safety with emoji at cut boundary; constructor validation.
+  - **3 migration integrations**: `appendBoundedTail`, `stream-preview.ts`, `iteration-hooks.ts` all verified behavior-equivalent to pre-Sprint-5.
+  - **L4 backward-compat**: all 3 migrations produce bit-identical output to pre-Sprint-5 inline implementations.
+- 111 output-handling + child-pi/task-output-context importer tests pass (was 80 in pre-Sprint-5 — added 31 new tests); `tsc --noEmit` clean.
+
+### Verification
+
+```
+npx tsc --noEmit                                                  -> clean (exit 0)
+node --test test/unit/deferred-truncation-migration.test.ts      -> 31 tests, 0 fail
+node --test (full Sprint 1+2+3+4+5 regression set, 7 files)       -> 111 tests, 0 fail
+node --test (all child-pi/task-output-context importer tests)     -> 132 tests, 0 fail
+```
+
+The full integration suite (incl. slow E2E / mocked-child-pi) was not re-run in this release window; the targeted unit + importer set covering every changed symbol is green.
+
+---
+
+## [v0.9.10 (continued)] — tee-recovery for truncated shared artifacts (P1-A, Sprint 4) (2026-06-26)
 
 When `readIfSmall` truncated a shared artifact down to ~32KB of head+tail for inline injection into a downstream worker's prompt, the worker had no way to recover the dropped middle. The only options were: re-run the producing task (waste), guess what was missing (error-prone), or skip the work (capability loss). This release wires up **tee-recovery** so the truncated middle is recoverable on demand.
 
@@ -49,7 +89,7 @@ The full integration suite (incl. slow E2E / mocked-child-pi) was not re-run in 
 
 ---
 
-## [v0.9.12] — stage-chain compression pipeline (P0-A) with monotonic-shrink safety (2026-06-26)
+## [v0.9.10 (continued)] — stage-chain compression pipeline (P0-A, Sprint 3) (2026-06-26)
 
 The output-handling & compression area had several ad-hoc truncation / cleaning functions, each with its own quirks (`appendBoundedTail`, `stream-preview`, `iteration-hooks`, `async-runner`, `compactString`, `readIfSmall`, `chain-runner`). This release introduces a composable **stage-chain compression pipeline** so that future clean-up stages (ANSI strip, blank-line collapse, deduplication, truncation, …) can be added once and reused at every call site, and so that ALL compaction is forced through a single **monotonic-shrink gate** that mathematically cannot expand its input.
 
@@ -105,7 +145,7 @@ The full integration suite (incl. slow E2E / mocked-child-pi) was not re-run in 
 
 ---
 
-## [v0.9.11] — harden output-handling: fix UTF-8 corruption, dead-code path resolution, compaction expansion, and stderr secret leakage (2026-06-26)
+## [v0.9.10 (continued)] — harden output-handling: fix UTF-8 corruption, dead-code path resolution, compaction expansion, stderr secret leakage, and add important-line classifier (Sprints 1-2) (2026-06-26)
 
 A code-review + security-review + verifier pass on the output-handling & compression code path surfaced 4 correctness bugs and 1 medium-severity security gap. This release fixes all of them and replaces the test "mirror" anti-pattern (tests re-implemented the algorithm locally instead of calling the real functions) with real-function tests, so the passing suite now actually guards the shipped code.
 

@@ -12,7 +12,7 @@ import { logInternalError } from "../utils/internal-error.ts";
 import { attachPostExitStdioGuard, trySignalChild } from "./post-exit-stdio-guard.ts";
 import { redactJsonLine, redactSecretString } from "../utils/redaction.ts";
 import { applyCompactPipeline } from "./compact-pipeline.ts";
-import { TruncationStage } from "./compact-stages/index.ts";
+import { TruncationStage, TailCaptureStage } from "./compact-stages/index.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { registerChildProcess, unregisterChildProcess } from "../extension/crew-cleanup.ts";
 import { classifyProcessCrash } from "./crash-classification.ts";
@@ -50,11 +50,13 @@ export function redactStderrExcerpt(stderr: string, maxChars: number): string {
 }
 
 function appendBoundedTail(current: string, chunk: string, maxBytes = MAX_CAPTURE_BYTES): string {
-	const combined = current + chunk;
-	if (Buffer.byteLength(combined, "utf-8") <= maxBytes) return combined;
-	let tail = combined.slice(Math.max(0, combined.length - maxBytes));
-	while (Buffer.byteLength(tail, "utf-8") > maxBytes) tail = tail.slice(1024);
-	return `[pi-crew captured output truncated to last ${Math.round(maxBytes / 1024)} KiB]\n${tail}`;
+	// Sprint 5: refactored onto TailCaptureStage (P0-A stage-chain). The marker
+	// embeds the cap size in KiB so the caller sees how much was dropped. Stage
+	// construction per call is cheap (4 fields) and avoids caching concerns.
+	return new TailCaptureStage({
+		maxBytes,
+		marker: `[pi-crew captured output truncated to last ${Math.round(maxBytes / 1024)} KiB]`,
+	}).apply(current + chunk);
 }
 
 function clearHardKillTimer(pid: number | undefined): void {
