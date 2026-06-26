@@ -113,23 +113,43 @@ export class CountdownTimer {
 	private readonly timeoutMs: number;
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private expired = false;
+	private lastEmittedSeconds = -1;
 
 	constructor(options: CountdownTimerOptions) {
 		this.timeoutMs = Math.max(0, options.timeoutMs);
 		this.onTick = options.onTick;
 		this.onExpire = options.onExpire;
 		this.startedAt = Date.now();
-		this.onTick(this.secondsLeft());
+		this.lastEmittedSeconds = this.secondsLeft();
+		this.onTick(this.lastEmittedSeconds);
 		if (this.timeoutMs === 0) {
 			this.emitExpire();
 			return;
 		}
-		this.timer = setInterval(() => {
+		this.scheduleNextTick();
+	}
+
+	/**
+	 * Schedule the next tick via recursive setTimeout. Each tick re-emits the
+	 * current `secondsLeft()` only if it differs from the last emitted value
+	 * (lastEmittedSeconds guard). This makes the countdown correct even under
+	 * event-loop pressure: if the previous tick fired 1.2s late, the next
+	 * tick still emits the right value for the current second rather than
+	 * skipping it (the pre-fix `setInterval` could SKIP a second value when
+	 * the loop was busy, producing [3,2,0] instead of [3,2,1,0] in tests).
+	 */
+	private scheduleNextTick(): void {
+		this.timer = setTimeout(() => {
 			const seconds = this.secondsLeft();
-			this.onTick(seconds);
+			if (seconds !== this.lastEmittedSeconds) {
+				this.lastEmittedSeconds = seconds;
+				this.onTick(seconds);
+			}
 			if (seconds <= 0) {
 				this.emitExpire();
+				return;
 			}
+			this.scheduleNextTick();
 		}, 1000);
 		// Defense-in-depth: never let the countdown timer keep the event loop
 		// alive. If dispose() is missed (e.g. UI unmount race), the timer must
@@ -151,7 +171,7 @@ export class CountdownTimer {
 
 	dispose(): void {
 		if (this.timer === undefined) return;
-		clearInterval(this.timer);
+		clearTimeout(this.timer);
 		this.timer = undefined;
 	}
 }

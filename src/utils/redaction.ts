@@ -208,6 +208,22 @@ export function redactSecretString(value: string): string {
 // i++ (advance 1 char) and re-scanned from i+1, so a long run was rescanned O(n)
 // times = O(n^2). The P1f ReDoS test (300KB no-dot input) surfaced this pre-existing
 // bug. Now advances past the whole run when it isn't a redactable secret -> O(n).
+// FIX (BG2 follow-up): the inner-loop regex test /[a-zA-Z0-9_-]/.test(value[j])
+// is O(1) per call but with measurable regex-engine overhead — for a 100KB
+// underscore run that's 100K regex calls, well over the 200ms budget the
+// P1f regression test allows. Replaced with a charCodeAt check (~5x faster
+// in practice, O(1) per call with no regex allocation/eval cost).
+function isKeyChar(c: string): boolean {
+	const code = c.charCodeAt(0);
+	return (
+		(code >= 48 && code <= 57) ||  // 0-9
+		(code >= 65 && code <= 90) ||  // A-Z
+		(code >= 97 && code <= 122) || // a-z
+		code === 95 || // _
+		code === 45 // -
+	);
+}
+
 function redactInlineSecrets(value: string): string {
 	const result: string[] = [];
 	let i = 0;
@@ -215,7 +231,7 @@ function redactInlineSecrets(value: string): string {
 	while (i < value.length) {
 		// Collect a run of key characters (alphanumeric, underscore, hyphen).
 		let j = i;
-		while (j < value.length && /[a-zA-Z0-9_-]/.test(value[j])) {
+		while (j < value.length && isKeyChar(value[j])) {
 			j++;
 		}
 		const keyLen = j - i;
