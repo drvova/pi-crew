@@ -39,30 +39,37 @@ function containedExists(filePath: string, baseDir?: string): boolean {
  * (24K/40K/80K) which truncated the same artifact differently depending on
  * which code path read it.
  */
-const MAX_RESULT_INLINE_BYTES = 32_000;
+export const MAX_RESULT_INLINE_BYTES = 32_000;
 
-function readIfSmall(filePath: string, baseDir?: string): string | undefined {
-	const maxBytes = MAX_RESULT_INLINE_BYTES;
+/**
+ * Read a file and return its content, truncating to a head+tail slice if it
+ * exceeds {@link MAX_RESULT_INLINE_BYTES} characters. Multi-byte UTF-8
+ * sequences are preserved by reading the full file as a UTF-8 string and
+ * slicing by character count (not raw bytes).
+ */
+export function readIfSmall(filePath: string, baseDir?: string): string | undefined {
+	const maxChars = MAX_RESULT_INLINE_BYTES;
 	try {
 		const safePath = baseDir ? resolveRealContainedPath(baseDir, filePath) : filePath;
-		const stat = fs.statSync(safePath);
-		if (stat.size > maxBytes) {
+		const content = fs.readFileSync(safePath, "utf-8");
+		if (content.length > maxChars) {
 			// L4: head + tail instead of head-only. Keeps closing markdown
 			// structure (code fences, headings) instead of leaving them truncated.
-			const head = Math.floor(maxBytes * 0.75);
-			const tail = maxBytes - head;
-			const headBuf = Buffer.alloc(head);
-			const tailBuf = Buffer.alloc(tail);
-			const fd = fs.openSync(safePath, "r");
-			try {
-				fs.readSync(fd, headBuf, 0, head, 0);
-				fs.readSync(fd, tailBuf, 0, tail, stat.size - tail);
-			} finally {
-				fs.closeSync(fd);
-			}
-			return `${headBuf.toString("utf-8")}\n\n...[pi-crew truncated ${stat.size - maxBytes} bytes, head+tail preserved]...\n${tailBuf.toString("utf-8")}`;
+			// Slice by character count to avoid splitting multi-byte UTF-8
+			// sequences (which would produce U+FFFD replacement characters).
+			const head = Math.floor(maxChars * 0.75);
+			const tail = maxChars - head;
+			const headPart = content.slice(0, head);
+			const tailPart = content.slice(content.length - tail);
+			const result = `${headPart}\n\n...[pi-crew truncated ${content.length - maxChars} chars, head+tail preserved]...\n${tailPart}`;
+			// Monotonic-shrink guard: for inputs barely over the threshold
+			// (threshold+1 .. threshold+marker-length), the head+marker+tail
+			// output could be LARGER than the input. Return the original
+			// unchanged in that case so compaction never expands.
+			if (result.length >= content.length) return content;
+			return result;
 		}
-		return fs.readFileSync(safePath, "utf-8");
+		return content;
 	} catch {
 		return undefined;
 	}
@@ -127,6 +134,7 @@ function aggregateUsage(task: TeamTaskState): DependencyContextEntry["usage"] {
 function pruneSharedReads(
 	reads: Array<{ name: string; path: string; content: string }>,
 	dependencies: DependencyContextEntry[],
+	artifactsRoot: string,
 ): Array<{ name: string; path: string; content: string }> {
 	if (reads.length === 0) return reads;
 	// Convert shared reads to tool result entries (ordered oldest → newest
@@ -140,15 +148,19 @@ function pruneSharedReads(
 	// Collect file edit events from dependency artifacts produced to shared/.
 	// A dependency that wrote a shared file after an earlier read invalidates
 	// that read (the content is now stale relative to the latest version).
-	const sharedRoot = path.resolve("shared");
+	// Artifact entries from listTaskArtifacts() are already relative to
+	// artifactsRoot (e.g. "shared/foo.md"), so resolve directly against
+	// artifactsRoot — NOT against a "shared" subdirectory (which would
+	// double-prefix to <artifactsRoot>/shared/shared/foo.md).
 	const fileEdits: FileEditEvent[] = [];
 	for (let depIndex = 0; depIndex < dependencies.length; depIndex++) {
 		const dep = dependencies[depIndex]!;
 		const produced = dep.artifactsProduced ?? [];
 		for (const artifact of produced) {
 			if (typeof artifact !== "string") continue;
-			// Map artifact path to shared-relative and check against read targets.
-			fileEdits.push({ target: path.resolve(sharedRoot, artifact), index: reads.length + depIndex });
+			// Map artifact path (relative to artifactsRoot) to absolute and
+			// check against read targets.
+			fileEdits.push({ target: path.resolve(artifactsRoot, artifact), index: reads.length + depIndex });
 		}
 	}
 	const pruned = pruneToolOutputs(entries, DEFAULT_PRUNE_CONFIG);
@@ -181,7 +193,7 @@ export function collectDependencyOutputContext(manifest: TeamRunManifest, tasks:
 	// (same file re-read with different selectors) and replaces stale large
 	// outputs with compact digest notices before injecting into the worker
 	// prompt. OPT-IN: default config protects recent results.
-	const sharedReads = pruneSharedReads(rawSharedReads, dependencies);
+	const sharedReads = pruneSharedReads(rawSharedReads, dependencies, manifest.artifactsRoot);
 	return { dependencies, sharedReads };
 }
 

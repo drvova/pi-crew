@@ -10,7 +10,7 @@ import { getPiSpawnCommand } from "./pi-spawn.ts";
 import { DEFAULT_CHILD_PI } from "../config/defaults.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { attachPostExitStdioGuard, trySignalChild } from "./post-exit-stdio-guard.ts";
-import { redactJsonLine } from "../utils/redaction.ts";
+import { redactJsonLine, redactSecretString } from "../utils/redaction.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { registerChildProcess, unregisterChildProcess } from "../extension/crew-cleanup.ts";
 import { classifyProcessCrash } from "./crash-classification.ts";
@@ -27,6 +27,25 @@ const MAX_TOOL_INPUT_CHARS = DEFAULT_CHILD_PI.maxToolInputChars;
 const MAX_COMPACT_CONTENT_CHARS = DEFAULT_CHILD_PI.maxCompactContentChars;
 const activeChildProcesses = new Map<number, ChildProcess>();
 const childHardKillTimers = new Map<number, NodeJS.Timeout>();
+
+/**
+ * SEC-1: Extract a redacted stderr/stdout excerpt for embedding in lifecycle
+ * events and error messages. The in-memory stdout/stderr accumulators receive
+ * RAW worker output (only structurally compacted via compactChildPiEvent —
+ * NOT secret-redacted), so any slice embedded into a persisted event must be
+ * redacted here. Otherwise worker-emitted secrets (API keys, tokens returned
+ * from a tool call) leak through diagnostic logs that bypass artifact-store
+ * redaction.
+ *
+ * Extracted as a single helper (8 call sites were duplicating this) so the
+ * redaction boundary is unit-testable directly. The real spawn error/timeout
+ * paths are integration-level and NOT reachable via PI_TEAMS_MOCK_CHILD_PI
+ * (the mock returns before the lifecycle-event handlers run), so a behavior
+ * test must target this helper rather than the full runChildPi path.
+ */
+export function redactStderrExcerpt(stderr: string, maxChars: number): string {
+	return redactSecretString(stderr.slice(-maxChars));
+}
 
 function appendBoundedTail(current: string, chunk: string, maxBytes = MAX_CAPTURE_BYTES): string {
 	const combined = current + chunk;
@@ -380,7 +399,7 @@ function appendTranscript(input: ChildPiRunInput, line: string): void {
 	}
 }
 
-function compactString(value: string, maxChars = MAX_COMPACT_CONTENT_CHARS): string {
+export function compactString(value: string, maxChars = MAX_COMPACT_CONTENT_CHARS): string {
 	if (value.length <= maxChars) return value;
 	// L4: head + tail instead of head-only. Keeps closing markdown structure
 	// (code fences, headings, list tails) instead of dropping them — the old
@@ -389,16 +408,32 @@ function compactString(value: string, maxChars = MAX_COMPACT_CONTENT_CHARS): str
 	// (opening structure + bulk of content); tail gets 25% (closing structure).
 	const head = Math.floor(maxChars * 0.75);
 	const tail = maxChars - head;
-	return `${value.slice(0, head)}\n...[pi-crew compacted ${value.length - maxChars} chars, head+tail preserved]...\n${value.slice(-tail)}`;
+	const result = `${value.slice(0, head)}\n...[pi-crew compacted ${value.length - maxChars} chars, head+tail preserved]...\n${value.slice(-tail)}`;
+	// Monotonic-shrink guard (BUG-3): for inputs just barely over maxChars,
+	// head+marker+tail can be LARGER than the input (marker is ~57 chars).
+	// Compaction must never expand — return the original verbatim in that case.
+	if (result.length >= value.length) return value;
+	return result;
 }
 
-function compactValue(value: unknown): unknown {
+export function compactValue(value: unknown): unknown {
 	if (typeof value === "string") return compactString(value);
-	if (Array.isArray(value)) return value.slice(0, 20).map(compactValue);
+	if (Array.isArray(value)) {
+		// BUG-4: silent .slice(0, 20) lost items 21-50 with no marker.
+		// Append a truncation marker when entries are dropped so downstream
+		// consumers know data was elided (consistent with compactString style).
+		if (value.length > 20) {
+			return [...value.slice(0, 20).map(compactValue), `[pi-crew truncated ${value.length - 20} entries]`];
+		}
+		return value.map(compactValue);
+	}
 	const record = asRecord(value);
 	if (!record) return value;
+	const entries = Object.entries(record);
 	const compacted: Record<string, unknown> = {};
-	for (const [key, entry] of Object.entries(record).slice(0, 20)) compacted[key] = compactValue(entry);
+	for (const [key, entry] of entries.slice(0, 20)) compacted[key] = compactValue(entry);
+	// BUG-4: mark elided object keys so consumers know data was dropped.
+	if (entries.length > 20) compacted["[truncated]"] = `${entries.length - 20} entries`;
 	return compacted;
 }
 
@@ -738,7 +773,9 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				noResponseTimer = setTimeout(() => {
 					responseTimeoutHit = true;
 					// Capture stderr at timeout moment for debugging
-					const timeoutStderr = stderr.slice(-1024); // Last 1KB of stderr
+					// SEC-1: redact secrets before embedding in lifecycle event so
+					// worker-emitted secrets (API keys etc.) don't bypass redaction.
+					const timeoutStderr = redactStderrExcerpt(stderr, 1024); // Last 1KB of stderr (redacted, SEC-1)
 					input.onLifecycleEvent?.({ type: "response_timeout", pid: child.pid, error: `No output for ${responseTimeoutMs}ms`, ts: new Date().toISOString(), stderr: timeoutStderr || undefined });
 					killProcessTree(child.pid, child);
 					try {
@@ -954,16 +991,17 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			});
 			child.on("error", (error) => {
 				// Reject pending operations with process error context
+				// SEC-1: redact stderr secrets embedded in the error message + excerpt.
 				const processError = new Error(
-					`Child Pi process error: ${error.message}. Stderr: ${stderr.slice(-500) || "(none)"}`,
+					`Child Pi process error: ${error.message}. Stderr: ${redactStderrExcerpt(stderr, 500) || "(none)"}`,
 				);
 				rejectPendingOperations(processError);
 				try {
-					input.onLifecycleEvent?.({ type: "spawn_error", pid: child.pid, error: processError.message, ts: new Date().toISOString(), stderrExcerpt: stderr.slice(-500) || undefined });
+					input.onLifecycleEvent?.({ type: "spawn_error", pid: child.pid, error: processError.message, ts: new Date().toISOString(), stderrExcerpt: redactStderrExcerpt(stderr, 500) || undefined });
 				} catch (err) {
 					logInternalError("child-pi.on-lifecycle-event", err, `event=error, pid=${child.pid}`);
 				}
-				settle({ exitCode: null, stdout, stderr, error: processError.message, exitStatus: { exitCode: null, cancelled: abortRequested, timedOut: responseTimeoutHit, killed: false, cleanupErrors, finalDrainMs, crashClass: classifyProcessCrash({ exitCode: null, cancelled: abortRequested, timedOut: responseTimeoutHit, spawnError: error, stderrSnippet: stderr ? stderr.slice(-1000) : undefined }).crashClass } });
+				settle({ exitCode: null, stdout, stderr, error: processError.message, exitStatus: { exitCode: null, cancelled: abortRequested, timedOut: responseTimeoutHit, killed: false, cleanupErrors, finalDrainMs, crashClass: classifyProcessCrash({ exitCode: null, cancelled: abortRequested, timedOut: responseTimeoutHit, spawnError: error, stderrSnippet: stderr ? redactStderrExcerpt(stderr, 1000) : undefined }).crashClass } });
 			});
 			child.on("exit", (code, signal) => {
 				if (child.pid) {
@@ -982,7 +1020,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				const exitError = isUnexpectedExit
 					? new Error(
 						`Child Pi process exited unexpectedly (code=${code ?? "null"} signal=${signal ?? "null"}). `
-						+ `Stderr: ${stderr.slice(-1000) || "(none)"}`,
+						+ `Stderr: ${redactStderrExcerpt(stderr, 1000) || "(none)"}`,
 					)
 					: null;
 				if (exitError) {
@@ -998,7 +1036,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 						exitCode: code,
 						ts: new Date().toISOString(),
 						error: exitError?.message,
-						stderrExcerpt: isUnexpectedExit ? stderr.slice(-1000) || undefined : undefined,
+						stderrExcerpt: isUnexpectedExit ? redactStderrExcerpt(stderr, 1000) || undefined : undefined,
 						// Phase-0 diagnostic fields (kept optional — no type change required).
 						...(signal ? { signal } : {}),
 						...(finalDrainArmed || forcedFinalDrain
@@ -1038,7 +1076,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				} catch (err) {
 					logInternalError("child-pi.on-lifecycle-event", err, `event=close, pid=${child.pid}`);
 				}
-				const timeoutError = responseTimeoutHit && !stderr.trim() ? { error: `Child Pi produced no new output for ${responseTimeoutMs}ms; process was terminated as unresponsive.` } : responseTimeoutHit && stderr.trim() ? { error: `Child Pi timed out after ${responseTimeoutMs}ms with stderr: ${stderr.slice(-500)}` } : undefined;
+				const timeoutError = responseTimeoutHit && !stderr.trim() ? { error: `Child Pi produced no new output for ${responseTimeoutMs}ms; process was terminated as unresponsive.` } : responseTimeoutHit && stderr.trim() ? { error: `Child Pi timed out after ${responseTimeoutMs}ms with stderr: ${redactStderrExcerpt(stderr, 500)}` } : undefined;
 				// M6 fix: log when forced final drain converts non-zero exit to 0.
 			// This is expected in normal operation (child finished cleanly but linger was killed),
 			// but the telemetry helps detect regressions where crashes are hidden.
@@ -1062,7 +1100,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 					timedOut: responseTimeoutHit,
 					killed: hardKilled,
 					spawnError: undefined,
-					stderrSnippet: stderr ? stderr.slice(-1000) : undefined,
+					stderrSnippet: stderr ? redactStderrExcerpt(stderr, 1000) : undefined,
 				});
 				settle({ exitCode: finalExitCode, stdout, stderr, ...(timeoutError ? { error: timeoutError.error } : {}), ...(steerError ? { error: steerError } : {}), aborted: wasGraceAborted || wasParentAborted, steered: softLimitReached && !wasGraceAborted, exitStatus: { exitCode: finalExitCode, cancelled: abortRequested, timedOut: responseTimeoutHit, killed: hardKilled, cleanupErrors, finalDrainMs, crashClass: crashClassification.crashClass } });
 			});

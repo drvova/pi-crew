@@ -1,5 +1,41 @@
 # Changelog
 
+## [v0.9.11] — harden output-handling: fix UTF-8 corruption, dead-code path resolution, compaction expansion, and stderr secret leakage (2026-06-26)
+
+A code-review + security-review + verifier pass on the output-handling & compression code path surfaced 4 correctness bugs and 1 medium-severity security gap. This release fixes all of them and replaces the test "mirror" anti-pattern (tests re-implemented the algorithm locally instead of calling the real functions) with real-function tests, so the passing suite now actually guards the shipped code.
+
+### Fixes
+
+- **`readIfSmall` UTF-8 byte-boundary corruption** — `src/runtime/task-output-context.ts` previously read head/tail as raw bytes then `.toString("utf-8")`, splitting multi-byte sequences into `\uFFFD` replacement characters. This corrupted emoji, CJK text, and the `⬜`/`⬛` large-square symbols central to the v0.9.10 visual fix. Now reads the full file as a UTF-8 string and slices by character count (char-safe, consistent with `compactString`).
+
+- **`pruneSharedReads` path resolution (dead invalidation branch)** — `path.resolve("shared")` resolved against the process CWD instead of `manifest.artifactsRoot`, and then double-prefixed to `<cwd>/shared/shared/<name>`. The file-edit-after-read invalidation branch therefore never matched. `pruneSharedReads` now receives `artifactsRoot` and resolves artifact paths (already relative to `artifactsRoot`) directly.
+
+- **`compactString` / `readIfSmall` expansion at threshold boundary** — for inputs just over the threshold, `head(75%) + marker(~57) + tail(25%)` was *larger* than the input, so "compaction" expanded the content. Added a monotonic-shrink guard: if the compacted result is not shorter than the input, return the input unchanged. (This is the local seed of the P0-A stage-chain `if (next.length <= text.length)` gate planned for a later release.)
+
+- **`compactValue` silent array/object truncation** — `.slice(0, 20)` dropped items 21+ with no marker. Now appends a `[pi-crew truncated N entries]` marker (arrays) / `[truncated]` key (objects) so downstream consumers know data was elided, consistent with `compactString`.
+
+### Security
+
+- **`child-pi.ts` stderr/stdout secret leakage via lifecycle events (SEC-1, medium)** — the in-memory `stdout`/`stderr` accumulators receive raw worker output (structurally compacted only, not secret-redacted). Tail slices embedded in lifecycle events (`response_timeout`, `spawn_error`, `exit`) and error messages could therefore leak worker-emitted secrets (GitHub PATs, AWS keys, JWTs) through diagnostic logs that bypass artifact-store redaction. All 8 embed sites now route through a single `redactStderrExcerpt(stderr, maxChars)` helper that applies `redactSecretString` at the boundary.
+
+### Tests
+
+- Replaced the **test-mirror anti-pattern**: `output-handling-l4.test.ts` had re-implemented `headTailCompact` locally and used a local fd-read that "mirrored" `readIfSmall`, so the suite stayed green while the bugs above existed. `compactString`, `compactValue`, `readIfSmall`, and `MAX_RESULT_INLINE_BYTES` are now exported and exercised directly.
+- New real-function suites: `child-pi-compaction-real.test.ts` (monotonic-shrink across the boundary window, head/tail/marker preservation), `task-output-context-compaction-real.test.ts` (UTF-8 multi-byte safety at the split point, monotonic-shrink at multiple thresholds), `child-pi-sec1-redaction.test.ts` (GitHub PAT / AWS key / JWT / Bearer redaction at the `redactStderrExcerpt` boundary, plus slice-window and passthrough cases).
+- 108 output-handling + child-pi importer tests pass; `tsc --noEmit` clean.
+
+### Verification
+
+```
+npx tsc --noEmit                                  -> clean (exit 0)
+node --test (output-handling + importers)        -> 108 tests, 0 fail, 2.0s
+SEC-1 redaction boundary (8 subtests)            -> 8 pass, 0 fail
+```
+
+The full integration suite (incl. slow E2E / mocked-child-pi) was not re-run in this release window; the targeted unit/importer set covering every changed symbol is green.
+
+---
+
 ## [v0.9.10] — fix TUI crash: count large-square emoji (⬜) as width 2 (2026-06-25)
 
 Fixes the recurring `uncaughtException: Rendered line N exceeds terminal width (160 > 159)` that killed the host Pi process while a pi-crew foreground team run was active. The crew run itself (a child process) kept running, but the Pi TUI died and could not be used to observe it.
