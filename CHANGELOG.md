@@ -1,5 +1,54 @@
 # Changelog
 
+## [v0.9.13] — tee-recovery for truncated shared artifacts (P1-A) (2026-06-26)
+
+When `readIfSmall` truncated a shared artifact down to ~32KB of head+tail for inline injection into a downstream worker's prompt, the worker had no way to recover the dropped middle. The only options were: re-run the producing task (waste), guess what was missing (error-prone), or skip the work (capability loss). This release wires up **tee-recovery** so the truncated middle is recoverable on demand.
+
+### Features
+
+- **`readIfSmallWithTee(filePath, opts) -> { content, fullOutputPath? }`** — new function in `src/runtime/task-output-context.ts`. Reads the file (with the same multi-byte-safe truncation pipeline as `readIfSmall`), and when the file size exceeds `2 * MAX_RESULT_INLINE_BYTES` AND `opts.tee.fullOutputPath` was provided, ALSO writes the FULL untruncated content to that path. Returns the truncated content for inline injection PLUS the path so the caller can expose it to the worker. Returns `{ content }` (no `fullOutputPath`) when truncation is below the 2× threshold or when no tee opts were provided. Returns `undefined` if the file cannot be read.
+- **`teePathForArtifact(artifactsRoot, taskId, artifactName) -> string`** — public helper computing the canonical tee path `${artifactsRoot}/tee/${taskId}-${artifactName}.full.txt`. `taskId` and `artifactName` are sanitized to `[A-Za-z0-9._-]+` (path separators and `..` neutralized to `_`) so the resulting path is always a single segment inside the tee directory.
+- **Tee directory auto-creation** — `mkdirSync(path.dirname(teePath), { recursive: true })` so callers do not need to pre-create `${artifactsRoot}/tee/`.
+- **Best-effort tee write** — I/O failures (disk full, permission denied, parent-is-a-file, etc.) are swallowed and `fullOutputPath` is omitted from the result instead of failing the read. The truncated inline content is still returned either way.
+- **SharedReads entry shape extended** — the `sharedReads` array in `DependencyOutputContext` gains an optional `fullOutputPath?: string` field, set when tee was actually written. The construction site in `collectDependencyOutputContext` was refactored to compute the tee path via `teePathForArtifact(manifest.artifactsRoot, task.id, name)`, call `readIfSmallWithTee`, and include `fullOutputPath` in the entry when present.
+- **Worker prompt augmentation** — `renderDependencyOutputContext` now emits a `Full output (if you need the missing middle): ${fullOutputPath}` line whenever the entry has one. Downstream workers can `read` this path to recover the dropped middle. The `read` call goes through pi-crew's normal permission gate (writer role has `workspace_write`), so security is preserved. Existing entries (small / under-2× files) render exactly as before — no extra line.
+- **`readIfSmall` backward-compat wrapper** — the existing `readIfSmall(filePath, baseDir?) -> string | undefined` signature is preserved; it now delegates to `readIfSmallWithTee` and returns just the content string. All existing call sites (live task resultArtifact reads, prompt-builder contexts, etc.) compile and behave identically.
+
+### Tests
+
+- New real-function suite `test/unit/tee-recovery-real.test.ts` (14 tests, calling the REAL exported `readIfSmallWithTee`, `readIfSmall`, `teePathForArtifact`):
+  - **Threshold boundary**: files at or below `MAX_RESULT_INLINE_BYTES` returned verbatim, no tee, no tee file created on disk.
+  - **Truncation without tee**: files between 1× and 2× threshold are truncated, marker present, NO tee file created (the head/tail is mostly intact, tee would be wasteful).
+  - **Truncation WITH tee**: files > 2× threshold trigger tee; the tee file on disk is byte-equal to the original (full content, not truncated); `result.fullOutputPath` equals the requested tee path.
+  - **Tee directory auto-creation**: nested non-existent directories (e.g. `${root}/deeply/nested/tee/`) are created via `mkdirSync recursive`.
+  - **Tee write failure (best-effort)**: when the tee path's parent is a regular file (not a directory), `writeFileSync` fails internally; the read still returns truncated content with `fullOutputPath: undefined`. Never throws.
+  - **No-op without tee opts**: `readIfSmallWithTee(file)` without `opts.tee` behaves like the legacy `readIfSmall` (content only, no `fullOutputPath`).
+  - **Legacy `readIfSmall` wrapper**: returns the same string as `readIfSmallWithTee(file).content` for any input (backward-compat verified end-to-end).
+  - **`teePathForArtifact` format**: `${artifactsRoot}/tee/${taskId}-${artifactName}.full.txt`. Path-safety invariants verified — final filename segment contains no path separators, ends with `.full.txt`.
+  - **`teePathForArtifact` sanitization**: input like `"../escape/me"` + `"../../etc/passwd"` produces a path whose final segment is single-segment and contains no `/`. (`.` is intentionally allowed in the safe-char class so legitimate filenames like `result.json` survive; the real safety guarantee is no path separators inside the segment.)
+  - **Integration**: sharedReads construction (replicated from `collectDependencyOutputContext`) — small entries have no `fullOutputPath`, medium (under 2×) have no `fullOutputPath`, large (over 2×) have `fullOutputPath` AND the tee file exists on disk.
+  - **L4 backward-compat**: `readIfSmallWithTee` truncated marker wording on plain text is bit-identical to the pre-P1-A format (no `important lines preserved` marker, exact `[pi-crew truncated N chars, head+tail preserved]`).
+- 133 output-handling + child-pi/task-output-context importer tests pass (was 119 in v0.9.12 — added 14 P1-A suite); `tsc --noEmit` clean.
+
+### Verification
+
+```
+npx tsc --noEmit                                                  -> clean (exit 0)
+node --test test/unit/tee-recovery-real.test.ts                   -> 14 tests, 0 fail
+node --test (full Sprint 1+2+3+P1-A regression set, 9 files)      -> 133 tests, 0 fail
+node --test (all child-pi/task-output-context importer tests)     -> 132 tests, 0 fail
+```
+
+The full integration suite (incl. slow E2E / mocked-child-pi) was not re-run in this release window; the targeted unit + importer set covering every changed symbol is green.
+
+### Lessons learned
+
+- **Backward-compat via thin wrapper** — adding `readIfSmallWithTee` (returns enriched object) as the new canonical function and refactoring `readIfSmall` to delegate + return just `result.content` avoided any change to the existing `readIfSmall(filePath, baseDir?) -> string | undefined` signature. All four existing call sites in the file compiled without edits. The enriched result type is a strict superset; new code can opt into the metadata without breaking old code.
+- **Best-effort tee is the right default** — making `writeTeeFile` swallow I/O errors and report success/failure via boolean means the read path is NEVER blocked by tee-side problems. The worker prompt augmentation (`if (read.fullOutputPath)`) is the natural fallback signal — when tee failed, the worker simply does not see the recovery hint and behaves as if the file is non-recoverable (same as pre-P1-A).
+- **Tee threshold of 2× is the right cutoff** — files just over `MAX_RESULT_INLINE_BYTES` (say 33KB) get a clean head/tail with most of the content visible inline; tee-ing them would be wasteful disk usage. Files over 2× (say 70KB+) have >38KB dropped in the middle, where tee provides real value.
+
+---
+
 ## [v0.9.12] — stage-chain compression pipeline (P0-A) with monotonic-shrink safety (2026-06-26)
 
 The output-handling & compression area had several ad-hoc truncation / cleaning functions, each with its own quirks (`appendBoundedTail`, `stream-preview`, `iteration-hooks`, `async-runner`, `compactString`, `readIfSmall`, `chain-runner`). This release introduces a composable **stage-chain compression pipeline** so that future clean-up stages (ANSI strip, blank-line collapse, deduplication, truncation, …) can be added once and reused at every call site, and so that ALL compaction is forced through a single **monotonic-shrink gate** that mathematically cannot expand its input.

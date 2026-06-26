@@ -21,7 +21,14 @@ export interface DependencyContextEntry {
 
 export interface DependencyOutputContext {
 	dependencies: DependencyContextEntry[];
-	sharedReads: Array<{ name: string; path: string; content: string }>;
+	/**
+	 * Each shared artifact read, truncated for inline injection. When truncation
+	 * is materially lossy (file size > 2× MAX_RESULT_INLINE_BYTES) the FULL
+	 * content is also teed to `${artifactsRoot}/tee/${taskId}-${name}.full.txt`
+	 * and the path is exposed via `fullOutputPath` so the downstream worker
+	 * can `read` it back if it needs the dropped middle.
+	 */
+	sharedReads: Array<{ name: string; path: string; content: string; fullOutputPath?: string }>;
 }
 
 function containedExists(filePath: string, baseDir?: string): boolean {
@@ -49,27 +56,87 @@ export const MAX_RESULT_INLINE_BYTES = 32_000;
  * sequences are preserved by reading the full file as a UTF-8 string and
  * slicing by character count (not raw bytes).
  */
-export function readIfSmall(filePath: string, baseDir?: string): string | undefined {
+export interface TeeRecoveryOptions {
+	/** Absolute path to write the full (non-truncated) content to. */
+	fullOutputPath: string;
+}
+
+export interface ReadIfSmallTeeResult {
+	/** Truncated content (or full content when no truncation). */
+	content: string;
+	/** Set only when tee was actually written (file size > 2× threshold + write succeeded). */
+	fullOutputPath?: string;
+}
+
+/**
+ * Sanitize a taskId / artifactName into a flat tee filename. Any character
+ * outside [A-Za-z0-9._-] is replaced with underscore so the resulting path
+ * is always single-segment and cannot escape the tee directory.
+ */
+function safeTeeName(taskId: string, artifactName: string): string {
+	const safe = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, "_");
+	return `${safe(taskId)}-${safe(artifactName)}.full.txt`;
+}
+
+/**
+ * Canonical tee path for a shared artifact read.
+ *
+ * Format: `${artifactsRoot}/tee/${taskId}-${artifactName}.full.txt`
+ *
+ * The downstream worker prompt includes this path so the worker can `read`
+ * the full content when it needs the dropped middle.
+ */
+export function teePathForArtifact(artifactsRoot: string, taskId: string, artifactName: string): string {
+	return path.join(artifactsRoot, "tee", safeTeeName(taskId, artifactName));
+}
+
+/**
+ * Best-effort tee write. Returns true on success, false on any error (write
+ * failures are silent — tee is enhancement, never a hard dependency). The
+ * truncated inline content is still returned by the caller either way.
+ */
+function writeTeeFile(fullOutputPath: string, content: string): boolean {
+	try {
+		fs.mkdirSync(path.dirname(fullOutputPath), { recursive: true });
+		fs.writeFileSync(fullOutputPath, content, "utf-8");
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Read a file with optional tee-recovery (P1-A). Returns the truncated
+ * content AND (when tee was actually written) the absolute path to the full
+ * file. Returns undefined if the file cannot be read at all.
+ *
+ * Tee threshold: only when content.length > 2 * MAX_RESULT_INLINE_BYTES
+ * (the head+tail is materially lossy — small over-threshold files are not
+ * teed because the inline content is mostly intact and the worker can live
+ * with the 75/25 split). File content is read once and reused for both the
+ * pipeline (truncation) and the tee write (full file).
+ *
+ * Truncation behavior is unchanged from the P0-A pipeline: ANSI strip +
+ * blank collapse BEFORE truncation, important-line preservation (P0-B)
+ * inside TruncationStage, marker wording matches the pre-P1-A `readIfSmall`
+ * output exactly (L4 backward-compat).
+ */
+export function readIfSmallWithTee(
+	filePath: string,
+	opts: { baseDir?: string; tee?: TeeRecoveryOptions } = {},
+): ReadIfSmallTeeResult | undefined {
 	const maxChars = MAX_RESULT_INLINE_BYTES;
 	try {
-		const safePath = baseDir ? resolveRealContainedPath(baseDir, filePath) : filePath;
+		const safePath = opts.baseDir ? resolveRealContainedPath(opts.baseDir, filePath) : filePath;
 		const content = fs.readFileSync(safePath, "utf-8");
 		if (content.length > maxChars) {
-			// L4: head + tail instead of head-only. Keeps closing markdown
-			// structure (code fences, headings) instead of leaving them truncated.
-			// Slice by character count to avoid splitting multi-byte UTF-8
-			// sequences (which would produce U+FFFD replacement characters).
-			// P0-A: compose the file through the stage-chain compression pipeline.
-			// Artifact files are tool output context and frequently contain ANSI
-			// color codes + blank-line noise (npm/cargo/jest output captured to
-			// disk), so we apply ANSI strip + blank collapse BEFORE truncation.
-			// For inputs WITHOUT ANSI or blank runs (e.g. plain text fixtures)
-			// those stages are no-ops and the output is bit-identical to the
-			// pre-P0-A format (L4 backward-compat safety).
-			// P0-B: the TruncationStage scans the middle slice for important
-			// diagnostic lines (error, file:line, HTTP 4xx/5xx, compiler codes)
-			// and preserves them within a 15% slack budget. Artifact files
-			// always scan (no assistant-text opt-out).
+			let fullOutputPath: string | undefined;
+			// Tee only when truncation is materially lossy (>2× threshold).
+			if (opts.tee && content.length > maxChars * 2) {
+				if (writeTeeFile(opts.tee.fullOutputPath, content)) {
+					fullOutputPath = opts.tee.fullOutputPath;
+				}
+			}
 			const result = applyCompactPipeline(content, [
 				ANSI_STRIP_STAGE,
 				BLANK_COLLAPSE_STAGE,
@@ -78,12 +145,28 @@ export function readIfSmall(filePath: string, baseDir?: string): string | undefi
 					marker: { verb: "truncated", unit: "chars", headSeparator: "\n\n", tailSeparator: "\n" },
 				}),
 			]);
-			return result.text;
+			return fullOutputPath ? { content: result.text, fullOutputPath } : { content: result.text };
 		}
-		return content;
+		return { content };
 	} catch {
 		return undefined;
 	}
+}
+
+/**
+ * Read a file and return its content, truncating to a head+tail slice if it
+ * exceeds {@link MAX_RESULT_INLINE_BYTES} characters. Multi-byte UTF-8
+ * sequences are preserved by reading the full file as a UTF-8 string and
+ * slicing by character count (not raw bytes).
+ *
+ * Thin wrapper around {@link readIfSmallWithTee} for backward compatibility
+ * — callers that do not need tee-recovery metadata get just the content
+ * string. New tee-recovery call sites should use {@link readIfSmallWithTee}
+ * directly so they can include the full output path in the worker prompt.
+ */
+export function readIfSmall(filePath: string, baseDir?: string): string | undefined {
+	const result = readIfSmallWithTee(filePath, { baseDir });
+	return result?.content;
 }
 
 function safeSharedName(name: string): string {
@@ -198,7 +281,27 @@ export function collectDependencyOutputContext(manifest: TeamRunManifest, tasks:
 	});
 	const rawSharedReads = (step.reads === false ? [] : step.reads ?? []).map((name) => {
 		const filePath = sharedPath(manifest, name);
-		return { name, path: filePath, content: readIfSmall(filePath, path.resolve(manifest.artifactsRoot, "shared")) ?? "" };
+		// P1-A tee-recovery: when the shared artifact is large enough that the
+		// 75/25 head+tail split is materially lossy (>2× MAX_RESULT_INLINE_BYTES),
+		// tee the full content to ${artifactsRoot}/tee/${taskId}-${name}.full.txt
+		// and expose the path so the downstream worker can `read` the full file
+		// if it needs the dropped middle. The truncated content is still
+		// included inline; tee is an enhancement, not a hard dependency. Tee
+		// write is best-effort (writeTeeFile swallows I/O errors and the result
+		// simply omits fullOutputPath in that case).
+		const teePath = teePathForArtifact(manifest.artifactsRoot, task.id, name);
+		const teeResult = readIfSmallWithTee(filePath, {
+			baseDir: path.resolve(manifest.artifactsRoot, "shared"),
+			tee: { fullOutputPath: teePath },
+		});
+		if (teeResult === undefined) return { name, path: filePath, content: "" };
+		const entry: { name: string; path: string; content: string; fullOutputPath?: string } = {
+			name,
+			path: filePath,
+			content: teeResult.content,
+		};
+		if (teeResult.fullOutputPath) entry.fullOutputPath = teeResult.fullOutputPath;
+		return entry;
 	}).filter((item) => item.content.trim().length > 0);
 	// Apply staleness-aware pruning to shared reads: drops superseded reads
 	// (same file re-read with different selectors) and replaces stale large
@@ -221,7 +324,15 @@ export function renderDependencyOutputContext(context: DependencyOutputContext):
 	}
 	if (context.sharedReads.length) {
 		parts.push("# Shared Run Context Reads", "");
-		for (const read of context.sharedReads) parts.push(`## shared/${read.name}`, `Path: ${read.path}`, "", read.content.trim(), "");
+		for (const read of context.sharedReads) {
+			parts.push(`## shared/${read.name}`, `Path: ${read.path}`);
+			// P1-A tee-recovery hint: when the file was materially truncated
+			// (>2× threshold) the full content was teed to fullOutputPath so the
+			// worker can read the dropped middle if needed. The path is inside
+			// artifactsRoot/tee/ and goes through the normal permission gate.
+			if (read.fullOutputPath) parts.push(`Full output (if you need the missing middle): ${read.fullOutputPath}`);
+			parts.push("", read.content.trim(), "");
+		}
 	}
 	return parts.join("\n").trim();
 }
