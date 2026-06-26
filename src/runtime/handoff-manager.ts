@@ -202,6 +202,16 @@ export class HandoffManager {
 		this.cleanupTimer = setInterval(() => {
 			this.cleanupStaleHandoffs();
 		}, this.options.cleanupIntervalMs);
+		// FIX (BG2 hang): without .unref(), the cleanup interval keeps the Node
+		// event loop alive forever — tests that create HandoffManager without
+		// calling dispose() (e.g. chain-runner.test.ts mock helper that does
+		// `return new HandoffManager()`) leak an interval per test, and the
+		// file-level test never completes because Node waits for all handles
+		// to close. .unref() lets the process exit when nothing else is pending
+		// — this is the standard Node.js pattern for background timers.
+		if (typeof this.cleanupTimer.unref === "function") {
+			this.cleanupTimer.unref();
+		}
 	}
 
 	/**
