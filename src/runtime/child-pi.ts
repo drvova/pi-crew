@@ -11,6 +11,7 @@ import { DEFAULT_CHILD_PI } from "../config/defaults.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { attachPostExitStdioGuard, trySignalChild } from "./post-exit-stdio-guard.ts";
 import { redactJsonLine, redactSecretString } from "../utils/redaction.ts";
+import { splitWithImportantLines } from "./important-line-classifier.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { registerChildProcess, unregisterChildProcess } from "../extension/crew-cleanup.ts";
 import { classifyProcessCrash } from "./crash-classification.ts";
@@ -399,16 +400,31 @@ function appendTranscript(input: ChildPiRunInput, line: string): void {
 	}
 }
 
-export function compactString(value: string, maxChars = MAX_COMPACT_CONTENT_CHARS): string {
+export function compactString(
+	value: string,
+	maxChars = MAX_COMPACT_CONTENT_CHARS,
+	opts: { preserveImportant?: boolean } = {},
+): string {
 	if (value.length <= maxChars) return value;
 	// L4: head + tail instead of head-only. Keeps closing markdown structure
 	// (code fences, headings, list tails) instead of dropping them — the old
 	// head-only slice left unclosed ``` fences that downstream parsers and
 	// output-validator.ts flagged as "output may be truncated". Head gets 75%
 	// (opening structure + bulk of content); tail gets 25% (closing structure).
-	const head = Math.floor(maxChars * 0.75);
-	const tail = maxChars - head;
-	const result = `${value.slice(0, head)}\n...[pi-crew compacted ${value.length - maxChars} chars, head+tail preserved]...\n${value.slice(-tail)}`;
+	// P0-B: middle slice is scanned for important diagnostic lines (error,
+	// file:line, HTTP 4xx/5xx, compiler codes) which are preserved between
+	// head and tail within a 15% slack budget. When no important lines are
+	// picked the marker wording stays bit-identical to the pre-P0-B format
+	// (L4 regression safety).
+	const { head, tail, importantLines, baseDropped } = splitWithImportantLines(value, maxChars, opts);
+	let result: string;
+	if (importantLines.length === 0) {
+		result = `${head}\n...[pi-crew compacted ${baseDropped} chars, head+tail preserved]...\n${tail}`;
+	} else {
+		const joined = importantLines.join("\n");
+		const remaining = value.length - head.length - tail.length - joined.length;
+		result = `${head}\n...[pi-crew compacted ${baseDropped} chars, head+tail + ${importantLines.length} important lines preserved, ${remaining} chars remaining dropped]...\n${joined}\n${tail}`;
+	}
 	// Monotonic-shrink guard (BUG-3): for inputs just barely over maxChars,
 	// head+marker+tail can be LARGER than the input (marker is ~57 chars).
 	// Compaction must never expand — return the original verbatim in that case.
@@ -440,7 +456,7 @@ export function compactValue(value: unknown): unknown {
 function compactContentPart(part: unknown): unknown | undefined {
 	const record = asRecord(part);
 	if (!record) return undefined;
-	if (record.type === "text") return { type: "text", text: typeof record.text === "string" ? compactString(record.text, MAX_ASSISTANT_TEXT_CHARS) : "" };
+	if (record.type === "text") return { type: "text", text: typeof record.text === "string" ? compactString(record.text, MAX_ASSISTANT_TEXT_CHARS, { preserveImportant: false }) : "" };
 	if (record.type === "toolCall") return { type: "toolCall", name: record.name, input: compactValue(typeof record.input === "string" ? compactString(record.input, MAX_TOOL_INPUT_CHARS) : record.input) };
 	if (record.type === "toolResult") return { type: "toolResult", name: record.name, content: compactValue(typeof record.content === "string" ? compactString(record.content, MAX_TOOL_RESULT_CHARS) : record.content) };
 	return undefined;

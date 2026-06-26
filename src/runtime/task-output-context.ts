@@ -5,6 +5,7 @@ import { writeArtifact } from "../state/artifact-store.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 import type { WorkflowStep } from "../workflows/workflow-config.ts";
 import { pruneToolOutputs, type ToolResultEntry, type FileEditEvent, DEFAULT_PRUNE_CONFIG } from "./tool-output-pruner.ts";
+import { splitWithImportantLines } from "./important-line-classifier.ts";
 
 export interface DependencyContextEntry {
 	taskId: string;
@@ -57,11 +58,18 @@ export function readIfSmall(filePath: string, baseDir?: string): string | undefi
 			// structure (code fences, headings) instead of leaving them truncated.
 			// Slice by character count to avoid splitting multi-byte UTF-8
 			// sequences (which would produce U+FFFD replacement characters).
-			const head = Math.floor(maxChars * 0.75);
-			const tail = maxChars - head;
-			const headPart = content.slice(0, head);
-			const tailPart = content.slice(content.length - tail);
-			const result = `${headPart}\n\n...[pi-crew truncated ${content.length - maxChars} chars, head+tail preserved]...\n${tailPart}`;
+			// P0-B: preserve important diagnostic lines from the middle slice
+			// (error, file:line, HTTP 4xx/5xx, compiler codes). Artifact files
+			// are tool output context — always scan (no assistant-text opt-out).
+			const { head: headPart, tail: tailPart, importantLines, baseDropped } = splitWithImportantLines(content, maxChars);
+			let result: string;
+			if (importantLines.length === 0) {
+				result = `${headPart}\n\n...[pi-crew truncated ${baseDropped} chars, head+tail preserved]...\n${tailPart}`;
+			} else {
+				const joined = importantLines.join("\n");
+				const remaining = content.length - headPart.length - tailPart.length - joined.length;
+				result = `${headPart}\n\n...[pi-crew truncated ${baseDropped} chars, head+tail + ${importantLines.length} important lines preserved, ${remaining} chars remaining dropped]...\n${joined}\n${tailPart}`;
+			}
 			// Monotonic-shrink guard: for inputs barely over the threshold
 			// (threshold+1 .. threshold+marker-length), the head+marker+tail
 			// output could be LARGER than the input. Return the original
