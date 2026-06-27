@@ -1,5 +1,43 @@
 # Changelog
 
+## [v0.9.11] — TUI UI/UX polish (21 findings) (2026-06-27)
+
+Comprehensive TUI UX review of pi-crew's UI layer (`src/ui/` + `src/utils/visual.ts`). 21 findings (5×P1, 10×P2, 6×P3), all addressed. Full review with evidence-backed file:line citations: `research-findings/pi-crew-uiux-review.md`.
+
+### Bug fixes
+
+- **F-3 (P1)** — `src/ui/live-conversation-overlay.ts`: local `pad` used `s.length` (counted ANSI escape bytes) and `content.slice` (UTF-16 units) → border drift on every colored or CJK line. Replaced with `pad`/`truncate` from `utils/visual.ts` (reference impl: `transcript-viewer.ts`).
+- **F-1 / F-2 / V-3 (P1/P2)** — `src/ui/status-colors.ts` (new shared `colorizeStatusGlyphs()`): unified status-glyph colorization covers ⏳ (waiting), ⚠ (needs_attention), and the braille spinner range ⠁–⣿ — the two most attention-demanding states were previously uncolored. Replaces duplicated per-module glyph maps/regexes in `widget-renderer.ts`, `live-run-sidebar.ts`, and `run-dashboard.ts`.
+- **L-1 (P1)** — `src/ui/run-dashboard.ts`: windowed run list with `scrollOffset`; selection can no longer escape the rendered 8-row window. ↓ past row 7 previously hid the highlight and Enter acted on an invisible run. Brute-force verified for 0–30 runs.
+- **L-2 (P1)** — cancellation/failure reason now shown in default detail row (`run-dashboard.ts`) and `live-run-sidebar.ts`. Previously rendered only in `progress-pane` (pane `2`). `cancellation-pane.ts` wired in via `summarizeTerminalReason()` (D-1).
+- **V-1 (P2)** — tabular-aligned numeric metrics across `run-dashboard` footer, `dashboard-panes/agents-pane.ts`, and `widget/widget-formatters.ts` via width-aware `alignMetric` (visibleWidth-based). Eliminates per-tick column jitter on transitions like 9.9s→10.0s and 950→1.0k.
+- **F-5 (P2)** — `src/runtime/process-status.ts`: `ERROR_VISIBILITY_GRACE_MS = 10 * 60_000` (was the 8s `COMPLETED_VISIBILITY_GRACE_MS` shared with completed runs). Failed/cancelled runs now linger 10 min in the crew widget — the run-level header (✗ team/workflow · X/Y agents) is the "one-line trace". Successful completions still vanish in 8s.
+- **K-1 (P2)** — new `src/ui/overlays/help-overlay.ts`: `?` opens the HelpOverlay rendering `BINDINGS[]` grouped by scope. ~16/20 keybindings were previously undiscoverable (no `?` cheatsheet existed). Header hint updated.
+- **F-6 (P2)** — `src/ui/live-run-sidebar.ts`: auto-close countdown moved inside the bordered box (was rendered below the bottom border).
+- **V-2 (P2)** — `src/ui/crew-footer.ts`, `src/ui/crew-select-list.ts`: dropped ASCII `'...'` 3rd arg from `truncate(...)` so they use the default `'…'` (U+2026) consistently with the rest of the UI. Test updated.
+- **L-3 / L-4 / L-5 (P2/P3)** — width-aware `runLabel` keeps the goal visible (the most meaningful field); widget prioritizes running > queued > waiting with `finishedSlots` so finished rows only fill leftover budget and never push a live agent's activity line off-screen; run-list separator unified to ` · `.
+- **F-4 / F-7 (P2/P3)** — stale-snapshot hint in the default dashboard view when manifest reads are flaky; actionable empty/error states (no more "Dashboard error — see logs").
+- **T-1 (P3)** — `src/utils/visual.ts`: ZWJ (`U+200D`) removed from `WIDE_RANGES` (now correctly width-0; was inflating compound-emoji width and over-truncating).
+- **T-2 (P3)** — `src/ui/widget/index.ts`: debounced (~120ms) SIGWINCH + stdout-resize listener busts the render cache and requests a repaint. Guarded against double-registration across widget reinstalls.
+- **D-1 (P3)** — `src/ui/dashboard-panes/cancellation-pane.ts` wired in via `summarizeTerminalReason()` (was dead-imported by `test/unit/cancellation-pane.test.ts`, so kept and given a real consumer instead of deleted).
+
+### Shortcut collision fix
+
+- **Extension-load warning**: `alt+d` collided with `tui.editor.deleteWordForward` (verified in pi-tui `TUI_KEYBINDINGS`). Pi resolved in favor of the extension, *stripping* the editor's delete-word-forward binding. Moved dashboard shortcut to **`alt+c`** (mnemonic: **C**rew — verified free against the full built-in `alt+` keymap: occupied letters are `b, d, f, v, y`).
+- **Test guard hardened**: `test/unit/crew-shortcuts.test.ts` collision set now includes the editor keys (`alt+b/d/f/y`, `alt+backspace`, `alt+delete`). The previous set was incomplete (`alt+v, alt+enter, alt+arrows` only), which is why the bug slipped past tests. This class of regression is now caught at test time.
+
+### Decisions (deviations from the initial review)
+
+- **K-3 `KEY_RESERVED`**: NOT dead code — consumed by `test/unit/keybinding-map.parity.test.ts:29,185-203` and `test/manual/l2-keybinding-dispatch-smoke.mjs`. Corrected the misleading "dead code" doc instead of deleting (deleting would have broken the parity test).
+- **K-2 `alt+m` / `alt+t`**: blocked — mailbox overlay is run-scoped (requires a runId; reached via the dashboard); `team-status` is a text command (`handleTeamTool({action:"status"})`), not an overlay opener. `alt+d → dashboard` is the only wired shortcut.
+- **F-5 location**: fixed at the correct layer (`process-status.ts` run-level grace) rather than the report's suggested `widget-renderer.ts` agent-row linger; the run-level header line is the right "one-line trace" per the finding.
+
+### Verification
+
+- `npx tsc --noEmit` + `npm run typecheck`: 0 errors (incl. strip-types import smoke).
+- Focused UI cluster: **74/74 pass** across 8 suites — `crew-shortcuts` (incl. strengthened collision assertion), `crew-footer` (incl. renamed V-2 test), `keybinding-map parity`, `cancellation-pane`, `process-status ×3`, `agents-pane-cost`.
+- Full suite baseline (before this batch): 5642 / 5639 pass / 0 fail. Two post-change full runs hit `ETIMEDOUT` on `spawnSync` inside integration child-spawn tests (`worktree-run`, `cleanup-full-flow`) under load (0 assertion failures — environmental flake). To be reconfirmed against CI.
+
 ## [v0.9.11] — Per-run lock path for background-runner (parallel-spawn race) (2026-06-27)
 
 Bug caught by an E2E parallel-spawn test in this session, NOT by unit tests (which cannot spawn multiple real processes). Independent of the F1-F5/redaction batches.
