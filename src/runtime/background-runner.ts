@@ -7,6 +7,7 @@ import {
 	withRunLockSync,
 } from "../state/locks.ts";
 import {
+	createRunPaths,
 	loadRunManifestById,
 	saveRunManifest,
 	updateRunStatus,
@@ -411,11 +412,21 @@ async function main(): Promise<void> {
 		);
 	// FIX Issue #3: Wrap in withRunLockSync to prevent concurrent background-runners
 	// for the same runId from reading stale manifest state. If lock cannot be
-	// acquired within 5s, fail immediately rather than proceeding with stale data.
+	// be acquired within 5s, fail immediately rather than proceeding with stale data.
+	//
+	// BUGFIX (caught by E2E parallel-spawn, 2026-06-27): the lock manifest must
+	// carry the REAL per-run stateRoot, NOT an empty string. lockPath() derives
+	// `<stateRoot>/run.lock`, so `stateRoot: ""` collapses every concurrent
+	// background-runner (different runIds, same spawn instant) onto a SINGLE
+	// shared `run.lock` at cwd — 1 acquires, the rest fail-fast and die. Compute
+	// the per-run stateRoot from (cwd, runId) via createRunPaths (same helper
+	// resolveRunStateRoot uses internally), so each run locks its own
+	// `<cwd>/.crew/state/runs/<runId>/run.lock`. Matches locks-race.test.ts.
+	const bootstrapStateRoot = createRunPaths(cwd, runId).stateRoot;
 	let loaded: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined;
 	try {
 		loaded = withRunLockSync(
-			{ stateRoot: "", runId, cwd } as TeamRunManifest,
+			{ stateRoot: bootstrapStateRoot, runId, cwd } as TeamRunManifest,
 			() => loadRunManifestById(cwd, runId),
 			{ staleMs: 30_000 },
 		);

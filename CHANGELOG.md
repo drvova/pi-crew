@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.9.10 (continued)] — Per-run lock path for background-runner (parallel-spawn race) (2026-06-27)
+
+Bug caught by an E2E parallel-spawn test in this session, NOT by unit tests (which cannot spawn multiple real processes). Independent of the F1-F5/redaction batches.
+
+### Bug fix
+
+- **Shared `run.lock` killed concurrent background runners** (`src/runtime/background-runner.ts:417`). The bootstrap call passed a fake manifest `{ stateRoot: "", runId, cwd }` to `withRunLockSync` because the real manifest was not loaded yet. `lockPath()` = `path.join(manifest.stateRoot, "run.lock")` = `path.join("", "run.lock")` = `"run.lock"` — a RELATIVE path at cwd, SHARED across every run regardless of runId. When multiple background agents spawned in the same instant (e.g. parallel `Agent` calls), they raced on the single shared lock: one acquired, the rest failed fast ("Run 'run.lock' is locked by another operation") and exited within 3s. The existing "FIX Issue #3" comment claimed to prevent concurrent runners "for the same runId", but the lock path never contained the runId. Fix: compute the real per-run stateRoot via `createRunPaths(cwd, runId).stateRoot` before locking, so each run locks its own `<cwd>/.crew/state/runs/<runId>/run.lock`. Matches `locks-race.test.ts`.
+
+### Verification
+
+- `npx tsc --noEmit` EXIT 0
+- 7 lock-related suites pass (locks-race 10, background-runner-console-redirect 4, async-runner 13, api-locks 1, orphan-worker-registry 15, locks-untested 11, team-runner-heartbeat 2)
+- E2E reproduce (decisive): BEFORE the fix, 3 parallel background explorers → 1 pass + 2 fail (background.log: "Failed to acquire lock"). AFTER the fix, same scenario → 3/3 pass, 0 lock errors.
+
+### Lesson
+
+Concurrency/lock bugs only reproduce when multiple real processes spawn simultaneously — unit tests mocking a single process can never catch them. E2E parallel-spawn smoke tests are the only way to verify. (Reinforces the v0.9.9 lesson: E2E with real extension load is decisive.)
+
 ## [v0.9.10 (continued)] — Read-only permission model fixes F1-F5 (2026-06-27)
 
 Review of the role permission model (question: "do read-only workflows still persist their task output?") confirmed output persistence is runner-driven and correct, but found 5 findings — one the same defect class as the v0.9.10 writer incident (Fix 5), in the opposite direction.
