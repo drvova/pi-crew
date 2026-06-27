@@ -6,6 +6,28 @@ import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
 import { formatCost } from "../../state/usage.ts";
 import { listLiveAgents, listLiveAgentsByWorkspace, type LiveAgentHandle } from "../../runtime/live-agent-manager.ts";
 import { computeLiveDurationMs } from "../live-duration.ts";
+import { visibleWidth } from "../../utils/visual.ts";
+
+/**
+ * Fixed visible widths for the per-agent numeric metrics (finding V-1).
+ * Right-aligning each field to a constant width stops the right edge of the
+ * stats block from jittering every tick as values change width
+ * (e.g. `9.9s`→`10.0s`, `950`→`1.0k`, `$0.9`→`$1.0`).
+ */
+const TOKENS_METRIC_WIDTH = 5; // `1.2k`, `12.3k`, `123`
+const COST_METRIC_WIDTH = 7; // `$0.0500`, `$1.50`
+const DURATION_METRIC_WIDTH = 6; // `3.0s`, `59.9s`, `120.0s`
+
+/**
+ * Width-aware right-align (padStart) for a numeric metric so its column stays
+ * stable across ticks. Uses `visibleWidth` so wide/CJK glyphs never misalign
+ * the padding. Values wider than `width` are returned verbatim (no truncation)
+ * so outliers overflow gracefully instead of crashing the render.
+ */
+function alignMetric(value: string, width: number): string {
+	const gap = width - visibleWidth(value);
+	return gap > 0 ? " ".repeat(gap) + value : value;
+}
 
 /**
  * Returns true if this agent did real work (LLM call, tool use, or non-trivial duration).
@@ -89,12 +111,12 @@ export function renderAgentsPane(snapshot: RunUiSnapshot | undefined, options: R
 		const tokenTotal = (agent.usage?.input ?? 0) + (agent.usage?.output ?? 0) + (agent.usage?.cacheRead ?? 0) + (agent.usage?.cacheWrite ?? 0);
 		if (tokenTotal > 0) {
 			const tok = tokenTotal >= 1000 ? `${(tokenTotal / 1000).toFixed(1)}k` : `${tokenTotal}`;
-			stats.push(tok);
+			stats.push(alignMetric(tok, TOKENS_METRIC_WIDTH));
 		}
 		// Per-agent cost (Round 17 BS-1): the data is already on task.usage.cost;
 		// surface it live so the user sees $ burn per agent during a run.
 		if (agent.usage?.cost && agent.usage.cost > 0) {
-			stats.push(formatCost(agent.usage.cost));
+			stats.push(alignMetric(formatCost(agent.usage.cost), COST_METRIC_WIDTH));
 		}
 		if (liveHandle) {
 			// Round 23 (BUG 1): the duration math here was naive —
@@ -104,13 +126,13 @@ export function renderAgentsPane(snapshot: RunUiSnapshot | undefined, options: R
 			// fired for EVERY running live agent in the dashboard. Use the shared,
 			// validated computeLiveDurationMs (mirrors widget-formatters.ts).
 			const ms = computeLiveDurationMs(liveHandle.activity);
-			stats.push(`${(ms / 1000).toFixed(1)}s`);
+			stats.push(alignMetric(`${(ms / 1000).toFixed(1)}s`, DURATION_METRIC_WIDTH));
 			if (options.showModel !== false && liveHandle.modelName && liveHandle.modelName !== "default") {
 				stats.push(liveHandle.modelName);
 			}
 		} else if (agent.startedAt) {
 			const ms = Date.now() - new Date(agent.startedAt).getTime();
-			if (Number.isFinite(ms)) stats.push(`${(ms / 1000).toFixed(1)}s`);
+			if (Number.isFinite(ms)) stats.push(alignMetric(`${(ms / 1000).toFixed(1)}s`, DURATION_METRIC_WIDTH));
 		}
 
 		const statsStr = stats.length ? ` · ${stats.join(" ")}` : "";

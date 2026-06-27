@@ -39,8 +39,10 @@ const WIDE_RANGES: Array<[number, number]> = [
 	[0x1FA00, 0x1FAFF], // Symbols Extended-A
 	[0x1F000, 0x1F02F], // Mahjong, Dominos
 	[0xFE00, 0xFE0F],   // Variation Selectors (emoji presentation)
-	[0x200D, 0x200D],   // Zero Width Joiner (creates compound emoji)
 ];
+// NOTE: U+200D (Zero Width Joiner, ZWJ) is intentionally NOT listed as wide.
+// ZWJ has zero advance width by Unicode definition; miscounting it as 2 caused
+// slight over-truncation/over-padding of compound-emoji goals (T-1).
 
 function isWideCodePoint(code: number): boolean {
 	for (const [lo, hi] of WIDE_RANGES) {

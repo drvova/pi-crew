@@ -26,6 +26,7 @@
 export const DASHBOARD_KEYS = {
 	close: ["q", "\u001b"],
 	select: ["\r", "\n", "s"],
+	help: ["?"],
 	root: {
 		summary: ["u"],
 		artifacts: ["a"],
@@ -67,6 +68,7 @@ export interface KeyBinding {
 
 export type DashboardKeyAction =
 	| "close"
+	| "help"
 	| "select"
 	| "summary"
 	| "artifacts"
@@ -112,6 +114,7 @@ export type DashboardKeyAction =
  */
 const BINDINGS: readonly KeyBinding[] = [
 	{ keys: DASHBOARD_KEYS.close, action: "close" },
+	{ keys: DASHBOARD_KEYS.help, action: "help" },
 	{ keys: DASHBOARD_KEYS.mailbox.openDetail, action: "mailbox-detail", pane: "mailbox" },
 	{ keys: DASHBOARD_KEYS.health.recovery, action: "health-recovery", pane: "health" },
 	{ keys: DASHBOARD_KEYS.health.killStale, action: "health-kill-stale", pane: "health" },
@@ -145,13 +148,14 @@ const BINDINGS: readonly KeyBinding[] = [
  * overlays. Derived from `DASHBOARD_KEYS` (the full key set) rather than from
  * `BINDINGS` (the dispatched subset) so overlay-handled keys stay reserved.
  *
- * @internal Currently unused outside this module but retained to document
- * intent and support future callers that need to know which keys the
- * dashboard ecosystem owns.
+ * @internal Consumed by `test/unit/keybinding-map.parity.test.ts` (asserts
+ * reserved-key membership) and the L2 dispatch smoke script. It is the
+ * canonical "keys the dashboard ecosystem owns" set — NOT dead code.
  */
 const KEY_RESERVED = new Set<string>([
 	...DASHBOARD_KEYS.close,
 	...DASHBOARD_KEYS.select,
+	...DASHBOARD_KEYS.help,
 	...Object.values(DASHBOARD_KEYS.root).flat(),
 	...Object.values(DASHBOARD_KEYS.pane).flat(),
 	...Object.values(DASHBOARD_KEYS.navigation).flat(),

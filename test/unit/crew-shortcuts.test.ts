@@ -29,9 +29,23 @@ describe("registerCrewShortcuts", () => {
 	});
 
 	it("uses keys that do not collide with Pi's built-in keymap", () => {
-		// Pi's built-in alt+letter bindings are only: alt+v, alt+enter,
-		// alt+down/up/left/right. Any other alt+<letter> is free.
-		const piBuiltinAlt = new Set(["alt+v", "alt+enter", "alt+down", "alt+up", "alt+left", "alt+right"]);
+		// Pi's built-in alt+ keymap spans BOTH pi-tui editor bindings
+		// (TUI_KEYBINDINGS) and pi core app bindings (core/keybindings.js).
+		// An earlier revision only checked a partial set and wrongly picked
+		// `alt+d`, which collides with `tui.editor.deleteWordForward`.
+		// This is the complete occupied alt+ set as of the verified keymaps.
+		const piBuiltinAlt = new Set([
+			// editor word/delete/navigation (pi-tui)
+			"alt+b",   // cursor word left
+			"alt+f",   // cursor word right
+			"alt+d",   // delete word forward
+			"alt+y",   // yank pop
+			"alt+backspace", // delete word backward
+			"alt+delete",     // delete word forward (alt)
+			// app-level (pi core)
+			"alt+v",   // paste
+			"alt+enter", "alt+up", "alt+down", "alt+left", "alt+right",
+		]);
 		for (const key of CREW_SHORTCUT_KEYS) {
 			assert.ok(!piBuiltinAlt.has(key), `crew shortcut ${key} must not collide with a Pi built-in`);
 		}

@@ -5,7 +5,7 @@
  */
 
 import type { CrewTheme } from "../theme-adapter.ts";
-import { iconForStatus } from "../status-colors.ts";
+import { iconForStatus, colorizeStatusGlyphs } from "../status-colors.ts";
 import { truncate } from "../../utils/visual.ts";
 import { Box, Text } from "../layout-primitives.ts";
 import { listLiveAgents } from "../../runtime/live-agent-manager.ts";
@@ -89,19 +89,21 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 
 		const liveForRun = listLiveAgents().filter((a) => a.runId === run.runId);
 
-		for (const agent of finishedAgents.slice(0, 2)) {
-			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
-			const name = liveHandle?.agent ?? agent.agent;
-			const icon = agent.status === "completed" ? "✓" : agent.status === "failed" ? "✗" : agent.status === "needs_attention" ? "⚠" : "▪";
-			const stats = agentStats(agent, liveHandle);
-			const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
-			const _finished = truncate(`│  ├─ ${icon} ${name} · ${desc}${stats ? ` · ${stats}` : ""}`, width);
-			lines.push(_finished);
-		}
+		// L-4: prioritize RUNNING > QUEUED > WAITING within the visible window so the
+		// most relevant live workers are always shown. Finished rows fill only the
+		// leftover budget and never steal slots from running agents.
+		const ACTIVE_PRIORITY: Record<string, number> = { running: 0, queued: 1, waiting: 2 };
+		const prioritizedActive = [...activeAgents].sort(
+			(a, b) => (ACTIVE_PRIORITY[a.status] ?? 9) - (ACTIVE_PRIORITY[b.status] ?? 9),
+		);
+		// Finished rows only appear in slots not used by active agents (max 2). When
+		// there are >= MAX_AGENTS_DISPLAY live workers, finished rows are suppressed
+		// entirely so they cannot push a live agent's activity line off-screen.
+		const finishedSlots = Math.max(0, Math.min(2, MAX_AGENTS_DISPLAY - activeAgents.length));
 
-		const visibleAgents = activeAgents.slice(0, MAX_AGENTS_DISPLAY);
+		const visibleAgents = prioritizedActive.slice(0, MAX_AGENTS_DISPLAY);
 		for (const [index, agent] of visibleAgents.entries()) {
-			const last = index === visibleAgents.length - 1 && activeAgents.length <= MAX_AGENTS_DISPLAY;
+			const last = index === visibleAgents.length - 1 && activeAgents.length <= MAX_AGENTS_DISPLAY && finishedSlots === 0;
 			const branch = last ? "└─" : "├─";
 			const agentGlyph = iconForStatus(agent.status, { runningGlyph });
 			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
@@ -118,6 +120,18 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 			lines.push(truncate(`│  └─ … +${activeAgents.length - MAX_AGENTS_DISPLAY} more agents`, width));
 		}
 
+		for (const [index, agent] of finishedAgents.slice(0, finishedSlots).entries()) {
+			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
+			const name = liveHandle?.agent ?? agent.agent;
+			const icon = agent.status === "completed" ? "✓" : agent.status === "failed" ? "✗" : agent.status === "needs_attention" ? "⚠" : "▪";
+			const stats = agentStats(agent, liveHandle);
+			const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
+			const isLastFinished = index === Math.min(finishedAgents.length, finishedSlots) - 1;
+			const branch = isLastFinished ? "└─" : "├─";
+			const _finished = truncate(`│  ${branch} ${icon} ${name} · ${desc}${stats ? ` · ${stats}` : ""}`, width);
+			lines.push(_finished);
+		}
+
 		if (lines.length >= maxLines) break;
 	}
 
@@ -126,25 +140,15 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 
 // ── Colorization ──────────────────────────────────────────────────────
 
-function statusGlyphColor(icon: string): Parameters<CrewTheme["fg"]>[0] {
-	const mapping: Record<string, Parameters<CrewTheme["fg"]>[0]> = {
-		"✓": "success",
-		"✗": "error",
-		"■": "warning",
-		"⏸": "warning",
-		"◦": "dim",
-		"·": "dim",
-		"▶": "accent",
-	};
-	return mapping[icon] ?? "accent";
-}
-
 export function colorWidgetLine(line: string, index: number, theme: CrewTheme): string {
 	let result = line;
 	if (index === 0) {
 		result = result.replace("Crew agents", theme.bold(theme.fg("accent", "Crew agents")));
 	}
-	result = result.replace(/[✓✗■⏸◦·▶]/g, (icon) => theme.fg(statusGlyphColor(icon), icon));
+	// Shared glyph colorizer covers ALL status glyphs — including ⏳ (waiting),
+	// ⚠ (needs_attention), and the braille spinner range ⠁-⣿ (running) — which the
+	// previous local statusGlyphColor map + regex omitted (F-1, V-3).
+	result = colorizeStatusGlyphs(result, theme);
 	if (index === 0) {
 		result = theme.fg("accent", result);
 	}

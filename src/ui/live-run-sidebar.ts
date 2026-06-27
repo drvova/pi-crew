@@ -8,7 +8,7 @@ import { aggregateUsage, formatUsage } from "../state/usage.ts";
 import type { TeamTaskState } from "../state/types.ts";
 import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
 import { pad, truncate } from "../utils/visual.ts";
-import { iconForStatus } from "./status-colors.ts";
+import { colorizeStatusGlyphs, iconForStatus } from "./status-colors.ts";
 import type { CrewTheme } from "./theme-adapter.ts";
 import { asCrewTheme, subscribeThemeChange } from "./theme-adapter.ts";
 import { Box, Text } from "./layout-primitives.ts";
@@ -93,13 +93,11 @@ export class LiveRunSidebar {
 	}
 
 	private colorLine(line: string): string {
-		const iconColor = (icon: string): Parameters<CrewTheme["fg"]>[0] => {
-			if (icon === "✓") return "success";
-			if (icon === "✗") return "error";
-			if (icon === "■" || icon === "⏸") return "warning";
-			return "accent";
-		};
-		return line.replace(/[✓✗■⏸◦·▶]/g, (icon) => this.theme.fg(iconColor(icon), icon));
+		// F-1 / V-3: delegate to the shared glyph colorizer so ⏳ (waiting),
+		// ⚠ (needs_attention) and the braille spinner frames are colored
+		// consistently with the rest of the UI. The previous local map/regex
+		// omitted all three, leaving the most attention-demanding states uncolored.
+		return colorizeStatusGlyphs(line, this.theme);
 	}
 
 	invalidate(): void {
@@ -150,10 +148,17 @@ export class LiveRunSidebar {
 		const waiting = tasks.filter((task) => task.status === "queued");
 		const signature = this.buildSignature(run.updatedAt, tasks, agents, waiting.length, snapshot);
 		if (signature !== this.cachedSignature || w !== this.cachedWidth) {
+			// L-2: surface the cancellation/failure reason for terminal runs so the
+			// user sees *why* a run ended without having to switch panes. The reason
+			// is already computed on the consumed snapshot (cancellationReason).
+			const TERMINAL_WITH_REASON = ["failed", "cancelled", "stopped"];
+			const reasonSuffix = TERMINAL_WITH_REASON.includes(run.status) && snapshot?.cancellationReason
+				? ` · ${truncate(snapshot.cancellationReason, 40)}`
+				: "";
 			const lines: string[] = [
 				border("╭", "─", "╮", w),
 				line(`${this.theme.fg("accent", "▐")} ${this.theme.bold("pi-crew live sidebar")}`, w),
-				line(`${run.runId.slice(-12)} · ${run.status} · right default`, w),
+				line(`${run.runId.slice(-12)} · ${run.status}${reasonSuffix} · right default`, w),
 				line(`${run.team}/${run.workflow ?? "none"} · ${shortUsage(tasks)}`, w),
 				border("├", "─", "┤", w),
 				line(`Active agents (${active.length})`, w),
@@ -180,7 +185,9 @@ export class LiveRunSidebar {
 			if (completed.length === 0) lines.push(line("- none", w));
 			lines.push(border("├", "─", "┤", w));
 			for (const entry of formatTaskGraphLines(tasks).slice(0, 6)) lines.push(line(entry, w));
-			lines.push(line("q close · /team-dashboard details", w), border("╰", "─", "╯", w));
+			lines.push(line("q close · /team-dashboard details", w));
+			// F-6: compute the auto-close countdown BEFORE pushing the bottom border
+			// so the countdown renders inside the bordered box rather than below it.
 			// Auto-close logic: if run is terminal and no active agents, close after delay
 			const isTerminal = ["completed", "failed", "cancelled", "blocked"].includes(run.status);
 			const hasActiveAgents = agents.some((a) => a.status === "running");
@@ -199,6 +206,7 @@ export class LiveRunSidebar {
 				clearTimeout(this.autoCloseTimeout);
 				this.autoCloseTimeout = undefined;
 			}
+			lines.push(border("╰", "─", "╯", w));
 			this.cachedLines = renderLines(lines.map((entry) => this.colorLine(entry)), w);
 			this.cachedSignature = signature;
 			this.cachedWidth = w;

@@ -90,9 +90,9 @@ export class CrewFooter {
 		].join(" • ");
 		const badges = this.data.badges?.length ? this.data.badges.map((badge) => `[${badge}]`).join(" ") : "";
 		this.cacheLines = [
-			this.theme.fg("dim", pad(truncate(firstParts.join(" • "), lineWidth, "..."), lineWidth)),
-			this.theme.fg("dim", pad(truncate(usageLine, lineWidth, "..."), lineWidth)),
-			this.theme.fg("dim", pad(truncate(badges, lineWidth, "..."), lineWidth)),
+			this.theme.fg("dim", pad(truncate(firstParts.join(" • "), lineWidth), lineWidth)),
+			this.theme.fg("dim", pad(truncate(usageLine, lineWidth), lineWidth)),
+			this.theme.fg("dim", pad(truncate(badges, lineWidth), lineWidth)),
 		];
 		this.cacheKey = key;
 		this.cacheWidth = width;

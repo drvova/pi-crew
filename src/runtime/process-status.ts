@@ -16,7 +16,11 @@ export interface ProcessLiveness {
  */
 const ORPHANED_ACTIVE_RUN_MS = 2 * 60 * 1000;
 /** How long a completed run stays visible in the widget after completion. */
-const COMPLETED_VISIBILITY_GRACE_MS = 8000;
+const COMPLETED_VISIBILITY_GRACE_MS = 8_000;
+/** Errors (failed/cancelled) linger far longer so a failed run leaves a visible
+ * trace in the crew widget for ~10 min (F-5). Successful completions vanish
+ * quickly to keep the widget quiet. */
+const ERROR_VISIBILITY_GRACE_MS = 10 * 60 * 1000;
 /** Maximum age (ms) for an active run before it's considered stale.
  * After this time, PID-only liveness is unreliable due to PID recycling. */
 const STALE_ACTIVE_RUN_MS = 30 * 60 * 1000;
@@ -120,12 +124,13 @@ export function isDisplayActiveRun(run: TeamRunManifest, agents: CrewAgentRecord
 	}
 	// Grace period: show completed runs for a few seconds so users see the result.
 	if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") {
+		const grace = run.status === "completed" ? COMPLETED_VISIBILITY_GRACE_MS : ERROR_VISIBILITY_GRACE_MS;
 		const lastAgentActivity = agents.reduce<number>((max, agent) => {
 			const ts = agent.completedAt ?? agent.startedAt;
 			const parsed = ts ? new Date(ts).getTime() : 0;
 			return Number.isFinite(parsed) && parsed > max ? parsed : max;
 		}, new Date(run.updatedAt).getTime());
-		if (Number.isFinite(lastAgentActivity) && now - lastAgentActivity < COMPLETED_VISIBILITY_GRACE_MS) return true;
+		if (Number.isFinite(lastAgentActivity) && now - lastAgentActivity < grace) return true;
 		return false;
 	}
 	if (!isActiveRunStatus(run.status)) return false;

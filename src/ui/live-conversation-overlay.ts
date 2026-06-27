@@ -8,6 +8,7 @@ import type { LiveAgentHandle } from "../runtime/live-agent-manager.ts";
 import { iconForStatus } from "./status-colors.ts";
 import { spinnerFrame } from "./spinner.ts";
 import type { CrewTheme } from "./theme-adapter.ts";
+import { pad, truncate } from "../utils/visual.ts";
 
 const CHROME_LINES = 6;
 const MIN_VIEWPORT = 3;
@@ -119,9 +120,8 @@ export class LiveConversationOverlay {
 		if (w < 6) return [];
 		const th = this.theme;
 		const innerW = w - 4;
-		const pad = (s: string, len: number) => s + " ".repeat(Math.max(0, len - s.length));
 		const row = (content: string) =>
-			th.fg("border", "│") + " " + pad(content.slice(0, innerW), innerW) + " " + th.fg("border", "│");
+			th.fg("border", "│") + " " + pad(truncate(content, innerW), innerW) + " " + th.fg("border", "│");
 		const hrTop = th.fg("border", `╭${"─".repeat(w - 2)}╮`);
 		const hrBot = th.fg("border", `╰${"─".repeat(w - 2)}╯`);
 		const hrMid = row(th.fg("dim", "─".repeat(innerW)));

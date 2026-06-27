@@ -25,9 +25,10 @@ test("CrewFooter colors context percentage thresholds", () => {
 	assert.match(error, /<error>95.0%\/200k<\/error>/);
 });
 
-test("CrewFooter truncates with ascii ellipsis at narrow width", () => {
+test("CrewFooter truncates with ellipsis at narrow width", () => {
 	const lines = new CrewFooter({ pwd: "/very/long/project/path", runId: "run-long" }, theme).render(12);
-	assert.ok(lines.some((line) => line.includes("...")));
+	// V-2 fix: footer now uses the default U+2026 ellipsis (no literal "...").
+	assert.ok(lines.some((line) => line.includes("…")), "expected U+2026 ellipsis after V-2 fix");
 });
 
 test("CrewFooter renders missing context as unknown over window", () => {

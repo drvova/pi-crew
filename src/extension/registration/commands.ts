@@ -260,6 +260,66 @@ async function handleHealthDashboardAction(ctx: ExtensionCommandContext, selecti
 
 let depsRef: RegisterTeamCommandsDeps | undefined;
 
+/**
+ * Open the pi-crew run dashboard overlay and run its action loop.
+ *
+ * Extracted verbatim from the `team-dashboard` command so it is reusable from
+ * a keyboard shortcut (alt+c, see crew-shortcuts.ts). Takes the base
+ * `ExtensionContext` (the shortcut handler's context) — uses only `hasUI`,
+ * `cwd`, `ui`, and `sessionManager` fields, so both `ExtensionContext` and
+ * `ExtensionCommandContext` satisfy it. Reads run caches via the module-level
+ * `depsRef` (set by `registerTeamCommands`), so it is a no-op if commands
+ * have not been registered yet. `deps` is captured into a local const so the
+ * non-undefined narrowing survives the awaited overlay call.
+ *
+ * The dashboard action helpers (handleMailboxDashboardAction, the viewers,
+ * notifyCommandResult, teamCommandContext/handleTeamTool) are declared for
+ * `ExtensionCommandContext` but only ever read base `ExtensionContext` fields
+ * (verified). The keyboard-shortcut path supplies an `ExtensionContext`, so we
+ * bridge those over-typed helpers with a single cast rather than relaxing
+ * signatures across several modules (some outside this file's scope).
+ */
+export async function openTeamDashboard(ctx: ExtensionContext): Promise<void> {
+	if (!ctx.hasUI) return;
+	const deps = depsRef;
+	if (!deps) return;
+	const cmdCtx = ctx as ExtensionCommandContext;
+	for (;;) {
+		// Extract sessionId for workspace-scoped filtering
+		const sessionId = cmdCtx.sessionManager?.getSessionId?.();
+		const runs = deps.getManifestCache(cmdCtx.cwd).list(50);
+		const uiConfig = loadConfig(cmdCtx.cwd).config.ui;
+		const rightPanel = (uiConfig?.dashboardPlacement ?? DEFAULT_UI.dashboardPlacement) === "right";
+		const width = rightPanel ? Math.min(90, Math.max(40, uiConfig?.dashboardWidth ?? DEFAULT_UI.dashboardWidth)) : "90%";
+		const { RunDashboard } = await ui();
+		const selection = await cmdCtx.ui.custom<RunDashboardSelection | undefined>((tui, theme, _keybindings, done) => new RunDashboard(runs, done, theme, { placement: rightPanel ? "right" : "center", showModel: uiConfig?.showModel, showTokens: uiConfig?.showTokens, showTools: uiConfig?.showTools, snapshotCache: deps.getRunSnapshotCache?.(cmdCtx.cwd), runProvider: () => deps.getManifestCache(cmdCtx.cwd).list(50), registry: deps.getMetricRegistry?.(), workspaceId: sessionId, requestRender: () => requestRenderTarget(tui) }), { overlay: true, overlayOptions: rightPanel ? { width, minWidth: 40, maxHeight: "100%", anchor: "top-right", offsetX: 0, offsetY: 0, margin: { top: 0, right: 0, bottom: 0, left: 0 } } : { width, maxHeight: "90%", anchor: "center", margin: 2 } });
+		if (!selection) return;
+		if (selection.action === "reload") continue;
+		if (selection.action === "notifications-dismiss") {
+			deps.dismissNotifications?.();
+			cmdCtx.ui.notify("pi-crew notifications dismissed.", "info");
+			continue;
+		}
+		if (selection.action === "mailbox-detail") {
+			await handleMailboxDashboardAction(cmdCtx, selection.runId);
+			deps.getRunSnapshotCache?.(cmdCtx.cwd).invalidate(selection.runId);
+			continue;
+		}
+		if (selection.action === "health-recovery" || selection.action === "health-kill-stale" || selection.action === "health-diagnostic-export") {
+			await handleHealthDashboardAction(cmdCtx, selection);
+			deps.getRunSnapshotCache?.(cmdCtx.cwd).invalidate(selection.runId);
+			continue;
+		}
+		if (selection.action === "agent-transcript" && await openTranscriptViewer(cmdCtx, selection.runId)) continue;
+		if (selection.action === "agent-live" && await openLiveConversation(cmdCtx, selection.runId)) continue;
+		if (selection.action === "agent-live") { await notifyCommandResult(cmdCtx, commandText({ content: [{ type: "text", text: "No live agent found for this run." }] })); continue; }
+		const result = selection.action === "api" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-manifest" } }, teamCommandContext(cmdCtx)) : selection.action === "agents" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "agent-dashboard" } }, teamCommandContext(cmdCtx)) : selection.action === "mailbox" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-mailbox" } }, teamCommandContext(cmdCtx)) : selection.action === "agent-events" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-events", limit: 50 } }, teamCommandContext(cmdCtx)) : selection.action === "agent-output" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-output", maxBytes: 32_000 } }, teamCommandContext(cmdCtx)) : selection.action === "agent-transcript" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-transcript" } }, teamCommandContext(cmdCtx)) : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+			await handleTeamTool({ action: selection.action as any, runId: selection.runId }, teamCommandContext(cmdCtx));
+		await notifyCommandResult(cmdCtx, commandText(result));
+		return;
+	}
+}
+
 export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommandsDeps): void {
 	depsRef = deps;
 	pi.registerCommand("teams", {
@@ -497,40 +557,7 @@ export function registerTeamCommands(pi: ExtensionAPI, deps: RegisterTeamCommand
 	} });
 
 	pi.registerCommand("team-dashboard", { description: "Open a pi-crew run dashboard overlay", handler: async (_args: string, ctx: ExtensionCommandContext) => {
-		for (;;) {
-			// Extract sessionId for workspace-scoped filtering
-			const sessionId = ctx.sessionManager?.getSessionId?.();
-			const runs = deps.getManifestCache(ctx.cwd).list(50);
-			const uiConfig = loadConfig(ctx.cwd).config.ui;
-			const rightPanel = (uiConfig?.dashboardPlacement ?? DEFAULT_UI.dashboardPlacement) === "right";
-			const width = rightPanel ? Math.min(90, Math.max(40, uiConfig?.dashboardWidth ?? DEFAULT_UI.dashboardWidth)) : "90%";
-			const { RunDashboard } = await ui();
-			const selection = await ctx.ui.custom<RunDashboardSelection | undefined>((tui, theme, _keybindings, done) => new RunDashboard(runs, done, theme, { placement: rightPanel ? "right" : "center", showModel: uiConfig?.showModel, showTokens: uiConfig?.showTokens, showTools: uiConfig?.showTools, snapshotCache: deps.getRunSnapshotCache?.(ctx.cwd), runProvider: () => deps.getManifestCache(ctx.cwd).list(50), registry: deps.getMetricRegistry?.(), workspaceId: sessionId, requestRender: () => requestRenderTarget(tui) }), { overlay: true, overlayOptions: rightPanel ? { width, minWidth: 40, maxHeight: "100%", anchor: "top-right", offsetX: 0, offsetY: 0, margin: { top: 0, right: 0, bottom: 0, left: 0 } } : { width, maxHeight: "90%", anchor: "center", margin: 2 } });
-			if (!selection) return;
-			if (selection.action === "reload") continue;
-			if (selection.action === "notifications-dismiss") {
-				deps.dismissNotifications?.();
-				ctx.ui.notify("pi-crew notifications dismissed.", "info");
-				continue;
-			}
-			if (selection.action === "mailbox-detail") {
-				await handleMailboxDashboardAction(ctx, selection.runId);
-				deps.getRunSnapshotCache?.(ctx.cwd).invalidate(selection.runId);
-				continue;
-			}
-			if (selection.action === "health-recovery" || selection.action === "health-kill-stale" || selection.action === "health-diagnostic-export") {
-				await handleHealthDashboardAction(ctx, selection);
-				deps.getRunSnapshotCache?.(ctx.cwd).invalidate(selection.runId);
-				continue;
-			}
-			if (selection.action === "agent-transcript" && await openTranscriptViewer(ctx, selection.runId)) continue;
-			if (selection.action === "agent-live" && await openLiveConversation(ctx, selection.runId)) continue;
-			if (selection.action === "agent-live") { await notifyCommandResult(ctx, commandText({ content: [{ type: "text", text: "No live agent found for this run." }] })); continue; }
-			const result = selection.action === "api" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-manifest" } }, teamCommandContext(ctx)) : selection.action === "agents" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "agent-dashboard" } }, teamCommandContext(ctx)) : selection.action === "mailbox" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-mailbox" } }, teamCommandContext(ctx)) : selection.action === "agent-events" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-events", limit: 50 } }, teamCommandContext(ctx)) : selection.action === "agent-output" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-output", maxBytes: 32_000 } }, teamCommandContext(ctx)) : selection.action === "agent-transcript" ? await handleTeamTool({ action: "api", runId: selection.runId, config: { operation: "read-agent-transcript" } }, teamCommandContext(ctx)) : // eslint-disable-next-line @typescript-eslint/no-explicit-any
-				await handleTeamTool({ action: selection.action as any, runId: selection.runId }, teamCommandContext(ctx));
-			await notifyCommandResult(ctx, commandText(result));
-			return;
-		}
+		await openTeamDashboard(ctx);
 	} });
 
 	pi.registerCommand("team-mascot", { description: "Show an animated mascot splash", handler: async (args: string, ctx: ExtensionCommandContext) => {

@@ -13,7 +13,7 @@ import type { RunSnapshotCache, RunUiSnapshot } from "../snapshot-types.ts";
 import type { CrewTheme } from "../theme-adapter.ts";
 import { asCrewTheme, subscribeThemeChange } from "../theme-adapter.ts";
 import { truncate } from "../../utils/visual.ts";
-import { requestRender, setExtensionWidget } from "../pi-ui-compat.ts";
+import { requestRender, requestRenderTarget, setExtensionWidget } from "../pi-ui-compat.ts";
 import { spinnerBucket, spinnerFrame } from "../spinner.ts";
 import { runEventBus } from "../run-event-bus.ts";
 import { DEFAULT_UI } from "../../config/defaults.ts";
@@ -51,6 +51,35 @@ const LEGACY_WIDGET_KEY = "pi-crew";
 const WIDGET_KEY = "pi-crew-active";
 const STATUS_KEY = "pi-crew";
 
+// ── Terminal resize handling (T-2) ────────────────────────────────────
+// On a terminal resize the widget's cached render width goes stale until the
+// next invalidate; a mid-run resize could briefly paint a frame at the old
+// width. We register ONE debounced process-level listener (guarded so it never
+// accumulates across widget reinstalls) that busts the active widget's cache
+// and pokes Pi to repaint at the new width. The listener references a
+// module-level `activeResizeTarget` (the most-recently-mounted widget) rather
+// than a specific instance, so replaced widgets do not leak listeners.
+let resizeListenerInstalled = false;
+let activeResizeTarget: { invalidate(): void; requestRepaint(): void } | undefined;
+
+function installResizeListener(): void {
+	if (resizeListenerInstalled) return;
+	resizeListenerInstalled = true;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const onResize = (): void => {
+		if (timer) clearTimeout(timer);
+		// Debounce (~120ms) so a drag-resize doesn't thrash renders.
+		timer = setTimeout(() => {
+			timer = undefined;
+			activeResizeTarget?.invalidate();
+			activeResizeTarget?.requestRepaint();
+		}, 120);
+	};
+	process.on("SIGWINCH", onResize);
+	// Windows has no SIGWINCH; Node emits "resize" on stdout instead.
+	if (typeof process.stdout?.on === "function") process.stdout.on("resize", onResize);
+}
+
 // ── Widget Component ──────────────────────────────────────────────────
 
 interface WidgetComponent {
@@ -66,13 +95,21 @@ class CrewWidgetComponent implements WidgetComponent {
 	private cachedLines: string[] = [];
 	private cachedBaseLines: string[] = [];
 	private cachedTheme: CrewTheme;
+	private readonly tui: unknown;
 	private readonly unsubscribeTheme: () => void;
 	private readonly unsubscribeEventBus: () => void;
 
-	constructor(model: CrewWidgetModel, themeLike: unknown) {
+	constructor(model: CrewWidgetModel, themeLike: unknown, tui?: unknown) {
 		this.model = model;
 		this.theme = asCrewTheme(themeLike);
 		this.cachedTheme = this.theme;
+		this.tui = tui;
+		// Register as the active resize target and ensure the single, guarded
+		// terminal-resize listener is installed. On a resize the cached width
+		// goes stale; busting the cache + requesting a repaint refreshes the
+		// widget at the new width without waiting for the next event tick (T-2).
+		activeResizeTarget = this;
+		installResizeListener();
 		this.unsubscribeTheme = subscribeThemeChange(themeLike, () => this.invalidate());
 		this.unsubscribeEventBus = (() => {
 		const unsub1 = runEventBus.onChannel("run:state", () => this.invalidate());
@@ -114,9 +151,15 @@ class CrewWidgetComponent implements WidgetComponent {
 		this.cachedLines = [];
 	}
 
+	/** Poke the host TUI to repaint immediately (defensive: no-op if unavailable). */
+	requestRepaint(): void {
+		requestRenderTarget(this.tui);
+	}
+
 	dispose(): void {
 		this.unsubscribeTheme();
 		this.unsubscribeEventBus();
+		if (activeResizeTarget === this) activeResizeTarget = undefined;
 	}
 
 	render(width: number): string[] {
@@ -215,7 +258,7 @@ export function updateCrewWidget(
 		setExtensionWidget(
 			ctx,
 			WIDGET_KEY,
-			((_tui: unknown, theme: unknown) => new CrewWidgetComponent(model, theme)) as never,
+			((_tui: unknown, theme: unknown) => new CrewWidgetComponent(model, theme, _tui)) as never,
 			{ placement, persist: true },
 		);
 		state.lastVisibility = "visible";
