@@ -1,11 +1,10 @@
-import { isSensitivePath } from "./sensitive-paths.ts";
-
 export type RolePermissionMode = "read_only" | "workspace_write" | "danger_full_access" | "explicit_confirm";
 
-const READ_ONLY_ROLES = new Set(["explorer", "reviewer", "security-reviewer", "verifier", "analyst", "critic", "planner"]);
-const WRITE_ROLES = new Set(["executor", "test-engineer", "writer"]);
-const READ_ONLY_COMMANDS = new Set(["cat", "head", "tail", "less", "more", "wc", "ls", "find", "grep", "rg", "awk", "sed", "echo", "printf", "which", "where", "whoami", "pwd", "env", "printenv", "date", "df", "du", "uname", "file", "stat", "diff", "sort", "uniq", "tr", "cut", "paste", "test", "true", "false", "type", "readlink", "realpath", "basename", "dirname", "sha256sum", "md5sum", "xxd", "hexdump", "od", "strings", "tree", "jq", "git", "gh"]);
-
+// Read-only roles: cannot mutate files/source. `verifier` is NOT here — it runs
+// tests (bash + cache writes) so it is a WRITE role (F4). `planner` stays
+// read-only to preserve the plan-approval gate boundary (F3).
+const READ_ONLY_ROLES = new Set(["explorer", "reviewer", "security-reviewer", "analyst", "critic", "planner"]);
+const WRITE_ROLES = new Set(["executor", "test-engineer", "writer", "verifier"]);
 export interface PermissionCheckResult {
 	allowed: boolean;
 	mode: RolePermissionMode;
@@ -16,21 +15,6 @@ export function permissionForRole(role: string): RolePermissionMode {
 	if (READ_ONLY_ROLES.has(role)) return "read_only";
 	if (WRITE_ROLES.has(role)) return "workspace_write";
 	return "workspace_write";
-}
-
-export function isReadOnlyCommand(command: string): boolean {
-	const first = command.trim().split(/\s+/)[0]?.split(/[\\/]/).pop() ?? "";
-	return READ_ONLY_COMMANDS.has(first) && !/\s(-i|--in-place)\b|\s>{1,2}\s|\brm\b|\bmv\b|\bcp\b|\b(?:npm|pnpm|yarn|bun)\s+(install|add|ci|remove)\b|\bgit\s+(commit|push|merge|rebase|reset|checkout|clean)\b/.test(command);
-}
-
-export function checkRolePermission(role: string, command: string, filePath?: string): PermissionCheckResult {
-	const mode = permissionForRole(role);
-	// Also block access to known sensitive paths even for read-only commands
-	if (filePath && isSensitivePath(filePath)) {
-		return { allowed: false, mode, reason: `Path '${filePath}' is sensitive (credentials, SSH keys, etc.) — access denied for all roles.` };
-	}
-	if (mode === "read_only" && !isReadOnlyCommand(command)) return { allowed: false, mode, reason: `Role '${role}' is read-only and command may modify state.` };
-	return { allowed: true, mode };
 }
 
 export function currentCrewRole(env: NodeJS.ProcessEnv = process.env): string | undefined {

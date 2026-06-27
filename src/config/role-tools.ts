@@ -22,9 +22,23 @@ export const ROLE_TOOL_CONFIGS: Record<string, RoleToolConfig> = {
 		excludeTools: ["edit", "write", "ask_question"],
 	},
 
-	// Planner - Planning and documentation
+	// Planner - Read-only planning; emits plans as TEXT (runner persists result).
+	// F2/F3: strengthened to a read-only tool-set matching its READ_ONLY_ROLES
+	// classification. Deliverables are emitted as RESULT TEXT (consumed by
+	// adaptive-plan.ts / runner shared-output), NOT file writes — so the
+	// plan-approval gate boundary (planner = read-only) is preserved. Moving
+	// planner to WRITE_ROLES would fire the gate before planning, breaking the
+	// default/implementation workflows.
 	planner: {
-		excludeTools: ["ask_question"],
+		tools: ["read", "grep", "find", "ls", "glob"],
+		excludeTools: ["edit", "write", "bash", "web", "ask_question"],
+	},
+
+	// Critic - Read-only plan/design critique (F2: was missing from the map,
+	// so a custom critic agent had no tool-level read-only enforcement).
+	critic: {
+		tools: ["read", "grep", "find", "ls", "glob"],
+		excludeTools: ["edit", "write", "bash", "web"],
 	},
 
 	// Executor - Full access (default)
@@ -45,13 +59,26 @@ export const ROLE_TOOL_CONFIGS: Record<string, RoleToolConfig> = {
 	},
 
 	// Security Reviewer - Strict restrictions
-	security_reviewer: {
+	// F1: key is hyphenated to match the runtime role string (agents/
+	// security-reviewer.md → "security-reviewer"). The underscore form never
+	// resolved at runtime (returned {}), silently dropping enforcement.
+	"security-reviewer": {
 		tools: ["read", "grep", "find"],
 		excludeTools: ["edit", "write", "bash", "web", "ask_question"],
 	},
 
-	// Test Engineer - Can write tests
-	test_engineer: {
+	// Verifier - Runs tests (needs bash) but must NOT edit source (F4: moved
+	// from READ_ONLY_ROLES to WRITE_ROLES — the read-only prompt gate forbids
+	// the test-running redirects / cache writes its task requires, contradicting
+	// agents/verifier.md). Tool-set keeps bash but excludes edit/write so source
+	// integrity is preserved during verification. Mirrors cold-verifier behavior.
+	verifier: {
+		tools: ["read", "grep", "find", "ls", "bash"],
+		excludeTools: ["edit", "write", "web"],
+	},
+
+	// Test Engineer - Can write tests (F1: hyphenated key)
+	"test-engineer": {
 		tools: ["read", "edit", "write", "bash", "ls"],
 		excludeTools: ["web"],
 	},
@@ -61,7 +88,13 @@ export const ROLE_TOOL_CONFIGS: Record<string, RoleToolConfig> = {
  * Get tool configuration for a specific role.
  */
 export function getToolConfig(role: string): RoleToolConfig {
-	return ROLE_TOOL_CONFIGS[role] ?? {};
+	// F1: normalize hyphen/underscore. Runtime role strings are hyphenated
+	// (agents/security-reviewer.md → "security-reviewer") but map keys were
+	// historically underscored, silently returning {} at runtime — the same
+	// defect class as the v0.9.10 writer incident (opposite direction:
+	// under-enforce instead of over-enforce). Accept both forms.
+	const key = role.includes("_") ? role.replaceAll("_", "-") : role;
+	return ROLE_TOOL_CONFIGS[key] ?? ROLE_TOOL_CONFIGS[role] ?? {};
 }
 
 /**

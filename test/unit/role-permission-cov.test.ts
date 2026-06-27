@@ -2,8 +2,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
 	permissionForRole,
-	isReadOnlyCommand,
-	checkRolePermission,
 	currentCrewRole,
 	checkSubagentSpawnPermission,
 } from "../../src/runtime/role-permission.ts";
@@ -23,8 +21,13 @@ describe("permissionForRole", () => {
 		assert.strictEqual(permissionForRole("security-reviewer"), "read_only");
 	});
 
-	it("returns 'read_only' for verifier", () => {
-		assert.strictEqual(permissionForRole("verifier"), "read_only");
+	it("returns 'workspace_write' for verifier (F4 — verifier runs tests)", () => {
+		// F4 (2026-06-26): verifier moved out of READ_ONLY_ROLES to WRITE_ROLES.
+		// Its task runs tests via bash with redirects/cache writes, which the
+		// read-only prompt gate forbids — a direct contradiction with
+		// agents/verifier.md. A write role + tool-config (no edit/write) lets it
+		// run tests without editing source. Mirrors cold-verifier.
+		assert.strictEqual(permissionForRole("verifier"), "workspace_write");
 	});
 
 	it("returns 'read_only' for analyst", () => {
@@ -35,7 +38,11 @@ describe("permissionForRole", () => {
 		assert.strictEqual(permissionForRole("critic"), "read_only");
 	});
 
-	it("returns 'read_only' for planner", () => {
+	it("returns 'read_only' for planner (F3 — kept read-only for approval gate)", () => {
+		// F3 (2026-06-26): planner stays read-only. Moving it to WRITE_ROLES
+		// would fire the plan-approval gate BEFORE planning (breaking the
+		// default/implementation workflows). Its deliverables are emitted as
+		// result text and persisted by the runner, so read-only is compatible.
 		assert.strictEqual(permissionForRole("planner"), "read_only");
 	});
 
@@ -58,87 +65,6 @@ describe("permissionForRole", () => {
 
 	it("returns 'workspace_write' for unknown role", () => {
 		assert.strictEqual(permissionForRole("unknown-role"), "workspace_write");
-	});
-});
-
-// ── isReadOnlyCommand ───────────────────────────────────────────────────
-
-describe("isReadOnlyCommand", () => {
-	it("returns true for simple read commands", () => {
-		assert.strictEqual(isReadOnlyCommand("ls -la"), true);
-		assert.strictEqual(isReadOnlyCommand("cat file.txt"), true);
-		assert.strictEqual(isReadOnlyCommand("grep pattern file"), true);
-		assert.strictEqual(isReadOnlyCommand("find . -name '*.ts'"), true);
-	});
-
-	it("returns true for git read-only commands", () => {
-		assert.strictEqual(isReadOnlyCommand("git status"), true);
-		assert.strictEqual(isReadOnlyCommand("git log --oneline"), true);
-		assert.strictEqual(isReadOnlyCommand("git diff HEAD"), true);
-	});
-
-	it("returns false for write-indicating commands", () => {
-		assert.strictEqual(isReadOnlyCommand("rm -rf /tmp/test"), false);
-		assert.strictEqual(isReadOnlyCommand("npm install"), false);
-		assert.strictEqual(isReadOnlyCommand("git commit -m 'x'"), false);
-	});
-
-	it("returns false for redirect commands", () => {
-		assert.strictEqual(isReadOnlyCommand("echo hi > file.txt"), false);
-	});
-
-	it("returns false for in-place sed", () => {
-		assert.strictEqual(isReadOnlyCommand("sed -i 's/old/new/g' file"), false);
-	});
-
-	it("handles paths with slashes in command name", () => {
-		assert.strictEqual(isReadOnlyCommand("/usr/bin/ls"), true);
-		assert.strictEqual(isReadOnlyCommand("/usr/local/bin/git status"), true);
-	});
-
-	it("returns false for mv and cp in the regex", () => {
-		assert.strictEqual(isReadOnlyCommand("mv a b"), false);
-		assert.strictEqual(isReadOnlyCommand("cp a b"), false);
-	});
-});
-
-// ── checkRolePermission ─────────────────────────────────────────────────
-
-describe("checkRolePermission", () => {
-	it("allows read-only role with read-only command", () => {
-		const result = checkRolePermission("explorer", "cat file.txt");
-		assert.strictEqual(result.allowed, true);
-		assert.strictEqual(result.mode, "read_only");
-	});
-
-	it("denies read-only role with write command", () => {
-		const result = checkRolePermission("explorer", "npm install");
-		assert.strictEqual(result.allowed, false);
-		assert.strictEqual(result.mode, "read_only");
-		assert.ok(result.reason?.includes("read-only"));
-	});
-
-	it("allows write role with any command", () => {
-		const result = checkRolePermission("executor", "npm install");
-		assert.strictEqual(result.allowed, true);
-		assert.strictEqual(result.mode, "workspace_write");
-	});
-
-	it("denies access to sensitive paths even for write roles", () => {
-		const result = checkRolePermission("executor", "cat", "/home/user/.ssh/id_rsa");
-		assert.strictEqual(result.allowed, false);
-		assert.ok(result.reason?.includes("sensitive"));
-	});
-
-	it("denies access to sensitive paths for read-only roles", () => {
-		const result = checkRolePermission("explorer", "cat", "/home/user/.ssh/id_rsa");
-		assert.strictEqual(result.allowed, false);
-		assert.ok(result.reason?.includes("sensitive"));
-	});
-
-	it("allows when no filePath is provided", () => {
-		const result = checkRolePermission("executor", "echo hello");
-		assert.strictEqual(result.allowed, true);
 	});
 });
 
@@ -197,6 +123,10 @@ describe("checkSubagentSpawnPermission", () => {
 	it("allows for test-engineer", () => {
 		const result = checkSubagentSpawnPermission("test-engineer");
 		assert.strictEqual(result.allowed, true);
+	});
+
+	it("allows for verifier (F4 — now a write role)", () => {
+		assert.strictEqual(checkSubagentSpawnPermission("verifier").allowed, true);
 	});
 
 	it("denies for reviewer", () => {

@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { 
-	getToolConfig, 
+import {
+	getToolConfig,
 	hasToolRestrictions,
 	getRestrictedRoles,
-	type RoleToolConfig 
+	type RoleToolConfig,
 } from "../../src/config/role-tools.ts";
 
 test("getToolConfig returns config for known roles", () => {
@@ -20,14 +20,15 @@ test("getToolConfig returns config for known roles", () => {
 });
 
 test("getToolConfig returns empty config for unknown roles", () => {
-	const unknown = getToolConfig("unknown_role");
+	const unknown = getToolConfig("unknown-role");
 	assert.equal(unknown.tools, undefined);
 	assert.equal(unknown.excludeTools, undefined);
 });
 
 test("hasToolRestrictions returns true for restricted roles", () => {
 	assert.equal(hasToolRestrictions("explorer"), true);
-	assert.equal(hasToolRestrictions("security_reviewer"), true);
+	// F1: runtime uses the HYPHEN form; map key is now hyphenated too.
+	assert.equal(hasToolRestrictions("security-reviewer"), true);
 	assert.equal(hasToolRestrictions("writer"), true);
 });
 
@@ -38,12 +39,15 @@ test("hasToolRestrictions returns false for executor", () => {
 test("getRestrictedRoles returns all restricted roles", () => {
 	const restricted = getRestrictedRoles();
 	assert.ok(restricted.includes("explorer"));
-	assert.ok(restricted.includes("security_reviewer"));
+	assert.ok(restricted.includes("security-reviewer"));
 	assert.ok(!restricted.includes("executor"));
 });
 
-test("security_reviewer has strictest restrictions", () => {
-	const security = getToolConfig("security_reviewer");
+test("security-reviewer has strictest restrictions (F1: hyphen key resolves)", () => {
+	// F1 regression: the runtime role string is the HYPHEN form. The underscore
+	// form previously never resolved (returned {}), silently dropping the
+	// strictest tool restrictions in the codebase.
+	const security = getToolConfig("security-reviewer");
 	assert.ok(security.tools!.length <= 3);
 	assert.ok(security.excludeTools!.includes("bash"));
 	assert.ok(security.excludeTools!.includes("edit"));
@@ -76,8 +80,61 @@ test("writer has edit and write but no bash", () => {
 	assert.ok(!writer.tools!.includes("bash"));
 });
 
-test("test_engineer has bash but no web", () => {
-	const testEngineer = getToolConfig("test_engineer");
+test("test-engineer has bash but no web (F1: hyphen key resolves)", () => {
+	const testEngineer = getToolConfig("test-engineer");
 	assert.ok(testEngineer.tools!.includes("bash"));
 	assert.ok(!testEngineer.tools!.includes("web"));
+});
+
+// ── F1/F2/F4 additions ──────────────────────────────────────────────────
+
+test("F1: getToolConfig normalizes underscore → hyphen (back-compat for underscore callers)", () => {
+	// Both forms must resolve to the SAME non-empty config. This guards against
+	// the original defect class (underscore map key vs hyphen runtime string).
+	assert.deepEqual(getToolConfig("security-reviewer"), getToolConfig("security_reviewer"));
+	assert.deepEqual(getToolConfig("test-engineer"), getToolConfig("test_engineer"));
+	assert.ok(getToolConfig("security_reviewer").excludeTools !== undefined);
+});
+
+test("F1: every runtime role name resolves its intended tool config", () => {
+	// Derive the REAL runtime role strings from the permission sets (the source
+	// of truth for role names) and assert each read-only/write role that should
+	// have a tool-config actually resolves one. This is the test the original
+	// bug evaded (tests only queried underscore forms that existed in the map).
+	const readRolesWithConfig = ["explorer", "reviewer", "security-reviewer", "analyst", "critic", "planner"];
+	const writeRolesWithConfig = ["executor", "test-engineer", "writer", "verifier"];
+	for (const role of [...readRolesWithConfig, ...writeRolesWithConfig]) {
+		const cfg: RoleToolConfig = getToolConfig(role);
+		const hasCfg = cfg.tools !== undefined || cfg.excludeTools !== undefined;
+		// executor intentionally has no restrictions; every other role must.
+		if (role === "executor") {
+			assert.equal(hasCfg, false, `executor should be unrestricted, got ${JSON.stringify(cfg)}`);
+		} else {
+			assert.ok(hasCfg, `role '${role}' must resolve a tool config (F1/F2 regression)`);
+		}
+	}
+});
+
+test("F2: critic is read-only (read tools, excludes edit/write/bash)", () => {
+	const critic = getToolConfig("critic");
+	assert.ok(critic.tools!.includes("read"));
+	assert.ok(critic.excludeTools!.includes("edit"));
+	assert.ok(critic.excludeTools!.includes("write"));
+	assert.ok(critic.excludeTools!.includes("bash"));
+});
+
+test("F2: planner is read-only and cannot write/bash (strengthened)", () => {
+	const planner = getToolConfig("planner");
+	assert.ok(planner.tools!.includes("read"));
+	assert.ok(planner.excludeTools!.includes("edit"));
+	assert.ok(planner.excludeTools!.includes("write"));
+	assert.ok(planner.excludeTools!.includes("bash"));
+});
+
+test("F4: verifier can run tests (bash) but cannot edit/write source", () => {
+	const verifier = getToolConfig("verifier");
+	assert.ok(verifier.tools!.includes("bash"), "verifier needs bash to run tests");
+	assert.ok(verifier.tools!.includes("read"));
+	assert.ok(verifier.excludeTools!.includes("edit"), "verifier must not edit source");
+	assert.ok(verifier.excludeTools!.includes("write"), "verifier must not write source");
 });

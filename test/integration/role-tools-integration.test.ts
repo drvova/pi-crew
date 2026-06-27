@@ -100,9 +100,13 @@ test("default team uses executor role without restrictions", async () => {
 
 test("role-tools config exports are available", () => {
 	// Sanity check that all expected roles have configs
-	const roles = ["explorer", "analyst", "planner", "executor", "reviewer", "writer", "security_reviewer", "test_engineer"];
+	const roles = ["explorer", "analyst", "planner", "executor", "reviewer", "writer", "security-reviewer", "test-engineer", "critic", "verifier"];
 	for (const role of roles) {
 		const config = getToolConfig(role);
-		assert.ok(config !== undefined, `Role ${role} should have a config`);
+		// executor is intentionally unrestricted; all others must have a real
+		// config (F1/F2: hyphen keys + critic/verifier entries).
+		if (role !== "executor") {
+			assert.ok(config.tools !== undefined || config.excludeTools !== undefined, `Role ${role} should have a config`);
+		}
 	}
 });

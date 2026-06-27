@@ -46,11 +46,25 @@ describe("hasPendingMutatingTaskAtBoundary", () => {
 	});
 
 	it("returns false with only completed read-only tasks (no pending mutating)", () => {
+		// F4 (2026-06-26): verifier is now a WRITE role (runs tests), so use a
+		// genuinely read-only role (reviewer) as the pending task to exercise the
+		// "no pending mutating" branch.
+		const tasks = [
+			makeTask({ id: "explore", role: "explorer", status: "completed" }),
+			makeTask({ id: "review", role: "reviewer", status: "queued" }),
+		];
+		assert.equal(hasPendingMutatingTaskAtBoundary(tasks), false);
+	});
+
+	it("F4: verifier now counts as mutating at the boundary (runs tests)", () => {
+		// Regression guard: verifier moved to WRITE_ROLES (F4) — a completed
+		// read-only task followed by a pending verifier task now crosses the
+		// boundary, same as any other write role.
 		const tasks = [
 			makeTask({ id: "explore", role: "explorer", status: "completed" }),
 			makeTask({ id: "verify", role: "verifier", status: "queued" }),
 		];
-		assert.equal(hasPendingMutatingTaskAtBoundary(tasks), false);
+		assert.equal(hasPendingMutatingTaskAtBoundary(tasks), true);
 	});
 
 	it("detects boundary for default workflow (explore+plan done, execute pending)", () => {

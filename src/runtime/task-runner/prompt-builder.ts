@@ -30,6 +30,7 @@ function readOnlyRoleInstructions(role: string): string {
 		"- Do not use shell redirects, heredocs, in-place edits, package installs, git commit/merge/rebase/reset/checkout, or other state-mutating commands.",
 		"- If implementation changes are needed, report exact recommendations instead of applying them.",
 		"- Prefer read/grep/find/listing tools and read-only git inspection commands.",
+		"- Your final RESULT TEXT is persisted automatically by the runner (as a result artifact and, if the step declares `output:`, to a shared file). To deliver a plan, report, or findings, EMIT THEM AS TEXT in your final result — do NOT try to write a file yourself.",
 	].join("\n");
 }
 

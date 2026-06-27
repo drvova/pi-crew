@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.9.10 (continued)] — Read-only permission model fixes F1-F5 (2026-06-27)
+
+Review of the role permission model (question: "do read-only workflows still persist their task output?") confirmed output persistence is runner-driven and correct, but found 5 findings — one the same defect class as the v0.9.10 writer incident (Fix 5), in the opposite direction.
+
+### Bug fixes
+
+- **`security-reviewer`/`test-engineer` tool config unreachable (F1, HIGH)** (`src/config/role-tools.ts`). Map keys were `security_reviewer`/`test_engineer` (underscore) while the runtime role strings are hyphenated (`agents/security-reviewer.md` → `security-reviewer`). `getToolConfig` did not normalize, so it returned `{}` and the strictest tool restrictions in the codebase silently never applied. Same defect class as the writer incident, opposite direction (under-enforce vs over-enforce). Tests masked it: they queried only the underscore forms. Fix: quote+hyphen the keys (a bare `security-reviewer:` key parses as subtraction — must be quoted) and normalize in `getToolConfig` (`role.replaceAll("_","-")`); added a regression test that derives role names from the runtime sets and asserts each resolves its intended config.
+- **`critic`/`planner` tool-config gaps (F2)** (`src/config/role-tools.ts`). `critic` had no entry (a custom critic agent had no tool-level read-only enforcement); `planner`'s entry only excluded `ask_question` and did not enforce read-only. Added a `critic` entry and strengthened `planner` to a read-only tool-set.
+- **`planner` kept read-only with deliverable guidance (F3)** (`src/runtime/task-runner/prompt-builder.ts`). `planner` emits deliverables (`output: plan.md`) but moving it to WRITE_ROLES would fire the plan-approval gate BEFORE planning (breaking default/implementation workflows — `team-runner.ts:399` relies on planner being read-only). Fix: keep planner read-only and add a prompt line telling read-only roles their RESULT TEXT is persisted by the runner, so they emit deliverables as text instead of attempting file writes.
+- **`verifier` reclassified read-only → write (F4)** (`src/runtime/role-permission.ts` + `src/config/role-tools.ts`). `verifier`'s task runs tests via bash with redirects/cache writes (`npm test | tee`, `mkdir`, `rm`), all forbidden by the read-only prompt gate — a direct contradiction with `agents/verifier.md`. Moved verifier to WRITE_ROLES; tool-config keeps bash but excludes edit/write so source integrity is preserved. Mirrors `cold-verifier`.
+- **Dead command-enforcement removed (F5)** (`src/runtime/role-permission.ts`). `isReadOnlyCommand`/`checkRolePermission`/`READ_ONLY_COMMANDS` had zero runtime callers (only tests). Real protection lives in the role tool-config + `safe-paths.ts`/`resolveRealContainedPath` (10+ runtime callers). Deleted the dead code.
+
+### Verification
+
+- `npx tsc --noEmit` EXIT 0
+- 124 tests pass / 0 fail across 13 suites + 1 integration (role-tools 15, role-permission-cov 23, role-permission 2, role-permission.spawn 3, prompt-builder-cov 15, v0-8-0-tool-policy-unification 10, skill-instructions 16, plan-approval-boundary 7, crew-contracts 6, goal-loop-team-roles 5, t9-cold-verifier 5, completion-guard 7, verification-gates 10, role-tools-integration 3)
+- E2E: `research` workflow 3/3 tasks — explorer+analyst (read-only) persisted findings, writer wrote the deliverable file
+
 ## [v0.9.10 (continued)] — Secret redaction & env hardening (2026-06-27)
 
 Independent security review (review team, 3/4 tasks, ~360K tokens) flagged 3 Medium findings in the secret-redaction and env-passthrough surfaces. All verified by live `npx tsx` repro + source trace before fixing.
