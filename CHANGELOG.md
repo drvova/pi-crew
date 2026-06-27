@@ -1,6 +1,6 @@
 # Changelog
 
-## [v0.9.11] — TUI UI/UX polish (21 findings) (2026-06-27)
+## [v0.9.12] — TUI UI/UX polish (21 findings) (2026-06-27)
 
 Comprehensive TUI UX review of pi-crew's UI layer (`src/ui/` + `src/utils/visual.ts`). 21 findings (5×P1, 10×P2, 6×P3), all addressed. Full review with evidence-backed file:line citations: `research-findings/pi-crew-uiux-review.md`.
 
