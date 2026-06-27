@@ -1,6 +1,6 @@
 # Changelog
 
-## [v0.9.10 (continued)] — Per-run lock path for background-runner (parallel-spawn race) (2026-06-27)
+## [v0.9.11] — Per-run lock path for background-runner (parallel-spawn race) (2026-06-27)
 
 Bug caught by an E2E parallel-spawn test in this session, NOT by unit tests (which cannot spawn multiple real processes). Independent of the F1-F5/redaction batches.
 
@@ -18,7 +18,7 @@ Bug caught by an E2E parallel-spawn test in this session, NOT by unit tests (whi
 
 Concurrency/lock bugs only reproduce when multiple real processes spawn simultaneously — unit tests mocking a single process can never catch them. E2E parallel-spawn smoke tests are the only way to verify. (Reinforces the v0.9.9 lesson: E2E with real extension load is decisive.)
 
-## [v0.9.10 (continued)] — Read-only permission model fixes F1-F5 (2026-06-27)
+## [v0.9.11] — Read-only permission model fixes F1-F5 (2026-06-27)
 
 Review of the role permission model (question: "do read-only workflows still persist their task output?") confirmed output persistence is runner-driven and correct, but found 5 findings — one the same defect class as the v0.9.10 writer incident (Fix 5), in the opposite direction.
 
@@ -36,7 +36,7 @@ Review of the role permission model (question: "do read-only workflows still per
 - 124 tests pass / 0 fail across 13 suites + 1 integration (role-tools 15, role-permission-cov 23, role-permission 2, role-permission.spawn 3, prompt-builder-cov 15, v0-8-0-tool-policy-unification 10, skill-instructions 16, plan-approval-boundary 7, crew-contracts 6, goal-loop-team-roles 5, t9-cold-verifier 5, completion-guard 7, verification-gates 10, role-tools-integration 3)
 - E2E: `research` workflow 3/3 tasks — explorer+analyst (read-only) persisted findings, writer wrote the deliverable file
 
-## [v0.9.10 (continued)] — Secret redaction & env hardening (2026-06-27)
+## [v0.9.11] — Secret redaction & env hardening (2026-06-27)
 
 Independent security review (review team, 3/4 tasks, ~360K tokens) flagged 3 Medium findings in the secret-redaction and env-passthrough surfaces. All verified by live `npx tsx` repro + source trace before fixing.
 
