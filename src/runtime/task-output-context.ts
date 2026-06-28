@@ -51,6 +51,16 @@ function containedExists(filePath: string, baseDir?: string): boolean {
 export const MAX_RESULT_INLINE_BYTES = 32_000;
 
 /**
+ * Tee-recovery multiplier (R2). A shared artifact is teed to disk — so the
+ * downstream worker can `read` the dropped middle — when its size exceeds
+ * this fraction of {@link MAX_RESULT_INLINE_BYTES}. Lowered from 2.0
+ * (64 KB) to 1.25 (40 KB) so the 32–64 KB band, where the head+tail split
+ * is already materially lossy for structured content, also gets a recovery
+ * path instead of losing the middle forever.
+ */
+export const TEE_THRESHOLD_MULTIPLIER = 1.25;
+
+/**
  * Read a file and return its content, truncating to a head+tail slice if it
  * exceeds {@link MAX_RESULT_INLINE_BYTES} characters. Multi-byte UTF-8
  * sequences are preserved by reading the full file as a UTF-8 string and
@@ -110,10 +120,11 @@ function writeTeeFile(fullOutputPath: string, content: string): boolean {
  * content AND (when tee was actually written) the absolute path to the full
  * file. Returns undefined if the file cannot be read at all.
  *
- * Tee threshold: only when content.length > 2 * MAX_RESULT_INLINE_BYTES
- * (the head+tail is materially lossy — small over-threshold files are not
- * teed because the inline content is mostly intact and the worker can live
- * with the 75/25 split). File content is read once and reused for both the
+ * Tee threshold: only when content.length > TEE_THRESHOLD_MULTIPLIER ×
+ * MAX_RESULT_INLINE_BYTES (R2: 1.25× = 40 KB; previously 2× = 64 KB). Below
+ * the tee threshold the head+tail split is mostly intact and the worker can
+ * live with it; at/above the threshold the dropped middle is recoverable via
+ * the teed full file. File content is read once and reused for both the
  * pipeline (truncation) and the tee write (full file).
  *
  * Truncation behavior is unchanged from the P0-A pipeline: ANSI strip +
@@ -131,8 +142,10 @@ export function readIfSmallWithTee(
 		const content = fs.readFileSync(safePath, "utf-8");
 		if (content.length > maxChars) {
 			let fullOutputPath: string | undefined;
-			// Tee only when truncation is materially lossy (>2× threshold).
-			if (opts.tee && content.length > maxChars * 2) {
+			// Tee when truncation is materially lossy (>TEE_THRESHOLD_MULTIPLIER ×
+			// threshold). R2: lowered from 2× (64 KB) to 1.25× (40 KB) so the
+			// 32–64 KB band also gets a recovery path.
+			if (opts.tee && content.length > maxChars * TEE_THRESHOLD_MULTIPLIER) {
 				if (writeTeeFile(opts.tee.fullOutputPath, content)) {
 					fullOutputPath = opts.tee.fullOutputPath;
 				}

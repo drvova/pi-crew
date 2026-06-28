@@ -43,10 +43,13 @@ export function ensureMemoryDir(memoryDir: string): void {
 
 export function readMemoryIndex(memoryDir: string): string | undefined {
 	if (isSymlink(memoryDir)) return undefined;
-	const content = safeReadMemoryFile(path.join(memoryDir, "MEMORY.md"));
+	const memPath = path.join(memoryDir, "MEMORY.md");
+	const content = safeReadMemoryFile(memPath);
 	if (content === undefined) return undefined;
 	const lines = content.split(/\r?\n/);
-	return lines.length > MAX_MEMORY_LINES ? `${lines.slice(0, MAX_MEMORY_LINES).join("\n")}\n... (truncated at 200 lines)` : content;
+	return lines.length > MAX_MEMORY_LINES
+		? `${lines.slice(0, MAX_MEMORY_LINES).join("\n")}\n... (truncated at 200 lines). Full file: ${memPath} — use the \`read\` tool if you need entries beyond the head.`
+		: content;
 }
 
 export function buildMemoryBlock(agentName: string, scope: AgentMemoryScope, cwd: string, writable: boolean): string {

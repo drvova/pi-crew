@@ -4,8 +4,13 @@ import type { AgentConfig } from "../agents/agent-config.ts";
 import type { CrewRuntimeConfig } from "../config/config.ts";
 import type { TeamRunManifest, TeamTaskState, UsageState } from "../state/types.ts";
 import { appendEvent } from "../state/event-log.ts";
-import { buildMemoryBlock } from "./agent-memory.ts";
 import { trackTaskUsage } from "./usage-tracker.ts";
+// NOTE: buildMemoryBlock is intentionally NOT imported here. The agent memory
+// block is injected via renderTaskPrompt().full (the USER prompt), which is
+// shared by both the child-pi path (no system prompt) and the live-session
+// path. Adding it to liveSystemPrompt() too duplicated the entire memory
+// block (up to 200 lines) in both the user and system prompts. Keep memory
+// in a single place: the shared user prompt. See G3 fix.
 import { createStreamingOutput, type StreamingOutputHandle } from "./streaming-output.ts";
 import { registerLiveAgent, disposeLiveAgentSession, terminateLiveAgent, updateLiveAgentStatus, trackLiveAgentToolStart, trackLiveAgentToolEnd, trackLiveAgentTurnEnd, trackLiveAgentResponseText, markLiveAgentCompleted } from "./live-agent-manager.ts";
 import { applyLiveAgentControlRequest, applyLiveAgentControlRequests, type LiveAgentControlCursor } from "./live-agent-control.ts";
@@ -371,8 +376,10 @@ function compressSessionToolDescriptions(session: LiveSessionLike): void {
 	// is loaded and tree-shakeable, so adding the actual logic later is trivial.
 }
 
-function liveSystemPrompt(input: LiveSessionSpawnInput): string {
-	const memory = input.agent.memory ? buildMemoryBlock(input.agent.name, input.agent.memory, input.task.cwd, Boolean(input.agent.tools?.some((tool) => tool === "write" || tool === "edit"))) : "";
+export function liveSystemPrompt(input: LiveSessionSpawnInput): string {
+	// Agent MEMORY is intentionally omitted here — it is already injected via
+	// renderTaskPrompt().full (the user prompt, shared with the child-pi path).
+	// See the import-block note above and the G3 fix.
 	const role = input.task.role;
 	const styleBlock = buildCommunicationStyle(role);
 	const contractBlock = buildOutputContract(role);
@@ -390,7 +397,6 @@ function liveSystemPrompt(input: LiveSessionSpawnInput): string {
 		sensitiveConstraint,
 		"",
 		input.agent.systemPrompt || "Follow the user task exactly and report verification evidence.",
-		memory ? `\n${memory}` : "",
 	].filter(Boolean).join("\n");
 }
 

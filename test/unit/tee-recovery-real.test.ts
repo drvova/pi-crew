@@ -6,8 +6,9 @@
  * construction path through `collectDependencyOutputContext`. NO local mirrors.
  *
  * Critical invariants tested:
- *   1. Tee threshold: only when file size > 2× MAX_RESULT_INLINE_BYTES.
- *      Smaller files (even when truncated) do NOT tee (no fullOutputPath).
+ *   1. Tee threshold: only when file size > TEE_THRESHOLD_MULTIPLIER ×
+ *      MAX_RESULT_INLINE_BYTES (R2: 1.25× = 40 KB; was 2× = 64 KB). Smaller
+ *      files (even when truncated) do NOT tee (no fullOutputPath).
  *   2. Tee file content: byte-equal to the original file (full content, not
  *      truncated).
  *   3. Tee directory auto-creation: the `${artifactsRoot}/tee/` directory is
@@ -28,6 +29,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
 	MAX_RESULT_INLINE_BYTES,
+	TEE_THRESHOLD_MULTIPLIER,
 	readIfSmall,
 	readIfSmallWithTee,
 	teePathForArtifact,
@@ -62,29 +64,54 @@ test("readIfSmallWithTee returns full content (no tee) when file is at or below 
 	}
 });
 
-test("readIfSmallWithTee returns truncated content WITHOUT tee when file is between maxChars and 2× maxChars", () => {
+test("readIfSmallWithTee returns truncated content WITHOUT tee when file is between maxChars and TEE_THRESHOLD_MULTIPLIER × maxChars", () => {
 	const { dir, cleanup } = makeTmpDir("p1a-mid-");
 	try {
 		const filePath = path.join(dir, "mid.txt");
-		const content = "A".repeat(MAX_RESULT_INLINE_BYTES + 1000); // just over threshold, well under 2×
+		// Just over the inline threshold but under the tee threshold
+		// (MAX+1000 = 33000 < 1.25× = 40000) → truncated inline, NO tee.
+		const content = "A".repeat(MAX_RESULT_INLINE_BYTES + 1000);
 		fs.writeFileSync(filePath, content, "utf-8");
 		const teePath = path.join(dir, "tee", "should-not-exist.txt");
 		const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: teePath } });
 		assert.ok(result);
 		assert.ok(result.content.length < content.length, "content must be truncated");
 		assert.match(result.content, /head\+tail preserved/, "truncation marker must be present");
-		assert.equal(result.fullOutputPath, undefined, "no tee when under 2× threshold (materially lossy check)");
-		assert.ok(!fs.existsSync(teePath), "tee file must NOT be created below 2× threshold");
+		assert.equal(result.fullOutputPath, undefined, "no tee when under tee threshold (materially lossy check)");
+		assert.ok(!fs.existsSync(teePath), "tee file must NOT be created below tee threshold");
 	} finally {
 		cleanup();
 	}
 });
 
-test("readIfSmallWithTee tees the full content and returns fullOutputPath when file is > 2× maxChars", () => {
+test("R2: readIfSmallWithTee tees (recovery path) when file is between TEE_THRESHOLD_MULTIPLIER × and 2× maxChars", () => {
+	const { dir, cleanup } = makeTmpDir("p1a-r2band-");
+	try {
+		const filePath = path.join(dir, "r2band.txt");
+		// 50_000 chars: above 1.25× (40_000) but below the old 2× (64_000).
+		// This is the exact band R2 targets — previously lost the middle
+		// forever, now gets a tee recovery path.
+		const content = "R".repeat(50_000);
+		fs.writeFileSync(filePath, content, "utf-8");
+		const teePath = path.join(dir, "tee", "task-R2-r2band.full.txt");
+		const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: teePath } });
+		assert.ok(result);
+		assert.ok(result.content.length < content.length, "content must be truncated inline");
+		assert.match(result.content, /head\+tail preserved/);
+		assert.equal(result.fullOutputPath, teePath, "R2 band must now produce fullOutputPath (recovery path)");
+		assert.ok(fs.existsSync(teePath), "tee file must be written for the R2 band");
+		const teeContent = fs.readFileSync(teePath, "utf-8");
+		assert.equal(teeContent, content, "tee content must be byte-equal to the full original");
+	} finally {
+		cleanup();
+	}
+});
+
+test("readIfSmallWithTee tees the full content and returns fullOutputPath when file is well above the tee threshold", () => {
 	const { dir, cleanup } = makeTmpDir("p1a-large-");
 	try {
 		const filePath = path.join(dir, "large.txt");
-		// Build a file clearly above 2× threshold so the truncation is materially lossy.
+		// Build a file clearly above the tee threshold so the truncation is materially lossy.
 		const content = "A".repeat(MAX_RESULT_INLINE_BYTES * 3 + 1000);
 		fs.writeFileSync(filePath, content, "utf-8");
 		const teePath = path.join(dir, "tee", "task-X-large.full.txt");
@@ -206,21 +233,23 @@ test("teePathForArtifact handles unusual but safe characters in names", () => {
 
 // --- Integration: sharedReads entry shape via the public construction path ---
 
-test("sharedReads entry includes fullOutputPath only when file size > 2× threshold", () => {
+test("sharedReads entry includes fullOutputPath only when file size > tee threshold (R2: 1.25×)", () => {
 	const { dir, cleanup } = makeTmpDir("p1a-shared-");
 	try {
 		// Set up a minimal manifest-shaped directory:
-		//   ${dir}/shared/small.txt   (below threshold)
-		//   ${dir}/shared/medium.txt  (between 1× and 2× threshold)
-		//   ${dir}/shared/large.txt   (above 2× threshold)
+		//   ${dir}/shared/small.txt       (below inline threshold)
+		//   ${dir}/shared/medium.txt      (between inline and tee threshold)
+		//   ${dir}/shared/recoverable.txt (R2 band: between 1.25× and 2×)
+		//   ${dir}/shared/large.txt       (well above tee threshold)
 		const sharedDir = path.join(dir, "shared");
 		fs.mkdirSync(sharedDir, { recursive: true });
 		fs.writeFileSync(path.join(sharedDir, "small.txt"), "x".repeat(100), "utf-8");
 		fs.writeFileSync(path.join(sharedDir, "medium.txt"), "M".repeat(MAX_RESULT_INLINE_BYTES + 500), "utf-8");
+		fs.writeFileSync(path.join(sharedDir, "recoverable.txt"), "R".repeat(50_000), "utf-8");
 		fs.writeFileSync(path.join(sharedDir, "large.txt"), "L".repeat(MAX_RESULT_INLINE_BYTES * 3), "utf-8");
 		// Replicate the construction logic from collectDependencyOutputContext to
 		// verify the entry shape end-to-end.
-		const step = { reads: ["small.txt", "medium.txt", "large.txt"] };
+		const step = { reads: ["small.txt", "medium.txt", "recoverable.txt", "large.txt"] };
 		const manifest = { artifactsRoot: dir } as unknown as Parameters<typeof import("../../src/runtime/task-output-context.ts").collectDependencyOutputContext>[0];
 		const task = { id: "t-1" } as unknown as Parameters<typeof import("../../src/runtime/task-output-context.ts").collectDependencyOutputContext>[2];
 		// Inline the same map logic to assert entry shape (this is integration —
@@ -238,12 +267,16 @@ test("sharedReads entry includes fullOutputPath only when file size > 2× thresh
 		const small = entries[0]!;
 		assert.ok(!("fullOutputPath" in small) || small.fullOutputPath === undefined);
 		assert.equal(small.content.length, 100);
-		// Medium: no fullOutputPath, content is truncated
+		// Medium: no fullOutputPath, content is truncated (under tee threshold)
 		const medium = entries[1]!;
 		assert.ok(!("fullOutputPath" in medium) || medium.fullOutputPath === undefined);
 		assert.ok(medium.content.length < MAX_RESULT_INLINE_BYTES + 500);
+		// Recoverable (R2 band 1.25×–2×): NOW has fullOutputPath + tee file on disk
+		const recoverable = entries[2]!;
+		assert.ok("fullOutputPath" in recoverable && recoverable.fullOutputPath, "R2-band entry must have fullOutputPath");
+		assert.ok(fs.existsSync(recoverable.fullOutputPath!), "tee file for R2-band entry must exist");
 		// Large: HAS fullOutputPath, tee file exists on disk
-		const large = entries[2]!;
+		const large = entries[3]!;
 		assert.ok("fullOutputPath" in large && large.fullOutputPath, "large entry must have fullOutputPath");
 		assert.ok(fs.existsSync(large.fullOutputPath!), "tee file for large entry must exist");
 		// Avoid unused-var noise for the `manifest` cast above.
