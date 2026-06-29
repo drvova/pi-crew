@@ -496,25 +496,54 @@ export class ChainRunner {
 			return context;
 		}
 
-		// Limit history size to prevent memory leak (H2)
-		const limitedHandoffs = handoffs.slice(-ChainRunner.MAX_CHAIN_HISTORY_SIZE);
+		const notes: string[] = [];
 
-		// Limit per-entry size to prevent memory issues from large artifacts
+		// Limit history size to prevent memory leak (H2). Emit a marker so a dropped
+		// entry does not vanish silently — this was the only silent-loss path in the
+		// output-handling machinery (see research-findings/output-handling-deep-dive.md §F).
+		let limitedHandoffs = handoffs;
+		if (handoffs.length > ChainRunner.MAX_CHAIN_HISTORY_SIZE) {
+			const dropped = handoffs.length - ChainRunner.MAX_CHAIN_HISTORY_SIZE;
+			notes.push(`[chain history limited to last ${ChainRunner.MAX_CHAIN_HISTORY_SIZE} entries; ${dropped} older entr${dropped === 1 ? "y" : "ies"} omitted]`);
+			limitedHandoffs = handoffs.slice(-ChainRunner.MAX_CHAIN_HISTORY_SIZE);
+		}
+
+		// Limit per-entry size to prevent memory issues from large artifacts.
 		const filteredHandoffs = limitedHandoffs.filter(h => {
 			const size = JSON.stringify(h).length;
 			return size <= ChainRunner.MAX_HANDOFF_ENTRY_SIZE;
 		});
+		const oversizedDropped = limitedHandoffs.length - filteredHandoffs.length;
+		if (oversizedDropped > 0) {
+			notes.push(`[${oversizedDropped} handoff entr${oversizedDropped === 1 ? "y" : "ies"} omitted (> ${ChainRunner.MAX_HANDOFF_ENTRY_SIZE} bytes each)]`);
+		}
 
-		return {
-			...context,
-			__chainHistory: filteredHandoffs.map(h => ({
+		// Track array-cap drops so capped lists do not vanish silently. Each field
+		// over its cap records the full count so a reader knows data was elided.
+		const arrayCapNotes: string[] = [];
+		const mapped = filteredHandoffs.map(h => {
+			const over: string[] = [];
+			if (h.filesCreated && h.filesCreated.length > 50) over.push(`filesCreated=${h.filesCreated.length}`);
+			if (h.filesModified && h.filesModified.length > 50) over.push(`filesModified=${h.filesModified.length}`);
+			if (h.decisions && h.decisions.length > 20) over.push(`decisions=${h.decisions.length}`);
+			if (h.nextSteps && h.nextSteps.length > 20) over.push(`nextSteps=${h.nextSteps.length}`);
+			if (over.length > 0) arrayCapNotes.push(`step ${h.taskId}: ${over.join(", ")} (capped)`);
+			return {
 				step: h.taskId,
 				outcome: h.outcome,
 				filesCreated: h.filesCreated?.slice(0, 50), // Limit array size
 				filesModified: h.filesModified?.slice(0, 50), // Limit array size
 				decisions: h.decisions?.slice(0, 20), // Limit array size
 				nextSteps: h.nextSteps?.slice(0, 20), // Limit array size
-			})),
+				...(h.outputText ? { outputText: h.outputText.slice(0, 5000) } : {}), // Size-capped worker output
+			};
+		});
+		if (arrayCapNotes.length > 0) notes.push(`[list caps applied: ${arrayCapNotes.join("; ")}]`);
+
+		return {
+			...context,
+			__chainHistory: mapped,
+			...(notes.length > 0 ? { __chainHistoryNotes: notes } : {}),
 		};
 	}
 
@@ -525,13 +554,23 @@ export class ChainRunner {
 		config: ChainStep,
 		context: Record<string, unknown>
 	): Promise<TaskResult> {
+		// Pass step config (team/workflow/model) into the packet context so the
+		// concrete ChainTaskRunner can resolve which team/workflow to run. Without
+		// this, a step parsed to a @teamName reference would lose its team because
+		// the only channel from executeStep to runTask is the TaskPacket. Purely
+		// additive — adds sibling keys alongside __chainHistory/Notes.
 		const packet: TaskPacket = {
 			taskId: `chain-${Date.now()}-${config.name}`,
 			runId: "chain",
 			goal: config.inlineGoal ?? config.name,
 			summarizeThreshold: 3000,
 			collapseContext: true,
-			context,
+			context: {
+				...context,
+				__chainStepTeam: config.team,
+				__chainStepWorkflow: config.workflow,
+				__chainStepModel: config.model,
+			},
 		};
 
 		return this.taskRunner.runTask(packet);

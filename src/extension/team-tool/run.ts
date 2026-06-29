@@ -113,6 +113,14 @@ function scheduleBackgroundEarlyExitGuard(cwd: string, runId: string, pid: numbe
 }
 
 export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
+	// CHAIN DISPATCH: runs before goal validation since a chain has no top-level
+	// goal. The injected handleRun reference breaks the run.ts ↔ chain-dispatch.ts
+	// import cycle; the lazy import defers the chain-executor cost until a chain is
+	// actually requested. Existing run/workflow paths below are unchanged.
+	if (params.chain) {
+		const { handleChainRun } = await import("./chain-dispatch.ts");
+		return handleChainRun(params, ctx, handleRun);
+	}
 	const goal = params.goal ?? params.task;
 	if (!goal) return result("Run requires goal or task.", { action: "run", status: "error" }, true);
 	const intentPrefix = goal.length > 60 ? `${goal.slice(0, 57)}...` : goal;

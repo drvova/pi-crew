@@ -99,6 +99,9 @@ export interface HandoffSummary {
 
 	// Context snapshot
 	contextSnapshot: string;
+
+	/** Worker output text propagated through the chain (read from resultArtifact). */
+	outputText?: string;
 }
 
 /**
@@ -121,6 +124,9 @@ export interface TaskResult {
 	filesDeleted?: string[];
 	decisions?: Decision[];
 	error?: string;
+
+	/** Worker's textual output (read from resultArtifact during chain execution). */
+	outputText?: string;
 }
 
 /**
@@ -443,6 +449,7 @@ export class HandoffManager {
 			},
 
 			contextSnapshot,
+			...(result.outputText ? { outputText: result.outputText } : {}),
 		};
 	}
 

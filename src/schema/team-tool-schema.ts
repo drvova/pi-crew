@@ -114,6 +114,12 @@ export const TeamToolParams = Type.Object({
 	goal: Type.Optional(
 		Type.String({ description: "High-level objective for a team run." }),
 	),
+	chain: Type.Optional(
+		Type.String({
+			description:
+				'Chain expression: "step1 -> step2 -> step3". Runs each step as a sequential team run, passing handoff context forward via the goal text. Supports inline goals ("...") and @team references. e.g. chain=\'"Research X" -> "Analyze" -> "Write report"\'.',
+		}),
+	),
 	task: Type.Optional(
 		Type.String({
 			description: "Concrete task text for direct role/agent execution.",
@@ -370,6 +376,9 @@ export interface TeamToolParamsValue {
 	role?: string;
 	agent?: string;
 	goal?: string;
+	/** Chain expression: "step1 -> step2 -> step3". Runs each step as a sequential
+	 *  team run with handoff context passed forward via the goal. */
+	chain?: string;
 	task?: string;
 	singleAgent?: boolean;
 	runId?: string;
