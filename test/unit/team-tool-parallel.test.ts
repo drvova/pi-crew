@@ -7,7 +7,7 @@
  * Full integration testing requires file-system setup of teams/workflows.
  */
 
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { handleParallel } from "../../src/extension/team-tool/parallel-dispatch.ts";
 import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
@@ -26,6 +26,22 @@ function makeParams(overrides: Partial<TeamToolParamsValue> = {}): TeamToolParam
 // ─── handleParallel ───────────────────────────────────────────────────────────
 
 describe("handleParallel", () => {
+	// PROCESS-LEAK PREVENTION: the "defaults team to fast-fix" test below
+	// passes validation (valid config.tasks + the fast-fix builtin team exists)
+	// and actually spawns a REAL background-runner via spawnBackgroundTeamRun.
+	// Without this, the spawned runner is daemonized (double-forked → parented by
+	// init/systemd), so neither the test's `finally` cleanup nor the process
+	// exit reaches it — it lingers until the 2h background-runner watchdog fires.
+	// Setting PI_CREW_PARENT_PID makes the runner's startParentGuard() poll the
+	// test process and self-terminate within 500ms of it exiting. Restored in
+	// `after` so later test files in the same process are unaffected.
+	const savedParentPid = process.env.PI_CREW_PARENT_PID;
+	before(() => { process.env.PI_CREW_PARENT_PID = String(process.pid); });
+	after(() => {
+		if (savedParentPid === undefined) delete process.env.PI_CREW_PARENT_PID;
+		else process.env.PI_CREW_PARENT_PID = savedParentPid;
+	});
+
 	it("returns error when config.tasks is missing", async () => {
 		const tmp = createTrackedTempDir("parallel-test-");
 		try {
@@ -92,20 +108,25 @@ describe("handleParallel", () => {
 		}
 	});
 
-	it("defaults team to 'fast-fix' when not specified", async () => {
+	it("defaults team to 'fast-fix' and surfaces per-task agent errors (no spawn)", async () => {
 		const tmp = createTrackedTempDir("parallel-test-");
 		try {
+			// No `config.team` → defaults to the `fast-fix` builtin. A non-existent
+			// agent makes spawnSingleTask return an error BEFORE reaching
+			// spawnBackgroundTeamRun, so this exercises team-defaulting + discovery
+			// + agent-validation WITHOUT spawning a real background-runner (the
+			// process leak the previous version of this test caused).
 			const res = await handleParallel(
 				makeParams({
-					config: { tasks: [{ goal: "test goal" }] },
+					config: { tasks: [{ goal: "test goal", agent: "nonexistent-agent-xyz" }] },
 				}),
 				makeCtx(tmp),
 			);
 
-			// May succeed or fail depending on whether fast-fix team exists in the test cwd
 			const text = textFromToolResult(res);
-			// We just verify the function completes and returns a result
 			assert.ok(typeof text === "string");
+			assert.ok(text.includes("nonexistent-agent-xyz"), `expected agent-not-found in result: ${text}`);
+			assert.ok(text.includes("not found"), `expected "not found" marker: ${text}`);
 		} finally {
 			removeTrackedTempDir(tmp);
 		}
