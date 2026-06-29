@@ -15,6 +15,7 @@ import { computeLiveDurationMs } from "../live-duration.ts";
 import { getTaskUsage } from "../../runtime/usage-tracker.ts";
 import { agentActivity, agentStats, elapsed, formatTokensCompact, notificationBadge } from "./widget-formatters.ts";
 import { activeWidgetRuns, shortRunLabel } from "./widget-model.ts";
+import { isFinishedRunStatus } from "../../runtime/process-status.ts";
 import type { WidgetRun } from "./widget-types.ts";
 
 const MAX_AGENTS_DISPLAY = 3;
@@ -69,6 +70,7 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 		});
 		const completed = agents.filter((a) => a.status === "completed").length;
 		const runGlyph = iconForStatus(run.status, { runningGlyph });
+		const isTerminal = isFinishedRunStatus(run.status);
 		// Run progress line. v1–v3 flickered on snapshot.tasks state, v4 was
 		// too minimal (`0/1 agents` only), v5 duplicated the worker activity
 		// line (tools/tokens/duration already shown one row below). v6 (this)
@@ -81,10 +83,19 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 		// for a healthy run), and `run.createdAt` is immutable. The format
 		// shape `"X/Y agents · Ns"` is therefore truly invariant: same number
 		// of `·`-separated fields, same field meanings, every render tick.
+		//
+		// Bug 022 (timer-fix + label): for TERMINAL runs (failed/cancelled/
+		// completed) the elapsed counter previously kept ticking up forever
+		// from createdAt (a failed run showed `2028s` and climbing, read as
+		// "still running"). Now it FREEZES at updatedAt (when the run
+		// reached its terminal status). The status label is also surfaced
+		// explicitly so the row cannot be misread as an active run.
 		const agentCountText = `${completed}/${agents.length} agents`;
-		const runElapsedMs = Math.max(0, Date.now() - new Date(run.createdAt).getTime());
+		const runEndMs = isTerminal ? new Date(run.updatedAt).getTime() : Date.now();
+		const runElapsedMs = Math.max(0, Number.isFinite(runEndMs) ? runEndMs - new Date(run.createdAt).getTime() : 0);
 		const runElapsedText = `${Math.floor(runElapsedMs / 1000)}s`;
-		const progressPart = `${agentCountText} · ${runElapsedText}`;
+		const statusLabel = isTerminal ? ` · ${run.status}` : "";
+		const progressPart = `${agentCountText} · ${runElapsedText}${statusLabel}`;
 		lines.push(truncate(`├─ ${runGlyph} ${shortRunLabel(run)} · ${progressPart} · ${run.runId.slice(-8)}`, width));
 
 		const liveForRun = listLiveAgents().filter((a) => a.runId === run.runId);
