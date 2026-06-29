@@ -144,9 +144,22 @@ export function agentStats(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle)
 
 // ── Notification badge ────────────────────────────────────────────────
 
+// Bug 021: the bell glyph 🔔 was misread as "queued messages" — users saw
+// `🔔227` and concluded there were 227 pending items, when the value is a
+// CUMULATIVE warning/error/critical count with zero actual queue behind it.
+// Fix: relabel to an explicit "alerts" segment (no bell) and cap the display
+// at 99+ (standard badge practice). The cumulative count stays accurate
+// internally (widgetState.notificationCount) and remains fully logged in
+// .crew/state/notifications/YYYY-MM-DD.jsonl — this bounds presentation only.
+// Deeper fixes (decay window, owner-scope, auto-reset on all-runs-terminal,
+// full deprecation) are product decisions documented in
+// docs/bugs/bug-021-notification-badge-counter-misleading.md.
+export const NOTIFICATION_BADGE_CAP = 99;
+
 export function notificationBadge(count: number | undefined, env: NodeJS.ProcessEnv = process.env): string {
 	if (!count || count <= 0) return "";
 	const term = `${env.TERM ?? ""} ${env.WT_SESSION ?? ""} ${env.TERM_PROGRAM ?? ""}`.toLowerCase();
 	const supportsEmoji = !term.includes("dumb") && env.NO_COLOR !== "1";
-	return supportsEmoji ? ` 🔔${count}` : ` [!${count}]`;
+	const label = count > NOTIFICATION_BADGE_CAP ? `${NOTIFICATION_BADGE_CAP}+ alerts` : `${count} alerts`;
+	return supportsEmoji ? ` · ${label}` : ` [${label}]`;
 }

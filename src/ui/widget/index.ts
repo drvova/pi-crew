@@ -42,7 +42,7 @@ export function getRenderWidth(width?: number): number {
 	if (Number.isFinite(stdoutCols) && stdoutCols! > 0) return Math.floor(stdoutCols!);
 	return DEFAULT_WIDGET_WIDTH;
 }
-export { notificationBadge } from "./widget-formatters.ts";
+export { notificationBadge, NOTIFICATION_BADGE_CAP } from "./widget-formatters.ts";
 
 // ── Constants ─────────────────────────────────────────────────────────
 

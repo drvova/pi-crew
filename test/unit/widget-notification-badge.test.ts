@@ -1,18 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { notificationBadge, widgetHeader } from "../../src/ui/widget/index.ts";
+import { notificationBadge, widgetHeader, NOTIFICATION_BADGE_CAP } from "../../src/ui/widget/index.ts";
 
-test("notificationBadge hides zero and renders emoji by default", () => {
+test("notificationBadge hides zero and renders alerts label (not a bell)", () => {
 	assert.equal(notificationBadge(0), "");
 	assert.equal(notificationBadge(undefined), "");
-	assert.match(notificationBadge(3, { TERM: "xterm-256color" }), /3/);
+	// Bug 021: no 🔔 bell glyph (was misread as "messages"); explicit "alerts" label
+	const badge = notificationBadge(3, { TERM: "xterm-256color" });
+	assert.match(badge, /3 alerts/);
+	assert.doesNotMatch(badge, /🔔/);
 });
 
-test("notificationBadge falls back for dumb terminals", () => {
-	assert.equal(notificationBadge(2, { TERM: "dumb" }), " [!2]");
+test("notificationBadge falls back for dumb terminals (bracketed, still labeled alerts)", () => {
+	assert.equal(notificationBadge(2, { TERM: "dumb" }), " [2 alerts]");
 });
 
-test("widgetHeader includes notification count", () => {
+test("Bug 021: notificationBadge caps the display at 99+ (no alarming 227)", () => {
+	const badge = notificationBadge(227, { TERM: "xterm-256color" });
+	assert.match(badge, /99\+ alerts/);
+	assert.doesNotMatch(badge, /227/); // the raw alarming number is NOT shown
+	// exactly-at-cap shows the bare number, not "99+"
+	assert.match(notificationBadge(NOTIFICATION_BADGE_CAP, { TERM: "xterm-256color" }), /99 alerts/);
+	assert.match(notificationBadge(NOTIFICATION_BADGE_CAP + 1, { TERM: "xterm-256color" }), /99\+ alerts/);
+});
+
+test("widgetHeader includes the alerts segment (not a bell)", () => {
 	const header = widgetHeader([], "⠋", 20, 4);
-	assert.match(header, /4/);
+	assert.match(header, /4 alerts/);
+	assert.doesNotMatch(header, /🔔/);
 });
