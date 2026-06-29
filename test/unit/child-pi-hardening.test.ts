@@ -44,7 +44,11 @@ function makeInput() {
 // ---------------------------------------------------------------------------
 
 describe("#3 SIGKILL timer hardening", () => {
-	test("killProcessPid schedules SIGKILL timer after SIGTERM (mock)", () => {
+	// The SIGTERM → SIGKILL escalation timer is a Unix-only mechanism. On
+	// Windows, killProcessPid uses `taskkill /T /F` and returns early (no
+	// SIGTERM, no SIGKILL timer). This subtest verifies the Unix path; skip it
+	// on win32 (cross-platform CI caught the original assertion assuming SIGTERM).
+	test("killProcessPid schedules SIGKILL timer after SIGTERM (mock)", { skip: process.platform === "win32" ? "Unix-only path (win32 uses taskkill)" : false }, () => {
 		// This test verifies the hardKillTimer is scheduled by checking the
 		// side effect: after SIGTERM succeeds, a setTimeout with HARD_KILL_MS
 		// (3000ms) is armed.
