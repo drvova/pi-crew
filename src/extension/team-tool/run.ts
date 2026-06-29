@@ -118,6 +118,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	// import cycle; the lazy import defers the chain-executor cost until a chain is
 	// actually requested. Existing run/workflow paths below are unchanged.
 	if (params.chain) {
+		// LAZY: defer chain-dispatch import until a chain is actually requested.
 		const { handleChainRun } = await import("./chain-dispatch.ts");
 		return handleChainRun(params, ctx, handleRun);
 	}

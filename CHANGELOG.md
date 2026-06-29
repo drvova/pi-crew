@@ -1,5 +1,39 @@
 # Changelog
 
+## [v0.9.13] — chain feature + raw worker output + anti-zombie hardening (2026-06-29)
+
+Context/compaction efficiency work + a live `chain` feature that wires previously-dead code, plus two root-cause zombie fixes. The unifying theme: **deliver the right context efficiently and never leave orphaned state behind.**
+
+### Features
+
+- **Section-aware knowledge injection** (`knowledge-injection.ts`) — `.crew/knowledge.md` is no longer injected as a uniform head-only block. CONVENTIONS sections (always-relevant: Code Style, Environment, Architecture, Testing, Release Process) are injected in full; SESSION-LOG sections (per-version post-mortems, incidents) are IDF-scored against the task/goal and budget-capped (5 KB), drop-whole with a head-slice fallback and a section-index recovery net. Cuts knowledge-token waste for trivial tasks (a `team action='run'` with a trivial goal went from ~4 000 tokens of mostly-irrelevant session-log noise to ~2 095 tokens of conventions + matching session-log) without starving architecture-relevant tasks. Backward compatible: `readKnowledge(cwd)` with no query keeps the legacy head-only path. Verified live (post-restart research run): worker knowledge dropped from ~4 000 tokens (95 % session-log noise) to ~2 095 tokens, with the synthesized Architecture reference present.
+
+- **Live `chain` feature** (`team action='run', chain='"a" -> "b" -> "c"'`) — `ChainRunner` was complete and unit-tested but had ZERO production callers. Each step now runs a REAL team run via an injected `handleRun`, with handoff context (including the previous step's output text) passed forward through a `# Previous Steps in This Chain` block prepended to the step's goal. This also makes `enrichContextFromHandoffs`'s honesty markers (`__chainHistoryNotes`) reachable in production. See `src/extension/team-tool/{chain-dispatch,chain-executor}.ts`.
+
+### Bug fixes
+
+- **Raw worker result + dependency-context tee recovery (output)** — `results/<id>.txt` was 16 K-capped at child-pi stream-parse time (`compactContentPart` caps assistant text at `MAX_ASSISTANT_TEXT_CHARS`), and the dependency-context path re-read the same capped text circularly (no tee, unlike sharedReads). Now: (a) `ChildPiLineObserver` captures the RAW final assistant text before the transcript's compaction, and `task-runner` writes it as the authoritative `results/<id>.txt` (monotonic-safe fallback to transcript-derived `finalText`); the transcript stays 16 K-capped (telemetry memory bound unchanged). (b) `collectDependencyOutputContext` now uses `readIfSmallWithTee` (matching sharedReads) and `renderDependencyOutputContext` surfaces the `Full output (if you need the missing middle): <path>` hint, breaking the circular re-read. Verified live: a research run's analyst result went from a 16 K-capped file with a `[pi-crew compacted N chars]` marker to a 33 KB RAW file with zero data-loss markers; the downstream writer received 33 K of raw dependency context. Tracing in `research-findings/output-handling-deep-dive.md`.
+
+- **Truncated-content recovery hints** — truncation markers in knowledge (`knowledge-injection.ts`), agent memory (`agent-memory.ts`), and dependency output now embed the absolute path + a `read`-tool hint so workers can recover the dropped tail instead of silently losing it. Tee threshold lowered 2× → 1.25× (`TEE_THRESHOLD_MULTIPLIER`) so the 32–64 KB band gets a recovery path. Live-session system prompt no longer duplicates the MEMORY block (it was already injected via `renderTaskPrompt().full`).
+
+- **background-runner watchdog (anti-zombie processes)** — the keepAlive interval (`setInterval(()=>{}, 5000)`, no `unref`) cleared only in `runCleanup`, so a hung team run (stuck child Pi, deadlocked lock, or a test that spawns a run without cleanup) left the process alive indefinitely. The existing parent-guard only fires when the parent DIES; here the parent hung too, so it never fired. Fix: a watchdog timer alongside keepAlive aborts via the shared `AbortController` (propagates → child-pi → kills child processes) and force-exits after a 15 s grace if the abort does not propagate. Default 2 h (generous for legitimate long runs); override via `PI_CREW_MAX_RUN_MS`. Verified live: normal run exits cleanly (watchdog cleared, 0 `watchdog_fired` events); isolated hang fires at exactly `MAX` ms.
+
+- **Test state isolation (anti-zombie UI rows)** — `useProjectState(cwd)` returns `findRepoRoot(cwd) !== undefined`, and `scopeBaseRoot` falls back to the EXTENSION-GLOBAL state dir (`~/.pi/agent/extensions/pi-crew/state/runs/`) when cwd is NOT a git repo. Tests that create a tmpdir WITHOUT `git init` and call `createRunManifest`/`writeRunFixture`/`createRunPaths` were leaking run records into that global dir — the one the crew widget reads — creating persistent fake-agent rows after every test run. Fix: the shared `createTrackedTempDir` helper and `state-store.test.ts`'s `makeResolvedTempDir` now create a `.git` marker dir so records land in `<tmpdir>/.crew/` (auto-cleaned). Protects all current and future callers. Verified: state-store + cov + chain-executor tests left global state 2 → 2 (zero leak).
+
+### Docs
+
+- **README** — removed 182 lines of version-by-version highlights (v0.9.0 → v0.9.12, v0.8.x, v0.7.0) that duplicated CHANGELOG.md. README now flows intro → `## Features` straight. Version tags remain only where they qualify a feature (e.g. `(L4, v0.9.8)`) — useful for deciding whether to upgrade.
+
+### Stats
+
+29 files changed · ~2 498 insertions / ~189 deletions across 7 commits.
+
+### Verification
+
+- `npx tsc --noEmit`: clean.
+- 44/44 new + modified unit tests pass (`raw-final-text`, `dependency-tee`, `chain-executor`, `chain-handoff-markers`, `background-runner-watchdog`).
+- Live (post-restart): chain 2-step run produced enriched step-2 goal with step 1's output; raw worker result verified end-to-end (33 KB analyst result, 0 markers); watchdog verified on normal path (clean exit) + hang path (fires at MAX ms).
+
 ## [v0.9.12] — TUI UI/UX polish (21 findings) (2026-06-27)
 
 Comprehensive TUI UX review of pi-crew's UI layer (`src/ui/` + `src/utils/visual.ts`). 21 findings (5×P1, 10×P2, 6×P3), all addressed. Full review with evidence-backed file:line citations: `research-findings/pi-crew-uiux-review.md`.
