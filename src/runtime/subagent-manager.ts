@@ -114,6 +114,36 @@ export function savePersistedSubagentRecord(
 	}
 }
 
+/**
+ * Delete the persisted subagent record from disk.
+ * Used when a subagent is cancelled or terminated — the user wants no trace.
+ * Safe-fail: if the file does not exist (already deleted), this is a no-op.
+ * Any other I/O error is logged but not propagated.
+ */
+export function removePersistedSubagentRecord(cwd: string, id: string): boolean {
+	try {
+		const filePath = persistedSubagentPath(cwd, id);
+		fs.unlinkSync(filePath);
+		return true;
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException)?.code;
+		if (code === "ENOENT") return false;
+		logInternalError("subagent-manager.remove", error, `id=${id}`);
+		return false;
+	}
+}
+
+/**
+ * Predicate: should this record's persisted file be deleted on terminal status?
+ * Only abnormal terminations (cancelled / stopped / terminated-flag) are wiped.
+ * Successful runs (`completed`) and agent errors (`failed`, `error`) keep their audit trail.
+ */
+export function shouldDeleteOnTerminalStatus(record: SubagentRecord): boolean {
+	if (record.terminated === true) return true;
+	const s = record.status;
+	return s === "cancelled" || s === "stopped";
+}
+
 const ALLOWED_RECORD_FIELDS = new Set([
 	"id",
 	"agentId",
@@ -427,6 +457,12 @@ export class SubagentManager {
 						? Math.max(0, record.completedAt - record.startedAt)
 						: undefined;
 					savePersistedSubagentRecord(options.cwd, record);
+					// User policy (v0.9.16): cancelled / stopped subagents leave NO trace.
+					// Successful runs (`completed`) and agent errors (`failed`, `error`)
+					// keep their audit trail. See shouldDeleteOnTerminalStatus().
+					if (shouldDeleteOnTerminalStatus(record)) {
+						removePersistedSubagentRecord(options.cwd, record.id);
+					}
 					this.onComplete?.(record);
 				}
 				this.drainQueue();
@@ -451,10 +487,16 @@ export class SubagentManager {
 
 	private markStopped(record: SubagentRecord, reason?: string): void {
 		record.status = "stopped";
+		record.terminated = true;
 		record.completedAt = Date.now();
 		if (reason && !record.error) record.error = reason;
 		const cwd = this.cwdByRecord.get(record.id);
+		// User policy (v0.9.16): stopped subagents leave NO trace on disk.
+		// Save first (so any concurrent reader sees the final status), then
+		// unlink. The race window is microseconds and the file is gone before
+		// the next widget/dashboard tick.
 		if (cwd) savePersistedSubagentRecord(cwd, record);
+		if (cwd) removePersistedSubagentRecord(cwd, record.id);
 	}
 
 	private createRunSignal(id: string, signal?: AbortSignal): AbortSignal {

@@ -206,9 +206,64 @@ export function saveCrewAgents(manifest: TeamRunManifest, records: CrewAgentReco
 
 const TERMINAL_AGENT_STATUSES = new Set(["completed", "failed", "cancelled", "blocked"]);
 
+/**
+ * User policy (v0.9.16): cancelled / stopped crew-agent records leave NO trace.
+ * `failed` records keep their audit trail (different from cancel — agent errored).
+ */
+export function shouldDeleteCrewAgentOnTerminalStatus(
+	record: Pick<CrewAgentRecord, "status">,
+): boolean {
+	const s = record.status;
+	return s === "cancelled" || s === "stopped";
+}
+
+/**
+ * Remove a single crew-agent record from both `agents.json` (the index file)
+ * and the per-task `status.json`. Called on cancellation to wipe the trace.
+ * Safe-fail: missing files are treated as success (already removed).
+ */
+export function removeCrewAgent(
+	manifest: TeamRunManifest,
+	taskId: string,
+): { removedIndex: boolean; removedStatus: boolean } {
+	let removedIndex = false;
+	let removedStatus = false;
+	// 1. Remove from agents.json index
+	try {
+		const existing = readCrewAgents(manifest);
+		const filtered = existing.filter((r) => r.taskId !== taskId);
+		if (filtered.length !== existing.length) {
+			saveCrewAgents(manifest, filtered);
+			removedIndex = true;
+		}
+	} catch {
+		// best-effort
+	}
+	// 2. Remove per-task status.json
+	try {
+		const statusPath = agentStatusPath(manifest, taskId);
+		if (fs.existsSync(statusPath)) {
+			fs.unlinkSync(statusPath);
+			removedStatus = true;
+		}
+	} catch {
+		// best-effort
+	}
+	return { removedIndex, removedStatus };
+}
+
 export function upsertCrewAgent(manifest: TeamRunManifest, record: CrewAgentRecord): void {
 	// Guard: skip if run state has been deleted (prune/forget/cleanup)
 	try { fs.statSync(manifest.stateRoot); } catch { return; }
+	// User policy (v0.9.16): cancelled / stopped crew agents leave NO trace.
+	// We delete BOTH the index entry (agents.json) and the per-task status.json
+	// immediately so the UI dashboard/widget never see the cancelled agent again.
+	if (shouldDeleteCrewAgentOnTerminalStatus(record)) {
+		removeCrewAgent(manifest, record.taskId);
+		// Invalidate the per-task reader cache so a subsequent read sees fresh state.
+		asyncAgentReaderCache.delete(agentsPath(manifest));
+		return;
+	}
 	// Read current state
 	const existing = readCrewAgents(manifest);
 	// Deduplicate by id: keep newer record when same id appears
