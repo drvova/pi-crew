@@ -31,8 +31,9 @@ function plainTmp(prefix: string): string {
 
 function manifest(cwd: string, status: TeamRunManifest["status"] = "completed"): TeamRunManifest {
 	return {
-		runId: "run_ga_test", stateRoot: path.join(cwd, ".crew"), artifactsRoot: path.join(cwd, ".crew"),
-		eventsPath: path.join(cwd, ".crew", "events.jsonl"), cwd, team: "t", workflow: "w", goal: "g",
+		schemaVersion: 1, runId: "run_ga_test", stateRoot: path.join(cwd, ".crew"), artifactsRoot: path.join(cwd, ".crew"),
+		tasksPath: path.join(cwd, ".crew", "tasks.json"), eventsPath: path.join(cwd, ".crew", "events.jsonl"),
+		cwd, team: "t", workflow: "w", goal: "g", workspaceMode: "single",
 		status, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), artifacts: [],
 	};
 }

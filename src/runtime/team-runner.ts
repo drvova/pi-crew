@@ -15,7 +15,7 @@ import { withRunLock } from "../state/locks.ts";
 import { aggregateUsage, formatUsage } from "../state/usage.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { evaluateCrewPolicy, summarizePolicyDecisions } from "./policy-engine.ts";
-import { buildRecoveryLedger } from "./recovery-recipes.ts";
+import { buildRecoveryLedger, shouldRerunFailedTask } from "./recovery-recipes.ts";
 import { assessGoalAchievement, applyGoalAchievement } from "./goal-achievement.ts";
 import { buildTaskGraphIndex, refreshTaskGraphQueues, taskGraphSnapshot } from "./task-graph-scheduler.ts";
 import { buildExecutionPlan as buildDagExecutionPlan, getReadyTasks as getDagReadyTasks, type TaskNode } from "./task-graph.ts";
@@ -630,6 +630,18 @@ async function executeTeamRunCore(
 
 		const failed = tasks.find((task) => task.status === "failed");
 		if (failed) {
+			// #4 (assessment): honor limits.maxRetriesPerTask — re-queue an eligible
+			// failed task for a bounded whole-task rerun instead of immediately
+			// aborting the run. Before #4, the recovery ledger recorded `rerun_task`
+			// entries with state:"planned" but never executed them (decorative).
+			// Default-off: maxRetriesPerTask=0 → original abort behavior preserved.
+			const rerun = shouldRerunFailedTask(failed, input.limits);
+			if (rerun.rerun) {
+				tasks = tasks.map((item) => item.id === failed.id ? { ...item, status: "queued" as const, policy: { ...(item.policy ?? {}), retryCount: rerun.newRetryCount }, error: undefined, finishedAt: undefined } : item);
+				await saveRunTasksAsync(manifest, tasks);
+				await appendEventAsync(manifest.eventsPath, { type: "recovery.rerun_task", runId: manifest.runId, taskId: failed.id, message: `Re-queuing failed task for whole-task rerun: ${rerun.reason}`, data: { attempt: rerun.newRetryCount, maxRetries: input.limits?.maxRetriesPerTask ?? 0, scenario: "task_failed" } });
+				continue; // loop re-processes the re-queued task
+			}
 			tasks = markBlocked(tasks, `Blocked by failed task '${failed.id}'.`);
 			await saveRunTasksAsync(manifest, tasks);
 			saveCrewAgents(manifest, recordsForMaterializedTasks(manifest, tasks, runtimeKind));

@@ -72,3 +72,38 @@ export function buildRecoveryLedger(decisions: PolicyDecision[], previous: Recov
 	}
 	return { entries };
 }
+
+/**
+ * #4 (assessment): decide whether a FAILED task should be re-queued for a
+ * whole-task rerun, honoring limits.maxRetriesPerTask.
+ *
+ * Before #4, buildRecoveryLedger recorded `rerun_task` entries with
+ * state:"planned" but NOTHING ever executed them — the recovery ledger was
+ * decorative. This pure function drives the actual re-queue decision used in
+ * the run loop: when a task returns a failed STATUS (not a retryable throw,
+ * which #1's autoRetry/executeWithRetry already handles), re-queue it for a
+ * bounded whole-task rerun instead of immediately aborting the run.
+ *
+ * Default-off: maxRetriesPerTask defaults to 0 → never rerun (preserves prior
+ * behavior unless explicitly opted in). Bounded by retryCount < maxRetries.
+ */
+export interface RerunDecision {
+	rerun: boolean;
+	newRetryCount: number;
+	reason: string;
+}
+
+export function shouldRerunFailedTask(
+	task: { policy?: { retryCount?: number } },
+	limits?: { maxRetriesPerTask?: number },
+): RerunDecision {
+	const maxRetries = limits?.maxRetriesPerTask ?? 0;
+	const retryCount = task.policy?.retryCount ?? 0;
+	if (maxRetries <= 0) {
+		return { rerun: false, newRetryCount: retryCount, reason: "maxRetriesPerTask not set (opt-in) — no whole-task rerun" };
+	}
+	if (retryCount >= maxRetries) {
+		return { rerun: false, newRetryCount: retryCount, reason: `retryCount ${retryCount} >= maxRetriesPerTask ${maxRetries} — rerun budget exhausted` };
+	}
+	return { rerun: true, newRetryCount: retryCount + 1, reason: `whole-task rerun ${retryCount + 1}/${maxRetries}` };
+}
