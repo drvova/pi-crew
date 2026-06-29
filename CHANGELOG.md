@@ -1,5 +1,69 @@
 # Changelog
 
+## [v0.9.16] — cancel wipes the trace (2026-06-29)
+
+User-driven refinement of the cancellation policy. Previously, cancelled / stopped subagents and crew-agent records were preserved on disk (`agent_*.json` files in `.crew/state/subagents/`, plus `agents.json` + per-task `status.json` in the run state directory) and continued to appear in the UI dashboard / widget / transcript viewer. The user explicitly asked: *"một khi đã cancel thì phải xóa luôn dấu vết về subagent đó chứ để lại làm gì nữa"* — once cancelled, the trace must be wiped. This release implements that policy.
+
+### Changed — terminal-status deletion
+
+- **Subagent records** (`.crew/state/subagents/<id>.json`) — added `removePersistedSubagentRecord(cwd, id)` in `src/runtime/subagent-manager.ts`. On terminal status `cancelled` / `stopped` / `terminated:true`, the persisted file is **deleted immediately** (no linger). The file is saved first so any concurrent reader sees the final status, then `unlink`'d within microseconds — the next widget/dashboard tick sees no entry.
+
+- **Crew-agent records** (per-run `agents.json` index + per-task `status.json`) — added `removeCrewAgent(manifest, taskId)` in `src/runtime/crew-agent-records.ts`. `upsertCrewAgent()` now checks `shouldDeleteCrewAgentOnTerminalStatus(record)` and dispatches to `removeCrewAgent` instead of `saveCrewAgents` for `cancelled` / `stopped` records. Both the index entry AND the per-task status.json are wiped.
+
+### What is preserved vs wiped
+
+| Status | Persisted? | Rationale |
+|---|---|---|
+| `completed` | ✅ yes | Successful work — audit value |
+| `failed` | ✅ yes | Agent errored — debugging value |
+| `error` | ✅ yes | Unexpected exception — debugging value |
+| `cancelled` | ❌ **wiped** | User-initiated cancellation — no trace |
+| `stopped` | ❌ **wiped** | External abort — no trace |
+| `terminated: true` (any status) | ❌ **wiped** | Any termination event — no trace |
+
+### In-memory handles
+
+`terminateLiveAgent` in `src/runtime/live-agent-manager.ts:169` already deletes from the `liveAgents` Map immediately after abort — no change needed. The `evictStaleLiveAgentHandles` fallback (10-min linger for orphan terminal handles) remains as a safety net.
+
+### New helper predicates
+
+- `shouldDeleteOnTerminalStatus(record)` — for `.crew/state/subagents/` records
+- `shouldDeleteCrewAgentOnTerminalStatus(record)` — for per-run `agents.json` records
+
+Both exported for downstream callers and tests.
+
+### Tests
+
+- **NEW `test/unit/cancellation-trace-wipe.test.ts`** — 15 cases covering:
+  - `shouldDeleteOnTerminalStatus` / `shouldDeleteCrewAgentOnTerminalStatus` predicates for all 6 statuses
+  - `removePersistedSubagentRecord` happy path + ENOENT safe-fail
+  - `removeCrewAgent` removes from `agents.json` index AND per-task `status.json`
+  - `upsertCrewAgent` integration: cancelled → wiped, completed/failed → preserved
+
+- **Existing tests still pass** — 118/118 across 9 test files (subagent-manager-cov, subagent-tools-integration, live-manager-cov, direct-agent-run, team-runner-merge, process-lifecycle, preflight-validator, topology-analyzer, cancellation-trace-wipe). 0 regressions.
+
+### Verification
+
+- `tsc --noEmit` → EXIT 0
+- `node scripts/check-lazy-imports.mjs` → "All dynamic imports have `// LAZY:` marker"
+- `npm test` (focused 9-file suite) → 118/118 pass
+
+### Honesty discipline
+
+- **Failed subagents are NOT wiped** — they may carry useful debugging info (error stack, partial output). Different from cancel. If the user later wants failed→wipe too, it's a 1-line predicate change.
+- **No tombstone** — the cancellation event is in `events.jsonl` (the run's audit log) and `notifications/`. Disk-level agent files are intentionally gone after cancel.
+- **Filesystem race window** is microseconds (save then unlink); under heavy concurrent access a reader might briefly see the final status before the file disappears. Acceptable trade-off for the "no trace" policy.
+
+### Files touched
+
+| File | Change |
+|---|---|
+| `src/runtime/subagent-manager.ts` | +2 functions (`removePersistedSubagentRecord`, `shouldDeleteOnTerminalStatus`); modified `markStopped` + `runSubagent` finally block to wipe on cancel |
+| `src/runtime/crew-agent-records.ts` | +2 functions (`removeCrewAgent`, `shouldDeleteCrewAgentOnTerminalStatus`); modified `upsertCrewAgent` to dispatch to remove on cancel |
+| `test/unit/cancellation-trace-wipe.test.ts` | NEW (15 cases, 8.3 KB) |
+| `CHANGELOG.md` | this entry |
+| `package.json` | 0.9.15 → 0.9.16 |
+
 ## [v0.9.15] — workflow topology advisory (2026-06-29)
 
 After a parallel-research assessment of v0.9.13 + v0.9.14 (`research-findings/pi-crew-performance-quality-assessment.md`, effectiveness evaluation at `.crew/research/pi-crew-effectiveness-evaluation.md`), a user-driven refinement showed that the original BLOCK-on-misuse design was too aggressive — **agents know their context better than the orchestrator**. This release ships an **advisory-only** topology classifier that prints measured-cost notes and proceeds either way. The agent (caller) decides.
