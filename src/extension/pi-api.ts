@@ -44,4 +44,4 @@ export { defineTool, createBashTool } from "@earendil-works/pi-coding-agent";
  * and to surface version-drift if Pi upgrades introduce breaking changes.
  * Update this when bumping the pi-coding-agent dependency.
  */
-export const BUILT_AGAINST_PI_VERSION = "0.79.3";
+export const BUILT_AGAINST_PI_VERSION = "0.77.0";
