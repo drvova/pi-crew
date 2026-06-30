@@ -3,52 +3,38 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { asRecord, loadConfig } from "../config/config.ts";
-import { clearHooksScoped } from "../hooks/registry.ts";
-import type { ScheduledJob } from "../runtime/scheduler.ts";
-import { applyCrewSettingsToConfig, loadCrewSettings } from "../runtime/settings-store.ts";
-// 2.7: Lazy-load LiveRunSidebar — only constructed when the user actually opens
-// a live run sidebar overlay. The class pulls in transcript-viewer and other
-// heavy UI modules.
-import type { LiveRunSidebar as LiveRunSidebarType } from "../ui/live-run-sidebar.ts";
-import { type AsyncNotifierState, startAsyncRunNotifier, stopAsyncRunNotifier } from "./async-notifier.ts";
-import { registerAutonomousPolicy } from "./autonomous-policy.ts";
-import { registerCleanupHandler } from "./crew-cleanup.ts";
-import { registerKnowledgeInjection } from "./knowledge-injection.ts";
-import { notifyActiveRuns } from "./session-summary.ts";
-import { uninstallCrewGlobalRegistry } from "./team-tool.ts";
-
-let _cachedLiveRunSidebar: typeof LiveRunSidebarType | undefined;
-async function importLiveRunSidebar(): Promise<typeof LiveRunSidebarType> {
-	if (!_cachedLiveRunSidebar) {
-		// LAZY: defer LiveRunSidebar import until the user opens a sidebar overlay.
-		const mod = await import("../ui/live-run-sidebar.ts");
-		_cachedLiveRunSidebar = mod.LiveRunSidebar;
-	}
-	return _cachedLiveRunSidebar;
-}
-
 import { DEFAULT_NOTIFICATIONS, DEFAULT_UI } from "../config/defaults.ts";
-import { type EventToMetricSubscription, wireEventToMetrics } from "../observability/event-to-metric.ts";
-// 2.7: Lazy-load OTLPExporter — only loaded when otlp.enabled=true. The
-// exporter pulls in node:http/https and serialization helpers that 99% of
-// users never need.
-import type { OTLPExporter as OTLPExporterType } from "../observability/exporters/otlp-exporter.ts";
-import { createMetricRegistry, type MetricRegistry } from "../observability/metric-registry.ts";
-import { createMetricFileSink, type MetricSink } from "../observability/metric-sink.ts";
+import { clearHooksScoped } from "../hooks/registry.ts";
+// 2.7: Lazy-load OTLPExporter — moved to registration/observability.ts (H3-L2 split).
 import { BatchBarrier, type BatchMember } from "../runtime/batch-barrier.ts";
+import type {
+	cancelOrphanedRuns as CancelOrphanedRunsFn,
+	detectInterruptedRuns as DetectInterruptedRunsFn,
+	purgeStaleActiveRunIndex as PurgeStaleActiveRunIndexFn,
+} from "../runtime/crash-recovery.ts";
+// 2.7: Lazy-load crash-recovery helpers — only invoked from session_start
+// deferred cleanup and cleanupRuntime. Each function is awaited inside an
+// async context that already runs after registration completes.
+import { reconcileAllStaleRuns } from "../runtime/crash-recovery.ts";
+import { appendDeadletter } from "../runtime/deadletter.ts";
 import { listLiveAgents } from "../runtime/live-agent-manager.ts";
 import { createManifestCache } from "../runtime/manifest-cache.ts";
+import { cleanupOrphanWorkers } from "../runtime/orphan-worker-registry.ts";
 import { primePeerDep } from "../runtime/peer-dep.ts";
 import { buildValidationBlocker, extractPathFromInput, validateWrittenFile } from "../runtime/per-write-validator.ts";
+import { cleanupLegacyOrphanTempDirs, cleanupOrphanTempDirs } from "../runtime/pi-args.ts";
 import { startRuntimeWarmup } from "../runtime/runtime-warmup.ts";
+import type { ScheduledJob } from "../runtime/scheduler.ts";
 import { CrewScheduler } from "../runtime/scheduler.ts";
+import { applyCrewSettingsToConfig, loadCrewSettings } from "../runtime/settings-store.ts";
+import { reconcileOrphanedTempWorkspaces } from "../runtime/stale-reconciler.ts";
 import { loadRunManifestById, updateRunStatus } from "../state/state-store.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 import { readPersistedSubagentRecord, SubagentManager } from "../subagents/manager.ts";
 import { terminateActiveChildPiProcesses } from "../subagents/spawn.ts";
 import { deployBundledThemes } from "../ui/deploy-bundled-themes.ts";
 import { summarizeHeartbeats } from "../ui/heartbeat-aggregator.ts";
-import { requestRender, setExtensionWidget, setWorkingIndicator, showCustom } from "../ui/pi-ui-compat.ts";
+import { requestRender, setExtensionWidget, setWorkingIndicator } from "../ui/pi-ui-compat.ts";
 import {
 	clearPiCrewPowerbar,
 	disposePowerbarCoalescer,
@@ -69,48 +55,46 @@ import { RunWatcherRegistry } from "../utils/run-watcher-registry.ts";
 import { resolveContainedPath } from "../utils/safe-paths.ts";
 import { extractSessionId } from "../utils/session-utils.ts";
 import { resetTimings, time } from "../utils/timings.ts";
+// 2.7: Lazy-load LiveRunSidebar — moved to registration/ui.ts (H3-L2 split).
+// The class pulls in transcript-viewer and other heavy UI modules.
+import { type AsyncNotifierState, startAsyncRunNotifier, stopAsyncRunNotifier } from "./async-notifier.ts";
+import { registerAutonomousPolicy } from "./autonomous-policy.ts";
 import { registerContextStatusInjection } from "./context-status-injection.ts";
 import { registerCrewAutocomplete } from "./crew-autocomplete.ts";
+import { registerCleanupHandler } from "./crew-cleanup.ts";
 import { registerCrewInputRouter } from "./crew-input-router.ts";
 import { registerCrewShortcuts } from "./crew-shortcuts.ts";
 import { type PiCrewRpcHandle, registerPiCrewRpc } from "./cross-extension-rpc.ts";
+import { registerKnowledgeInjection } from "./knowledge-injection.ts";
 import { registerCrewMessageRenderers } from "./message-renderers.ts";
-import { type NotificationDescriptor, NotificationRouter } from "./notification-router.ts";
-import { createJsonlSink, type NotificationSink } from "./notification-sink.ts";
+import { type NotificationDescriptor } from "./notification-router.ts";
 import { runArtifactCleanup } from "./registration/artifact-cleanup.ts";
 import { registerTeamCommands } from "./registration/commands.ts";
 import { registerCompactionGuard } from "./registration/compaction-guard.ts";
+// H3-L2 split: lifecycle installer extracted to registration/lifecycle.ts.
+// This module owns the async-run notifier, notification router, delivery coordinator, and run-lifecycle subscriptions.
+import {
+	configureDeliveryCoordinator as configureDeliveryCoordinatorFromRegistration,
+	configureNotifications as configureNotificationsFromRegistration,
+	disposeDeliveryCoordinator,
+	disposeNotifications,
+	type LifecycleState,
+	startLifecycleWatchers,
+	stopLifecycleWatchers,
+} from "./registration/lifecycle.ts";
+// H3-L2 split: observability installer extracted to registration/observability.ts.
+// This module owns metric registry, OTLP, heartbeat-watcher, and auto-repair timers.
+import { configureObservability, disposeObservability, type ObservabilityState } from "./registration/observability.ts";
 import { __test__subagentSpawnParams, sendAgentWakeUp, sendFollowUp } from "./registration/subagent-helpers.ts";
 import { registerSubagentTools } from "./registration/subagent-tools.ts";
 import { registerTeamTool } from "./registration/team-tool.ts";
+// H3-L2 split: ui installer extracted to registration/ui.ts.
+// This module owns live-run sidebar + powerbar overlay logic.
+import { clearDashboardPowerbar, installLiveSidebar, pushPowerbarUpdate, type UiState } from "./registration/ui.ts";
+import { notifyActiveRuns } from "./session-summary.ts";
 import { shouldBlockDestructiveTeamAction } from "./team-tool/destructive-gate.ts";
 import { persistScheduledJobUpdate } from "./team-tool/handle-schedule.ts";
-import { handleTeamTool } from "./team-tool.ts";
-
-let _cachedOTLPExporter: typeof OTLPExporterType | undefined;
-async function importOTLPExporter(): Promise<typeof OTLPExporterType> {
-	if (!_cachedOTLPExporter) {
-		// LAZY: opt-in OTLP metric export — load only when otlp.enabled=true.
-		const mod = await import("../observability/exporters/otlp-exporter.ts");
-		_cachedOTLPExporter = mod.OTLPExporter;
-	}
-	return _cachedOTLPExporter;
-}
-
-import type {
-	cancelOrphanedRuns as CancelOrphanedRunsFn,
-	detectInterruptedRuns as DetectInterruptedRunsFn,
-	purgeStaleActiveRunIndex as PurgeStaleActiveRunIndexFn,
-} from "../runtime/crash-recovery.ts";
-// 2.7: Lazy-load crash-recovery helpers — only invoked from session_start
-// deferred cleanup and cleanupRuntime. Each function is awaited inside an
-// async context that already runs after registration completes.
-import { reconcileAllStaleRuns } from "../runtime/crash-recovery.ts";
-import { appendDeadletter } from "../runtime/deadletter.ts";
-import { HeartbeatWatcher } from "../runtime/heartbeat-watcher.ts";
-import { cleanupOrphanWorkers } from "../runtime/orphan-worker-registry.ts";
-import { cleanupLegacyOrphanTempDirs, cleanupOrphanTempDirs } from "../runtime/pi-args.ts";
-import { reconcileOrphanedTempWorkspaces } from "../runtime/stale-reconciler.ts";
+import { handleTeamTool, uninstallCrewGlobalRegistry } from "./team-tool.ts";
 
 let _cachedCrashRecovery:
 	| {
@@ -145,8 +129,7 @@ function purgeStaleActiveRunIndexSyncIfLoaded(): void {
 
 import { pruneFinishedRuns, pruneUserLevelRuns } from "../extension/run-maintenance.ts";
 import { initI18n } from "../i18n.ts";
-import { DeliveryCoordinator } from "../runtime/delivery-coordinator.ts";
-import { OverflowRecoveryTracker } from "../runtime/overflow-recovery.ts";
+// H3-L2 split: DeliveryCoordinator + OverflowRecoveryTracker moved to registration/lifecycle.ts.
 import { tryRegisterSessionCleanup } from "../runtime/session-resources.ts";
 import { createSessionSnapshot } from "../runtime/session-snapshot.ts";
 
@@ -211,249 +194,70 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	};
 	const telemetryEnabled = (): boolean => loadConfig(currentCtx?.cwd ?? process.cwd()).config.telemetry?.enabled !== false;
 	const widgetState: CrewWidgetState = { frame: 0 };
-	let notificationSink: NotificationSink | undefined;
-	let notificationRouter: NotificationRouter | undefined;
-	let metricRegistry: MetricRegistry | undefined;
-	let eventMetricSub: EventToMetricSubscription | undefined;
-	let metricSink: MetricSink | undefined;
-	let heartbeatWatcher: HeartbeatWatcher | undefined;
-	let autoRepairTimer: ReturnType<typeof setInterval> | undefined;
-	let tempReconcileTimer: ReturnType<typeof setInterval> | undefined;
-	let otlpExporter: OTLPExporterType | undefined;
-	let deliveryCoordinator: DeliveryCoordinator | undefined;
-	let overflowTracker: OverflowRecoveryTracker | undefined;
+	// H3-L2 split: notification sink + router moved to registration/lifecycle.ts state.
+	// H3-L2 split: Observability state lives in registration/observability.ts;
+	// orchestrator keeps a holder so cleanupRuntime can dispose in place.
+	const observabilityState: ObservabilityState = {
+		metricRegistry: undefined,
+		eventMetricSub: undefined,
+		metricSink: undefined,
+		heartbeatWatcher: undefined,
+		autoRepairTimer: undefined,
+		tempReconcileTimer: undefined,
+		otlpExporter: undefined,
+	};
+	// H3-L2 split: UI state lives in registration/ui.ts; orchestrator keeps
+	// a holder for the live sidebar runId and dashboard-opened flag.
+	const uiState: UiState = { liveSidebarRunId: undefined, dashboardOpened: false };
+	// H3-L2 split: Lifecycle state lives in registration/lifecycle.ts.
+	const lifecycleState: LifecycleState = {
+		notifierStarted: false,
+		notificationSink: undefined,
+		notificationRouter: undefined,
+		deliveryCoordinator: undefined,
+		overflowTracker: undefined,
+	};
 	const configureNotifications = (ctx: ExtensionContext): void => {
-		notificationRouter?.dispose();
-		notificationSink?.dispose();
-		notificationRouter = undefined;
-		notificationSink = undefined;
-		const config = loadConfig(ctx.cwd).config;
-		if (config.notifications?.enabled === false) return;
-		if (config.telemetry?.enabled !== false)
-			notificationSink = createJsonlSink(
-				projectCrewRoot(ctx.cwd),
-				config.notifications?.sinkRetentionDays ?? DEFAULT_NOTIFICATIONS.sinkRetentionDays,
-			);
-		notificationRouter = new NotificationRouter(
-			{
-				dedupWindowMs: config.notifications?.dedupWindowMs ?? DEFAULT_NOTIFICATIONS.dedupWindowMs,
-				batchWindowMs: config.notifications?.batchWindowMs ?? DEFAULT_NOTIFICATIONS.batchWindowMs,
-				quietHours: config.notifications?.quietHours,
-				severityFilter: config.notifications?.severityFilter ?? [...DEFAULT_NOTIFICATIONS.severityFilter],
-				sink: (notification) => notificationSink?.write(notification),
-			},
-			(notification) => {
-				widgetState.notificationCount = (widgetState.notificationCount ?? 0) + 1;
-				sendFollowUp(
-					pi,
-					[notification.title, notification.body, notification.runId ? `Run: ${notification.runId}` : undefined]
-						.filter((line): line is string => Boolean(line))
-						.join("\n"),
-				);
-				if (currentCtx) {
-					const uiConfig = loadConfig(currentCtx.cwd).config.ui;
-					updateCrewWidget(
-						currentCtx,
-						widgetState,
-						uiConfig,
-						getManifestCache(currentCtx.cwd),
-						getRunSnapshotCache(currentCtx.cwd),
-					);
-					requestPowerbarUpdate(
-						pi.events,
-						currentCtx.cwd,
-						uiConfig,
-						getManifestCache(currentCtx.cwd),
-						getRunSnapshotCache(currentCtx.cwd),
-						currentCtx,
-						widgetState.notificationCount ?? 0,
-					);
-				}
-			},
-		);
+		// H3-L2 split: notifications wiring delegated to registration/lifecycle.ts.
+		void configureNotificationsFromRegistration(ctx);
 	};
-	const configureObservability = (ctx: ExtensionContext): void => {
-		heartbeatWatcher?.dispose();
-		if (autoRepairTimer) {
-			clearInterval(autoRepairTimer);
-			autoRepairTimer = undefined;
-		}
-		if (tempReconcileTimer) {
-			clearInterval(tempReconcileTimer);
-			tempReconcileTimer = undefined;
-		}
-		metricSink?.dispose();
-		eventMetricSub?.dispose();
-		otlpExporter?.dispose();
-		metricRegistry?.dispose();
-		heartbeatWatcher = undefined;
-		metricSink = undefined;
-		eventMetricSub = undefined;
-		otlpExporter = undefined;
-		metricRegistry = undefined;
-		const config = loadConfig(ctx.cwd).config;
-		if (config.observability?.enabled === false) return;
-		metricRegistry = createMetricRegistry();
-		eventMetricSub = wireEventToMetrics(pi.events, metricRegistry);
-		if (config.telemetry?.enabled !== false)
-			metricSink = createMetricFileSink({
-				crewRoot: projectCrewRoot(ctx.cwd),
-				registry: metricRegistry,
-				retentionDays: config.observability?.metricRetentionDays ?? 7,
-			});
-		if (config.otlp?.enabled === true && config.otlp.endpoint) {
-			const otlpEndpoint = config.otlp.endpoint;
-			const otlpHeaders = config.otlp.headers;
-			const otlpInterval = config.otlp.intervalMs;
-			const owningRegistry = metricRegistry;
-			// LAZY: opt-in OTLP export — load the exporter module on first enable.
-			void importOTLPExporter()
-				.then((Ctor) => {
-					if (cleanedUp || metricRegistry !== owningRegistry || !owningRegistry) return;
-					otlpExporter = new Ctor(
-						{
-							endpoint: otlpEndpoint,
-							headers: otlpHeaders,
-							intervalMs: otlpInterval,
-						},
-						owningRegistry,
-					);
-					otlpExporter.start();
-				})
-				.catch((error: unknown) => logInternalError("register.otlp-lazy-import", error));
-		}
-		heartbeatWatcher = new HeartbeatWatcher({
-			cwd: ctx.cwd,
-			pollIntervalMs: config.observability?.pollIntervalMs ?? 5000,
-			manifestCache: getManifestCache(ctx.cwd),
-			registry: metricRegistry,
-			router: {
-				enqueue: (notification) => {
-					notifyOperator(notification);
-					return true;
-				},
-			},
-			deadletterTickThreshold: config.reliability?.deadletterThreshold ?? 3,
-			onDeadletterTrigger: (manifest, taskId) => {
-				appendDeadletter(manifest, {
-					taskId,
-					runId: manifest.runId,
-					reason: "heartbeat-dead",
-					attempts: 0,
-					timestamp: new Date().toISOString(),
-				});
-				metricRegistry?.counter("crew.task.deadletter_total", "Deadletter triggers by reason").inc({ reason: "heartbeat-dead" });
-				pi.events?.emit?.("crew.task.deadletter", {
-					runId: manifest.runId,
-					taskId,
-					reason: "heartbeat-dead",
-				});
-			},
+	async function configureNotificationsFromRegistration(ctx: ExtensionContext): Promise<void> {
+		// LAZY: registration/lifecycle is heavy (notification-router + sink)
+		const lifecycleModule = await import("./registration/lifecycle.ts");
+		await lifecycleModule.configureNotifications(ctx, lifecycleState, {
+			pi,
+			widgetState,
+			getCurrentCtx: () => currentCtx,
+			getManifestCache,
+			getRunSnapshotCache,
+			requestPowerbarUpdate,
 		});
-		heartbeatWatcher.start();
-
-		// Auto-repair: periodically reconcile stale/zombie runs during runtime.
-		// This catches tasks whose worker process died without calling submit_result,
-		// or whose heartbeat went dead while the session is still active.
-		if (autoRepairTimer) {
-			clearInterval(autoRepairTimer);
-			autoRepairTimer = undefined;
-		}
-		if (tempReconcileTimer) {
-			clearInterval(tempReconcileTimer);
-			tempReconcileTimer = undefined;
-		}
-		const autoRepairIntervalMs = config.reliability?.autoRepairIntervalMs ?? 60_000;
-		if (autoRepairIntervalMs > 0) {
-			autoRepairTimer = setInterval(() => {
-				if (cleanedUp || !currentCtx) return;
-				try {
-					const staleResults = reconcileAllStaleRuns(currentCtx.cwd, getManifestCache(currentCtx.cwd));
-					if (staleResults.length > 0) {
-						for (const result of staleResults) {
-							if (result.repaired) {
-								notifyOperator({
-									id: `auto_repair_${result.runId}`,
-									severity: "info",
-									source: "auto-repair",
-									runId: result.runId,
-									title: `Auto-repaired stale run`,
-									body: result.detail,
-								});
-							}
-						}
-					}
-				} catch (error) {
-					logInternalError("register.autoRepair", error);
-				}
-			}, autoRepairIntervalMs);
-			autoRepairTimer.unref();
-		}
-
-		// Auto-repair: also scan /tmp/ for orphaned pi-crew-* workspaces.
-		// This catches zombie runs from tests or crashed sessions.
-		if (autoRepairIntervalMs > 0) {
-			tempReconcileTimer = setInterval(() => {
-				if (cleanedUp) return;
-				try {
-					reconcileOrphanedTempWorkspaces(Date.now(), {
-						cleanupOrphanedTempDirs: config.reliability?.cleanupOrphanedTempDirs,
-					});
-					// Layer 4: also clean orphan temp dirs under
-					// ~/.pi/agent/pi-crew/tmp/ that the SIGKILL'd parent
-					// processes left behind. Catches anything Layers 1-3 missed.
-					const orphanResult = cleanupOrphanTempDirs();
-					if (orphanResult.cleaned > 0) {
-						notifyOperator({
-							id: `layer4_temp_cleanup_${Date.now()}`,
-							severity: "info",
-							source: "temp-cleanup",
-							title: `Layer 4: cleaned ${orphanResult.cleaned} orphan temp dir(s)`,
-							body: `~/.pi/agent/pi-crew/tmp/ orphans older than 24h removed (scanned ${orphanResult.scanned}, failed ${orphanResult.failed}).`,
-						});
-					}
-					// Layer 5: clean legacy /tmp/pi-crew-* prompt/task orphans
-					// from before commit 8ba270d moved temp dirs out of /tmp.
-					// The existing reconcileOrphanedTempWorkspaces only cleans
-					// dirs containing .crew/state/runs/ (run-state dirs), so
-					// prompt/task orphans are never touched by Layer 3.
-					const legacyResult = cleanupLegacyOrphanTempDirs();
-					if (legacyResult.cleaned > 0) {
-						notifyOperator({
-							id: `layer5_legacy_temp_cleanup_${Date.now()}`,
-							severity: "info",
-							source: "temp-cleanup",
-							title: `Layer 5: cleaned ${legacyResult.cleaned} legacy /tmp/pi-crew-* orphan(s)`,
-							body: `Pre-fix /tmp/pi-crew-* prompt/task orphans (no .crew/state/runs/, >24h) removed (scanned ${legacyResult.scanned}, failed ${legacyResult.failed}).`,
-						});
-					}
-				} catch (error) {
-					logInternalError("register.tempAutoRepair", error);
-				}
-			}, autoRepairIntervalMs * 5); // Less frequent: every 5 min by default
-			tempReconcileTimer.unref();
-		}
-
-		if (config.reliability?.autoRecover === true) {
-			const cwdSnapshot = ctx.cwd;
-			const cacheSnapshot = getManifestCache(cwdSnapshot);
-			void importCrashRecovery()
-				.then(({ detectInterruptedRuns }) => {
-					if (cleanedUp) return;
-					for (const plan of detectInterruptedRuns(cwdSnapshot, cacheSnapshot)) {
-						notifyOperator({
-							id: `recovery_prompt_${plan.runId}`,
-							severity: "warning",
-							source: "crash-recovery",
-							runId: plan.runId,
-							title: `Run ${plan.runId} was interrupted`,
-							body: `${plan.resumableTasks.length} tasks pending recovery. Open dashboard to inspect before resuming.`,
-						});
-					}
-				})
-				.catch((error: unknown) => logInternalError("register.crash-recovery-lazy-import", error));
-		}
+	}
+	const configureObservability = (ctx: ExtensionContext): void => {
+		// H3-L2 split: observability installation delegated to registration/observability.ts.
+		// This keeps the orchestrator thin while preserving the same lifecycle:
+		// dispose prior → install fresh → gate on config flags.
+		void configureObservabilityFromRegistration(ctx);
 	};
+	// H3-L2 split: wraps the registration/observability.configureObservability call.
+	// Pulled out as a method so we can build the deps bag once at registration time
+	// and reuse it across session_start cycles.
+	async function configureObservabilityFromRegistration(ctx: ExtensionContext): Promise<void> {
+		// LAZY: registration/observability is heavy (HeartbeatWatcher + metric stack)
+		const observabilityModule = await import("./registration/observability.ts");
+		await observabilityModule.configureObservability(ctx, observabilityState, {
+			pi,
+			getManifestCache,
+			notifyOperator,
+			isCleanedUp: () => cleanedUp,
+			reconcileStaleRuns: (cwd, cache) => reconcileAllStaleRuns(cwd, cache),
+			reconcileOrphanedTempWorkspaces: (now, opts) => reconcileOrphanedTempWorkspaces(now, opts),
+			cleanupOrphanTempDirs,
+			cleanupLegacyOrphanTempDirs,
+			appendDeadletter: (manifest, entry) => appendDeadletter(manifest, entry as Parameters<typeof appendDeadletter>[1]),
+			importCrashRecovery,
+		});
+	}
 	const autoRecoveryLast = new Map<string, { insertedAt: number; lastAccessAt: number }>();
 	// FIX (Round 22, defensive cap): Bound the cooldown-gate Map. Each run
 	// contributes up to 4 keys (one per maybeNotifyHealth kind). Without a cap,
@@ -465,51 +269,18 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	// being re-accessed.
 	const AUTO_RECOVERY_LAST_MAX_ENTRIES = 1000;
 	const configureDeliveryCoordinator = (): void => {
-		deliveryCoordinator?.dispose();
-		deliveryCoordinator = undefined;
-		overflowTracker?.dispose();
-		overflowTracker = undefined;
-		deliveryCoordinator = new DeliveryCoordinator({
-			emit: (event, data) => {
-				pi.events?.emit?.(event, data);
-			},
-			sendFollowUp: (title, body) => {
-				sendFollowUp(pi, [title, body].filter((line): line is string => Boolean(line)).join("\n"));
-			},
-			sendWakeUp: (message) => {
-				sendAgentWakeUp(pi, message);
-			},
-		});
-		overflowTracker = new OverflowRecoveryTracker({
-			onPhaseChange: (state, previousPhase) => {
-				if (metricRegistry) {
-					metricRegistry.counter("crew.task.overflow_recovery_total", "Overflow recovery phase transitions").inc({
-						phase: state.phase,
-						previous_phase: previousPhase,
-					});
-				}
-				pi.events?.emit?.("crew.task.overflow", {
-					runId: state.runId,
-					taskId: state.taskId,
-					phase: state.phase,
-					previousPhase,
-				});
-			},
-			onTimeout: (state) => {
-				notifyOperator({
-					id: `overflow_timeout_${state.taskId}`,
-					severity: "warning",
-					source: "overflow-recovery",
-					runId: state.runId,
-					title: `Task ${state.taskId} overflow recovery timed out`,
-					body: `Phase: ${state.phase}, compaction_count: ${state.compactionCount}, retry_count: ${state.retryCount}. The task may be stuck.`,
-				});
-			},
+		// H3-L2 split: delivery coordinator + overflow tracker moved to registration/lifecycle.ts.
+		void configureDeliveryCoordinatorFromRegistration(lifecycleState, {
+			pi,
+			observabilityState,
+			notifyOperator,
+			sendFollowUp,
+			sendAgentWakeUp,
 		});
 	};
 	const notifyOperator = (notification: NotificationDescriptor): void => {
 		try {
-			notificationRouter?.enqueue(notification);
+			lifecycleState.notificationRouter?.enqueue(notification);
 		} catch (error) {
 			logInternalError("register.notification", error);
 			sendFollowUp(pi, [notification.title, notification.body].filter((line): line is string => Boolean(line)).join("\n"));
@@ -659,7 +430,6 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		},
 	);
 	const foregroundControllers = new Map<string | symbol, AbortController>();
-	let liveSidebarRunId: string | undefined;
 	let renderScheduler: RenderScheduler | undefined;
 	const renderSchedulerUnsubscribers: Array<() => void> = [];
 	// T4 (v0.8.3): terminal tab title + Ghostty native progress bar. Lazily
@@ -711,70 +481,27 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		terminalStatus?.dispose();
 		terminalStatus = undefined;
 		terminalStatusActive = false;
-		liveSidebarRunId = undefined;
+		uiState.liveSidebarRunId = undefined;
 		if (currentCtx) stopCrewWidget(currentCtx, widgetState, loadConfig(currentCtx.cwd).config.ui);
 		clearPiCrewPowerbar(pi.events);
 	};
 	const openLiveSidebar = (ctx: ExtensionContext, runId: string): void => {
-		const uiConfig = loadConfig(ctx.cwd).config.ui;
-		const autoOpen = uiConfig?.autoOpenDashboard === true;
-		const foregroundAutoOpen = uiConfig?.autoOpenDashboardForForegroundRuns ?? DEFAULT_UI.autoOpenDashboardForForegroundRuns;
-		if (!ctx.hasUI || !autoOpen || !foregroundAutoOpen || (uiConfig?.dashboardPlacement ?? DEFAULT_UI.dashboardPlacement) !== "right")
-			return;
-		if (liveSidebarRunId === runId) return;
-		liveSidebarRunId = runId;
-		const widgetPlacement = uiConfig?.widgetPlacement ?? DEFAULT_UI.widgetPlacement;
-		setExtensionWidget(ctx, "pi-crew", undefined, {
-			placement: widgetPlacement,
-		});
-		setExtensionWidget(ctx, "pi-crew-active", undefined, {
-			placement: widgetPlacement,
-		});
-		widgetState.lastVisibility = "hidden";
-		widgetState.lastPlacement = widgetPlacement;
-		widgetState.lastKey = "pi-crew-active";
-		widgetState.model = undefined;
-		const width = Math.min(90, Math.max(40, uiConfig?.dashboardWidth ?? DEFAULT_UI.dashboardWidth));
-		void importLiveRunSidebar()
-			.then((LiveRunSidebar) => {
-				if (cleanedUp || !currentCtx) return;
-				void showCustom<undefined>(
-					ctx,
-					(_tui, theme, _keybindings, done) =>
-						new LiveRunSidebar({
-							cwd: ctx.cwd,
-							runId,
-							done,
-							theme,
-							config: uiConfig,
-							snapshotCache: getRunSnapshotCache(ctx.cwd),
-						}),
-					{
-						overlay: true,
-						overlayOptions: {
-							width,
-							minWidth: 40,
-							maxHeight: "100%",
-							anchor: "top-right",
-							offsetX: 0,
-							offsetY: 0,
-							margin: { top: 0, right: 0, bottom: 0, left: 0 },
-							visible: (termWidth: number) => termWidth >= 100,
-						},
-					},
-				).finally(() => {
-					if (liveSidebarRunId === runId) liveSidebarRunId = undefined;
-					updateCrewWidget(
-						ctx,
-						widgetState,
-						loadConfig(ctx.cwd).config.ui,
-						getManifestCache(ctx.cwd),
-						getRunSnapshotCache(ctx.cwd),
-					);
-				});
-			})
-			.catch((error: unknown) => logInternalError("register.live-sidebar-lazy-import", error));
+		// H3-L2 split: live sidebar delegated to registration/ui.ts.
+		void installLiveSidebarFromRegistration(ctx, runId);
 	};
+	// H3-L2 split: wraps registration/ui.ts installLiveSidebar call.
+	async function installLiveSidebarFromRegistration(ctx: ExtensionContext, runId: string): Promise<void> {
+		// LAZY: registration/ui only imported when a live sidebar is actually opened.
+		const uiModule = await import("./registration/ui.ts");
+		await uiModule.installLiveSidebar(ctx, runId, uiState, {
+			pi,
+			widgetState,
+			getManifestCache,
+			getRunSnapshotCache,
+			isCleanedUp: () => cleanedUp,
+			getCurrentCtx: () => currentCtx,
+		});
+	}
 	const startForegroundRun = (ctx: ExtensionContext, runner: (signal?: AbortSignal) => Promise<void>, runId?: string): void => {
 		const ownerGeneration = captureSessionGeneration();
 		const controller = new AbortController();
@@ -1017,30 +744,14 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		stopCrewWidget(currentCtx, widgetState, currentCtx ? loadConfig(currentCtx.cwd).config.ui : undefined);
 		clearPiCrewPowerbar(pi.events);
 		disposePowerbarCoalescer();
-		heartbeatWatcher?.dispose();
-		if (autoRepairTimer) {
-			clearInterval(autoRepairTimer);
-			autoRepairTimer = undefined;
-		}
-		if (tempReconcileTimer) {
-			clearInterval(tempReconcileTimer);
-			tempReconcileTimer = undefined;
-		}
-		metricSink?.dispose();
-		eventMetricSub?.dispose();
-		otlpExporter?.dispose();
-		metricRegistry?.dispose();
-		heartbeatWatcher = undefined;
-		metricSink = undefined;
-		eventMetricSub = undefined;
-		otlpExporter = undefined;
-		metricRegistry = undefined;
-		deliveryCoordinator?.dispose();
+		// H3-L2 split: observability disposal delegated to registration/observability.ts.
+		disposeObservability(observabilityState, cleanedUp);
+		lifecycleState.deliveryCoordinator?.dispose();
 		clearHooksScoped();
 		uninstallCrewGlobalRegistry();
-		overflowTracker?.dispose();
-		deliveryCoordinator = undefined;
-		overflowTracker = undefined;
+		lifecycleState.overflowTracker?.dispose();
+		lifecycleState.deliveryCoordinator = undefined;
+		lifecycleState.overflowTracker = undefined;
 		manifestCache.dispose();
 		runSnapshotCache.dispose?.();
 		// 2.10: drop cached findRepoRoot results when the extension reloads.
@@ -1048,10 +759,8 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		renderScheduler?.dispose();
 		renderScheduler = undefined;
 		autoRecoveryLast.clear();
-		notificationRouter?.dispose();
-		notificationSink?.dispose();
-		notificationRouter = undefined;
-		notificationSink = undefined;
+		// H3-L2 split: notification disposal delegated to registration/lifecycle.ts.
+		disposeNotifications(lifecycleState);
 		rpcHandle?.unsubscribe();
 		rpcHandle = undefined;
 		disposeI18n();
@@ -1355,7 +1064,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		configureNotifications(ctx);
 		configureObservability(ctx);
 		configureDeliveryCoordinator();
-		if (typeof sessionId === "string" && sessionId) deliveryCoordinator?.activate(sessionId);
+		if (typeof sessionId === "string" && sessionId) lifecycleState.deliveryCoordinator?.activate(sessionId);
 		tryRegisterSessionCleanup(pi, () => {
 			terminateActiveChildPiProcesses();
 			cleanupRuntime();
@@ -1459,7 +1168,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			// frame is ready, avoiding statSync(`runs/`) inside the hot path.
 			const manifests = lastPreloadedManifests;
 			if (!lastPreloadedConfig) backgroundPreload();
-			if (liveSidebarRunId) {
+			if (uiState.liveSidebarRunId) {
 				const placement = config?.widgetPlacement ?? DEFAULT_UI.widgetPlacement;
 				if (widgetState.lastVisibility !== "hidden" || widgetState.lastPlacement !== placement) {
 					setExtensionWidget(currentCtx, "pi-crew", undefined, {
@@ -1651,7 +1360,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	});
 	pi.on("session_before_switch", () => {
 		sessionGeneration++;
-		const pendingCount = deliveryCoordinator?.getPendingCount() ?? 0;
+		const pendingCount = lifecycleState.deliveryCoordinator?.getPendingCount() ?? 0;
 		try {
 			const activeRuns = currentCtx
 				? getManifestCache(currentCtx.cwd)
@@ -1667,7 +1376,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		if (pendingCount > 0) {
 			logInternalError("register.session-before-switch", `Switching session with ${pendingCount} pending deliveries`);
 		}
-		deliveryCoordinator?.deactivate();
+		lifecycleState.deliveryCoordinator?.deactivate();
 		resetPowerbarDedupState();
 		stopAsyncRunNotifier(notifierState);
 		stopSessionBoundSubagents();
@@ -1755,12 +1464,12 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		openLiveSidebar,
 		getManifestCache,
 		getRunSnapshotCache,
-		getMetricRegistry: () => metricRegistry,
+		getMetricRegistry: () => observabilityState.metricRegistry,
 		widgetState,
 		onJsonEvent: (taskId, runId, event) => {
 			const record = event as Record<string, unknown>;
 			const eventType = typeof record.type === "string" ? record.type : undefined;
-			if (eventType) overflowTracker?.feedEvent(taskId, runId, eventType);
+			if (eventType) lifecycleState.overflowTracker?.feedEvent(taskId, runId, eventType);
 		},
 	});
 	registerSubagentTools(pi, subagentManager, {
@@ -1792,7 +1501,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		openLiveSidebar,
 		getManifestCache,
 		getRunSnapshotCache,
-		getMetricRegistry: () => metricRegistry,
+		getMetricRegistry: () => observabilityState.metricRegistry,
 		dismissNotifications: () => {
 			widgetState.notificationCount = 0;
 			if (currentCtx) {
