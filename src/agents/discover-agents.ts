@@ -358,6 +358,17 @@ export function sanitizeAgentSystemPrompt(content: string, source: ResourceSourc
 	return sanitized.trim();
 }
 
+/**
+ * M4: per-process dedup set of agent filePaths for which we've already
+ * emitted the `contextMode: fork` warn-only notice. Avoids spam when
+ * the discovery cache reloads or the same agent is parsed multiple
+ * times in a session. Exported for test reset.
+ */
+const warnedForkAgents = new Set<string>();
+export function __test_resetForkWarnings(): void {
+	warnedForkAgents.clear();
+}
+
 function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig | undefined {
 	try {
 		const content = fs.readFileSync(filePath, "utf-8");
@@ -373,6 +384,27 @@ function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig |
 		// SEC-002: Sanitize system prompt based on source trust level
 		const rawSystemPrompt = body.trim();
 		const systemPrompt = sanitizeAgentSystemPrompt(rawSystemPrompt, source);
+
+		const contextMode = parseContextMode(frontmatter.contextMode);
+
+		// M4: warn-only when contextMode=fork is configured but the
+		// runtime is the default child-process path. `contextMode: fork`
+		// is only effective in the live-session runtime (the experimental
+		// path that runs the agent IN the parent pi's session). The
+		// default child-process path (runChildPi in src/runtime/child-pi.ts)
+		// spawns a NEW pi process and has no parent session to inherit,
+		// so the agent will behave as `fresh` regardless of the setting.
+		// We warn (not throw) so existing configs that predate live-session
+		// keep working. Deduped per-filePath so we don't spam on cache
+		// reload. Use console.warn (no logger hook here yet; a future
+		// refactor could pipe through the same log channel as
+		// logInternalError below).
+		if (contextMode === "fork" && !warnedForkAgents.has(filePath)) {
+			console.warn(
+				"contextMode: 'fork' is only effective in live-session runtime; current default child-process will behave as 'fresh'. See docs/runtime-modes.md.",
+			);
+			warnedForkAgents.add(filePath);
+		}
 
 		return {
 			name,
@@ -394,7 +426,7 @@ function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig |
 			memory: parseMemory(frontmatter.memory),
 			loadMode: parseLoadMode(frontmatter.loadMode),
 			defaultTools: frontmatter.defaultTools !== undefined ? (parseCsv(frontmatter.defaultTools) ?? null) : undefined,
-			contextMode: parseContextMode(frontmatter.contextMode),
+			contextMode,
 			maxTurns: (() => {
 				const n = Number.parseInt(frontmatter.maxTurns, 10);
 				return Number.isFinite(n) && n > 0 ? n : undefined;
