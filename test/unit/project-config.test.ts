@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { loadConfig, projectConfigPath } from "../../src/config/config.ts";
 
 test("loadConfig merges project config but ignores sensitive project trust-boundary keys", () => {
@@ -16,10 +16,39 @@ test("loadConfig merges project config but ignores sensitive project trust-bound
 	try {
 		const userConfig = path.join(tmp, ".pi", "agent", "extensions", "pi-crew", "config.json");
 		fs.mkdirSync(path.dirname(userConfig), { recursive: true });
-		fs.writeFileSync(userConfig, JSON.stringify({ asyncByDefault: true, autonomous: { profile: "suggested", preferAsyncForLongTasks: false }, runtime: { isolationPolicy: { isolatedRoles: ["executor"], defaultRuntime: "child-process" } } }), "utf-8");
+		fs.writeFileSync(
+			userConfig,
+			JSON.stringify({
+				asyncByDefault: true,
+				autonomous: {
+					profile: "suggested",
+					preferAsyncForLongTasks: false,
+				},
+				runtime: {
+					isolationPolicy: {
+						isolatedRoles: ["executor"],
+						defaultRuntime: "child-process",
+					},
+				},
+			}),
+			"utf-8",
+		);
 		const projectConfig = projectConfigPath(tmp);
 		fs.mkdirSync(path.dirname(projectConfig), { recursive: true });
-		fs.writeFileSync(projectConfig, JSON.stringify({ executeWorkers: true, autonomous: { profile: "manual" }, runtime: { isolationPolicy: { isolatedRoles: [], defaultRuntime: "live-session" } } }), "utf-8");
+		fs.writeFileSync(
+			projectConfig,
+			JSON.stringify({
+				executeWorkers: true,
+				autonomous: { profile: "manual" },
+				runtime: {
+					isolationPolicy: {
+						isolatedRoles: [],
+						defaultRuntime: "live-session",
+					},
+				},
+			}),
+			"utf-8",
+		);
 
 		const loaded = loadConfig(tmp);
 		assert.equal(loaded.config.asyncByDefault, true);
@@ -28,7 +57,10 @@ test("loadConfig merges project config but ignores sensitive project trust-bound
 		assert.equal(loaded.config.autonomous?.profile, "suggested");
 		assert.ok(loaded.warnings?.some((warning) => warning.includes("autonomous.profile")));
 		assert.equal(loaded.config.autonomous?.preferAsyncForLongTasks, false);
-		assert.deepEqual(loaded.config.runtime?.isolationPolicy, { isolatedRoles: ["executor"], defaultRuntime: "child-process" });
+		assert.deepEqual(loaded.config.runtime?.isolationPolicy, {
+			isolatedRoles: ["executor"],
+			defaultRuntime: "child-process",
+		});
 		assert.ok(loaded.warnings?.some((warning) => warning.includes("runtime.isolationPolicy")));
 		assert.ok(loaded.paths.includes(projectConfig));
 	} finally {

@@ -1,8 +1,8 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { expandParallelResearchWorkflow } from "../../src/runtime/parallel-research.ts";
 import { getPiSpawnCommand } from "../../src/runtime/pi-spawn.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
@@ -15,8 +15,18 @@ const parallelResearchWorkflow: WorkflowConfig = {
 	steps: [
 		{ id: "discover", role: "explorer", task: "discover" },
 		{ id: "explore-core", role: "explorer", task: "explore core" },
-		{ id: "synthesize", role: "analyst", task: "synthesize", dependsOn: ["explore-core"] },
-		{ id: "write", role: "writer", task: "write", dependsOn: ["synthesize"] },
+		{
+			id: "synthesize",
+			role: "analyst",
+			task: "synthesize",
+			dependsOn: ["explore-core"],
+		},
+		{
+			id: "write",
+			role: "writer",
+			task: "write",
+			dependsOn: ["synthesize"],
+		},
 	],
 };
 
@@ -32,7 +42,10 @@ test("multi-shard fanout expands Source/pi-* projects and wires synthesize depen
 		assert.equal(shards.length, 4);
 		assert.ok(shards.every((step) => /Source\/pi-/.test(step.task ?? "")));
 		const synthesize = expanded.steps.find((step) => step.id === "synthesize");
-		assert.deepEqual(synthesize?.dependsOn, shards.map((step) => step.id));
+		assert.deepEqual(
+			synthesize?.dependsOn,
+			shards.map((step) => step.id),
+		);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}

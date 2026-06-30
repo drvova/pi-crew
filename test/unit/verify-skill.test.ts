@@ -2,11 +2,11 @@
  * Verify Skill Script Tests
  */
 
-import test from "node:test";
 import assert from "node:assert";
+import test from "node:test";
 import * as fs from "fs";
-import * as path from "path";
 import * as os from "os";
+import * as path from "path";
 
 // Import verification functions by re-implementing the logic for testing
 // This allows testing the pattern matching logic without running the script
@@ -68,20 +68,20 @@ function hasAntiPatternSection(content: string): boolean {
 
 function extractGates(content: string): Gate[] {
 	const gates: Gate[] = [];
-	
+
 	// Check for explicit gate sections
 	const gateSectionMatch = content.match(/(?:^|\n)(?:##|###)\s*(RED|GREEN)[\s_-]*(GATE|Gates?)[^\n]*\n([\s\S]*?)(?=\n##|\n###|$)/gi);
-	
+
 	if (gateSectionMatch) {
 		for (const match of gateSectionMatch) {
 			const typeMatch = match.match(/(RED|GREEN)/i);
 			if (typeMatch) {
 				const type = typeMatch[1].toLowerCase() as "red" | "green";
-				
+
 				const conditionMatch = match.match(/condition[:\s]+([^\n]+)/i);
 				const checkMatch = match.match(/check[:\s]+([^\n]+)/i);
 				const failMatch = match.match(/(?:fail|message)[:\s]+([^\n]+)/i);
-				
+
 				if (conditionMatch || checkMatch) {
 					gates.push({
 						type,
@@ -93,7 +93,7 @@ function extractGates(content: string): Gate[] {
 			}
 		}
 	}
-	
+
 	// Look for explicit pass/fail checks
 	for (const pattern of PASS_FAIL_PATTERNS) {
 		const matches = content.match(new RegExp(pattern, "gi"));
@@ -101,9 +101,9 @@ function extractGates(content: string): Gate[] {
 			for (const match of matches) {
 				const contextMatch = content.substring(
 					Math.max(0, content.indexOf(match) - 200),
-					content.indexOf(match) + match.length + 200
+					content.indexOf(match) + match.length + 200,
 				);
-				
+
 				if (
 					/check|verify|validate|test|pass|fail|criteria|condition/i.test(contextMatch) &&
 					!/best practice|recommend|suggest/i.test(contextMatch)
@@ -118,7 +118,7 @@ function extractGates(content: string): Gate[] {
 			}
 		}
 	}
-	
+
 	return gates;
 }
 
@@ -131,15 +131,13 @@ function isDescriptiveOnly(content: string): boolean {
 		/purely\s+descriptive/i,
 		/descriptive\s+only/i,
 	];
-	
-	const hasDescriptiveOnly = descriptiveIndicators.some((pattern) =>
-		pattern.test(content)
-	);
-	
+
+	const hasDescriptiveOnly = descriptiveIndicators.some((pattern) => pattern.test(content));
+
 	const shouldCount = (content.match(/\bshould\b/gi) || []).length;
 	const mustCount = (content.match(/\bmust\b/gi) || []).length;
 	const shallCount = (content.match(/\bshall\b/gi) || []).length;
-	
+
 	return hasDescriptiveOnly || (shouldCount > 10 && mustCount === 0 && shallCount === 0);
 }
 
@@ -155,32 +153,32 @@ function verifySkillContent(content: string): Omit<VerificationResult, "skillPat
 		warnings: [] as string[],
 		passed: false,
 	};
-	
+
 	result.hasTriggerSection = hasTriggerSection(content);
 	if (!result.hasTriggerSection) {
 		result.warnings.push("No trigger section found");
 	}
-	
+
 	result.hasAntiPatterns = hasAntiPatternSection(content);
 	if (!result.hasAntiPatterns) {
 		result.warnings.push("No anti-patterns section found");
 	}
-	
+
 	result.gates = extractGates(content);
 	result.hasGates = result.gates.length > 0;
-	
+
 	if (!result.hasGates) {
 		result.errors.push("No RED/GREEN gate found - only descriptive text");
 	}
-	
+
 	result.isDescriptiveOnly = isDescriptiveOnly(content);
 	if (result.isDescriptiveOnly) {
 		result.warnings.push("Skill appears to be purely descriptive without enforcement");
 	}
-	
+
 	result.hasEnforceableGates = result.hasGates && !result.isDescriptiveOnly;
 	result.passed = result.hasTriggerSection && result.hasEnforceableGates;
-	
+
 	return result;
 }
 
@@ -367,21 +365,23 @@ test("isDescriptiveOnly detects pure recommendations", () => {
 test("isDescriptiveOnly counts should vs must", () => {
 	const lotsOfShould = "should do this " + "should do that ".repeat(11);
 	assert.ok(isDescriptiveOnly(lotsOfShould), "lots of should without must");
-	
+
 	const withMust = lotsOfShould + " must do something";
 	assert.ok(!isDescriptiveOnly(withMust), "with must present");
 });
 
 test("Gate extraction from RED/GREEN sections", () => {
-	const content = "## RED Gate: Block Bad Input\n- condition: input is valid\n- check: validate input\n- failMessage: Invalid input rejected\n\n## GREEN Gate: Proceed\n- condition: validated\n- check: confirm\n- failMessage: Not confirmed";
-	
+	const content =
+		"## RED Gate: Block Bad Input\n- condition: input is valid\n- check: validate input\n- failMessage: Invalid input rejected\n\n## GREEN Gate: Proceed\n- condition: validated\n- check: confirm\n- failMessage: Not confirmed";
+
 	const gates = extractGates(content);
 	assert.ok(gates.length >= 1, "Should extract gates");
 });
 
 test("Gate extraction from decision matrices", () => {
-	const content = "## Decision Matrix\n\n| Condition | Check | Result |\n|-----------|-------|--------|\n| Valid | verify | PASS |\n| Invalid | verify | FAIL |";
-	
+	const content =
+		"## Decision Matrix\n\n| Condition | Check | Result |\n|-----------|-------|--------|\n| Valid | verify | PASS |\n| Invalid | verify | FAIL |";
+
 	const gates = extractGates(content);
 	// Decision matrix parsing may not extract all gates, but should not crash
 	assert.ok(true, "Should not crash on decision matrix");

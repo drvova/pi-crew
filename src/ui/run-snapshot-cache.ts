@@ -1,17 +1,24 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { readCrewAgents, readCrewAgentsAsync, agentsPath, agentOutputPath } from "../runtime/crew-agent-records.ts";
+import { agentOutputPath, agentsPath, readCrewAgents, readCrewAgentsAsync } from "../runtime/crew-agent-records.ts";
 import type { CrewAgentRecord } from "../runtime/crew-agent-runtime.ts";
 import { isActiveRunStatus } from "../runtime/process-status.ts";
 import type { TeamEvent } from "../state/event-log.ts";
+import { sequencePath } from "../state/event-log.ts";
 import type { MailboxMessageStatus } from "../state/mailbox.ts";
 import { loadRunManifestById, loadRunManifestByIdAsync } from "../state/state-store.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
-import type { RunSnapshotCache as RunSnapshotCacheBase, RunUiGroupJoin, RunUiMailbox, RunUiProgress, RunUiSnapshot, RunUiUsage } from "./snapshot-types.ts";
-import { runEventBus } from "./run-event-bus.ts";
 import { extractDwfPhaseState } from "./dwf-phase-display.ts";
-import { sequencePath } from "../state/event-log.ts";
+import { runEventBus } from "./run-event-bus.ts";
+import type {
+	RunSnapshotCache as RunSnapshotCacheBase,
+	RunUiGroupJoin,
+	RunUiMailbox,
+	RunUiProgress,
+	RunUiSnapshot,
+	RunUiUsage,
+} from "./snapshot-types.ts";
 
 export interface RunSnapshotCache extends RunSnapshotCacheBase {
 	preloadStale(runId: string): Promise<RunUiSnapshot | undefined>;
@@ -90,7 +97,9 @@ function eventsStamp(eventsPath: string): FileStamp {
 		const raw = fs.readFileSync(sequencePath(eventsPath), "utf-8");
 		const seq = Number.parseInt(raw.trim(), 10);
 		if (Number.isFinite(seq) && seq >= 0) return { mtimeMs: 0, size: seq + 1 };
-	} catch { /* fall through to legacy stat */ }
+	} catch {
+		/* fall through to legacy stat */
+	}
 	return stampFile(eventsPath);
 }
 
@@ -99,12 +108,20 @@ async function eventsStampAsync(eventsPath: string): Promise<FileStamp> {
 		const raw = await fs.promises.readFile(sequencePath(eventsPath), "utf-8");
 		const seq = Number.parseInt(raw.trim(), 10);
 		if (Number.isFinite(seq) && seq >= 0) return { mtimeMs: 0, size: seq + 1 };
-	} catch { /* fall through to legacy stat */ }
+	} catch {
+		/* fall through to legacy stat */
+	}
 	return stampFileAsync(eventsPath);
 }
 
 function combineStamps(stamps: FileStamp[]): FileStamp {
-	return stamps.reduce((acc, stamp) => ({ mtimeMs: Math.max(acc.mtimeMs, stamp.mtimeMs), size: acc.size + stamp.size }), zeroStamp());
+	return stamps.reduce(
+		(acc, stamp) => ({
+			mtimeMs: Math.max(acc.mtimeMs, stamp.mtimeMs),
+			size: acc.size + stamp.size,
+		}),
+		zeroStamp(),
+	);
 }
 
 function mailboxStamp(manifest: TeamRunManifest): FileStamp {
@@ -116,7 +133,9 @@ function mailboxStamp(manifest: TeamRunManifest): FileStamp {
 	];
 	const tasksRoot = path.join(root, "tasks");
 	try {
-		for (const entry of fs.readdirSync(tasksRoot, { withFileTypes: true })) {
+		for (const entry of fs.readdirSync(tasksRoot, {
+			withFileTypes: true,
+		})) {
 			if (!entry.isDirectory()) continue;
 			stamps.push(stampFile(path.join(tasksRoot, entry.name, "inbox.jsonl")));
 			stamps.push(stampFile(path.join(tasksRoot, entry.name, "outbox.jsonl")));
@@ -136,7 +155,9 @@ async function mailboxStampAsync(manifest: TeamRunManifest): Promise<FileStamp> 
 	];
 	const tasksRoot = path.join(root, "tasks");
 	try {
-		for (const entry of await fs.promises.readdir(tasksRoot, { withFileTypes: true })) {
+		for (const entry of await fs.promises.readdir(tasksRoot, {
+			withFileTypes: true,
+		})) {
 			if (!entry.isDirectory()) continue;
 			stamps.push(await stampFileAsync(path.join(tasksRoot, entry.name, "inbox.jsonl")));
 			stamps.push(await stampFileAsync(path.join(tasksRoot, entry.name, "outbox.jsonl")));
@@ -168,11 +189,13 @@ function sameStamp(a: FileStamp, b: FileStamp): boolean {
 }
 
 function sameStamps(a: SnapshotStamps, b: SnapshotStamps): boolean {
-	return sameStamp(a.manifest, b.manifest)
-		&& sameStamp(a.tasks, b.tasks)
-		&& sameStamp(a.agents, b.agents)
-		&& sameStamp(a.events, b.events)
-		&& sameStamp(a.mailbox, b.mailbox);
+	return (
+		sameStamp(a.manifest, b.manifest) &&
+		sameStamp(a.tasks, b.tasks) &&
+		sameStamp(a.agents, b.agents) &&
+		sameStamp(a.events, b.events) &&
+		sameStamp(a.mailbox, b.mailbox)
+	);
 }
 
 function readTasks(tasksPath: string): TeamTaskState[] {
@@ -195,10 +218,12 @@ function tailJsonlLines<T>(filePath: string, limit: number, parse: (line: string
 			const buffer = Buffer.alloc(bytesToRead);
 			fs.readSync(fd, buffer, 0, bytesToRead, stat.size - bytesToRead);
 			const lines = buffer.toString("utf-8").split(/\r?\n/).filter(Boolean);
-			return lines.flatMap((line) => {
-				const item = parse(line);
-				return item ? [item] : [];
-			}).slice(-limit);
+			return lines
+				.flatMap((line) => {
+					const item = parse(line);
+					return item ? [item] : [];
+				})
+				.slice(-limit);
 		} finally {
 			fs.closeSync(fd);
 		}
@@ -218,10 +243,12 @@ async function tailJsonlLinesAsync<T>(filePath: string, limit: number, parse: (l
 			const buffer = Buffer.alloc(bytesToRead);
 			await handle.read(buffer, 0, bytesToRead, stat.size - bytesToRead);
 			const lines = buffer.toString("utf-8").split(/\r?\n/).filter(Boolean);
-			return lines.flatMap((line) => {
-				const item = parse(line);
-				return item ? [item] : [];
-			}).slice(-limit);
+			return lines
+				.flatMap((line) => {
+					const item = parse(line);
+					return item ? [item] : [];
+				})
+				.slice(-limit);
 		} finally {
 			await handle.close();
 		}
@@ -294,21 +321,39 @@ function recentOutputLines(manifest: TeamRunManifest, agents: CrewAgentRecord[],
 		const outputPath = safeAgentOutputPath(manifest, agent);
 		return outputPath ? tailLines(outputPath, limit) : [];
 	});
-	return [...fromProgress, ...fromFiles].map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean).slice(-limit);
+	return [...fromProgress, ...fromFiles]
+		.map((line) => line.replace(/\s+/g, " ").trim())
+		.filter(Boolean)
+		.slice(-limit);
 }
 
 async function recentOutputLinesAsync(manifest: TeamRunManifest, agents: CrewAgentRecord[], limit: number): Promise<string[]> {
 	const fromProgress = agents.flatMap((agent) => agent.progress?.recentOutput ?? []);
-	const fromFilesArrays = await Promise.all(agents.map((agent) => {
-		const outputPath = safeAgentOutputPath(manifest, agent);
-		return outputPath ? tailLinesAsync(outputPath, limit) : Promise.resolve([]);
-	}));
+	const fromFilesArrays = await Promise.all(
+		agents.map((agent) => {
+			const outputPath = safeAgentOutputPath(manifest, agent);
+			return outputPath ? tailLinesAsync(outputPath, limit) : Promise.resolve([]);
+		}),
+	);
 	const fromFiles = fromFilesArrays.flat();
-	return [...fromProgress, ...fromFiles].map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean).slice(-limit);
+	return [...fromProgress, ...fromFiles]
+		.map((line) => line.replace(/\s+/g, " ").trim())
+		.filter(Boolean)
+		.slice(-limit);
 }
 
 function progressFromTasks(tasks: TeamTaskState[]): RunUiProgress {
-	const progress: RunUiProgress = { total: tasks.length, completed: 0, running: 0, failed: 0, queued: 0, waiting: 0, cancelled: 0, skipped: 0, needsAttention: 0 };
+	const progress: RunUiProgress = {
+		total: tasks.length,
+		completed: 0,
+		running: 0,
+		failed: 0,
+		queued: 0,
+		waiting: 0,
+		cancelled: 0,
+		skipped: 0,
+		needsAttention: 0,
+	};
 	for (const task of tasks) {
 		if (task.status === "completed") progress.completed += 1;
 		else if (task.status === "running") progress.running += 1;
@@ -323,19 +368,25 @@ function progressFromTasks(tasks: TeamTaskState[]): RunUiProgress {
 }
 
 function usageFrom(tasks: TeamTaskState[], agents: CrewAgentRecord[]): RunUiUsage {
-	const taskUsage = tasks.reduce((acc, task) => {
-		acc.tokensIn += task.usage?.input ?? 0;
-		acc.tokensOut += task.usage?.output ?? 0;
-		acc.toolUses += task.agentProgress?.toolCount ?? 0;
-		return acc;
-	}, { tokensIn: 0, tokensOut: 0, toolUses: 0 });
+	const taskUsage = tasks.reduce(
+		(acc, task) => {
+			acc.tokensIn += task.usage?.input ?? 0;
+			acc.tokensOut += task.usage?.output ?? 0;
+			acc.toolUses += task.agentProgress?.toolCount ?? 0;
+			return acc;
+		},
+		{ tokensIn: 0, tokensOut: 0, toolUses: 0 },
+	);
 	if (taskUsage.tokensIn || taskUsage.tokensOut || taskUsage.toolUses) return taskUsage;
-	return agents.reduce((acc, agent) => {
-		acc.tokensIn += agent.usage?.input ?? 0;
-		acc.tokensOut += agent.usage?.output ?? agent.progress?.tokens ?? 0;
-		acc.toolUses += agent.toolUses ?? agent.progress?.toolCount ?? 0;
-		return acc;
-	}, { tokensIn: 0, tokensOut: 0, toolUses: 0 });
+	return agents.reduce(
+		(acc, agent) => {
+			acc.tokensIn += agent.usage?.input ?? 0;
+			acc.tokensOut += agent.usage?.output ?? agent.progress?.tokens ?? 0;
+			acc.toolUses += agent.toolUses ?? agent.progress?.toolCount ?? 0;
+			return acc;
+		},
+		{ tokensIn: 0, tokensOut: 0, toolUses: 0 },
+	);
 }
 
 function isMailboxStatus(value: unknown): value is MailboxMessageStatus {
@@ -377,9 +428,17 @@ function readGroupJoinMailbox(filePath: string, delivery: Record<string, Mailbox
 			const parsed = JSON.parse(line) as unknown;
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
 			const message = parsed as { id?: unknown; data?: unknown };
-			const data = message.data && typeof message.data === "object" && !Array.isArray(message.data) ? message.data as Record<string, unknown> : undefined;
+			const data =
+				message.data && typeof message.data === "object" && !Array.isArray(message.data)
+					? (message.data as Record<string, unknown>)
+					: undefined;
 			if (typeof message.id !== "string" || data?.kind !== "group_join" || typeof data.requestId !== "string") return undefined;
-			return { requestId: data.requestId, messageId: message.id, partial: data.partial === true, ack: delivery[message.id] === "acknowledged" ? "acknowledged" as const : "pending" as const };
+			return {
+				requestId: data.requestId,
+				messageId: message.id,
+				partial: data.partial === true,
+				ack: delivery[message.id] === "acknowledged" ? ("acknowledged" as const) : ("pending" as const),
+			};
 		} catch {
 			return undefined;
 		}
@@ -392,9 +451,17 @@ async function readGroupJoinMailboxAsync(filePath: string, delivery: Record<stri
 			const parsed = JSON.parse(line) as unknown;
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
 			const message = parsed as { id?: unknown; data?: unknown };
-			const data = message.data && typeof message.data === "object" && !Array.isArray(message.data) ? message.data as Record<string, unknown> : undefined;
+			const data =
+				message.data && typeof message.data === "object" && !Array.isArray(message.data)
+					? (message.data as Record<string, unknown>)
+					: undefined;
 			if (typeof message.id !== "string" || data?.kind !== "group_join" || typeof data.requestId !== "string") return undefined;
-			return { requestId: data.requestId, messageId: message.id, partial: data.partial === true, ack: delivery[message.id] === "acknowledged" ? "acknowledged" as const : "pending" as const };
+			return {
+				requestId: data.requestId,
+				messageId: message.id,
+				partial: data.partial === true,
+				ack: delivery[message.id] === "acknowledged" ? ("acknowledged" as const) : ("pending" as const),
+			};
 		} catch {
 			return undefined;
 		}
@@ -435,10 +502,20 @@ function readMailboxCounts(filePath: string, delivery: Record<string, MailboxMes
 		try {
 			const parsed = JSON.parse(line) as unknown;
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return 0;
-			const msg = parsed as { id?: unknown; status?: unknown; kind?: unknown; data?: unknown };
+			const msg = parsed as {
+				id?: unknown;
+				status?: unknown;
+				kind?: unknown;
+				data?: unknown;
+			};
 			if (typeof msg.id !== "string" || !isMailboxStatus(msg.status)) return 0;
 			if (msg.status !== "acknowledged" && delivery[msg.id] !== "acknowledged") {
-				const kind = typeof msg.kind === "string" ? msg.kind : typeof (msg.data as Record<string, unknown>)?.kind === "string" ? (msg.data as Record<string, unknown>).kind as string : undefined;
+				const kind =
+					typeof msg.kind === "string"
+						? msg.kind
+						: typeof (msg.data as Record<string, unknown>)?.kind === "string"
+							? ((msg.data as Record<string, unknown>).kind as string)
+							: undefined;
 				if (kind === "steer") kindCounts.steer++;
 				else if (kind === "follow-up") kindCounts.followUp++;
 				else if (kind === "response") kindCounts.response++;
@@ -451,19 +528,36 @@ function readMailboxCounts(filePath: string, delivery: Record<string, MailboxMes
 		}
 	}) as number[];
 	const count = items.reduce((sum, val) => sum + val, 0);
-	return { count, approximate: tailApproximate(filePath), steer: kindCounts.steer, followUp: kindCounts.followUp, response: kindCounts.response, message: kindCounts.message };
+	return {
+		count,
+		approximate: tailApproximate(filePath),
+		steer: kindCounts.steer,
+		followUp: kindCounts.followUp,
+		response: kindCounts.response,
+		message: kindCounts.message,
+	};
 }
 
 async function readMailboxCountsAsync(filePath: string, delivery: Record<string, MailboxMessageStatus>): Promise<MailboxKindCount> {
 	const kindCounts = { steer: 0, followUp: 0, response: 0, message: 0 };
-	const items = await tailJsonlLinesAsync(filePath, MAX_TAIL_LINES, (line) => {
+	const items = (await tailJsonlLinesAsync(filePath, MAX_TAIL_LINES, (line) => {
 		try {
 			const parsed = JSON.parse(line) as unknown;
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return 0;
-			const msg = parsed as { id?: unknown; status?: unknown; kind?: unknown; data?: unknown };
+			const msg = parsed as {
+				id?: unknown;
+				status?: unknown;
+				kind?: unknown;
+				data?: unknown;
+			};
 			if (typeof msg.id !== "string" || !isMailboxStatus(msg.status)) return 0;
 			if (msg.status !== "acknowledged" && delivery[msg.id] !== "acknowledged") {
-				const kind = typeof msg.kind === "string" ? msg.kind : typeof (msg.data as Record<string, unknown>)?.kind === "string" ? (msg.data as Record<string, unknown>).kind as string : undefined;
+				const kind =
+					typeof msg.kind === "string"
+						? msg.kind
+						: typeof (msg.data as Record<string, unknown>)?.kind === "string"
+							? ((msg.data as Record<string, unknown>).kind as string)
+							: undefined;
 				if (kind === "steer") kindCounts.steer++;
 				else if (kind === "follow-up") kindCounts.followUp++;
 				else if (kind === "response") kindCounts.response++;
@@ -474,9 +568,16 @@ async function readMailboxCountsAsync(filePath: string, delivery: Record<string,
 		} catch {
 			return 0;
 		}
-	}) as number[];
+	})) as number[];
 	const count = items.reduce((sum, val) => sum + val, 0);
-	return { count, approximate: await tailApproximateAsync(filePath), steer: kindCounts.steer, followUp: kindCounts.followUp, response: kindCounts.response, message: kindCounts.message };
+	return {
+		count,
+		approximate: await tailApproximateAsync(filePath),
+		steer: kindCounts.steer,
+		followUp: kindCounts.followUp,
+		response: kindCounts.response,
+		message: kindCounts.message,
+	};
 }
 
 function groupJoinsFrom(manifest: TeamRunManifest): RunUiGroupJoin[] {
@@ -509,7 +610,9 @@ function mailboxFrom(manifest: TeamRunManifest, agents: CrewAgentRecord[]): RunU
 	let outbox = readMailboxCounts(path.join(root, "outbox.jsonl"), delivery);
 	const tasksRoot = path.join(root, "tasks");
 	try {
-		for (const entry of fs.readdirSync(tasksRoot, { withFileTypes: true })) {
+		for (const entry of fs.readdirSync(tasksRoot, {
+			withFileTypes: true,
+		})) {
 			if (!entry.isDirectory()) continue;
 			const taskInbox = readMailboxCounts(path.join(tasksRoot, entry.name, "inbox.jsonl"), delivery);
 			const taskOutbox = readMailboxCounts(path.join(tasksRoot, entry.name, "outbox.jsonl"), delivery);
@@ -521,8 +624,14 @@ function mailboxFrom(manifest: TeamRunManifest, agents: CrewAgentRecord[]): RunU
 	}
 	const attentionAgents = agents.filter((agent) => agent.progress?.activityState === "needs_attention").length;
 	return {
-		inboxUnread: inbox.count, outboxPending: outbox.count, needsAttention: inbox.count + attentionAgents, approximate: inbox.approximate || outbox.approximate,
-		steerUnread: inbox.steer + outbox.steer, followUpUnread: inbox.followUp + outbox.followUp, responseUnread: inbox.response + outbox.response, messageUnread: inbox.message + outbox.message,
+		inboxUnread: inbox.count,
+		outboxPending: outbox.count,
+		needsAttention: inbox.count + attentionAgents,
+		approximate: inbox.approximate || outbox.approximate,
+		steerUnread: inbox.steer + outbox.steer,
+		followUpUnread: inbox.followUp + outbox.followUp,
+		responseUnread: inbox.response + outbox.response,
+		messageUnread: inbox.message + outbox.message,
 	};
 }
 
@@ -533,7 +642,9 @@ async function mailboxFromAsync(manifest: TeamRunManifest, agents: CrewAgentReco
 	let outbox = await readMailboxCountsAsync(path.join(root, "outbox.jsonl"), delivery);
 	const tasksRoot = path.join(root, "tasks");
 	try {
-		for (const entry of await fs.promises.readdir(tasksRoot, { withFileTypes: true })) {
+		for (const entry of await fs.promises.readdir(tasksRoot, {
+			withFileTypes: true,
+		})) {
 			if (!entry.isDirectory()) continue;
 			const taskInbox = await readMailboxCountsAsync(path.join(tasksRoot, entry.name, "inbox.jsonl"), delivery);
 			const taskOutbox = await readMailboxCountsAsync(path.join(tasksRoot, entry.name, "outbox.jsonl"), delivery);
@@ -545,33 +656,59 @@ async function mailboxFromAsync(manifest: TeamRunManifest, agents: CrewAgentReco
 	}
 	const attentionAgents = agents.filter((agent) => agent.progress?.activityState === "needs_attention").length;
 	return {
-		inboxUnread: inbox.count, outboxPending: outbox.count, needsAttention: inbox.count + attentionAgents, approximate: inbox.approximate || outbox.approximate,
-		steerUnread: inbox.steer + outbox.steer, followUpUnread: inbox.followUp + outbox.followUp, responseUnread: inbox.response + outbox.response, messageUnread: inbox.message + outbox.message,
+		inboxUnread: inbox.count,
+		outboxPending: outbox.count,
+		needsAttention: inbox.count + attentionAgents,
+		approximate: inbox.approximate || outbox.approximate,
+		steerUnread: inbox.steer + outbox.steer,
+		followUpUnread: inbox.followUp + outbox.followUp,
+		responseUnread: inbox.response + outbox.response,
+		messageUnread: inbox.message + outbox.message,
 	};
 }
 
 function cancellationReasonFromEvents(events: TeamEvent[]): string | undefined {
-	return [...events].reverse().find((event) => event.type === "run.cancelled" && typeof event.data?.reason === "string")?.data?.reason as string | undefined;
+	return [...events].reverse().find((event) => event.type === "run.cancelled" && typeof event.data?.reason === "string")?.data?.reason as
+		| string
+		| undefined;
 }
 
 function signatureFor(input: Omit<RunUiSnapshot, "signature" | "fetchedAt" | "sliceSignatures">, stamps: SnapshotStamps): string {
 	try {
 		const digest = createHash("sha256");
-		digest.update(JSON.stringify({
-		run: [input.manifest.runId, input.manifest.status, input.manifest.updatedAt, input.manifest.artifacts.length],
-		tasks: input.tasks.map((task) => [task.id, task.status, task.startedAt, task.finishedAt, task.agentProgress, task.usage]),
-		agents: input.agents.map((agent) => [agent.id, agent.status, agent.startedAt, agent.completedAt, agent.toolUses, agent.progress, agent.usage, agent.model]),
-		progress: input.progress,
-		usage: input.usage,
-		mailbox: input.mailbox,
-		groupJoins: input.groupJoins,
-		events: input.recentEvents.map((event) => [event.metadata?.seq, event.time, event.type, event.taskId, event.message, event.data?.reason]),
-		cancellationReason: input.cancellationReason,
-		dwfPhaseState: input.dwfPhaseState,
-		output: input.recentOutputLines,
-		stamps,
-	}));
-	return digest.digest("hex").slice(0, 16);
+		digest.update(
+			JSON.stringify({
+				run: [input.manifest.runId, input.manifest.status, input.manifest.updatedAt, input.manifest.artifacts.length],
+				tasks: input.tasks.map((task) => [task.id, task.status, task.startedAt, task.finishedAt, task.agentProgress, task.usage]),
+				agents: input.agents.map((agent) => [
+					agent.id,
+					agent.status,
+					agent.startedAt,
+					agent.completedAt,
+					agent.toolUses,
+					agent.progress,
+					agent.usage,
+					agent.model,
+				]),
+				progress: input.progress,
+				usage: input.usage,
+				mailbox: input.mailbox,
+				groupJoins: input.groupJoins,
+				events: input.recentEvents.map((event) => [
+					event.metadata?.seq,
+					event.time,
+					event.type,
+					event.taskId,
+					event.message,
+					event.data?.reason,
+				]),
+				cancellationReason: input.cancellationReason,
+				dwfPhaseState: input.dwfPhaseState,
+				output: input.recentOutputLines,
+				stamps,
+			}),
+		);
+		return digest.digest("hex").slice(0, 16);
 	} catch {
 		// Circular reference or non-serializable data — fall back to timestamp.
 		return String(Date.now());
@@ -593,10 +730,30 @@ function sliceSignaturesFor(input: Omit<RunUiSnapshot, "signature" | "fetchedAt"
 	};
 	return {
 		tasks: hash(input.tasks.map((task) => [task.id, task.status, task.startedAt, task.finishedAt, task.agentProgress, task.usage])),
-		agents: hash(input.agents.map((agent) => [agent.id, agent.status, agent.startedAt, agent.completedAt, agent.toolUses, agent.progress, agent.usage, agent.model])),
+		agents: hash(
+			input.agents.map((agent) => [
+				agent.id,
+				agent.status,
+				agent.startedAt,
+				agent.completedAt,
+				agent.toolUses,
+				agent.progress,
+				agent.usage,
+				agent.model,
+			]),
+		),
 		mailbox: hash([input.mailbox, input.groupJoins]),
 		progress: hash([input.progress, input.usage, input.cancellationReason]),
-		events: hash(input.recentEvents.map((event) => [event.metadata?.seq, event.time, event.type, event.taskId, event.message, event.data?.reason])),
+		events: hash(
+			input.recentEvents.map((event) => [
+				event.metadata?.seq,
+				event.time,
+				event.type,
+				event.taskId,
+				event.message,
+				event.data?.reason,
+			]),
+		),
 	};
 }
 
@@ -623,7 +780,13 @@ async function stampsForAsync(manifest: TeamRunManifest, _agents: CrewAgentRecor
 		eventsStampAsync(manifest.eventsPath),
 		mailboxStampAsync(manifest),
 	]);
-	return { manifest: manifestStamp, tasks: tasksStamp, agents: agentsStamp, events: eventsStampValue, mailbox };
+	return {
+		manifest: manifestStamp,
+		tasks: tasksStamp,
+		agents: agentsStamp,
+		events: eventsStampValue,
+		mailbox,
+	};
 }
 
 export function createRunSnapshotCache(cwd: string, options: RunSnapshotCacheOptions = {}): RunSnapshotCache {
@@ -691,8 +854,18 @@ export function createRunSnapshotCache(cwd: string, options: RunSnapshotCacheOpt
 			recentOutputLines: recentOutputLines(loaded.manifest, agents, recentOutputLimit),
 		};
 		const stamps = stampsFor(loaded.manifest, agents);
-		const snapshot: RunUiSnapshot = { ...base, fetchedAt: Date.now(), signature: signatureFor(base, stamps), sliceSignatures: sliceSignaturesFor(base) };
-		return { snapshot, stamps, loadedAtMs: snapshot.fetchedAt, lastAccessMs: snapshot.fetchedAt };
+		const snapshot: RunUiSnapshot = {
+			...base,
+			fetchedAt: Date.now(),
+			signature: signatureFor(base, stamps),
+			sliceSignatures: sliceSignaturesFor(base),
+		};
+		return {
+			snapshot,
+			stamps,
+			loadedAtMs: snapshot.fetchedAt,
+			lastAccessMs: snapshot.fetchedAt,
+		};
 	}
 
 	async function buildAsync(runId: string, previous?: CacheEntry): Promise<CacheEntry> {
@@ -738,8 +911,18 @@ export function createRunSnapshotCache(cwd: string, options: RunSnapshotCacheOpt
 			recentOutputLines: recentOutput,
 		};
 		const stamps = await stampsForAsync(loaded.manifest, agents);
-		const snapshot: RunUiSnapshot = { ...base, fetchedAt: Date.now(), signature: signatureFor(base, stamps), sliceSignatures: sliceSignaturesFor(base) };
-		return { snapshot, stamps, loadedAtMs: snapshot.fetchedAt, lastAccessMs: snapshot.fetchedAt };
+		const snapshot: RunUiSnapshot = {
+			...base,
+			fetchedAt: Date.now(),
+			signature: signatureFor(base, stamps),
+			sliceSignatures: sliceSignaturesFor(base),
+		};
+		return {
+			snapshot,
+			stamps,
+			loadedAtMs: snapshot.fetchedAt,
+			lastAccessMs: snapshot.fetchedAt,
+		};
 	}
 
 	function currentStamps(previous: CacheEntry): SnapshotStamps {
@@ -819,10 +1002,17 @@ export function createRunSnapshotCache(cwd: string, options: RunSnapshotCacheOpt
 	const scheduleRefresh = (runId: string): void => {
 		const existing = pendingRefreshes.get(runId);
 		if (existing) clearTimeout(existing);
-		pendingRefreshes.set(runId, setTimeout(() => {
-			pendingRefreshes.delete(runId);
-			try { localRefreshIfStale(runId); } catch { /* best-effort; widget falls back gracefully */ }
-		}, INVAL_COALESCE_MS));
+		pendingRefreshes.set(
+			runId,
+			setTimeout(() => {
+				pendingRefreshes.delete(runId);
+				try {
+					localRefreshIfStale(runId);
+				} catch {
+					/* best-effort; widget falls back gracefully */
+				}
+			}, INVAL_COALESCE_MS),
+		);
 	};
 	const unsubState = runEventBus.onChannel("run:state", (event) => {
 		if (entries.has(event.runId)) scheduleRefresh(event.runId);

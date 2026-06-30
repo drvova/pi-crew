@@ -1,9 +1,16 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { waitForRun, registerRunPromise, resolveRunPromise, rejectRunPromise, clearRunPromisesForTest, hasActiveRunPromise } from "../../src/runtime/run-tracker.ts";
+import test from "node:test";
+import {
+	clearRunPromisesForTest,
+	hasActiveRunPromise,
+	registerRunPromise,
+	rejectRunPromise,
+	resolveRunPromise,
+	waitForRun,
+} from "../../src/runtime/run-tracker.ts";
 import { createRunManifest, saveRunManifest } from "../../src/state/state-store.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
@@ -32,10 +39,21 @@ test("waitForRun returns immediately for a terminal manifest on disk", async () 
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "tracker-"));
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	try {
-		const created = createRunManifest({ cwd, team, workflow, goal: "test" });
-		const completed = { ...created.manifest, status: "completed" as const, updatedAt: new Date().toISOString() };
+		const created = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "test",
+		});
+		const completed = {
+			...created.manifest,
+			status: "completed" as const,
+			updatedAt: new Date().toISOString(),
+		};
 		saveRunManifest(completed);
-		const result = await waitForRun(created.manifest.runId, cwd, { timeoutMs: 1000 });
+		const result = await waitForRun(created.manifest.runId, cwd, {
+			timeoutMs: 1000,
+		});
 		assert.equal(result.manifest.status, "completed");
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -46,18 +64,32 @@ test("waitForRun awaits a foreground promise and resolves when run completes", a
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "tracker-"));
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	try {
-		const created = createRunManifest({ cwd, team, workflow, goal: "test" });
-		const running = { ...created.manifest, status: "running" as const, updatedAt: new Date().toISOString() };
+		const created = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "test",
+		});
+		const running = {
+			...created.manifest,
+			status: "running" as const,
+			updatedAt: new Date().toISOString(),
+		};
 		saveRunManifest(running);
 
 		registerRunPromise(created.manifest.runId);
 		assert.equal(hasActiveRunPromise(created.manifest.runId), true);
 
 		setTimeout(() => {
-			resolveRunPromise(created.manifest.runId, { manifest: { ...running, status: "completed" }, tasks: [] });
+			resolveRunPromise(created.manifest.runId, {
+				manifest: { ...running, status: "completed" },
+				tasks: [],
+			});
 		}, 100);
 
-		const result = await waitForRun(created.manifest.runId, cwd, { timeoutMs: 5000 });
+		const result = await waitForRun(created.manifest.runId, cwd, {
+			timeoutMs: 5000,
+		});
 		assert.equal(result.manifest.status, "completed");
 		assert.equal(hasActiveRunPromise(created.manifest.runId), false);
 	} finally {
@@ -70,8 +102,17 @@ test("waitForRun rejects when run promise is rejected", async () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "tracker-"));
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	try {
-		const created = createRunManifest({ cwd, team, workflow, goal: "test" });
-		const running = { ...created.manifest, status: "running" as const, updatedAt: new Date().toISOString() };
+		const created = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "test",
+		});
+		const running = {
+			...created.manifest,
+			status: "running" as const,
+			updatedAt: new Date().toISOString(),
+		};
 		saveRunManifest(running);
 
 		registerRunPromise(created.manifest.runId);
@@ -81,7 +122,10 @@ test("waitForRun rejects when run promise is rejected", async () => {
 		}, 50);
 
 		await assert.rejects(
-			async () => await waitForRun(created.manifest.runId, cwd, { timeoutMs: 5000 }),
+			async () =>
+				await waitForRun(created.manifest.runId, cwd, {
+					timeoutMs: 5000,
+				}),
 			(error) => (error as Error).message === "Simulated run failure",
 		);
 	} finally {
@@ -94,12 +138,24 @@ test("waitForRun times out if run never finishes and no promise is registered", 
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "tracker-"));
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	try {
-		const created = createRunManifest({ cwd, team, workflow, goal: "test" });
-		const running = { ...created.manifest, status: "running" as const, updatedAt: new Date().toISOString() };
+		const created = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "test",
+		});
+		const running = {
+			...created.manifest,
+			status: "running" as const,
+			updatedAt: new Date().toISOString(),
+		};
 		saveRunManifest(running);
 
 		await assert.rejects(
-			async () => await waitForRun(created.manifest.runId, cwd, { timeoutMs: 300 }),
+			async () =>
+				await waitForRun(created.manifest.runId, cwd, {
+					timeoutMs: 300,
+				}),
 			(error) => (error as Error).message.includes("timed out"),
 		);
 	} finally {

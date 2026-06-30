@@ -9,15 +9,7 @@ import { getToolConfig } from "../config/role-tools.ts";
  * the wildcard expansion will pick it up. The 7 names below are stable
  * across pi v0.77+ and cover read, edit, write, bash, grep, find, ls.
  */
-export const BUILTIN_TOOL_NAMES: readonly string[] = [
-	"read",
-	"edit",
-	"write",
-	"bash",
-	"grep",
-	"find",
-	"ls",
-];
+export const BUILTIN_TOOL_NAMES: readonly string[] = ["read", "edit", "write", "bash", "grep", "find", "ls"];
 
 /**
  * F1 (v0.7.9): normalize the raw `tools:` frontmatter CSV into a `string[]`.
@@ -41,7 +33,10 @@ export function parseToolsField(raw: unknown): string[] | undefined {
 	const lowered = s.toLowerCase();
 	if (lowered === "none" || lowered === "[]") return [];
 	if (lowered === "*" || lowered === "all") return [...BUILTIN_TOOL_NAMES];
-	const items = s.split(",").map((t) => t.trim()).filter(Boolean);
+	const items = s
+		.split(",")
+		.map((t) => t.trim())
+		.filter(Boolean);
 	return items;
 }
 
@@ -160,9 +155,7 @@ function uniqueToolMerge(...lists: Array<string[] | undefined>): string[] | unde
 export function resolveToolPolicy(agent: AgentConfig, role?: string): ResolvedToolPolicy {
 	const roleConfig = role ? getToolConfig(role) : {};
 	// allowlist: source-aware precedence (see doc above).
-	const explicitTools = agent.source === "builtin"
-		? (roleConfig.tools ?? agent.tools)
-		: (agent.tools ?? roleConfig.tools);
+	const explicitTools = agent.source === "builtin" ? (roleConfig.tools ?? agent.tools) : (agent.tools ?? roleConfig.tools);
 	// denylist: additive merge of role excludeTools + agent disallowedTools.
 	const excludeTools = uniqueToolMerge(roleConfig.excludeTools, agent.disallowedTools);
 	return { tools: explicitTools, excludeTools };

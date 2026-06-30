@@ -31,17 +31,7 @@
  */
 
 import { createHash } from "node:crypto";
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	readdirSync,
-	unlinkSync,
-	openSync,
-	closeSync,
-	statSync,
-	writeFileSync,
-} from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import { atomicWriteJson } from "../state/atomic-write.ts";
 import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
@@ -69,7 +59,10 @@ export const defaultStartTimeResolver: StartTimeResolver = (pid: number): number
 		const stat = readFileSync(`/proc/${pid}/stat`, "utf-8");
 		const lastParen = stat.lastIndexOf(")");
 		if (lastParen === -1) return undefined;
-		const fieldsAfterComm = stat.slice(lastParen + 1).trim().split(/\s+/);
+		const fieldsAfterComm = stat
+			.slice(lastParen + 1)
+			.trim()
+			.split(/\s+/);
 		// starttime is at index 19 (the 20th field after comm) of /proc/<pid>/stat.
 		const startTimeClockTicks = Number(fieldsAfterComm[19]);
 		if (!Number.isFinite(startTimeClockTicks)) return undefined;
@@ -202,7 +195,11 @@ function claimLock(lockPath: string, contents: WorkspaceLockContents, staleRecla
 		// Caller verified the existing lock is logically stale; remove it and claim. A concurrent
 		// reclaimer might re-create between our unlink and our open — that's fine, we lose the race
 		// and return false, falling through to the queue path.
-		try { unlinkSync(lockPath); } catch { /* best-effort */ }
+		try {
+			unlinkSync(lockPath);
+		} catch {
+			/* best-effort */
+		}
 		return tryCreate();
 	}
 	if (tryCreate()) return true;
@@ -210,10 +207,16 @@ function claimLock(lockPath: string, contents: WorkspaceLockContents, staleRecla
 	try {
 		const stat = statSync(lockPath);
 		if (Date.now() - stat.mtimeMs > staleReclaimMs) {
-			try { unlinkSync(lockPath); } catch { /* fall through */ }
+			try {
+				unlinkSync(lockPath);
+			} catch {
+				/* fall through */
+			}
 			return tryCreate();
 		}
-	} catch { /* fall through to false */ }
+	} catch {
+		/* fall through to false */
+	}
 	return false;
 }
 
@@ -281,9 +284,7 @@ export async function acquireWorkspaceLock(
 	while (true) {
 		// Poll-loop: re-check the lock each tick until free/stale or aborted.
 		if (opts.signal?.aborted) {
-			throw new Error(
-				`workspace lock acquisition aborted for goal ${goalId} (cwd=${cwd})`,
-			);
+			throw new Error(`workspace lock acquisition aborted for goal ${goalId} (cwd=${cwd})`);
 		}
 		const existing = readLock(lockPath);
 		// Classify the existing lock: "absent" / "stale" (PID recycled or heartbeat dead) / "live".
@@ -293,7 +294,9 @@ export async function acquireWorkspaceLock(
 		// acquireWorkspaceLock poll loop would re-queue forever = hang.
 		const existingKind: "absent" | "stale" | "live" = !existing
 			? "absent"
-			: (isLockStale(existing, resolveStartTime, heartbeatStaleMs, now()).stale ? "stale" : "live");
+			: isLockStale(existing, resolveStartTime, heartbeatStaleMs, now()).stale
+				? "stale"
+				: "live";
 		if (existingKind !== "live") {
 			// Claim the lock (covers both no-lock and stale-lock cases).
 			// Cold-review #3 NIT #N1 fix: claim via O_EXCL (claimLock), NOT temp+rename — two
@@ -324,9 +327,7 @@ export async function acquireWorkspaceLock(
 		}
 		// Lock is held and live.
 		if (opts.failOnWorkspaceBusy) {
-			throw new Error(
-				`workspace busy: cwd=${cwd} held by goalId=${existing!.goalId} (pid=${existing!.pid})`,
-			);
+			throw new Error(`workspace busy: cwd=${cwd} held by goalId=${existing!.goalId} (pid=${existing!.pid})`);
 		}
 		// Queue: wait for the next poll interval, then re-check.
 		await sleepOrAbort(pollMs, opts.signal);
@@ -338,20 +339,10 @@ export async function acquireWorkspaceLock(
  * (goalId, pid, startTime). A stale handle (whose lock was reclaimed and
  * re-acquired by another goal) must NOT delete the new owner's lock.
  */
-function safeRelease(
-	lockPath: string,
-	goalId: string,
-	pid: number,
-	writtenStartTime: number | undefined,
-): void {
+function safeRelease(lockPath: string, goalId: string, pid: number, writtenStartTime: number | undefined): void {
 	try {
 		const current = readLock(lockPath);
-		if (
-			current &&
-			current.goalId === goalId &&
-			current.pid === pid &&
-			current.startTime === writtenStartTime
-		) {
+		if (current && current.goalId === goalId && current.pid === pid && current.startTime === writtenStartTime) {
 			unlinkSync(lockPath);
 		}
 	} catch {
@@ -390,7 +381,11 @@ function sleepOrAbort(ms: number, signal?: AbortSignal): Promise<void> {
  */
 export function isWorkspaceBusy(
 	cwd: string,
-	opts: { startTimeResolver?: StartTimeResolver; heartbeatStaleMs?: number; now?: () => number } = {},
+	opts: {
+		startTimeResolver?: StartTimeResolver;
+		heartbeatStaleMs?: number;
+		now?: () => number;
+	} = {},
 ): string | undefined {
 	const lockPath = workspaceLockPath(cwd);
 	const resolveStartTime = opts.startTimeResolver ?? defaultStartTimeResolver;

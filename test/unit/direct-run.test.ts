@@ -1,11 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	isDirectRun,
-	directTeamAndWorkflowFromRun,
-} from "../../src/runtime/direct-run.ts";
-import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
+import test from "node:test";
 import type { AgentConfig } from "../../src/agents/agent-config.ts";
+import { directTeamAndWorkflowFromRun, isDirectRun } from "../../src/runtime/direct-run.ts";
+import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
 /**
  * Round 28 (test coverage gaps): `direct-run.ts` provides direct-run detection
@@ -31,7 +28,10 @@ test("isDirectRun: returns false for review workflow", () => {
 // ─── directTeamAndWorkflowFromRun ──────────────────────────────────────────
 
 test("directTeamAndWorkflowFromRun: returns undefined for non-direct runs", () => {
-	const manifest = { team: "default", workflow: "implementation" } as TeamRunManifest;
+	const manifest = {
+		team: "default",
+		workflow: "implementation",
+	} as TeamRunManifest;
 	const result = directTeamAndWorkflowFromRun(manifest, [], []);
 	assert.equal(result, undefined);
 });
@@ -42,16 +42,20 @@ test("directTeamAndWorkflowFromRun: builds team/workflow from first task", () =>
 		workflow: "direct-agent",
 		workspaceMode: "single",
 	} as TeamRunManifest;
-	const tasks = [{
-		id: "task-1",
-		agent: "executor",
-		role: "agent",
-		stepId: "01_agent",
-	}] as TeamTaskState[];
-	const agents = [{
-		name: "executor",
-		description: "Implements code changes",
-	}] as AgentConfig[];
+	const tasks = [
+		{
+			id: "task-1",
+			agent: "executor",
+			role: "agent",
+			stepId: "01_agent",
+		},
+	] as TeamTaskState[];
+	const agents = [
+		{
+			name: "executor",
+			description: "Implements code changes",
+		},
+	] as AgentConfig[];
 
 	const result = directTeamAndWorkflowFromRun(manifest, tasks, agents);
 	assert.ok(result);

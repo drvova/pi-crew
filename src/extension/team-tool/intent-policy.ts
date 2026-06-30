@@ -36,7 +36,10 @@ export function enforceDestructiveIntent(
 	const label = DESTRUCTIVE_ACTION_LABELS[action];
 	return result(
 		`Destructive action '${label}' requires config.intent when policy.requireIntentForDestructiveActions is enabled.`,
-		{ action: action === "delete" ? "management" : action, status: "error" },
+		{
+			action: action === "delete" ? "management" : action,
+			status: "error",
+		},
 		true,
 	);
 }

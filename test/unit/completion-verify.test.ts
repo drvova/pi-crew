@@ -1,9 +1,14 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { verifyTaskCompletion, formatOutputPreview } from "../../src/runtime/completion-guard.ts";
-import type { TeamTaskState, TeamRunManifest, ArtifactDescriptor } from "../../src/state/types.ts";
+import { describe, it } from "node:test";
+import { formatOutputPreview, verifyTaskCompletion } from "../../src/runtime/completion-guard.ts";
+import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
-const makeArtifact = (overrides: Partial<ArtifactDescriptor> & { kind: ArtifactDescriptor["kind"]; producer: string }): ArtifactDescriptor => ({
+const makeArtifact = (
+	overrides: Partial<ArtifactDescriptor> & {
+		kind: ArtifactDescriptor["kind"];
+		producer: string;
+	},
+): ArtifactDescriptor => ({
 	path: "/tmp/artifact.txt",
 	createdAt: new Date().toISOString(),
 	retention: "run",
@@ -40,10 +45,7 @@ const baseTask: TeamTaskState = {
 
 describe("verifyTaskCompletion", () => {
 	it("returns green=0 for task with error", () => {
-		const result = verifyTaskCompletion(
-			{ ...baseTask, error: "something failed" },
-			emptyManifest,
-		);
+		const result = verifyTaskCompletion({ ...baseTask, error: "something failed" }, emptyManifest);
 		assert.equal(result.greenLevel, 0);
 		assert.ok(result.warnings.length > 0);
 	});
@@ -58,7 +60,10 @@ describe("verifyTaskCompletion", () => {
 		const result = verifyTaskCompletion(
 			{
 				...baseTask,
-				resultArtifact: makeArtifact({ kind: "result", producer: "task-1" }),
+				resultArtifact: makeArtifact({
+					kind: "result",
+					producer: "task-1",
+				}),
 			},
 			emptyManifest,
 		);
@@ -69,8 +74,14 @@ describe("verifyTaskCompletion", () => {
 		const result = verifyTaskCompletion(
 			{
 				...baseTask,
-				resultArtifact: makeArtifact({ kind: "result", producer: "task-1" }),
-				transcriptArtifact: makeArtifact({ kind: "log", producer: "task-1" }),
+				resultArtifact: makeArtifact({
+					kind: "result",
+					producer: "task-1",
+				}),
+				transcriptArtifact: makeArtifact({
+					kind: "log",
+					producer: "task-1",
+				}),
 			},
 			emptyManifest,
 		);
@@ -85,8 +96,14 @@ describe("verifyTaskCompletion", () => {
 		const result = verifyTaskCompletion(
 			{
 				...baseTask,
-				resultArtifact: makeArtifact({ kind: "result", producer: "task-1" }),
-				transcriptArtifact: makeArtifact({ kind: "log", producer: "task-1" }),
+				resultArtifact: makeArtifact({
+					kind: "result",
+					producer: "task-1",
+				}),
+				transcriptArtifact: makeArtifact({
+					kind: "log",
+					producer: "task-1",
+				}),
 			},
 			manifest,
 		);
@@ -94,10 +111,7 @@ describe("verifyTaskCompletion", () => {
 	});
 
 	it("warns about zero token usage", () => {
-		const result = verifyTaskCompletion(
-			{ ...baseTask, usage: { input: 0, output: 0 } },
-			emptyManifest,
-		);
+		const result = verifyTaskCompletion({ ...baseTask, usage: { input: 0, output: 0 } }, emptyManifest);
 		assert.ok(result.warnings.some((w) => w.includes("token")));
 	});
 });

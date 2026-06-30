@@ -2,22 +2,23 @@
  * Unit tests for conflict-detect.ts
  * Forked from oh-my-pi with pi-crew adaptations.
  */
-import { describe, it, before, after } from "node:test";
+
 import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { after, before, describe, it } from "node:test";
 import {
+	ConflictHistory,
+	expandContentTokens,
+	formatConflictSummary,
+	formatConflictWarning,
+	parseConflictUri,
+	renderConflictRegion,
 	scanConflictLines,
 	scanFileForConflicts,
 	scanFileForConflictsSync,
-	parseConflictUri,
-	ConflictHistory,
 	spliceConflict,
-	expandContentTokens,
-	renderConflictRegion,
-	formatConflictWarning,
-	formatConflictSummary,
 } from "../../src/utils/conflict-detect.ts";
 
 function tempFile(content: string): string {
@@ -28,15 +29,7 @@ function tempFile(content: string): string {
 
 describe("scanConflictLines", () => {
 	it("detects basic two-way conflict block", () => {
-		const lines = [
-			"line before",
-			"<<<<<<< HEAD",
-			"our change",
-			"=======",
-			"their change",
-			">>>>>>> feature",
-			"line after",
-		];
+		const lines = ["line before", "<<<<<<< HEAD", "our change", "=======", "their change", ">>>>>>> feature", "line after"];
 		const blocks = scanConflictLines(lines, 1);
 		assert.strictEqual(blocks.length, 1);
 		assert.strictEqual(blocks[0].startLine, 2);
@@ -49,13 +42,7 @@ describe("scanConflictLines", () => {
 	});
 
 	it("detects conflict with no labels", () => {
-		const lines = [
-			"<<<<<<<",
-			"ours content",
-			"=======",
-			"theirs content",
-			">>>>>>>",
-		];
+		const lines = ["<<<<<<<", "ours content", "=======", "theirs content", ">>>>>>>"];
 		const blocks = scanConflictLines(lines, 1);
 		assert.strictEqual(blocks.length, 1);
 		assert.strictEqual(blocks[0].oursLabel, undefined);
@@ -65,15 +52,7 @@ describe("scanConflictLines", () => {
 	});
 
 	it("detects diff3 conflict with base section", () => {
-		const lines = [
-			"<<<<<<< HEAD",
-			"new feature",
-			"||||||| old",
-			"original line",
-			"=======",
-			"another change",
-			">>>>>>> feature",
-		];
+		const lines = ["<<<<<<< HEAD", "new feature", "||||||| old", "original line", "=======", "another change", ">>>>>>> feature"];
 		const blocks = scanConflictLines(lines, 1);
 		assert.strictEqual(blocks.length, 1);
 		// baseLine is the ||||||| marker line
@@ -90,19 +69,7 @@ describe("scanConflictLines", () => {
 	});
 
 	it("detects multiple conflict blocks", () => {
-		const lines = [
-			"<<<<<<< a",
-			"a1",
-			"=======",
-			"b1",
-			">>>>>>> b",
-			"middle",
-			"<<<<<<< c",
-			"c1",
-			"=======",
-			"d1",
-			">>>>>>> d",
-		];
+		const lines = ["<<<<<<< a", "a1", "=======", "b1", ">>>>>>> b", "middle", "<<<<<<< c", "c1", "=======", "d1", ">>>>>>> d"];
 		const blocks = scanConflictLines(lines, 1);
 		assert.strictEqual(blocks.length, 2);
 		assert.strictEqual(blocks[0].startLine, 1);
@@ -134,13 +101,7 @@ describe("scanConflictLines", () => {
 	});
 
 	it("handles empty lines inside conflict", () => {
-		const lines = [
-			"<<<<<<<",
-			"",
-			"=======",
-			"",
-			">>>>>>>",
-		];
+		const lines = ["<<<<<<<", "", "=======", "", ">>>>>>>"];
 		const blocks = scanConflictLines(lines, 1);
 		assert.strictEqual(blocks.length, 1);
 		assert.deepStrictEqual(blocks[0].oursLines, [""]);
@@ -157,11 +118,7 @@ describe("scanConflictLines", () => {
 	});
 
 	it("ignores non-column-0 markers", () => {
-		const lines = [
-			"  <<<<<<< (not a marker)",
-			"  ======= (not a separator)",
-			"  >>>>>>> (not a closer)",
-		];
+		const lines = ["  <<<<<<< (not a marker)", "  ======= (not a separator)", "  >>>>>>> (not a closer)"];
 		const blocks = scanConflictLines(lines, 1);
 		assert.strictEqual(blocks.length, 0);
 	});
@@ -172,7 +129,11 @@ describe("scanFileForConflicts / sync", () => {
 
 	after(() => {
 		for (const p of cleanup) {
-			try { fs.unlinkSync(p); } catch { /* ignore */ }
+			try {
+				fs.unlinkSync(p);
+			} catch {
+				/* ignore */
+			}
 		}
 	});
 
@@ -200,10 +161,7 @@ describe("scanFileForConflicts / sync", () => {
 	it("async version matches sync", async () => {
 		const tmp = tempFile("<<<<<<< a\na1\n=======\nb1\n>>>>>>>\n");
 		cleanup.push(tmp);
-		const [sync, async] = await Promise.all([
-			Promise.resolve(scanFileForConflictsSync(tmp)),
-			scanFileForConflicts(tmp),
-		]);
+		const [sync, async] = await Promise.all([Promise.resolve(scanFileForConflictsSync(tmp)), scanFileForConflicts(tmp)]);
 		assert.strictEqual(sync.blocks.length, async.blocks.length);
 		assert.strictEqual(sync.scanTruncated, async.scanTruncated);
 	});
@@ -254,8 +212,24 @@ describe("ConflictHistory", () => {
 
 	it("entries returns in insertion order", () => {
 		const history = new ConflictHistory();
-		const e1 = history.register({ absolutePath: "/a/1.txt", displayPath: "1.txt", startLine: 1, separatorLine: 2, endLine: 3, oursLines: [], theirsLines: [] });
-		const e2 = history.register({ absolutePath: "/a/2.txt", displayPath: "2.txt", startLine: 1, separatorLine: 2, endLine: 3, oursLines: [], theirsLines: [] });
+		const e1 = history.register({
+			absolutePath: "/a/1.txt",
+			displayPath: "1.txt",
+			startLine: 1,
+			separatorLine: 2,
+			endLine: 3,
+			oursLines: [],
+			theirsLines: [],
+		});
+		const e2 = history.register({
+			absolutePath: "/a/2.txt",
+			displayPath: "2.txt",
+			startLine: 1,
+			separatorLine: 2,
+			endLine: 3,
+			oursLines: [],
+			theirsLines: [],
+		});
 		const entries = history.entries();
 		assert.strictEqual(entries[0].id, e1.id);
 		assert.strictEqual(entries[1].id, e2.id);
@@ -263,7 +237,15 @@ describe("ConflictHistory", () => {
 
 	it("invalidate removes single entry", () => {
 		const history = new ConflictHistory();
-		const e = history.register({ absolutePath: "/a.txt", displayPath: "a.txt", startLine: 1, separatorLine: 2, endLine: 3, oursLines: [], theirsLines: [] });
+		const e = history.register({
+			absolutePath: "/a.txt",
+			displayPath: "a.txt",
+			startLine: 1,
+			separatorLine: 2,
+			endLine: 3,
+			oursLines: [],
+			theirsLines: [],
+		});
 		history.invalidate(e.id);
 		assert.strictEqual(history.get(e.id), undefined);
 		assert.strictEqual(history.size, 0);
@@ -271,9 +253,33 @@ describe("ConflictHistory", () => {
 
 	it("invalidatePath removes all matching", () => {
 		const history = new ConflictHistory();
-		history.register({ absolutePath: "/a.txt", displayPath: "a.txt", startLine: 1, separatorLine: 2, endLine: 3, oursLines: [], theirsLines: [] });
-		history.register({ absolutePath: "/a.txt", displayPath: "a.txt", startLine: 10, separatorLine: 12, endLine: 14, oursLines: [], theirsLines: [] });
-		history.register({ absolutePath: "/b.txt", displayPath: "b.txt", startLine: 1, separatorLine: 2, endLine: 3, oursLines: [], theirsLines: [] });
+		history.register({
+			absolutePath: "/a.txt",
+			displayPath: "a.txt",
+			startLine: 1,
+			separatorLine: 2,
+			endLine: 3,
+			oursLines: [],
+			theirsLines: [],
+		});
+		history.register({
+			absolutePath: "/a.txt",
+			displayPath: "a.txt",
+			startLine: 10,
+			separatorLine: 12,
+			endLine: 14,
+			oursLines: [],
+			theirsLines: [],
+		});
+		history.register({
+			absolutePath: "/b.txt",
+			displayPath: "b.txt",
+			startLine: 1,
+			separatorLine: 2,
+			endLine: 3,
+			oursLines: [],
+			theirsLines: [],
+		});
 		history.invalidatePath("/a.txt");
 		assert.strictEqual(history.size, 1);
 	});
@@ -483,7 +489,12 @@ describe("renderConflictRegion", () => {
 	});
 
 	it("/base throws for 2-way conflict", () => {
-		const twoWay = { ...entry, baseLines: undefined, baseLine: undefined, baseLabel: undefined };
+		const twoWay = {
+			...entry,
+			baseLines: undefined,
+			baseLine: undefined,
+			baseLabel: undefined,
+		};
 		assert.throws(() => renderConflictRegion(twoWay, "base"), /no base section/i);
 	});
 });

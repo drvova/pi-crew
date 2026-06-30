@@ -1,14 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { TeamRunManifest } from "../state/types.ts";
-import { resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
-import { listRuns } from "./run-index.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import { redactSecrets } from "../utils/redaction.ts";
-import { createCancellationToken } from "../runtime/cancellation-token.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
-import { isSafePathId } from "../utils/safe-paths.ts";
+import { createCancellationToken } from "../runtime/cancellation-token.ts";
+import type { TeamRunManifest } from "../state/types.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
+import { redactSecrets } from "../utils/redaction.ts";
+import { isSafePathId, resolveRealContainedPath } from "../utils/safe-paths.ts";
+import { listRuns } from "./run-index.ts";
 
 export interface PruneRunsResult {
 	kept: string[];
@@ -50,7 +49,9 @@ function appendPruneAudit(cwd: string, payload: Record<string, unknown>): string
 
 export function pruneFinishedRuns(cwd: string, keep: number, options: PruneRunsOptions = {}): PruneRunsResult {
 	const token = createCancellationToken({ signal: options.signal });
-	const finished = listRuns(cwd, options.signal).filter((run) => run.cwd === cwd && isFinished(run)).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+	const finished = listRuns(cwd, options.signal)
+		.filter((run) => run.cwd === cwd && isFinished(run))
+		.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 	const kept = finished.slice(0, keep).map((run) => run.runId);
 	const removed: string[] = [];
 	const toRemove = finished.slice(keep);
@@ -58,14 +59,24 @@ export function pruneFinishedRuns(cwd: string, keep: number, options: PruneRunsO
 		if (i % 5 === 0) token.heartbeat(`prune:${i}/${toRemove.length}`);
 		const run = toRemove[i];
 		if (!isSafeToPrune(cwd, run)) {
-			logInternalError("prune.path-unsafe", new Error(`Skipping unsafe prune: stateRoot=${run.stateRoot}, artifactsRoot=${run.artifactsRoot}`), `runId=${run.runId}`);
+			logInternalError(
+				"prune.path-unsafe",
+				new Error(`Skipping unsafe prune: stateRoot=${run.stateRoot}, artifactsRoot=${run.artifactsRoot}`),
+				`runId=${run.runId}`,
+			);
 			continue;
 		}
 		fs.rmSync(run.stateRoot, { recursive: true, force: true });
 		fs.rmSync(run.artifactsRoot, { recursive: true, force: true });
 		removed.push(run.runId);
 	}
-	const auditPath = appendPruneAudit(cwd, { action: "prune", keep, intent: options.intent, kept, removed });
+	const auditPath = appendPruneAudit(cwd, {
+		action: "prune",
+		keep,
+		intent: options.intent,
+		kept,
+		removed,
+	});
 	return { kept, removed, auditPath };
 }
 
@@ -85,9 +96,15 @@ export function pruneUserLevelRuns(keep: number): PruneRunsResult {
 
 	// Read all run directories, parse manifests, filter to finished
 	const MAX_DIRS = 500;
-	const finished: Array<{ runId: string; updatedAt: string; stateRoot: string; artifactsRoot: string }> = [];
+	const finished: Array<{
+		runId: string;
+		updatedAt: string;
+		stateRoot: string;
+		artifactsRoot: string;
+	}> = [];
 	const ghostRemoved: string[] = [];
-	const dirs = fs.readdirSync(runsRoot, { withFileTypes: true })
+	const dirs = fs
+		.readdirSync(runsRoot, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory() && isSafePathId(entry.name))
 		.slice(0, MAX_DIRS)
 		.map((entry) => entry.name);
@@ -105,7 +122,10 @@ export function pruneUserLevelRuns(keep: number): PruneRunsResult {
 		// These are deadletter/replay/temp runs from dead Pi sessions.
 		const isActive = manifest.status === "queued" || manifest.status === "running" || manifest.status === "planning";
 		if (isActive && manifest.cwd && !fs.existsSync(manifest.cwd)) {
-			fs.rmSync(path.join(runsRoot, dir), { recursive: true, force: true });
+			fs.rmSync(path.join(runsRoot, dir), {
+				recursive: true,
+				force: true,
+			});
 			ghostRemoved.push(manifest.runId);
 			continue;
 		}

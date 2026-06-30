@@ -8,7 +8,11 @@ export interface TaskClaimState {
 }
 
 export function createTaskClaim(owner: string, leaseMs = 5 * 60_000, now = new Date()): TaskClaimState {
-	return { owner, token: randomUUID(), leasedUntil: new Date(now.getTime() + leaseMs).toISOString() };
+	return {
+		owner,
+		token: randomUUID(),
+		leasedUntil: new Date(now.getTime() + leaseMs).toISOString(),
+	};
 }
 
 export function isTaskClaimExpired(claim: TaskClaimState | undefined, now = new Date()): boolean {
@@ -43,7 +47,13 @@ export function releaseTaskClaim<T extends TeamTaskState>(task: T, owner: string
 	return { ...task, claim: undefined };
 }
 
-export function transitionClaimedTaskStatus<T extends TeamTaskState>(task: T, owner: string, token: string, status: T["status"], now = new Date()): T {
+export function transitionClaimedTaskStatus<T extends TeamTaskState>(
+	task: T,
+	owner: string,
+	token: string,
+	status: T["status"],
+	now = new Date(),
+): T {
 	if (!canUseTaskClaim(task, owner, token, now)) {
 		throw new Error(`Task '${task.id}' claim is not held by '${owner}' or has expired.`);
 	}

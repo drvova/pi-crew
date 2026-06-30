@@ -30,16 +30,14 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, it } from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Resolve the source file relative to THIS test file's directory
 // (test/unit/ → ../../src/runtime/...). fileURLToPath(new URL(rel, base))
 // resolves `rel` against the test file's URL without the dirname-of-
 // trailing-slash pitfall that path.dirname() introduces.
-const SRC = fileURLToPath(
-	new URL("../../src/runtime/live-session-runtime.ts", import.meta.url),
-);
+const SRC = fileURLToPath(new URL("../../src/runtime/live-session-runtime.ts", import.meta.url));
 // dynamic import() requires a file:// URL on Windows (a bare D:\ path is
 // rejected as ERR_UNSUPPORTED_ESM_URL_SCHEME). pathToFileURL handles that
 // cross-platform; on POSIX it round-trips to the same path.
@@ -60,10 +58,7 @@ describe("live-session import latch (module-scoped memoization)", () => {
 			"module-scoped latch variable must exist (prevents concurrent-import cold-start race)",
 		);
 		// First-caller-wins check-before-set.
-		assert.ok(
-			src.includes("if (!liveSessionModulePromise)"),
-			"latch must check-before-set so the first caller wins",
-		);
+		assert.ok(src.includes("if (!liveSessionModulePromise)"), "latch must check-before-set so the first caller wins");
 		// The single memoized loader helper must be called at the use site.
 		assert.ok(
 			src.includes("await loadLiveSessionModule()"),
@@ -75,7 +70,7 @@ describe("live-session import latch (module-scoped memoization)", () => {
 		// satisfy this check by accident.
 		const codeOnly = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 		assert.ok(
-			!codeOnly.includes("import(\"@earendil-works/pi-coding-agent\") as unknown as LiveSessionModule"),
+			!codeOnly.includes('import("@earendil-works/pi-coding-agent") as unknown as LiveSessionModule'),
 			"the un-memoized direct import (with cast) must be replaced by the latched loader",
 		);
 	});

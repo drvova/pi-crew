@@ -12,23 +12,28 @@
  * - getRecord, listAgents
  * - L1: console.error replaced with logInternalError
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
+import type { PiTeamsToolResult } from "../../src/extension/tool-result.ts";
 import {
-	savePersistedSubagentRecord,
 	readPersistedSubagentRecord,
 	SubagentManager,
 	type SubagentRecord,
 	type SubagentSpawnOptions,
+	savePersistedSubagentRecord,
 } from "../../src/runtime/subagent-manager.ts";
-import type { PiTeamsToolResult } from "../../src/extension/tool-result.ts";
 
 const makeTempDir = () => {
 	let dir = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-test-"));
-	try { dir = fs.realpathSync(dir); } catch { /* keep as-is */ }
+	try {
+		dir = fs.realpathSync(dir);
+	} catch {
+		/* keep as-is */
+	}
 	return dir;
 };
 
@@ -41,8 +46,10 @@ const makeResult = (text: string, runId?: string): PiTeamsToolResult => {
 	};
 };
 
-const makeRunner = (result: PiTeamsToolResult) =>
-	async (_options: SubagentSpawnOptions, _signal?: AbortSignal): Promise<PiTeamsToolResult> => result;
+const makeRunner =
+	(result: PiTeamsToolResult) =>
+	async (_options: SubagentSpawnOptions, _signal?: AbortSignal): Promise<PiTeamsToolResult> =>
+		result;
 
 test("isValidSubagentId accepts valid IDs", () => {
 	const dir = makeTempDir();
@@ -168,7 +175,13 @@ test("SubagentManager.spawn creates a record with running status", () => {
 	try {
 		const runner = makeRunner(makeResult("done"));
 		const record = manager.spawn(
-			{ cwd: dir, type: "test", description: "Test", prompt: "Do", background: false },
+			{
+				cwd: dir,
+				type: "test",
+				description: "Test",
+				prompt: "Do",
+				background: false,
+			},
 			runner,
 		);
 		assert.ok(record.id);
@@ -189,11 +202,23 @@ test("SubagentManager.spawn queues when at maxConcurrent", () => {
 			return makeResult("never");
 		};
 		const r1 = manager.spawn(
-			{ cwd: dir, type: "test", description: "A", prompt: "Do", background: true },
+			{
+				cwd: dir,
+				type: "test",
+				description: "A",
+				prompt: "Do",
+				background: true,
+			},
 			slowRunner,
 		);
 		const r2 = manager.spawn(
-			{ cwd: dir, type: "test", description: "B", prompt: "Do", background: true },
+			{
+				cwd: dir,
+				type: "test",
+				description: "B",
+				prompt: "Do",
+				background: true,
+			},
 			slowRunner,
 		);
 		assert.equal(r1.status, "running");
@@ -215,7 +240,13 @@ test("SubagentManager.abort returns false for already-completed record", async (
 	const manager = new SubagentManager();
 	try {
 		const record = manager.spawn(
-			{ cwd: dir, type: "test", description: "Test", prompt: "Do", background: false },
+			{
+				cwd: dir,
+				type: "test",
+				description: "Test",
+				prompt: "Do",
+				background: false,
+			},
 			makeRunner(makeResult("done")),
 		);
 		// Wait for it to complete
@@ -232,7 +263,13 @@ test("SubagentManager.getRecord returns the record by id", () => {
 	const manager = new SubagentManager();
 	try {
 		const record = manager.spawn(
-			{ cwd: dir, type: "test", description: "Test", prompt: "Do", background: false },
+			{
+				cwd: dir,
+				type: "test",
+				description: "Test",
+				prompt: "Do",
+				background: false,
+			},
 			makeRunner(makeResult("done")),
 		);
 		const fetched = manager.getRecord(record.id);
@@ -248,11 +285,23 @@ test("SubagentManager.listAgents returns all records sorted by startedAt", () =>
 	const manager = new SubagentManager();
 	try {
 		manager.spawn(
-			{ cwd: dir, type: "a", description: "A", prompt: "1", background: false },
+			{
+				cwd: dir,
+				type: "a",
+				description: "A",
+				prompt: "1",
+				background: false,
+			},
 			makeRunner(makeResult("a")),
 		);
 		manager.spawn(
-			{ cwd: dir, type: "b", description: "B", prompt: "2", background: false },
+			{
+				cwd: dir,
+				type: "b",
+				description: "B",
+				prompt: "2",
+				background: false,
+			},
 			makeRunner(makeResult("b")),
 		);
 		const list = manager.listAgents();

@@ -134,11 +134,7 @@ export function resultDigest(toolName: string, content: string, isError?: boolea
 		const files = text.match(/(\d+)\s+files?/i) ?? text.match(/filesWithMatches["']?:\s*(\d+)/i);
 		const error = firstErrorLine(text);
 		return (
-			[
-				match ? `matches=${match[1]}` : undefined,
-				files ? `files=${files[1]}` : undefined,
-				error ? `error=${error}` : undefined,
-			]
+			[match ? `matches=${match[1]}` : undefined, files ? `files=${files[1]}` : undefined, error ? `error=${error}` : undefined]
 				.filter((part): part is string => part !== undefined)
 				.join("; ") || "search digest unavailable"
 		);
@@ -289,9 +285,7 @@ export function pruneToolOutputs(results: ToolResultEntry[], config: PruneConfig
 		// Staleness waives protected-tool immunity for overridable tools
 		// (e.g. a superseded `read`); the most recent result per target is
 		// never stale, so the latest read of each file stays protected.
-		const isProtected =
-			config.protectedTools.includes(entry.toolName) &&
-			!(isStale && staleOverridable.has(entry.toolName));
+		const isProtected = config.protectedTools.includes(entry.toolName) && !(isStale && staleOverridable.has(entry.toolName));
 
 		// Stale results are prunable even inside the recency protect window —
 		// they are superseded, so recency no longer implies relevance. They
@@ -325,7 +319,10 @@ export function pruneToolOutputs(results: ToolResultEntry[], config: PruneConfig
 
 	const prunedResults = [...results];
 	for (const candidate of candidates) {
-		prunedResults[candidate.index] = { ...candidate.entry, content: candidate.notice };
+		prunedResults[candidate.index] = {
+			...candidate.entry,
+			content: candidate.notice,
+		};
 		prunedIds.push(candidate.entry.id);
 		prunedCount++;
 	}

@@ -33,13 +33,13 @@ export class Semaphore {
 		// implementation let #queue grow without bound, risking memory
 		// exhaustion under sustained high concurrency with slow releases.
 		if (this.#queue.length >= Semaphore.MAX_QUEUE) {
-			throw new Error(
-				`Semaphore queue full: ${this.#queue.length} waiters (max ${Semaphore.MAX_QUEUE}); cannot acquire slot`,
-			);
+			throw new Error(`Semaphore queue full: ${this.#queue.length} waiters (max ${Semaphore.MAX_QUEUE}); cannot acquire slot`);
 		}
 		const { promise, resolve } = (() => {
 			let res: () => void;
-			const p = new Promise<void>((r) => { res = r; });
+			const p = new Promise<void>((r) => {
+				res = r;
+			});
 			return { promise: p, resolve: res! };
 		})();
 		this.#queue.push(resolve);
@@ -101,9 +101,7 @@ async function mapWithFailFast<T, R>(
 
 	// Internal abort controller for fail-fast
 	const abortController = new AbortController();
-	const workerSignal = signal
-		? AbortSignal.any([signal, abortController.signal])
-		: abortController.signal;
+	const workerSignal = signal ? AbortSignal.any([signal, abortController.signal]) : abortController.signal;
 
 	// Promise that rejects on first error — used for fail-fast
 	let rejectFirst: (error: unknown) => void;

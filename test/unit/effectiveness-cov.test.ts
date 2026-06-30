@@ -1,14 +1,14 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { CrewRuntimeConfig } from "../../src/config/types.ts";
 import {
-	taskHasObservableWorkerActivity,
-	resolveEffectivenessGuardMode,
+	effectivenessPolicyDecision,
 	evaluateRunEffectiveness,
 	formatRunEffectivenessLines,
-	effectivenessPolicyDecision,
+	resolveEffectivenessGuardMode,
+	taskHasObservableWorkerActivity,
 } from "../../src/runtime/effectiveness.ts";
-import type { TeamTaskState, TeamRunManifest } from "../../src/state/types.ts";
-import type { CrewRuntimeConfig } from "../../src/config/types.ts";
+import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
 function makeTask(overrides: Partial<TeamTaskState> = {}): TeamTaskState {
 	return {
@@ -32,43 +32,53 @@ describe("effectiveness", () => {
 
 		it("returns true when toolCount > 0", () => {
 			assert.equal(
-				taskHasObservableWorkerActivity(makeTask({
-					agentProgress: { toolCount: 5, recentTools: [], recentOutput: [] },
-				})),
+				taskHasObservableWorkerActivity(
+					makeTask({
+						agentProgress: {
+							toolCount: 5,
+							recentTools: [],
+							recentOutput: [],
+						},
+					}),
+				),
 				true,
 			);
 		});
 
 		it("returns true when usage is present", () => {
-			assert.equal(
-				taskHasObservableWorkerActivity(makeTask({ usage: { input: 100, output: 50 } })),
-				true,
-			);
+			assert.equal(taskHasObservableWorkerActivity(makeTask({ usage: { input: 100, output: 50 } })), true);
 		});
 
 		it("returns true when transcriptArtifact is present", () => {
 			assert.equal(
-				taskHasObservableWorkerActivity(makeTask({
-					transcriptArtifact: { kind: "log", path: "/tmp/transcript.md", createdAt: "", producer: "test", retention: "run" },
-				})),
+				taskHasObservableWorkerActivity(
+					makeTask({
+						transcriptArtifact: {
+							kind: "log",
+							path: "/tmp/transcript.md",
+							createdAt: "",
+							producer: "test",
+							retention: "run",
+						},
+					}),
+				),
 				true,
 			);
 		});
 
 		it("returns true when modelAttempts has a success", () => {
 			assert.equal(
-				taskHasObservableWorkerActivity(makeTask({
-					modelAttempts: [{ model: "sonnet", success: true }],
-				})),
+				taskHasObservableWorkerActivity(
+					makeTask({
+						modelAttempts: [{ model: "sonnet", success: true }],
+					}),
+				),
 				true,
 			);
 		});
 
 		it("returns true when jsonEvents is set", () => {
-			assert.equal(
-				taskHasObservableWorkerActivity(makeTask({ jsonEvents: 42 })),
-				true,
-			);
+			assert.equal(taskHasObservableWorkerActivity(makeTask({ jsonEvents: 42 })), true);
 		});
 	});
 
@@ -78,7 +88,9 @@ describe("effectiveness", () => {
 		});
 
 		it("returns configured mode", () => {
-			const config = { effectivenessGuard: "off" } as unknown as CrewRuntimeConfig;
+			const config = {
+				effectivenessGuard: "off",
+			} as unknown as CrewRuntimeConfig;
 			assert.equal(resolveEffectivenessGuardMode(config), "off");
 		});
 
@@ -90,12 +102,16 @@ describe("effectiveness", () => {
 		});
 
 		it("returns 'block' when configured", () => {
-			const config = { effectivenessGuard: "block" } as unknown as CrewRuntimeConfig;
+			const config = {
+				effectivenessGuard: "block",
+			} as unknown as CrewRuntimeConfig;
 			assert.equal(resolveEffectivenessGuardMode(config), "block");
 		});
 
 		it("returns 'fail' when configured", () => {
-			const config = { effectivenessGuard: "fail" } as unknown as CrewRuntimeConfig;
+			const config = {
+				effectivenessGuard: "fail",
+			} as unknown as CrewRuntimeConfig;
 			assert.equal(resolveEffectivenessGuardMode(config), "fail");
 		});
 	});
@@ -104,8 +120,16 @@ describe("effectiveness", () => {
 		it("returns ok when all completed tasks have observable work", () => {
 			const result = evaluateRunEffectiveness({
 				tasks: [
-					makeTask({ id: "t1", status: "completed", usage: { input: 100 } }),
-					makeTask({ id: "t2", status: "completed", usage: { input: 200 } }),
+					makeTask({
+						id: "t1",
+						status: "completed",
+						usage: { input: 100 },
+					}),
+					makeTask({
+						id: "t2",
+						status: "completed",
+						usage: { input: 200 },
+					}),
 				],
 				executeWorkers: true,
 			});
@@ -116,9 +140,7 @@ describe("effectiveness", () => {
 
 		it("returns warning when completed tasks lack observable work", () => {
 			const result = evaluateRunEffectiveness({
-				tasks: [
-					makeTask({ id: "t1", status: "completed" }),
-				],
+				tasks: [makeTask({ id: "t1", status: "completed" })],
 				executeWorkers: true,
 			});
 			assert.equal(result.severity, "blocked"); // executor role is not read_only, escalates
@@ -128,7 +150,9 @@ describe("effectiveness", () => {
 			const result = evaluateRunEffectiveness({
 				tasks: [makeTask({ id: "t1", status: "completed" })],
 				executeWorkers: true,
-				runtimeConfig: { effectivenessGuard: "off" } as unknown as CrewRuntimeConfig,
+				runtimeConfig: {
+					effectivenessGuard: "off",
+				} as unknown as CrewRuntimeConfig,
 			});
 			assert.equal(result.severity, "ok");
 		});
@@ -148,7 +172,12 @@ describe("effectiveness", () => {
 					makeTask({
 						id: "t1",
 						status: "running",
-						agentProgress: { toolCount: 0, recentTools: [], recentOutput: [], activityState: "needs_attention" },
+						agentProgress: {
+							toolCount: 0,
+							recentTools: [],
+							recentOutput: [],
+							activityState: "needs_attention",
+						},
 					}),
 				],
 				executeWorkers: true,
@@ -160,7 +189,9 @@ describe("effectiveness", () => {
 			const result = evaluateRunEffectiveness({
 				tasks: [makeTask({ id: "t1", status: "completed" })],
 				executeWorkers: true,
-				runtimeConfig: { effectivenessGuard: "fail" } as unknown as CrewRuntimeConfig,
+				runtimeConfig: {
+					effectivenessGuard: "fail",
+				} as unknown as CrewRuntimeConfig,
 			});
 			assert.equal(result.severity, "failed");
 		});

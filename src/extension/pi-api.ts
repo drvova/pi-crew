@@ -29,15 +29,15 @@
  * and centralizes the type-level surface.
  */
 export type {
-	ExtensionAPI,
-	ExtensionContext,
-	ExtensionCommandContext,
-	ToolDefinition,
 	AgentSessionEvent,
 	BeforeAgentStartEvent,
+	ExtensionAPI,
+	ExtensionCommandContext,
+	ExtensionContext,
+	ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 
-export { defineTool, createBashTool } from "@earendil-works/pi-coding-agent";
+export { createBashTool, defineTool } from "@earendil-works/pi-coding-agent";
 
 /**
  * The Pi package version pi-crew was built against. Used for diagnostics

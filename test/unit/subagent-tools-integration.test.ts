@@ -1,16 +1,26 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { registerPiTeams } from "../../src/extension/register.ts";
-import { readPersistedSubagentRecord, savePersistedSubagentRecord, SubagentManager, type SubagentSpawnOptions } from "../../src/runtime/subagent-manager.ts";
 import { registerSubagentTools } from "../../src/extension/registration/subagent-tools.ts";
 import { toolResult } from "../../src/extension/tool-result.ts";
+import {
+	readPersistedSubagentRecord,
+	SubagentManager,
+	type SubagentSpawnOptions,
+	savePersistedSubagentRecord,
+} from "../../src/runtime/subagent-manager.ts";
 import { createRunManifest, updateRunStatus } from "../../src/state/state-store.ts";
 
 /** Retry rmSync on Windows EBUSY — child processes may hold file handles briefly. */
-function rmSyncRetry(target: string, opts: fs.RmOptions & { recursive?: boolean; force?: boolean } = {}, retries = 10, delayMs = 500): void {
+function rmSyncRetry(
+	target: string,
+	opts: fs.RmOptions & { recursive?: boolean; force?: boolean } = {},
+	retries = 10,
+	delayMs = 500,
+): void {
 	for (let attempt = 0; attempt <= retries; attempt++) {
 		try {
 			fs.rmSync(target, opts);
@@ -27,6 +37,7 @@ function rmSyncRetry(target: string, opts: fs.RmOptions & { recursive?: boolean;
 		}
 	}
 }
+
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
 
@@ -41,7 +52,11 @@ function createFakePi(options: { throwForTools?: string[] } = {}) {
 			const list = handlers.get(event) ?? [];
 			list.push(handler);
 			handlers.set(event, list);
-			return () => handlers.set(event, (handlers.get(event) ?? []).filter((item) => item !== handler));
+			return () =>
+				handlers.set(
+					event,
+					(handlers.get(event) ?? []).filter((item) => item !== handler),
+				);
 		},
 		emit(event: string, data: unknown, ctx?: unknown) {
 			for (const handler of handlers.get(event) ?? []) handler(data, ctx);
@@ -59,9 +74,15 @@ function createFakePi(options: { throwForTools?: string[] } = {}) {
 				if (options.throwForTools?.includes(tool.name)) throw new Error(`duplicate tool: ${tool.name}`);
 				tools.set(tool.name, tool);
 			},
-			registerCommand(name: string, command: any) { commands.set(name, command); },
-			sendMessage(message: unknown) { sentMessages.push(message); },
-			sendUserMessage(content: string, options?: unknown) { sentUserMessages.push({ content, options }); },
+			registerCommand(name: string, command: any) {
+				commands.set(name, command);
+			},
+			sendMessage(message: unknown) {
+				sentMessages.push(message);
+			},
+			sendUserMessage(content: string, options?: unknown) {
+				sentUserMessages.push({ content, options });
+			},
 		},
 	};
 }
@@ -122,11 +143,26 @@ test("registered Agent tool stamps background subagents with owner session gener
 				ownerSessionGeneration: options.ownerSessionGeneration,
 			};
 		},
-		getRecord() { return undefined; },
+		getRecord() {
+			return undefined;
+		},
 		waitForRecord: async () => undefined,
 	} as unknown as SubagentManager;
-	registerSubagentTools(fake.api as never, manager, { ownerSessionGeneration: () => 42 });
-	const result = await fake.tools.get("Agent").execute("call-owner", { prompt: "Explore", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, fakeCtx(process.cwd()) as never);
+	registerSubagentTools(fake.api as never, manager, {
+		ownerSessionGeneration: () => 42,
+	});
+	const result = await fake.tools.get("Agent").execute(
+		"call-owner",
+		{
+			prompt: "Explore",
+			description: "Explore",
+			subagent_type: "explorer",
+			run_in_background: true,
+		},
+		undefined,
+		undefined,
+		fakeCtx(process.cwd()) as never,
+	);
 	assert.match(firstText(result), /Agent ID: agent_owner_generation/);
 	assert.equal(captured?.ownerSessionGeneration, 42);
 	if (previousCrewRole === undefined) delete process.env.PI_CREW_ROLE;
@@ -159,7 +195,18 @@ test("registered Agent tool can run a background subagent and join its result", 
 		assert.ok(fake.tools.get("crew_agent"));
 		assert.ok(fake.tools.get("crew_agent_result"));
 		const ctx = fakeCtx(cwd) as never;
-		const launched = await agentTool.execute("call-1", { prompt: "Explore with tool", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		const launched = await agentTool.execute(
+			"call-1",
+			{
+				prompt: "Explore with tool",
+				description: "Explore",
+				subagent_type: "explorer",
+				run_in_background: true,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
 		const launchText = firstText(launched);
 		assert.match(launchText, /Agent ID:/);
 		const agentId = launchText.match(/Agent ID: (\S+)/)?.[1];
@@ -171,7 +218,9 @@ test("registered Agent tool can run a background subagent and join its result", 
 		assert.match(joinedText, /MOCK.*JSON success for explorer/);
 		const restarted = createFakePi();
 		registerPiTeams(restarted.api as never);
-		const persisted = await restarted.tools.get("get_subagent_result").execute("call-3", { agent_id: agentId, verbose: true }, undefined, undefined, ctx);
+		const persisted = await restarted.tools
+			.get("get_subagent_result")
+			.execute("call-3", { agent_id: agentId, verbose: true }, undefined, undefined, ctx);
 		assert.match(firstText(persisted), /Status: completed/);
 		assert.match(firstText(persisted), /MOCK.*JSON success for explorer/);
 		assert.equal(readPersistedSubagentRecord(cwd, agentId)?.resultConsumed, true);
@@ -221,7 +270,18 @@ test("background subagent completion wakes the parent agent to join results", as
 		fake = createFakePi();
 		registerPiTeams(fake.api as never);
 		const ctx = fakeCtx(cwd) as never;
-		const launched = await fake.tools.get("Agent").execute("call-wakeup", { prompt: "Explore and report", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		const launched = await fake.tools.get("Agent").execute(
+			"call-wakeup",
+			{
+				prompt: "Explore and report",
+				description: "Explore",
+				subagent_type: "explorer",
+				run_in_background: true,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
 		const agentId = firstText(launched).match(/Agent ID: (\S+)/)?.[1];
 		assert.ok(agentId);
 		const deadline = Date.now() + 30_000;
@@ -232,7 +292,10 @@ test("background subagent completion wakes the parent agent to join results", as
 		assert.match(fake.sentUserMessages[0]!.content, /"status": "completed"/);
 		assert.match(fake.sentUserMessages[0]!.content, new RegExp(`agent_id="${agentId}"`));
 		assert.match(fake.sentUserMessages[0]!.content, /continue the user's original task/);
-		assert.deepEqual(fake.sentUserMessages[0]!.options, { deliverAs: "followUp", triggerTurn: true });
+		assert.deepEqual(fake.sentUserMessages[0]!.options, {
+			deliverAs: "followUp",
+			triggerTurn: true,
+		});
 	} finally {
 		fake?.api.events.emit("session_shutdown", {});
 		if (previousExecute === undefined) delete process.env.PI_TEAMS_EXECUTE_WORKERS;
@@ -268,7 +331,18 @@ test("background subagent completion does not wake a newer session", async () =>
 		registerPiTeams(fake.api as never);
 		const ctx = fakeCtx(cwd) as never;
 		fake.api.events.emit("session_start", {}, ctx);
-		const launched = await fake.tools.get("Agent").execute("call-stale-wakeup", { prompt: "Explore and report", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		const launched = await fake.tools.get("Agent").execute(
+			"call-stale-wakeup",
+			{
+				prompt: "Explore and report",
+				description: "Explore",
+				subagent_type: "explorer",
+				run_in_background: true,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
 		assert.match(firstText(launched), /Agent ID:/);
 		fake.api.events.emit("session_start", {}, ctx);
 		await new Promise((resolve) => setTimeout(resolve, 3500));
@@ -308,7 +382,18 @@ test("session_before_switch suppresses pending background subagent wakeup", asyn
 		registerPiTeams(fake.api as never);
 		const ctx = fakeCtx(cwd) as never;
 		fake.api.events.emit("session_start", {}, ctx);
-		const launched = await fake.tools.get("Agent").execute("call-switch-wakeup", { prompt: "Explore and report", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		const launched = await fake.tools.get("Agent").execute(
+			"call-switch-wakeup",
+			{
+				prompt: "Explore and report",
+				description: "Explore",
+				subagent_type: "explorer",
+				run_in_background: true,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
 		assert.match(firstText(launched), /Agent ID:/);
 		fake.api.events.emit("session_before_switch", {});
 		await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -333,8 +418,18 @@ test("get_subagent_result wait=true does not consume final result when wait retu
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-agent-blocked-wait-consume-"));
 	try {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-		const team: TeamConfig = { name: "blocked", description: "blocked", source: "builtin", filePath: "blocked.team.md", roles: [{ name: "executor", agent: "executor" }] };
-		const { manifest } = createRunManifest({ cwd, team, goal: "blocked wait consume" });
+		const team: TeamConfig = {
+			name: "blocked",
+			description: "blocked",
+			source: "builtin",
+			filePath: "blocked.team.md",
+			roles: [{ name: "executor", agent: "executor" }],
+		};
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			goal: "blocked wait consume",
+		});
 		const running = updateRunStatus(manifest, "running", "running");
 		const completedStatuses: string[] = [];
 		const manager = new SubagentManager(1, (record) => completedStatuses.push(`${record.status}:${record.resultConsumed === true}`), 5);
@@ -343,15 +438,31 @@ test("get_subagent_result wait=true does not consume final result when wait retu
 		const runner = async (_options: SubagentSpawnOptions) => {
 			await new Promise((resolve) => setTimeout(resolve, 10));
 			updateRunStatus(running, "blocked", "blocked");
-			return toolResult("blocked", { action: "run", status: "ok" as const, runId: running.runId });
+			return toolResult("blocked", {
+				action: "run",
+				status: "ok" as const,
+				runId: running.runId,
+			});
 		};
-		const record = manager.spawn({ cwd, type: "executor", description: "blocked", prompt: "do", background: true }, runner);
-		const result = await fake.tools.get("get_subagent_result").execute("call-blocked-wait", { agent_id: record.id, wait: true, verbose: true }, undefined, undefined, fakeCtx(cwd) as never);
+		const record = manager.spawn(
+			{
+				cwd,
+				type: "executor",
+				description: "blocked",
+				prompt: "do",
+				background: true,
+			},
+			runner,
+		);
+		const result = await fake.tools
+			.get("get_subagent_result")
+			.execute("call-blocked-wait", { agent_id: record.id, wait: true, verbose: true }, undefined, undefined, fakeCtx(cwd) as never);
 		assert.match(firstText(result), /Status: blocked/);
 		assert.equal(record.resultConsumed, false);
 		updateRunStatus(running, "completed", "completed");
 		const deadline = Date.now() + 1000;
-		while (!completedStatuses.some((entry) => entry.startsWith("completed:")) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+		while (!completedStatuses.some((entry) => entry.startsWith("completed:")) && Date.now() < deadline)
+			await new Promise((resolve) => setTimeout(resolve, 10));
 		assert.ok(completedStatuses.includes("completed:false"));
 	} finally {
 		rmSyncRetry(cwd, { recursive: true, force: true });
@@ -363,8 +474,18 @@ test("get_subagent_result refreshes blocked records after run resumes to termina
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	let fake: ReturnType<typeof createFakePi> | undefined;
 	try {
-		const team: TeamConfig = { name: "blocked", description: "blocked", source: "builtin", filePath: "blocked.team.md", roles: [{ name: "executor", agent: "executor" }] };
-		const { manifest } = createRunManifest({ cwd, team, goal: "blocked refresh" });
+		const team: TeamConfig = {
+			name: "blocked",
+			description: "blocked",
+			source: "builtin",
+			filePath: "blocked.team.md",
+			roles: [{ name: "executor", agent: "executor" }],
+		};
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			goal: "blocked refresh",
+		});
 		const running = updateRunStatus(manifest, "running", "running");
 		const completed = updateRunStatus(running, "completed", "completed");
 		const agentId = "agent_blocked_refresh_1";
@@ -381,7 +502,9 @@ test("get_subagent_result refreshes blocked records after run resumes to termina
 		});
 		fake = createFakePi();
 		registerPiTeams(fake.api as never);
-		const result = await fake.tools.get("get_subagent_result").execute("call-blocked-refresh", { agent_id: agentId, verbose: true }, undefined, undefined, fakeCtx(cwd) as never);
+		const result = await fake.tools
+			.get("get_subagent_result")
+			.execute("call-blocked-refresh", { agent_id: agentId, verbose: true }, undefined, undefined, fakeCtx(cwd) as never);
 		assert.match(firstText(result), /Status: completed/);
 		assert.equal(readPersistedSubagentRecord(cwd, agentId)?.status, "completed");
 	} finally {
@@ -408,7 +531,9 @@ test("get_subagent_result after restart fails fast for unrecoverable running rec
 		fake = createFakePi();
 		registerPiTeams(fake.api as never);
 		const ctx = fakeCtx(cwd) as never;
-		const result = await fake.tools.get("get_subagent_result").execute("call-unrecoverable", { agent_id: agentId, wait: true, verbose: true }, undefined, undefined, ctx);
+		const result = await fake.tools
+			.get("get_subagent_result")
+			.execute("call-unrecoverable", { agent_id: agentId, wait: true, verbose: true }, undefined, undefined, ctx);
 		const text = firstText(result);
 		assert.match(text, /Status: error/);
 		assert.match(text, /cannot be recovered after restart/);
@@ -418,7 +543,6 @@ test("get_subagent_result after restart fails fast for unrecoverable running rec
 		rmSyncRetry(cwd, { recursive: true, force: true });
 	}
 });
-
 
 // ─── Rule 2 regression tests (consume-race fix) ───────────────────────────────
 // Background: onComplete fires inside record.promise IIFE `finally`, BEFORE the
@@ -446,7 +570,18 @@ test("Rule 2: notify still fires when leader does NOT pre-consume (case 1 sanity
 		fake = createFakePi();
 		registerPiTeams(fake.api as never);
 		const ctx = fakeCtx(cwd) as never;
-		await fake.tools.get("Agent").execute("rule2-notify", { prompt: "Explore and report", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		await fake.tools.get("Agent").execute(
+			"rule2-notify",
+			{
+				prompt: "Explore and report",
+				description: "Explore",
+				subagent_type: "explorer",
+				run_in_background: true,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
 		// Leader does NOT call get_subagent_result — waits for notify instead.
 		const deadline = Date.now() + 30_000;
 		while (Date.now() < deadline && fake.sentUserMessages.length === 0) await new Promise((resolve) => setTimeout(resolve, 100));
@@ -488,13 +623,30 @@ test("Rule 2: notify is suppressed when leader pre-consumes via wait:true (case 
 		const agentTool = fake.tools.get("Agent");
 		const resultTool = fake.tools.get("get_subagent_result");
 		const ctx = fakeCtx(cwd) as never;
-		const launched = await agentTool.execute("rule2-suppress-launch", { prompt: "Explore with tool", description: "Explore", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		const launched = await agentTool.execute(
+			"rule2-suppress-launch",
+			{
+				prompt: "Explore with tool",
+				description: "Explore",
+				subagent_type: "explorer",
+				run_in_background: true,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
 		const agentId = firstText(launched).match(/Agent ID: (\S+)/)?.[1];
 		assert.ok(agentId);
 		// Leader joins IMMEDIATELY — this marks resultConsumed=true inside the
 		// microtask that follows record.promise resolution. The deferred notify
 		// (setTimeout 0 macrotask) must observe resultConsumed=true and suppress.
-		const joined = await resultTool.execute("rule2-suppress-join", { agent_id: agentId, wait: true, verbose: true }, undefined, undefined, ctx);
+		const joined = await resultTool.execute(
+			"rule2-suppress-join",
+			{ agent_id: agentId, wait: true, verbose: true },
+			undefined,
+			undefined,
+			ctx,
+		);
 		assert.match(firstText(joined), /Status: completed/);
 		assert.equal(readPersistedSubagentRecord(cwd, agentId)?.resultConsumed, true);
 		// Drain any pending deferred notify macrotasks.
@@ -539,9 +691,45 @@ test("Rule 1: batch coalesces completion into a single notification (no wait)", 
 		registerPiTeams(fake.api as never);
 		const ctx = fakeCtx(cwd) as never;
 		// Launch 3 background agents sharing batch_id "batchX", WITHOUT joining.
-		await fake.tools.get("Agent").execute("rule1-a", { prompt: "Task A", description: "A", subagent_type: "explorer", run_in_background: true, batch_id: "batchX" }, undefined, undefined, ctx);
-		await fake.tools.get("Agent").execute("rule1-b", { prompt: "Task B", description: "B", subagent_type: "explorer", run_in_background: true, batch_id: "batchX" }, undefined, undefined, ctx);
-		await fake.tools.get("Agent").execute("rule1-c", { prompt: "Task C", description: "C", subagent_type: "explorer", run_in_background: true, batch_id: "batchX" }, undefined, undefined, ctx);
+		await fake.tools.get("Agent").execute(
+			"rule1-a",
+			{
+				prompt: "Task A",
+				description: "A",
+				subagent_type: "explorer",
+				run_in_background: true,
+				batch_id: "batchX",
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+		await fake.tools.get("Agent").execute(
+			"rule1-b",
+			{
+				prompt: "Task B",
+				description: "B",
+				subagent_type: "explorer",
+				run_in_background: true,
+				batch_id: "batchX",
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+		await fake.tools.get("Agent").execute(
+			"rule1-c",
+			{
+				prompt: "Task C",
+				description: "C",
+				subagent_type: "explorer",
+				run_in_background: true,
+				batch_id: "batchX",
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
 		// Wait for the consolidated notification. The barrier emits exactly ONE
 		// wake-up only after all 3 reach terminal.
 		const deadline = Date.now() + 30_000;
@@ -588,7 +776,18 @@ test("Rule 1: no batch_id preserves individual notification (default behavior)",
 		registerPiTeams(fake.api as never);
 		const ctx = fakeCtx(cwd) as never;
 		// Single background agent, no batch_id -> individual notification.
-		await fake.tools.get("Agent").execute("rule1-nobatch", { prompt: "Task", description: "Solo", subagent_type: "explorer", run_in_background: true }, undefined, undefined, ctx);
+		await fake.tools.get("Agent").execute(
+			"rule1-nobatch",
+			{
+				prompt: "Task",
+				description: "Solo",
+				subagent_type: "explorer",
+				run_in_background: true,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
 		const deadline = Date.now() + 30_000;
 		while (Date.now() < deadline && fake.sentUserMessages.length === 0) await new Promise((resolve) => setTimeout(resolve, 100));
 		assert.equal(fake.sentUserMessages.length, 1);

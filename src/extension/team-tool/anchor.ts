@@ -3,16 +3,11 @@
  * Provides set/clear/status commands for anchor points.
  */
 
+import { AnchorManager, AnchorNotFoundError, createAnchorManager, NoHandoffsError } from "../../runtime/anchor-manager.ts";
+import type { HandoffSummary } from "../../runtime/handoff-manager.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
 import { result, type TeamContext } from "./context.ts";
-import {
-	AnchorManager,
-	createAnchorManager,
-	AnchorNotFoundError,
-	NoHandoffsError,
-} from "../../runtime/anchor-manager.ts";
-import type { HandoffSummary } from "../../runtime/handoff-manager.ts";
 
 // Global anchor manager instance for CLI usage
 let globalAnchorManager: AnchorManager | null = null;
@@ -31,10 +26,7 @@ function getSessionId(ctx: TeamContext): string {
 	return ctx.sessionId ?? "default";
 }
 
-export function handleAnchorSet(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleAnchorSet(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const manager = getAnchorManager();
 	const sessionId = getSessionId(ctx);
 	const cfg = params.config ?? {};
@@ -60,18 +52,15 @@ export function handleAnchorSet(
 			`Anchor set successfully.`,
 			`Anchor ID: ${anchorId}`,
 			`Session: ${sessionId}`,
-			context && Object.keys(context).length > 0
-				? `Context: ${JSON.stringify(context)}`
-				: "",
-		].filter(Boolean).join("\n"),
+			context && Object.keys(context).length > 0 ? `Context: ${JSON.stringify(context)}` : "",
+		]
+			.filter(Boolean)
+			.join("\n"),
 		{ action: "anchor", status: "ok" },
 	);
 }
 
-export function handleAnchorClear(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleAnchorClear(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const manager = getAnchorManager();
 	const sessionId = getSessionId(ctx);
 	const cfg = params.config ?? {};
@@ -88,28 +77,16 @@ export function handleAnchorClear(
 		} else {
 			const anchorResult = manager.clearAnchorBySession(sessionId);
 			if (!anchorResult) {
-				return result(
-					"No anchor found for this session.",
-					{ action: "anchor", status: "error" },
-					true,
-				);
+				return result("No anchor found for this session.", { action: "anchor", status: "error" }, true);
 			}
 			accumulated = anchorResult;
 		}
 	} catch (error) {
 		if (error instanceof AnchorNotFoundError) {
-			return result(
-				`Anchor not found: ${error.anchorId}`,
-				{ action: "anchor", status: "error" },
-				true,
-			);
+			return result(`Anchor not found: ${error.anchorId}`, { action: "anchor", status: "error" }, true);
 		}
 		if (error instanceof NoHandoffsError) {
-			return result(
-				"No handoffs have been accumulated to this anchor.",
-				{ action: "anchor", status: "error" },
-				true,
-			);
+			return result("No handoffs have been accumulated to this anchor.", { action: "anchor", status: "error" }, true);
 		}
 		throw error;
 	}
@@ -134,21 +111,16 @@ export function handleAnchorClear(
 			accumulated.decisions.length > 0
 				? `\nDecisions:\n${accumulated.decisions.map((d: { rationale: string; outcome: string }) => `  - ${d.rationale}: ${d.outcome}`).join("\n")}`
 				: "",
-			accumulated.blockers.length > 0
-				? `\nBlockers: ${accumulated.blockers.join("; ")}`
-				: "",
-			accumulated.nextSteps.length > 0
-				? `\nNext steps: ${accumulated.nextSteps.join("; ")}`
-				: "",
-		].filter(Boolean).join("\n"),
+			accumulated.blockers.length > 0 ? `\nBlockers: ${accumulated.blockers.join("; ")}` : "",
+			accumulated.nextSteps.length > 0 ? `\nNext steps: ${accumulated.nextSteps.join("; ")}` : "",
+		]
+			.filter(Boolean)
+			.join("\n"),
 		{ action: "anchor", status: "ok" },
 	);
 }
 
-export function handleAnchorStatus(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleAnchorStatus(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const manager = getAnchorManager();
 	const sessionId = getSessionId(ctx);
 	const cfg = params.config ?? {};
@@ -166,12 +138,10 @@ export function handleAnchorStatus(
 	}
 
 	if (!status) {
-		return result(
-			anchorId
-				? `No anchor found with ID: ${anchorId}`
-				: `No anchor set for session: ${sessionId}`,
-			{ action: "anchor", status: "ok" },
-		);
+		return result(anchorId ? `No anchor found with ID: ${anchorId}` : `No anchor set for session: ${sessionId}`, {
+			action: "anchor",
+			status: "ok",
+		});
 	}
 
 	return result(
@@ -184,22 +154,19 @@ export function handleAnchorStatus(
 			`Handoffs: ${status.handoffCount}`,
 			`Total tokens: ${status.totalTokens}`,
 			`Total duration: ${Math.round(status.totalDuration / 1000)}s`,
-			status.context && Object.keys(status.context).length > 0
-				? `\nContext: ${JSON.stringify(status.context, null, 2)}`
-				: "",
-		].filter(Boolean).join("\n"),
+			status.context && Object.keys(status.context).length > 0 ? `\nContext: ${JSON.stringify(status.context, null, 2)}` : "",
+		]
+			.filter(Boolean)
+			.join("\n"),
 		{ action: "anchor", status: "ok" },
 	);
 }
 
-export function handleAnchorAccumulate(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleAnchorAccumulate(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	// This would be used to manually accumulate a handoff to the current anchor
 	// In practice, this is called internally by HandoffManager when anchor is set
-	return result(
-		"Use handleAnchorSet to set an anchor, then run tasks normally. Handoffs will be accumulated automatically.",
-		{ action: "anchor", status: "ok" },
-	);
+	return result("Use handleAnchorSet to set an anchor, then run tasks normally. Handoffs will be accumulated automatically.", {
+		action: "anchor",
+		status: "ok",
+	});
 }

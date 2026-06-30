@@ -6,12 +6,15 @@
  * itself breaks (e.g. an argv/env change that makes pi exit non-zero before
  * producing output).
  */
-import test from "node:test";
-import assert from "node:assert/strict";
-import { runChildPi } from "../../src/runtime/child-pi.ts";
-import { SMOKE_ENABLED, SKIP_REASON, makeTmpCwd, fakeExecutorAgent, assertHasAnswer } from "./_helpers.ts";
 
-test("smoke: ctx.agent() plain returns exit 0 + answer", { skip: SMOKE_ENABLED ? false : SKIP_REASON }, async () => {
+import assert from "node:assert/strict";
+import test from "node:test";
+import { runChildPi } from "../../src/runtime/child-pi.ts";
+import { assertHasAnswer, fakeExecutorAgent, makeTmpCwd, SKIP_REASON, SMOKE_ENABLED } from "./_helpers.ts";
+
+test("smoke: ctx.agent() plain returns exit 0 + answer", {
+	skip: SMOKE_ENABLED ? false : SKIP_REASON,
+}, async () => {
 	const { cwd, cleanup } = makeTmpCwd("agent-plain");
 	try {
 		const ac = new AbortController();

@@ -5,8 +5,9 @@
  * - OTLPExporter snapshot cap + in-flight check
  * - live-agent-manager eviction
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { Semaphore } from "../../src/runtime/semaphore.ts";
 
 test("Semaphore rejects acquire when queue is full", async () => {
@@ -23,10 +24,7 @@ test("Semaphore rejects acquire when queue is full", async () => {
 		const w2 = sem.acquire().catch((e) => e);
 		// Third waiter should be rejected (queue full at 2)
 		const w3 = sem.acquire();
-		await assert.rejects(
-			() => w3,
-			/Semaphore queue full/,
-		);
+		await assert.rejects(() => w3, /Semaphore queue full/);
 		// Release the first slot so the queued waiters can drain.
 		sem.release();
 		await w1;

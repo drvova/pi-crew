@@ -35,12 +35,12 @@ export function attachPostExitStdioGuard(child: ChildWithPipedStdio, options: Po
 		if (!stdoutEnded) {
 			try {
 				child.stdout?.destroy();
-		} catch {}
+			} catch {}
 		}
 		if (!stderrEnded) {
 			try {
 				child.stderr?.destroy();
-		} catch {}
+			} catch {}
 		}
 	};
 

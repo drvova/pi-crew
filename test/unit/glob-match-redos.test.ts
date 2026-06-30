@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 
 /**
  * Tests for the hardened globMatch function (MEDIUM #4 fix).
@@ -14,9 +14,9 @@ function globMatch(value: string, pattern: string): boolean {
 	// Prevent ReDoS: reject excessively long patterns
 	if (pattern.length > 200) return false;
 	const regex = pattern
-		.replace(/[.+^${}()|[\]\\]/g, "\\$&")  // escape regex special chars
-		.replace(/\*/g, "[^/]*")  // * matches non-slash characters only
-		.replace(/\?/g, "[^/]");  // ? matches single non-slash
+		.replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape regex special chars
+		.replace(/\*/g, "[^/]*") // * matches non-slash characters only
+		.replace(/\?/g, "[^/]"); // ? matches single non-slash
 	return new RegExp(`^${regex}$`).test(value);
 }
 
@@ -36,7 +36,7 @@ test("globMatch: ? matches single non-slash char", () => {
 	assert.equal(globMatch("a", "?"), true);
 	assert.equal(globMatch("ab", "?"), false);
 	assert.equal(globMatch("a/b", "?/?"), true); // ? matches a and b, / matches /
-	assert.equal(globMatch("a/b", "?"), false);   // single ? can't match two chars + /
+	assert.equal(globMatch("a/b", "?"), false); // single ? can't match two chars + /
 });
 
 test("globMatch: exact match without wildcards", () => {

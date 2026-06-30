@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { buildRecoveryLedger, recipeFor, scenarioForPolicyReason } from "../../src/runtime/recovery-recipes.ts";
 import type { PolicyDecision } from "../../src/state/types.ts";
 
@@ -11,8 +11,19 @@ test("recovery recipes map policy reasons to deterministic steps", () => {
 
 test("recovery ledger records retry/block/escalate decisions", () => {
 	const decisions: PolicyDecision[] = [
-		{ action: "retry", reason: "task_failed", message: "failed", taskId: "task_1", createdAt: new Date(0).toISOString() },
-		{ action: "block", reason: "branch_stale", message: "stale", createdAt: new Date(0).toISOString() },
+		{
+			action: "retry",
+			reason: "task_failed",
+			message: "failed",
+			taskId: "task_1",
+			createdAt: new Date(0).toISOString(),
+		},
+		{
+			action: "block",
+			reason: "branch_stale",
+			message: "stale",
+			createdAt: new Date(0).toISOString(),
+		},
 	];
 	const ledger = buildRecoveryLedger(decisions);
 	assert.equal(ledger.entries.length, 2);

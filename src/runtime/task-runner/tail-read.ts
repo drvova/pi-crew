@@ -5,11 +5,7 @@ import * as fs from "node:fs";
  * If the file exceeds maxBytes, reads only the last maxBytes and snaps
  * to the nearest newline boundary to avoid partial JSONL lines.
  */
-export function tailReadWithLineSnap(
-	filePath: string,
-	maxBytes: number,
-	fallbackContent: string,
-): string {
+export function tailReadWithLineSnap(filePath: string, maxBytes: number, fallbackContent: string): string {
 	if (!fs.existsSync(filePath)) return fallbackContent;
 	const stat = fs.statSync(filePath);
 	if (stat.size <= maxBytes) return fs.readFileSync(filePath, "utf-8");

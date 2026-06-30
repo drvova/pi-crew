@@ -1,13 +1,13 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import type { AgentConfig } from "../../src/agents/agent-config.ts";
 import {
+	type AgentOverlayState,
 	agentToEntry,
 	createAgentOverlayState,
 	moveSelection,
 	renderAgentOverlay,
 	toggleExpand,
-	type AgentOverlayState,
 } from "../../src/ui/agent-management-overlay.ts";
 
 function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
@@ -22,7 +22,11 @@ function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
 }
 
 test("agentToEntry maps AgentConfig fields", () => {
-	const agent = makeAgent({ model: "gpt-4", thinking: "high", loadMode: "lean" });
+	const agent = makeAgent({
+		model: "gpt-4",
+		thinking: "high",
+		loadMode: "lean",
+	});
 	const entry = agentToEntry(agent);
 	assert.equal(entry.name, "test-agent");
 	assert.equal(entry.model, "gpt-4");
@@ -38,9 +42,9 @@ test("createAgentOverlayState sorts by source priority then name", () => {
 		makeAgent({ name: "charlie", source: "user" }),
 	];
 	const state = createAgentOverlayState(agents.map(agentToEntry), 20);
-	assert.equal(state.entries[0].name, "alpha");   // project first
+	assert.equal(state.entries[0].name, "alpha"); // project first
 	assert.equal(state.entries[1].name, "charlie"); // user second
-	assert.equal(state.entries[2].name, "bravo");   // builtin last
+	assert.equal(state.entries[2].name, "bravo"); // builtin last
 });
 
 test("moveSelection navigates within bounds", () => {
@@ -87,7 +91,11 @@ test("renderAgentOverlay shows header and agents", () => {
 });
 
 test("renderAgentOverlay shows expanded details", () => {
-	const agent = makeAgent({ name: "executor", model: "gpt-4", description: "Does work" });
+	const agent = makeAgent({
+		name: "executor",
+		model: "gpt-4",
+		description: "Does work",
+	});
 	let state = createAgentOverlayState([agentToEntry(agent)], 20);
 	state = toggleExpand(state);
 	const lines = renderAgentOverlay(state, 80);

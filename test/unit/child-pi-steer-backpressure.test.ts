@@ -18,11 +18,12 @@
  *      maxTurns:1 + disableTools and assert exit=0 + answer present, run 5×. Skipped
  *      in normal CI to avoid token cost.
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
-import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import type { AgentConfig } from "../../src/agents/agent-config.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -41,11 +42,7 @@ test("HB-003a source contract: steer-backpressure branch does NOT call killProce
 	// The fix removed `killProcessTree(child.pid, child)` from both the
 	// `!writeSucceeded` (backpressure) and the `else` (not-writable) branches.
 	// A regression that reintroduces either call must fail this test.
-	const steerBlock = sliceBetween(
-		childPiSource,
-		"// Inject steer via stdin to tell child to wrap up.",
-		"// Hard abort",
-	);
+	const steerBlock = sliceBetween(childPiSource, "// Inject steer via stdin to tell child to wrap up.", "// Hard abort");
 	assert.ok(steerBlock.length > 0, "steer-injection block must be locatable in child-pi.ts");
 
 	// The block must STILL log the conditions (we kept the diagnostics)...
@@ -61,21 +58,13 @@ test("HB-003a source contract: steer-backpressure branch does NOT call killProce
 	);
 
 	// And the rationale comment must be present so a future edit understands why.
-	assert.match(
-		steerBlock,
-		/ADVISORY/i,
-		"steer-injection block must document that steer is advisory (rationale for not killing)",
-	);
+	assert.match(steerBlock, /ADVISORY/i, "steer-injection block must document that steer is advisory (rationale for not killing)");
 });
 
 test("HB-003a source contract: hard-abort at maxTurns + graceTurns still enforces the limit", () => {
 	// The safety net for genuinely runaway workers is the hard-abort branch. It must
 	// remain intact (it uses child.kill, not killProcessTree, which is fine).
-	const hardAbortBlock = sliceBetween(
-		childPiSource,
-		"} else if (maxTurns !== undefined && softLimitReached",
-		"// Hard abort",
-	);
+	const hardAbortBlock = sliceBetween(childPiSource, "} else if (maxTurns !== undefined && softLimitReached", "// Hard abort");
 	assert.match(hardAbortBlock, /maxTurns\s*\+\s*\(graceTurns/, "hard-abort must key off maxTurns + graceTurns");
 	// The hard-abort block ends at the comment; the child.kill call is on the
 	// next line. Verify it follows. Use a window after the anchor that doesn't
@@ -88,7 +77,9 @@ test("HB-003a source contract: hard-abort at maxTurns + graceTurns still enforce
 // --- Optional real-binary smoke check (opt-in via PI_CREW_SMOKE=1) -----------------
 // Skipped by default to avoid token cost in CI. Run manually with:
 //   PI_CREW_SMOKE=1 npx tsx --test test/unit/child-pi-steer-backpressure.test.ts
-test("HB-003a real-binary smoke: maxTurns:1 + disableTools returns exit 0 (5x)", { skip: process.env.PI_CREW_SMOKE !== "1" }, async () => {
+test("HB-003a real-binary smoke: maxTurns:1 + disableTools returns exit 0 (5x)", {
+	skip: process.env.PI_CREW_SMOKE !== "1",
+}, async () => {
 	const { runChildPi } = await import("../../src/runtime/child-pi.ts");
 	const os = await import("node:os");
 	let pass = 0;

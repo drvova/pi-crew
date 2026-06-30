@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { trySignalChild, attachPostExitStdioGuard } from "../../src/runtime/post-exit-stdio-guard.ts";
+import test from "node:test";
+import { attachPostExitStdioGuard, trySignalChild } from "../../src/runtime/post-exit-stdio-guard.ts";
 
 class MockPipedChild extends EventEmitter {
 	readonly stdout: PassThrough;
@@ -28,7 +28,17 @@ function sleep(ms: number): Promise<void> {
 test("trySignalChild reports whether a termination signal was actually delivered", () => {
 	assert.equal(trySignalChild({ kill: () => true }, "SIGTERM"), true);
 	assert.equal(trySignalChild({ kill: () => false }, "SIGTERM"), false);
-	assert.equal(trySignalChild({ kill: () => { throw new Error("gone"); } }, "SIGTERM"), false);
+	assert.equal(
+		trySignalChild(
+			{
+				kill: () => {
+					throw new Error("gone");
+				},
+			},
+			"SIGTERM",
+		),
+		false,
+	);
 });
 
 test("idle timer closes post-exit silent streams", async () => {

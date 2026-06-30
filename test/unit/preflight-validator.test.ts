@@ -251,10 +251,6 @@ test("all three severity levels are reachable for known topologies", () => {
 		const wf = baseConfig(c.steps);
 		if (c.name === "info-dynamic") wf.runtime = "dynamic";
 		const r = validateWorkflowUsage(wf);
-		assert.equal(
-			r.level,
-			c.expected,
-			`${c.name}: expected ${c.expected}, got ${r.level}`,
-		);
+		assert.equal(r.level, c.expected, `${c.name}: expected ${c.expected}, got ${r.level}`);
 	}
 });

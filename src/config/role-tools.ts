@@ -102,7 +102,7 @@ export function getToolConfig(role: string): RoleToolConfig {
  */
 export function hasToolRestrictions(role: string): boolean {
 	const config = getToolConfig(role);
-	return (config.tools !== undefined) || (config.excludeTools !== undefined);
+	return config.tools !== undefined || config.excludeTools !== undefined;
 }
 
 /**
@@ -110,6 +110,6 @@ export function hasToolRestrictions(role: string): boolean {
  */
 export function getRestrictedRoles(): string[] {
 	return Object.entries(ROLE_TOOL_CONFIGS)
-		.filter(([, config]) => (config.tools !== undefined) || (config.excludeTools !== undefined))
+		.filter(([, config]) => config.tools !== undefined || config.excludeTools !== undefined)
 		.map(([role]) => role);
 }

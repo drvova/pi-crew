@@ -3,21 +3,21 @@
  * Covers: all exported default constant objects
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
+	DEFAULT_ARTIFACT_CLEANUP,
+	DEFAULT_CACHE,
 	DEFAULT_CHILD_PI,
-	DEFAULT_LIVE_SESSION,
-	DEFAULT_LOCKS,
 	DEFAULT_CONCURRENCY,
 	DEFAULT_EVENT_LOG,
-	DEFAULT_ARTIFACT_CLEANUP,
-	DEFAULT_PATHS,
-	DEFAULT_UI,
-	DEFAULT_NOTIFICATIONS,
-	DEFAULT_CACHE,
+	DEFAULT_LIVE_SESSION,
+	DEFAULT_LOCKS,
 	DEFAULT_MAILBOX,
+	DEFAULT_NOTIFICATIONS,
+	DEFAULT_PATHS,
 	DEFAULT_SUBAGENT,
+	DEFAULT_UI,
 } from "../../src/config/defaults.ts";
 
 describe("DEFAULT_CHILD_PI", () => {
@@ -58,7 +58,7 @@ describe("DEFAULT_CHILD_PI", () => {
 		const original = DEFAULT_CHILD_PI.postExitStdioGuardMs;
 		assert.equal(typeof original, "number");
 		assert.ok(original > 0);
-	})
+	});
 });
 
 describe("DEFAULT_LIVE_SESSION", () => {
@@ -253,10 +253,7 @@ describe("DEFAULT_MAILBOX", () => {
 	});
 
 	it("only has expected keys", () => {
-		assert.deepEqual(
-			Object.keys(DEFAULT_MAILBOX).sort(),
-			["maxArchivesPerDirection", "perFileThresholdBytes"],
-		);
+		assert.deepEqual(Object.keys(DEFAULT_MAILBOX).sort(), ["maxArchivesPerDirection", "perFileThresholdBytes"]);
 	});
 });
 

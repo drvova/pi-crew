@@ -1,11 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	IntercomQueue,
-	getIntercomQueue,
-	cleanupIntercomQueue,
-} from "../../src/runtime/intercom-bridge.ts";
+import { describe, it } from "node:test";
 import type { IntercomMessage } from "../../src/runtime/intercom-bridge.ts";
+import { cleanupIntercomQueue, getIntercomQueue, IntercomQueue } from "../../src/runtime/intercom-bridge.ts";
 
 function makeMessage(overrides?: Partial<IntercomMessage>): IntercomMessage {
 	return {

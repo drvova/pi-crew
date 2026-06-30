@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { toolResult, isToolError, textFromToolResult } from "../../src/extension/tool-result.ts";
+import { describe, it } from "node:test";
+import { isToolError, textFromToolResult, toolResult } from "../../src/extension/tool-result.ts";
 
 describe("toolResult", () => {
 	it("creates a result with text content and details", () => {
@@ -23,7 +23,12 @@ describe("toolResult", () => {
 	});
 
 	it("preserves extra detail fields", () => {
-		const r = toolResult("msg", { action: "cancel", status: "ok", runId: "r1", abortedIds: ["t1"] });
+		const r = toolResult("msg", {
+			action: "cancel",
+			status: "ok",
+			runId: "r1",
+			abortedIds: ["t1"],
+		});
 		assert.equal(r.details.runId, "r1");
 		assert.deepEqual(r.details.abortedIds, ["t1"]);
 	});
@@ -50,7 +55,12 @@ describe("textFromToolResult", () => {
 	});
 
 	it("joins multiple content items with newline", () => {
-		const r = { content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] };
+		const r = {
+			content: [
+				{ type: "text", text: "a" },
+				{ type: "text", text: "b" },
+			],
+		};
 		assert.equal(textFromToolResult(r), "a\nb");
 	});
 

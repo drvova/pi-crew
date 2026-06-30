@@ -1,15 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-	applyThinkingSuffix,
-	currentCrewDepth,
-	resolveCrewMaxDepth,
-	checkCrewDepth,
-	cleanupTempDir,
-} from "../../src/runtime/pi-args.ts";
+import { describe, it } from "node:test";
+import { applyThinkingSuffix, checkCrewDepth, cleanupTempDir, currentCrewDepth, resolveCrewMaxDepth } from "../../src/runtime/pi-args.ts";
 
 // ── applyThinkingSuffix ──
 
@@ -99,7 +93,13 @@ describe("resolveCrewMaxDepth", () => {
 	});
 
 	it("prefers PI_CREW_MAX_DEPTH over PI_TEAMS_MAX_DEPTH", () => {
-		assert.strictEqual(resolveCrewMaxDepth(undefined, { PI_CREW_MAX_DEPTH: "5", PI_TEAMS_MAX_DEPTH: "3" }), 5);
+		assert.strictEqual(
+			resolveCrewMaxDepth(undefined, {
+				PI_CREW_MAX_DEPTH: "5",
+				PI_TEAMS_MAX_DEPTH: "3",
+			}),
+			5,
+		);
 	});
 
 	it("uses input value when env is not set", () => {

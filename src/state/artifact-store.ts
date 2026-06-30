@@ -1,10 +1,10 @@
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { createHash } from "node:crypto";
-import type { ArtifactDescriptor } from "./types.ts";
-import { atomicWriteFile } from "./atomic-write.ts";
-import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 import { redactSecretString, redactSecrets } from "../utils/redaction.ts";
+import { resolveRealContainedPath } from "../utils/safe-paths.ts";
+import { atomicWriteFile } from "./atomic-write.ts";
+import type { ArtifactDescriptor } from "./types.ts";
 
 function hashContent(content: string): string {
 	return createHash("sha256").update(content).digest("hex");
@@ -107,7 +107,11 @@ function resolveInside(baseDir: string, relativePath: string): string {
 	}
 
 	const normalizedRelativePath = relativePath.replaceAll("\\", "/").replace(/^\.\/+/, "");
-	if (!normalizedRelativePath || normalizedRelativePath.split("/").some((segment) => segment === "..") || path.isAbsolute(normalizedRelativePath)) {
+	if (
+		!normalizedRelativePath ||
+		normalizedRelativePath.split("/").some((segment) => segment === "..") ||
+		path.isAbsolute(normalizedRelativePath)
+	) {
 		throw new Error(`Invalid artifact path: ${relativePath}`);
 	}
 	// Use resolveRealContainedPath to resolve symlinks before checking containment,

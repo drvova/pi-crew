@@ -26,11 +26,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, it } from "node:test";
-import { BUILTIN_TOOL_NAMES, parseToolsField } from "../../src/agents/agent-config.ts";
-import { discoverSkills } from "../../src/skills/discover-skills.ts";
-import { renderSkillInstructions } from "../../src/runtime/skill-instructions.ts";
-import { buildPiWorkerArgs } from "../../src/runtime/pi-args.ts";
 import type { AgentConfig } from "../../src/agents/agent-config.ts";
+import { BUILTIN_TOOL_NAMES, parseToolsField } from "../../src/agents/agent-config.ts";
+import { buildPiWorkerArgs } from "../../src/runtime/pi-args.ts";
+import { renderSkillInstructions } from "../../src/runtime/skill-instructions.ts";
+import { discoverSkills } from "../../src/skills/discover-skills.ts";
 
 const tempDirs: string[] = [];
 function freshProject(): string {
@@ -41,7 +41,11 @@ function freshProject(): string {
 afterEach(() => {
 	while (tempDirs.length > 0) {
 		const dir = tempDirs.pop()!;
-		try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+		try {
+			fs.rmSync(dir, { recursive: true, force: true });
+		} catch {
+			/* ignore */
+		}
 	}
 });
 
@@ -117,10 +121,7 @@ describe("F6 — skill discovery reads 5 roots", () => {
 			agent: makeAgentConfig({ skills: ["shared"] }),
 		});
 		assert.ok(rendered, "renderSkillInstructions should return a result for a found skill");
-		assert.ok(
-			rendered!.block.includes("shared body content from .pi/skills"),
-			"rendered block should include the .pi/skills body",
-		);
+		assert.ok(rendered!.block.includes("shared body content from .pi/skills"), "rendered block should include the .pi/skills body");
 	});
 });
 
@@ -205,7 +206,10 @@ describe("F1 — excludeExtensions applied in child-pi spawn args", () => {
 	});
 
 	it("empty excludeExtensions array = no-op (all extensions pass through)", () => {
-		const agent = makeAgentConfig({ extensions: ["foo"], excludeExtensions: [] });
+		const agent = makeAgentConfig({
+			extensions: ["foo"],
+			excludeExtensions: [],
+		});
 		const { args } = buildPiWorkerArgs({
 			agent,
 			role: "test",

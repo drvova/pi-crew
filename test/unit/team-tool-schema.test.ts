@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { Value } from "@sinclair/typebox/value";
 import { TeamToolParams } from "../../src/schema/team-tool-schema.ts";
 
@@ -20,7 +20,8 @@ test("team tool schema is strict-provider friendly", () => {
 	const violations: string[] = [];
 	walkSchema(TeamToolParams, (node) => {
 		if (Array.isArray(node.type)) violations.push("array type union");
-		if (node.description && !node.type && !node.anyOf && !node.oneOf && !node.allOf && !node.properties) violations.push(`description-only schema: ${node.description}`);
+		if (node.description && !node.type && !node.anyOf && !node.oneOf && !node.allOf && !node.properties)
+			violations.push(`description-only schema: ${node.description}`);
 		if (node.type === "array" && !node.items) violations.push("array without items");
 		if (node.type && (node.anyOf || node.oneOf)) violations.push("type combined with union keyword");
 	});
@@ -30,7 +31,10 @@ test("team tool schema is strict-provider friendly", () => {
 test("team tool flexible fields use explicit schema shapes", () => {
 	const properties = (TeamToolParams as { properties: Record<string, unknown> }).properties;
 	const skill = properties.skill as { anyOf?: unknown[] };
-	const config = properties.config as { type?: string; additionalProperties?: boolean };
+	const config = properties.config as {
+		type?: string;
+		additionalProperties?: boolean;
+	};
 	assert.equal(Array.isArray(skill.anyOf), true);
 	assert.equal(skill.anyOf?.length, 3);
 	assert.equal(config.type, "object");
@@ -45,12 +49,18 @@ test("schema accepts action: retry", () => {
 test("schema accepts action: invalidate", () => {
 	// FIX: Previously "invalidate" was in TS interface but missing from TypeBox schema,
 	// causing silent failure with -32602 at the JSON-RPC layer.
-	const ok = Value.Check(TeamToolParams, { action: "invalidate", runId: "r1" });
+	const ok = Value.Check(TeamToolParams, {
+		action: "invalidate",
+		runId: "r1",
+	});
 	assert.strictEqual(ok, true);
 });
 
 test("schema accepts action: anchor", () => {
-	const ok = Value.Check(TeamToolParams, { action: "anchor", anchor: "test" });
+	const ok = Value.Check(TeamToolParams, {
+		action: "anchor",
+		anchor: "test",
+	});
 	assert.strictEqual(ok, true);
 });
 

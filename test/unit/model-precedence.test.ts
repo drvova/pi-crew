@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { buildConfiguredModelRouting } from "../../src/runtime/model-fallback.ts";
 
 describe("model inheritance precedence", () => {

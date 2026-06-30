@@ -15,10 +15,10 @@
 
 import { ChainRunner, parseChainString } from "../../runtime/chain-runner.ts";
 import { HandoffManager } from "../../runtime/handoff-manager.ts";
-import { ChainTeamRunExecutor, type HandleRunFn } from "./chain-executor.ts";
-import { result, type TeamContext } from "./context.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
+import { ChainTeamRunExecutor, type HandleRunFn } from "./chain-executor.ts";
+import { result, type TeamContext } from "./context.ts";
 
 /**
  * Execute a chain expression (`"a -> b -> c"`). Each step runs a real team run
@@ -30,11 +30,7 @@ import type { PiTeamsToolResult } from "../tool-result.ts";
  * @param ctx     - The team tool context (cwd is used to load run manifests).
  * @param handleRun - The run.ts `handleRun` function reference (injected).
  */
-export async function handleChainRun(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-	handleRun: HandleRunFn,
-): Promise<PiTeamsToolResult> {
+export async function handleChainRun(params: TeamToolParamsValue, ctx: TeamContext, handleRun: HandleRunFn): Promise<PiTeamsToolResult> {
 	const chainString = params.chain;
 	if (!chainString || chainString.trim().length === 0) {
 		return result("Chain expression is empty.", { action: "run", status: "error" }, true);
@@ -43,7 +39,7 @@ export async function handleChainRun(
 	const spec = parseChainString(chainString);
 	if (spec.steps.length === 0) {
 		return result(
-			"Chain must contain at least one step. Use the form: \"step1 -> step2 -> step3\".",
+			'Chain must contain at least one step. Use the form: "step1 -> step2 -> step3".',
 			{ action: "run", status: "error" },
 			true,
 		);
@@ -72,11 +68,7 @@ export async function handleChainRun(
 	];
 	for (const s of chainResult.steps) {
 		const runId = executor.stepRunIds[s.step - 1];
-		const tag =
-			s.outcome === "success" ? "✓"
-			: s.outcome === "failure" ? "✗"
-			: s.outcome === "partial" ? "≈"
-			: "⊘";
+		const tag = s.outcome === "success" ? "✓" : s.outcome === "failure" ? "✗" : s.outcome === "partial" ? "≈" : "⊘";
 		lines.push(
 			`${tag} Step ${s.step} [${s.name}]: ${s.outcome} (${s.duration}ms)${runId ? ` runId=${runId}` : ""}${s.error ? ` | ${s.error}` : ""}`,
 		);

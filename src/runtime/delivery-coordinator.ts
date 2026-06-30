@@ -63,7 +63,13 @@ export class DeliveryCoordinator {
 				logInternalError("delivery-coordinator.deliverResult", error, `runId=${runId}`);
 			}
 		}
-		if (!this.flushing) this.enqueue({ runId, payload: result, timestamp: Date.now(), type: "result" });
+		if (!this.flushing)
+			this.enqueue({
+				runId,
+				payload: result,
+				timestamp: Date.now(),
+				type: "result",
+			});
 	}
 
 	deliverNotification(notification: NotificationDescriptor): void {
@@ -80,11 +86,19 @@ export class DeliveryCoordinator {
 			if (this.deps.emit) {
 				try {
 					this.deps.emit("pi-crew:notification", notification);
-				} catch { /* secondary delivery, ignore errors */ }
+				} catch {
+					/* secondary delivery, ignore errors */
+				}
 			}
 			return;
 		}
-		if (!this.flushing) this.enqueue({ runId: notification.runId ?? "", payload: notification, timestamp: Date.now(), type: "notification" });
+		if (!this.flushing)
+			this.enqueue({
+				runId: notification.runId ?? "",
+				payload: notification,
+				timestamp: Date.now(),
+				type: "notification",
+			});
 	}
 
 	deliverSteer(runId: string, message: string): void {
@@ -96,7 +110,13 @@ export class DeliveryCoordinator {
 				logInternalError("delivery-coordinator.deliverSteer", error, `runId=${runId}`);
 			}
 		}
-		if (!this.flushing) this.enqueue({ runId, payload: message, timestamp: Date.now(), type: "steer" });
+		if (!this.flushing)
+			this.enqueue({
+				runId,
+				payload: message,
+				timestamp: Date.now(),
+				type: "steer",
+			});
 	}
 
 	flushQueuedResults(): void {
@@ -115,10 +135,17 @@ export class DeliveryCoordinator {
 					continue;
 				}
 				try {
-					if (!this.deliverQueued(delivery)) retryLater.push({ ...delivery, generation: this.generation });
+					if (!this.deliverQueued(delivery))
+						retryLater.push({
+							...delivery,
+							generation: this.generation,
+						});
 				} catch (error) {
 					logInternalError("delivery-coordinator.flush", error, `runId=${delivery.runId} type=${delivery.type}`);
-					retryLater.push({ ...delivery, generation: this.generation });
+					retryLater.push({
+						...delivery,
+						generation: this.generation,
+					});
 				}
 			}
 			this.pending.unshift(...retryLater);

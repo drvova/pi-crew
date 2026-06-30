@@ -2,21 +2,22 @@
  * Validation test for needs_attention task status feature.
  * Covers: contracts, state transitions, attention events, agent-control idle detection.
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
-import {
-	TEAM_TASK_STATUSES,
-	TEAM_TERMINAL_TASK_STATUSES,
-	TEAM_TASK_STATUS_TRANSITIONS,
-	canTransitionTaskStatus,
-} from "../../src/state/contracts.ts";
 import { applyAttentionState, resolveCrewControlConfig } from "../../src/runtime/agent-control.ts";
 import { readCrewAgents, upsertCrewAgent } from "../../src/runtime/crew-agent-records.ts";
-import { createRunManifest } from "../../src/state/state-store.ts";
+import {
+	canTransitionTaskStatus,
+	TEAM_TASK_STATUS_TRANSITIONS,
+	TEAM_TASK_STATUSES,
+	TEAM_TERMINAL_TASK_STATUSES,
+} from "../../src/state/contracts.ts";
 import { readEvents } from "../../src/state/event-log.ts";
+import { createRunManifest } from "../../src/state/state-store.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
@@ -75,7 +76,12 @@ test("agent control marks stale running agents as needs_attention", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-needs-attention-"));
 	try {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-		const { manifest } = createRunManifest({ cwd, team, workflow, goal: "test needs_attention" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "test needs_attention",
+		});
 
 		const old = new Date(Date.now() - 120_000).toISOString();
 		const record = {
@@ -100,19 +106,14 @@ test("agent control marks stale running agents as needs_attention", () => {
 		const updated = applyAttentionState(
 			manifest,
 			record,
-			resolveCrewControlConfig({ control: { needsAttentionAfterMs: 1000 } }),
+			resolveCrewControlConfig({
+				control: { needsAttentionAfterMs: 1000 },
+			}),
 		);
 
 		assert.equal(updated.progress?.activityState, "needs_attention");
-		assert.equal(
-			readCrewAgents(manifest)[0]!.progress?.activityState,
-			"needs_attention",
-		);
-		assert.ok(
-			readEvents(manifest.eventsPath).some(
-				(e) => e.type === "task.attention" && e.data?.reason === "idle",
-			),
-		);
+		assert.equal(readCrewAgents(manifest)[0]!.progress?.activityState, "needs_attention");
+		assert.ok(readEvents(manifest.eventsPath).some((e) => e.type === "task.attention" && e.data?.reason === "idle"));
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
@@ -122,7 +123,12 @@ test("agent control does NOT mark recently active agents", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-needs-attention-"));
 	try {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-		const { manifest } = createRunManifest({ cwd, team, workflow, goal: "test active" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "test active",
+		});
 
 		const recent = new Date().toISOString();
 		const record = {
@@ -147,7 +153,9 @@ test("agent control does NOT mark recently active agents", () => {
 		const updated = applyAttentionState(
 			manifest,
 			record,
-			resolveCrewControlConfig({ control: { needsAttentionAfterMs: 60_000 } }),
+			resolveCrewControlConfig({
+				control: { needsAttentionAfterMs: 60_000 },
+			}),
 		);
 
 		assert.equal(updated.progress?.activityState, "active");

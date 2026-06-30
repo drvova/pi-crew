@@ -1,8 +1,14 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { requestRender, requestRenderTarget, setExtensionWidget, setStatusFallback, setWorkingIndicator } from "../../src/ui/pi-ui-compat.ts";
+import test from "node:test";
+import {
+	requestRender,
+	requestRenderTarget,
+	setExtensionWidget,
+	setStatusFallback,
+	setWorkingIndicator,
+} from "../../src/ui/pi-ui-compat.ts";
 
 function walkTsFiles(dir: string): string[] {
 	return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -13,7 +19,9 @@ function walkTsFiles(dir: string): string[] {
 }
 
 test("pi UI compat centralizes requestRender casts", () => {
-	const offenders = walkTsFiles(path.join(process.cwd(), "src")).filter((file) => fs.readFileSync(file, "utf-8").includes("as { requestRender"));
+	const offenders = walkTsFiles(path.join(process.cwd(), "src")).filter((file) =>
+		fs.readFileSync(file, "utf-8").includes("as { requestRender"),
+	);
 	assert.deepEqual(offenders, []);
 });
 
@@ -24,20 +32,39 @@ test("pi UI compat safely feature-detects optional APIs", () => {
 	let widget: { key: string; content: unknown; placement?: string } | undefined;
 	const ctx = {
 		ui: {
-			requestRender: () => { renderCount += 1; },
-			setWorkingIndicator: (options?: unknown) => { workingOptions = options; },
-			setStatus: (key: string, value?: string) => { status = { key, value }; },
-			setWidget: (key: string, content: unknown, options?: { placement?: string }) => { widget = { key, content, placement: options?.placement }; },
+			requestRender: () => {
+				renderCount += 1;
+			},
+			setWorkingIndicator: (options?: unknown) => {
+				workingOptions = options;
+			},
+			setStatus: (key: string, value?: string) => {
+				status = { key, value };
+			},
+			setWidget: (key: string, content: unknown, options?: { placement?: string }) => {
+				widget = { key, content, placement: options?.placement };
+			},
 		},
 	} as never;
 	requestRender(ctx);
-	requestRenderTarget({ requestRender: () => { renderCount += 1; } });
+	requestRenderTarget({
+		requestRender: () => {
+			renderCount += 1;
+		},
+	});
 	setWorkingIndicator(ctx, { frames: ["x"], intervalMs: 10 });
-	setExtensionWidget(ctx, "widget", ["line"], { placement: "belowEditor", persist: true });
+	setExtensionWidget(ctx, "widget", ["line"], {
+		placement: "belowEditor",
+		persist: true,
+	});
 	setStatusFallback(ctx, "status", ["a", "b"], "segment");
 	assert.equal(renderCount, 2);
 	assert.deepEqual(workingOptions, { frames: ["x"], intervalMs: 10 });
-	assert.deepEqual(widget, { key: "widget", content: ["line"], placement: "belowEditor" });
+	assert.deepEqual(widget, {
+		key: "widget",
+		content: ["line"],
+		placement: "belowEditor",
+	});
 	assert.deepEqual(status, { key: "status:segment", value: "a\nb" });
 
 	assert.doesNotThrow(() => requestRender({ ui: {} } as never));

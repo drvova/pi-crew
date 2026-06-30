@@ -1,14 +1,14 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	runPhaseGates,
+	CARGO_RUST_GATES,
 	computeGreenLevelFromResults,
 	executeVerificationCommands,
 	NPM_TYPESCRIPT_GATES,
-	CARGO_RUST_GATES,
+	runPhaseGates,
 } from "../../src/runtime/verification-gates.ts";
 import type { VerificationCommandResult } from "../../src/state/types.ts";
-import { pickCmd, OK_CMD, FAIL_CMD, ECHO_CMD } from "../fixtures/cross-platform-cmd.ts";
+import { ECHO_CMD, FAIL_CMD, OK_CMD, pickCmd } from "../fixtures/cross-platform-cmd.ts";
 
 test("verification-gates: NPM_TYPESCRIPT_GATES has expected phases", () => {
 	assert.equal(NPM_TYPESCRIPT_GATES.length, 4);
@@ -38,7 +38,11 @@ test("verification-gates: runPhaseGates stops on critical failure", async () => 
 	const gates = [
 		{ name: "success", command: pickCmd(OK_CMD), critical: true },
 		{ name: "fails", command: pickCmd(FAIL_CMD), critical: true },
-		{ name: "would-run", command: pickCmd(ECHO_CMD("should not run")), critical: true },
+		{
+			name: "would-run",
+			command: pickCmd(ECHO_CMD("should not run")),
+			critical: true,
+		},
 	];
 	const result = await runPhaseGates(gates, process.cwd());
 	// Results contain only executed gates (not skipped)
@@ -53,7 +57,11 @@ test("verification-gates: runPhaseGates continues on non-critical failure", asyn
 	const gates = [
 		{ name: "success", command: pickCmd(OK_CMD), critical: true },
 		{ name: "fails", command: pickCmd(FAIL_CMD), critical: false },
-		{ name: "continues", command: pickCmd(ECHO_CMD("still going")), critical: true },
+		{
+			name: "continues",
+			command: pickCmd(ECHO_CMD("still going")),
+			critical: true,
+		},
 	];
 	const result = await runPhaseGates(gates, process.cwd());
 	assert.equal(result.results.length, 3);
@@ -72,9 +80,7 @@ test("verification-gates: computeGreenLevelFromResults all passed", () => {
 });
 
 test("verification-gates: computeGreenLevelFromResults all failed", () => {
-	const results: VerificationCommandResult[] = [
-		{ cmd: "npm test", status: "failed", exitCode: 1 },
-	];
+	const results: VerificationCommandResult[] = [{ cmd: "npm test", status: "failed", exitCode: 1 }];
 	const level = computeGreenLevelFromResults(results, "targeted");
 	assert.equal(level, "none");
 });
@@ -96,7 +102,11 @@ test("verification-gates: computeGreenLevelFromResults empty commands", () => {
 
 test("verification-gates: executeVerificationCommands with empty contract", async () => {
 	const results = await executeVerificationCommands(
-		{ requiredGreenLevel: "targeted", commands: [], allowManualEvidence: true },
+		{
+			requiredGreenLevel: "targeted",
+			commands: [],
+			allowManualEvidence: true,
+		},
 		process.cwd(),
 		"test-run",
 		"test-task",

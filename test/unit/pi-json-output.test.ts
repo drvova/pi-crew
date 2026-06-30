@@ -1,14 +1,32 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import test from "node:test";
 import { parsePiJsonOutput } from "../../src/runtime/pi-json-output.ts";
 
 test("parsePiJsonOutput extracts final text and usage", () => {
 	const stdout = [
-		JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "hello" }] } }),
-		JSON.stringify({ type: "message", content: [{ type: "text", text: "final" }] }),
-		JSON.stringify({ type: "message_end", usage: { input: 12, output: 5, cache_read_tokens: 2, cost_usd: 0.03, turns: 1 } }),
+		JSON.stringify({
+			type: "message",
+			message: {
+				role: "assistant",
+				content: [{ type: "text", text: "hello" }],
+			},
+		}),
+		JSON.stringify({
+			type: "message",
+			content: [{ type: "text", text: "final" }],
+		}),
+		JSON.stringify({
+			type: "message_end",
+			usage: {
+				input: 12,
+				output: 5,
+				cache_read_tokens: 2,
+				cost_usd: 0.03,
+				turns: 1,
+			},
+		}),
 	].join("\n");
 	const parsed = parsePiJsonOutput(stdout);
 	assert.equal(parsed.jsonEvents, 3);
@@ -21,8 +39,20 @@ test("parsePiJsonOutput extracts final text and usage", () => {
 
 test("parsePiJsonOutput ignores user prompt text when extracting final output", () => {
 	const stdout = [
-		JSON.stringify({ type: "message", message: { role: "user", content: [{ type: "text", text: "secret prompt" }] } }),
-		JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "clean answer" }] } }),
+		JSON.stringify({
+			type: "message",
+			message: {
+				role: "user",
+				content: [{ type: "text", text: "secret prompt" }],
+			},
+		}),
+		JSON.stringify({
+			type: "message",
+			message: {
+				role: "assistant",
+				content: [{ type: "text", text: "clean answer" }],
+			},
+		}),
 	].join("\n");
 	const parsed = parsePiJsonOutput(stdout);
 	assert.equal(parsed.finalText, "clean answer");

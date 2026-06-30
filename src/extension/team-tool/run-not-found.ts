@@ -12,12 +12,11 @@
  * consistent and the hint never drifts.
  */
 
-import { result, type TeamContext } from "./context.ts";
 import type { TeamToolDetails } from "../team-tool-types.ts";
+import { result, type TeamContext } from "./context.ts";
 
 /** Recovery hint appended to every "Run not found" message. */
-export const RUN_NOT_FOUND_HINT =
-	"\n\nTip: run action='list' to see recent runs and their IDs.";
+export const RUN_NOT_FOUND_HINT = "\n\nTip: run action='list' to see recent runs and their IDs.";
 
 /**
  * Build the standard "Run not found" error result with a recovery hint.
@@ -26,11 +25,7 @@ export const RUN_NOT_FOUND_HINT =
  * @param action the action that was attempted (for the details.action field)
  */
 export function runNotFound(runId: string, action: string): ReturnType<typeof result> {
-	return result(
-		`Run '${runId}' not found.${RUN_NOT_FOUND_HINT}`,
-		{ action, status: "error" } satisfies TeamToolDetails,
-		true,
-	);
+	return result(`Run '${runId}' not found.${RUN_NOT_FOUND_HINT}`, { action, status: "error" } satisfies TeamToolDetails, true);
 }
 
 /**

@@ -1,5 +1,5 @@
-import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
 import { readCrewAgents } from "../../runtime/crew-agent-records.ts";
+import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
 import { loadRunManifestById } from "../../state/state-store.ts";
 import { pad, truncate } from "../../utils/visual.ts";
 import { asCrewTheme, type CrewTheme } from "../theme-adapter.ts";
@@ -14,7 +14,12 @@ export class AgentPickerOverlay {
 	private readonly theme: CrewTheme;
 	private selected = 0;
 
-	constructor(opts: { cwd: string; runId: string; done: (selection: AgentPickerSelection | undefined) => void; theme?: unknown }) {
+	constructor(opts: {
+		cwd: string;
+		runId: string;
+		done: (selection: AgentPickerSelection | undefined) => void;
+		theme?: unknown;
+	}) {
 		const loaded = loadRunManifestById(opts.cwd, opts.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency;
 		this.agents = loaded ? readCrewAgents(loaded.manifest) : [];
 		this.done = opts.done;
@@ -30,7 +35,10 @@ export class AgentPickerOverlay {
 		const lines = [
 			this.theme.bold("Select agent"),
 			"↑/↓ move · Enter select · ESC cancel",
-			...this.agents.map((agent, index) => `${index === this.selected ? "›" : " "} ${agent.taskId} · ${agent.status} · ${agent.role}->${agent.agent}`),
+			...this.agents.map(
+				(agent, index) =>
+					`${index === this.selected ? "›" : " "} ${agent.taskId} · ${agent.status} · ${agent.role}->${agent.agent}`,
+			),
 		];
 		if (!this.agents.length) lines.push("No agents found.");
 		return lines.map((line) => pad(truncate(line, inner), inner));

@@ -23,7 +23,11 @@ export interface FileCoalescer {
 	clear(): void;
 }
 
-export function createFileCoalescer(handler: (file: string) => void, defaultDelayMs: number, timerApi: TimerApi = defaultTimerApi): FileCoalescer {
+export function createFileCoalescer(
+	handler: (file: string) => void,
+	defaultDelayMs: number,
+	timerApi: TimerApi = defaultTimerApi,
+): FileCoalescer {
 	const pending = new Map<string, unknown>();
 	return {
 		schedule(file, delayMs = defaultDelayMs) {

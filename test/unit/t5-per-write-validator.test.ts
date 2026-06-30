@@ -13,8 +13,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import {
 	buildValidationBlocker,
-	extractPathFromInput,
 	extensionKey,
+	extractPathFromInput,
 	resetPerWriteValidatorCache,
 	setPerWriteValidatorsForTest,
 	validateJson,
@@ -42,7 +42,7 @@ afterEach(() => {
 describe("T5: validateJson", () => {
 	test("valid JSON is ok", () => {
 		assert.deepEqual(validateJson('{"a":1}', "x.json"), { ok: true });
-		assert.deepEqual(validateJson('[1,2,3]', "x.json"), { ok: true });
+		assert.deepEqual(validateJson("[1,2,3]", "x.json"), { ok: true });
 		assert.deepEqual(validateJson("null", "x.json"), { ok: true });
 	});
 
@@ -134,9 +134,17 @@ describe("T5: validateWrittenFile — dedup by content", () => {
 
 describe("T5: custom validator registry (extensibility for future .js/.py)", () => {
 	test("a registered extension is validated, an unregistered one is skipped", () => {
-		setPerWriteValidatorsForTest(new Map([
-			["js", (_content, _path) => ({ ok: false, error: "would-be-process-spawn (mock)" })],
-		]));
+		setPerWriteValidatorsForTest(
+			new Map([
+				[
+					"js",
+					(_content, _path) => ({
+						ok: false,
+						error: "would-be-process-spawn (mock)",
+					}),
+				],
+			]),
+		);
 		writeFileSync(join(dir, "x.js"), "anything");
 		writeFileSync(join(dir, "y.txt"), "anything");
 		const jsResult = validateWrittenFile(join(dir, "x.js"));

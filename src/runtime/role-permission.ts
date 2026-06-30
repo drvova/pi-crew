@@ -24,6 +24,11 @@ export function currentCrewRole(env: NodeJS.ProcessEnv = process.env): string | 
 export function checkSubagentSpawnPermission(role: string | undefined): PermissionCheckResult {
 	if (!role) return { allowed: true, mode: "workspace_write" };
 	const mode = permissionForRole(role);
-	if (mode === "read_only") return { allowed: false, mode, reason: `Role '${role}' is read-only and cannot spawn additional subagents.` };
+	if (mode === "read_only")
+		return {
+			allowed: false,
+			mode,
+			reason: `Role '${role}' is read-only and cannot spawn additional subagents.`,
+		};
 	return { allowed: true, mode };
 }

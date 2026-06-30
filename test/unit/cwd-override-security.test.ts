@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { resolveCwdOverride } from "../../src/extension/registration/team-tool.ts";
 
 test("resolveCwdOverride rejects directories outside the base cwd", () => {
@@ -27,7 +27,9 @@ test("resolveCwdOverride allows contained child directories", () => {
 		try {
 			const r = fs.realpathSync.native(root);
 			root = r.startsWith("\\\\?\\") ? r.slice(4) : r;
-		} catch { /* keep as-is */ }
+		} catch {
+			/* keep as-is */
+		}
 		const child = path.join(root, "child");
 		fs.mkdirSync(child, { recursive: true });
 		const result = resolveCwdOverride(root, "child");

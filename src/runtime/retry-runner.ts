@@ -1,17 +1,17 @@
 /**
  * RetryRunner - Execute tasks with retry support and summary accumulation.
- * 
+ *
  * Based on pi-boomerang's --rethrow pattern:
  * - Retries failed tasks up to maxAttempts
  * - Generates handoffs between attempts
  * - Accumulates context from previous attempts
  * - Supports exponential backoff
  * - Limits handoff accumulation to prevent memory leaks
- * 
+ *
  * @see docs/pi-boomerang-integration-plan.md
  */
 
-import type { HandoffSummary, HandoffManager, TaskPacket, TaskResult } from "./handoff-manager.ts";
+import type { HandoffManager, HandoffSummary, TaskPacket, TaskResult } from "./handoff-manager.ts";
 
 /**
  * Retry configuration.
@@ -75,10 +75,7 @@ export class RetryRunner {
 	private taskRunner: TaskRunnerLike;
 	private handoffManager: HandoffManager;
 
-	constructor(
-		taskRunner: TaskRunnerLike,
-		handoffManager: HandoffManager,
-	) {
+	constructor(taskRunner: TaskRunnerLike, handoffManager: HandoffManager) {
 		this.taskRunner = taskRunner;
 		this.handoffManager = handoffManager;
 	}
@@ -127,15 +124,12 @@ export class RetryRunner {
 	/**
 	 * Execute task with retry support.
 	 * Summaries accumulate between attempts for better context.
-	 * 
+	 *
 	 * @param packet - Task packet to execute
 	 * @param config - Retry configuration (stopOnSuccess defaults to true)
 	 * @returns Final retry result with all attempts
 	 */
-	async runWithRetry(
-		packet: TaskPacket,
-		config: RetryConfig
-	): Promise<RetryResult> {
+	async runWithRetry(packet: TaskPacket, config: RetryConfig): Promise<RetryResult> {
 		if (this._disposed) {
 			throw new Error("RetryRunner has been disposed");
 		}
@@ -148,7 +142,6 @@ export class RetryRunner {
 		// Clear previous handoffs at start of each retry run
 		this._handoffs = [];
 
-
 		for (let attempt = 1; attempt <= config.maxAttempts; attempt++) {
 			if (this._disposed) {
 				throw new Error("RetryRunner was disposed during retry");
@@ -157,11 +150,7 @@ export class RetryRunner {
 
 			try {
 				// Inject accumulated handoffs into context
-				const enrichedPacket = this.enrichPacketWithHandoffs(
-					packet,
-					handoffs,
-					attempt
-				);
+				const enrichedPacket = this.enrichPacketWithHandoffs(packet, handoffs, attempt);
 
 				// Execute task
 				const result = await this.taskRunner.runTask(enrichedPacket);
@@ -175,10 +164,7 @@ export class RetryRunner {
 
 				// Generate summary between attempts
 				if (config.summaryBetweenAttempts !== false) {
-					const summary = await this.handoffManager.generateSummary(
-						packet,
-						result
-					);
+					const summary = await this.handoffManager.generateSummary(packet, result);
 					attemptResult.summary = summary;
 					handoffs.push(summary);
 
@@ -213,13 +199,12 @@ export class RetryRunner {
 						config.backoffMs ?? 1000,
 						attempt,
 						config.backoffMultiplier ?? 1,
-						config.maxBackoffMs
+						config.maxBackoffMs,
 					);
 					if (backoffDelay > 0) {
 						await this.sleep(backoffDelay);
 					}
 				}
-
 			} catch (error) {
 				attempts.push({
 					attempt,
@@ -238,7 +223,7 @@ export class RetryRunner {
 						config.backoffMs,
 						attempt,
 						config.backoffMultiplier ?? 1,
-						config.maxBackoffMs
+						config.maxBackoffMs,
 					);
 					if (backoffDelay > 0) {
 						await this.sleep(backoffDelay);
@@ -260,24 +245,23 @@ export class RetryRunner {
 	/**
 	 * Enrich packet with accumulated handoffs from previous attempts.
 	 */
-	private enrichPacketWithHandoffs(
-		packet: TaskPacket,
-		handoffs: HandoffSummary[],
-		attempt: number
-	): TaskPacket {
+	private enrichPacketWithHandoffs(packet: TaskPacket, handoffs: HandoffSummary[], attempt: number): TaskPacket {
 		if (handoffs.length === 0) {
 			return packet;
 		}
 
 		// Build accumulated context from previous attempts
-		const accumulatedContext = handoffs.map((h, index) =>
-			`## Attempt ${index + 1}: ${h.task}\n` +
-			`Outcome: ${h.outcome}\n` +
-			`Files: created=${h.filesCreated.join(", ")}, modified=${h.filesModified.join(", ")}\n` +
-			`Decisions: ${h.decisions.map(d => d.rationale).join("; ")}\n` +
-			`Blockers: ${h.blockers.join(", ")}\n` +
-			`Next Steps: ${h.nextSteps.join(", ")}\n`
-		).join("\n---\n");
+		const accumulatedContext = handoffs
+			.map(
+				(h, index) =>
+					`## Attempt ${index + 1}: ${h.task}\n` +
+					`Outcome: ${h.outcome}\n` +
+					`Files: created=${h.filesCreated.join(", ")}, modified=${h.filesModified.join(", ")}\n` +
+					`Decisions: ${h.decisions.map((d) => d.rationale).join("; ")}\n` +
+					`Blockers: ${h.blockers.join(", ")}\n` +
+					`Next Steps: ${h.nextSteps.join(", ")}\n`,
+			)
+			.join("\n---\n");
 
 		return {
 			...packet,
@@ -293,12 +277,7 @@ export class RetryRunner {
 	/**
 	 * Calculate backoff delay with optional capping.
 	 */
-	private calculateBackoff(
-		baseMs: number,
-		attempt: number,
-		multiplier: number,
-		maxBackoffMs?: number
-	): number {
+	private calculateBackoff(baseMs: number, attempt: number, multiplier: number, maxBackoffMs?: number): number {
 		let delay = baseMs * Math.pow(multiplier, attempt - 1);
 		if (maxBackoffMs !== undefined) {
 			delay = Math.min(delay, maxBackoffMs);
@@ -310,17 +289,14 @@ export class RetryRunner {
 	 * Sleep helper.
 	 */
 	private sleep(ms: number): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, ms));
+		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 }
 
 /**
  * Create a RetryRunner with default dependencies.
  */
-export function createRetryRunner(
-	taskRunner: TaskRunnerLike,
-	handoffManager: HandoffManager
-): RetryRunner {
+export function createRetryRunner(taskRunner: TaskRunnerLike, handoffManager: HandoffManager): RetryRunner {
 	return new RetryRunner(taskRunner, handoffManager);
 }
 

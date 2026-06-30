@@ -100,20 +100,24 @@ export interface ValidationResult {
  * surface as `{ ok: false }` rather than throwing — discovery must remain
  * exception-safe.
  */
-export function parseSkillFrontmatter(
-	content: string,
-): { ok: true; data: Record<string, unknown> } | { ok: false; error: string } {
+export function parseSkillFrontmatter(content: string): { ok: true; data: Record<string, unknown> } | { ok: false; error: string } {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
 	if (!match) return { ok: true, data: {} };
 	try {
 		const parsed = yaml.parse(match[1]);
 		if (parsed === null || parsed === undefined) return { ok: true, data: {} };
 		if (typeof parsed !== "object" || Array.isArray(parsed)) {
-			return { ok: false, error: "Frontmatter must be a YAML mapping, not a scalar or list." };
+			return {
+				ok: false,
+				error: "Frontmatter must be a YAML mapping, not a scalar or list.",
+			};
 		}
 		return { ok: true, data: parsed as Record<string, unknown> };
 	} catch (e) {
-		return { ok: false, error: `YAML parse error: ${(e as Error).message}` };
+		return {
+			ok: false,
+			error: `YAML parse error: ${(e as Error).message}`,
+		};
 	}
 }
 
@@ -173,7 +177,13 @@ export function validateSkillFrontmatter(skillDir: string): ValidationResult {
 	const nameRaw = data.name;
 	let resolvedName = derivedName;
 	if (nameRaw === undefined || nameRaw === null) {
-		errors.push(warn(skillDir, "name", `Frontmatter 'name' missing; using directory name "${derivedName}" as fallback. Add explicit 'name' to silence this.`));
+		errors.push(
+			warn(
+				skillDir,
+				"name",
+				`Frontmatter 'name' missing; using directory name "${derivedName}" as fallback. Add explicit 'name' to silence this.`,
+			),
+		);
 	} else if (typeof nameRaw !== "string") {
 		errors.push(hard(skillDir, "name", `'name' must be a string, got ${typeof nameRaw}.`));
 	} else if (nameRaw.length === 0) {
@@ -227,7 +237,13 @@ export function validateSkillFrontmatter(skillDir: string): ValidationResult {
 	// ── OPTIONAL: version
 	if (data.version !== undefined) {
 		if (typeof data.version !== "string" || !VERSION_REGEX.test(data.version)) {
-			errors.push(hard(skillDir, "version", `'version' must be a semver string (e.g. "1.2.3" or "1.2.3-beta.1"); got "${String(data.version)}".`));
+			errors.push(
+				hard(
+					skillDir,
+					"version",
+					`'version' must be a semver string (e.g. "1.2.3" or "1.2.3-beta.1"); got "${String(data.version)}".`,
+				),
+			);
 		}
 	}
 
@@ -239,7 +255,9 @@ export function validateSkillFrontmatter(skillDir: string): ValidationResult {
 	// ── UNKNOWN PROPS: SOFT warn (HYBRID policy)
 	for (const key of Object.keys(data)) {
 		if (!ALLOWED_SKILL_PROPS.has(key)) {
-			errors.push(warn(skillDir, `<unknown-prop:${key}>`, `Unknown property '${key}' is not in the whitelist; keeping for forward-compat.`));
+			errors.push(
+				warn(skillDir, `<unknown-prop:${key}>`, `Unknown property '${key}' is not in the whitelist; keeping for forward-compat.`),
+			);
 		}
 	}
 

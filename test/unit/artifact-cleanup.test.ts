@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { cleanupOldArtifacts, CLEANUP_MARKER_FILE, writeCleanupMarker } from "../../src/state/artifact-store.ts";
+import test from "node:test";
+import { CLEANUP_MARKER_FILE, cleanupOldArtifacts, writeCleanupMarker } from "../../src/state/artifact-store.ts";
 
 function makeDir(): string {
 	// Use realpath to resolve symlinks (macOS /var/folders → /private/var/folders).
@@ -39,7 +39,10 @@ test("fresh marker skips cleanup", () => {
 		const oldMs = Date.now() - 2 * 24 * 60 * 60 * 1000;
 		fs.utimesSync(oldFile, oldMs / 1000, oldMs / 1000);
 		writeCleanupMarker(dir, CLEANUP_MARKER_FILE);
-		cleanupOldArtifacts(dir, { maxAgeDays: 1, scanGraceMs: 24 * 60 * 60 * 1000 });
+		cleanupOldArtifacts(dir, {
+			maxAgeDays: 1,
+			scanGraceMs: 24 * 60 * 60 * 1000,
+		});
 		assert.equal(fs.existsSync(oldFile), true);
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });

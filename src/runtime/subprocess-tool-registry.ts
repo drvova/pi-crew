@@ -2,7 +2,10 @@ export interface SubprocessToolEvent {
 	toolName: string;
 	toolCallId: string;
 	args?: Record<string, unknown>;
-	result?: { content: Array<{ type: string; text?: string }>; details?: unknown };
+	result?: {
+		content: Array<{ type: string; text?: string }>;
+		details?: unknown;
+	};
 	isError?: boolean;
 }
 

@@ -23,20 +23,33 @@
  * entry aging past the threshold, and use `fs.utimesSync` to place the heartbeat
  * mtime precisely in simulated time.
  */
+
+import assert from "node:assert/strict";
+import { type ChildProcess, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { createRunManifest, loadRunManifestById, saveRunManifest } from "../../src/state/state-store.ts";
-import { registerActiveRun } from "../../src/state/active-run-registry.ts";
 import { purgeStaleActiveRunIndex } from "../../src/runtime/crash-recovery.ts";
+import { registerActiveRun } from "../../src/state/active-run-registry.ts";
+import { createRunManifest, loadRunManifestById, saveRunManifest } from "../../src/state/state-store.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
-const team: TeamConfig = { name: "ari", description: "ari", source: "builtin", filePath: "ari.team.md", roles: [{ name: "explorer", agent: "explorer" }] };
-const workflow: WorkflowConfig = { name: "ari", description: "ari", source: "builtin", filePath: "ari.workflow.md", steps: [{ id: "explore", role: "explorer", task: "Explore" }] };
+const team: TeamConfig = {
+	name: "ari",
+	description: "ari",
+	source: "builtin",
+	filePath: "ari.team.md",
+	roles: [{ name: "explorer", agent: "explorer" }],
+};
+const workflow: WorkflowConfig = {
+	name: "ari",
+	description: "ari",
+	source: "builtin",
+	filePath: "ari.workflow.md",
+	steps: [{ id: "explore", role: "explorer", task: "Explore" }],
+};
 
 async function withIsolatedHomeAsync<T>(fn: () => Promise<T>): Promise<T> {
 	const previousHome = process.env.PI_TEAMS_HOME;
@@ -61,7 +74,11 @@ class AliveWorker {
 	}
 	/** Kill + fully reap so the PID is genuinely dead (ESRCH), not a zombie. */
 	async stop(): Promise<void> {
-		try { this.child.kill("SIGKILL"); } catch { /* already gone */ }
+		try {
+			this.child.kill("SIGKILL");
+		} catch {
+			/* already gone */
+		}
 		await new Promise<void>((resolve) => {
 			this.child.once("exit", () => resolve());
 			setTimeout(resolve, 2000);
@@ -72,15 +89,39 @@ class AliveWorker {
 const STALE = 5 * 60 * 1000; // 5 min, matching purgeStaleActiveRunIndex default
 
 /** Register a running async run with a live worker, then reap the worker. */
-async function setupRunningRun(cwd: string, goal: string): Promise<{ runId: string; stateRoot: string; manifestPath: string; worker: AliveWorker; t0: number }> {
+async function setupRunningRun(
+	cwd: string,
+	goal: string,
+): Promise<{
+	runId: string;
+	stateRoot: string;
+	manifestPath: string;
+	worker: AliveWorker;
+	t0: number;
+}> {
 	const worker = new AliveWorker();
 	const t0 = Date.now();
 	const created = createRunManifest({ cwd, team, workflow, goal });
-	const running = { ...created.manifest, status: "running" as const, updatedAt: new Date(t0).toISOString(), async: { pid: worker.pid, logPath: "", spawnedAt: new Date(t0).toISOString() } };
+	const running = {
+		...created.manifest,
+		status: "running" as const,
+		updatedAt: new Date(t0).toISOString(),
+		async: {
+			pid: worker.pid,
+			logPath: "",
+			spawnedAt: new Date(t0).toISOString(),
+		},
+	};
 	saveRunManifest(running);
 	registerActiveRun(running); // PID alive here → passes the registration liveness filter
 	await worker.stop(); // now the PID is genuinely dead, exactly like a finished worker
-	return { runId: created.manifest.runId, stateRoot: created.paths.stateRoot, manifestPath: created.paths.manifestPath, worker, t0 };
+	return {
+		runId: created.manifest.runId,
+		stateRoot: created.paths.stateRoot,
+		manifestPath: created.paths.manifestPath,
+		worker,
+		t0,
+	};
 }
 
 // ─── Regression: a fresh on-disk manifest must NOT be purged ───
@@ -94,7 +135,10 @@ test("purgeStaleActiveRunIndex keeps a run whose on-disk manifest is fresh (regr
 			// exact bug enabler. But re-save the on-disk manifest with a FRESH updatedAt
 			// (1 min ago in simulated time), as a live workflow would on each transition.
 			const now = run.t0 + 20 * 60 * 1000;
-			saveRunManifest({ ...loadRunManifestById(cwd, run.runId)!.manifest, updatedAt: new Date(now - 60_000).toISOString() });
+			saveRunManifest({
+				...loadRunManifestById(cwd, run.runId)!.manifest,
+				updatedAt: new Date(now - 60_000).toISOString(),
+			});
 
 			assert.ok(fs.existsSync(run.stateRoot), "stateRoot exists before purge");
 			const result = purgeStaleActiveRunIndex(STALE, now);
@@ -145,7 +189,14 @@ test("purgeStaleActiveRunIndex keeps a run with a fresh team heartbeat even if t
 			// team heartbeat written 1 min ago in simulated time (via utimesSync).
 			const now = run.t0 + 20 * 60 * 1000;
 			const heartbeatPath = path.join(run.stateRoot, "heartbeat.json");
-			fs.writeFileSync(heartbeatPath, JSON.stringify({ pid: run.worker.pid, at: now - 60_000, runId: run.runId }));
+			fs.writeFileSync(
+				heartbeatPath,
+				JSON.stringify({
+					pid: run.worker.pid,
+					at: now - 60_000,
+					runId: run.runId,
+				}),
+			);
 			const freshMtime = (now - 60_000) / 1000;
 			fs.utimesSync(heartbeatPath, freshMtime, freshMtime);
 

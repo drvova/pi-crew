@@ -11,7 +11,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { logInternalError } from "../utils/internal-error.ts";
 
-import type { ScheduleStoreData, ScheduledTask } from "./types.ts";
+import type { ScheduledTask, ScheduleStoreData } from "./types.ts";
 
 export type DetectedSchedule =
 	| { type: "cron"; normalized: string }
@@ -34,7 +34,10 @@ export function parseInterval(s: string): number | null {
 }
 
 /** 6-field cron validation ("second minute hour dom month dow"). */
-export function validateCronExpression(expr: string): { valid: boolean; error?: string } {
+export function validateCronExpression(expr: string): {
+	valid: boolean;
+	error?: string;
+} {
 	const fields = expr.trim().split(/\s+/);
 	if (fields.length !== 6) {
 		return {
@@ -43,8 +46,11 @@ export function validateCronExpression(expr: string): { valid: boolean; error?: 
 		};
 	}
 	// Basic format check: all fields must be non-empty
-	if (!fields.every(f => f.length > 0)) {
-		return { valid: false, error: "Cron expression contains empty fields." };
+	if (!fields.every((f) => f.length > 0)) {
+		return {
+			valid: false,
+			error: "Cron expression contains empty fields.",
+		};
 	}
 	// Accept any cron pattern — fail silently for malformed expressions
 	// (the croner library will reject at execution time)
@@ -122,11 +128,11 @@ export class ScheduleStore {
 	}
 
 	hasName(name: string): boolean {
-		return this.data.jobs.some(j => j.name === name);
+		return this.data.jobs.some((j) => j.name === name);
 	}
 
 	get(id: string): ScheduledTask | undefined {
-		return this.data.jobs.find(j => j.id === id);
+		return this.data.jobs.find((j) => j.id === id);
 	}
 
 	add(job: ScheduledTask): void {
@@ -135,7 +141,7 @@ export class ScheduleStore {
 	}
 
 	update(id: string, patch: Partial<ScheduledTask>): ScheduledTask | undefined {
-		const idx = this.data.jobs.findIndex(j => j.id === id);
+		const idx = this.data.jobs.findIndex((j) => j.id === id);
 		if (idx === -1) return undefined;
 		this.data.jobs[idx] = { ...this.data.jobs[idx], ...patch };
 		this.save();
@@ -144,7 +150,7 @@ export class ScheduleStore {
 
 	remove(id: string): boolean {
 		const before = this.data.jobs.length;
-		this.data.jobs = this.data.jobs.filter(j => j.id !== id);
+		this.data.jobs = this.data.jobs.filter((j) => j.id !== id);
 		if (this.data.jobs.length !== before) {
 			this.save();
 			return true;

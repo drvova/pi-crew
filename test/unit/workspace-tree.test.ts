@@ -1,13 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import * as os from "node:os";
-import {
-	buildWorkspaceTree,
-	formatAge,
-	formatBytes,
-} from "../../src/runtime/workspace-tree.ts";
+import * as path from "node:path";
+import test from "node:test";
+import { buildWorkspaceTree, formatAge, formatBytes } from "../../src/runtime/workspace-tree.ts";
 
 // ── Helper: create a temp directory tree ───────────────────────────────
 
@@ -120,7 +116,10 @@ test("applies per-directory entry limit", async () => {
 		}
 		await createTempTree(entries, dir);
 
-		const result = await buildWorkspaceTree(dir, { maxDepth: 1, dirLimit: 3 });
+		const result = await buildWorkspaceTree(dir, {
+			maxDepth: 1,
+			dirLimit: 3,
+		});
 		assert.equal(result.truncated, true, "should be truncated");
 		assert.ok(result.rendered.includes("… 2 more"), `expected truncation indicator in:\n${result.rendered}`);
 	} finally {
@@ -139,7 +138,11 @@ test("truncates when line cap is exceeded", async () => {
 		}
 		await createTempTree(entries, dir);
 
-		const result = await buildWorkspaceTree(dir, { maxDepth: 2, dirLimit: 50, lineCap: 5 });
+		const result = await buildWorkspaceTree(dir, {
+			maxDepth: 2,
+			dirLimit: 50,
+			lineCap: 5,
+		});
 		assert.equal(result.truncated, true);
 		assert.ok(result.totalLines <= 5, `totalLines=${result.totalLines} should be <= 5`);
 		assert.ok(result.rendered.includes("elided"), `expected elided in:\n${result.rendered}`);
@@ -156,7 +159,7 @@ test("excludes specified directory names", async () => {
 		await createTempTree(
 			{
 				src: { "main.ts": "export {}" },
-				node_modules: { "pkg": { "index.js": "module.exports" } },
+				node_modules: { pkg: { "index.js": "module.exports" } },
 				".hidden": { "secret.txt": "shh" },
 			},
 			dir,

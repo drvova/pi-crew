@@ -1,13 +1,12 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-
-import { handleCleanup } from "../../src/extension/team-tool/lifecycle-actions.ts";
-import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import { handleCleanup } from "../../src/extension/team-tool/lifecycle-actions.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
+import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
 
 /**
  * Issue #35 comment: "pi-crew leaves behind user-level junk". This test pins
@@ -23,12 +22,19 @@ function makeTempHome(): string {
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "crew-user-cleanup-home-"));
 	// userPiRoot() = <home>/.pi/agent
 	fs.mkdirSync(path.join(home, ".pi", "agent", "extensions", "pi-crew", "state"), { recursive: true });
-	fs.mkdirSync(path.join(home, ".pi", "agent", "agents"), { recursive: true });
+	fs.mkdirSync(path.join(home, ".pi", "agent", "agents"), {
+		recursive: true,
+	});
 	return home;
 }
 
 function makeCtx(cwd: string): TeamContext {
-	return { cwd, config: undefined, sessionId: "test-session", signal: undefined } as unknown as TeamContext;
+	return {
+		cwd,
+		config: undefined,
+		sessionId: "test-session",
+		signal: undefined,
+	} as unknown as TeamContext;
 }
 
 function params(p: Partial<TeamToolParamsValue>): TeamToolParamsValue {

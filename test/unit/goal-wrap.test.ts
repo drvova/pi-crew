@@ -7,11 +7,12 @@
  *   - validateGoalWrapConfig: budget required / mutex / evaluatorModel required
  *   - GOAL_WRAP_ELIGIBLE_BUILTINS: implementation, fast-fix, default
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import test from "node:test";
 import {
 	GOAL_WRAP_ELIGIBLE_BUILTINS,
 	GOAL_WRAP_MAX_STEPS,
@@ -59,15 +60,32 @@ test("isGoalWrapEnabled: returns false when no config (default OFF)", () => {
 // --- validateGoalWrapConfig ---
 
 test("validateGoalWrapConfig: returns undefined for valid unlimited config", () => {
-	assert.equal(validateGoalWrapConfig({ enabled: true, evaluatorModel: "minimax/MiniMax-M3", budgetUnlimited: true }), undefined);
+	assert.equal(
+		validateGoalWrapConfig({
+			enabled: true,
+			evaluatorModel: "minimax/MiniMax-M3",
+			budgetUnlimited: true,
+		}),
+		undefined,
+	);
 });
 
 test("validateGoalWrapConfig: returns undefined for valid budgetTotal config", () => {
-	assert.equal(validateGoalWrapConfig({ enabled: true, evaluatorModel: "minimax/MiniMax-M3", budgetTotal: 5000 }), undefined);
+	assert.equal(
+		validateGoalWrapConfig({
+			enabled: true,
+			evaluatorModel: "minimax/MiniMax-M3",
+			budgetTotal: 5000,
+		}),
+		undefined,
+	);
 });
 
 test("validateGoalWrapConfig: requires evaluatorModel", () => {
-	const err = validateGoalWrapConfig({ enabled: true, budgetUnlimited: true });
+	const err = validateGoalWrapConfig({
+		enabled: true,
+		budgetUnlimited: true,
+	});
 	assert.match(err ?? "", /evaluatorModel/i);
 });
 
@@ -77,12 +95,21 @@ test("validateGoalWrapConfig: requires budget (no silent unbounded default)", ()
 });
 
 test("validateGoalWrapConfig: rejects both budgetTotal AND budgetUnlimited (mutex)", () => {
-	const err = validateGoalWrapConfig({ enabled: true, evaluatorModel: "x", budgetTotal: 5000, budgetUnlimited: true });
+	const err = validateGoalWrapConfig({
+		enabled: true,
+		evaluatorModel: "x",
+		budgetTotal: 5000,
+		budgetUnlimited: true,
+	});
 	assert.match(err ?? "", /mutually exclusive/i);
 });
 
 test("validateGoalWrapConfig: rejects budgetTotal below 1000 floor", () => {
-	const err = validateGoalWrapConfig({ enabled: true, evaluatorModel: "x", budgetTotal: 500 });
+	const err = validateGoalWrapConfig({
+		enabled: true,
+		evaluatorModel: "x",
+		budgetTotal: 500,
+	});
 	assert.match(err ?? "", /budgetTotal.*1000|>=1000/i);
 });
 
@@ -144,10 +171,7 @@ test("FIX: startGoalWrappedRun calls persistAsyncOnGoalLoopManifest after spawn"
 	// a real runner). Instead we assert the helper exists and was called from
 	// startGoalWrappedRun's source via grep. This catches accidental removal
 	// during future refactors.
-	const source = fs.readFileSync(
-		new URL("../../src/extension/team-tool/goal-wrap.ts", import.meta.url),
-		"utf-8",
-	);
+	const source = fs.readFileSync(new URL("../../src/extension/team-tool/goal-wrap.ts", import.meta.url), "utf-8");
 	assert.match(source, /persistAsyncOnGoalLoopManifest\(/, "startGoalWrappedRun must call persistAsyncOnGoalLoopManifest");
 	assert.match(source, /async:\s*\{\s*pid:\s*spawned\.pid/, "manifest.async.pid must come from spawn result");
 });
@@ -197,7 +221,7 @@ test("SAFETY: shouldGoalWrap returns {enabled:true} for single-step workflows (i
 	try {
 		writeConfig(cwd, {
 			goalWrap: {
-				"implementation": {
+				implementation: {
 					enabled: true,
 					maxTurns: 1,
 					evaluatorModel: "minimax/MiniMax-M3",

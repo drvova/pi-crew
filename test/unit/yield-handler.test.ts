@@ -1,33 +1,49 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import { subprocessToolRegistry } from "../../src/runtime/subprocess-tool-registry.ts";
 import {
-	isYieldEvent,
+	buildYieldReminder,
+	DEFAULT_YIELD_CONFIG,
 	extractYieldResult,
 	hasYieldInOutput,
-	buildYieldReminder,
+	isYieldEvent,
 	registerYieldTool,
 	YIELD_TOOL_NAME,
-	DEFAULT_YIELD_CONFIG,
 } from "../../src/runtime/yield-handler.ts";
-import { subprocessToolRegistry } from "../../src/runtime/subprocess-tool-registry.ts";
 
 test("isYieldEvent detects submit_result tool_execution_start", () => {
-	const event = { type: "tool_execution_start", toolName: "submit_result", args: { summary: "done" } };
+	const event = {
+		type: "tool_execution_start",
+		toolName: "submit_result",
+		args: { summary: "done" },
+	};
 	assert.equal(isYieldEvent(event), true);
 });
 
 test("isYieldEvent detects submit_result toolCall", () => {
-	const event = { type: "toolCall", name: "submit_result", args: { summary: "done" } };
+	const event = {
+		type: "toolCall",
+		name: "submit_result",
+		args: { summary: "done" },
+	};
 	assert.equal(isYieldEvent(event), true);
 });
 
 test("isYieldEvent detects submit_result tool_call", () => {
-	const event = { type: "tool_call", tool: "submit_result", args: { summary: "done" } };
+	const event = {
+		type: "tool_call",
+		tool: "submit_result",
+		args: { summary: "done" },
+	};
 	assert.equal(isYieldEvent(event), true);
 });
 
 test("isYieldEvent returns false for other tool calls", () => {
-	const event = { type: "tool_execution_start", toolName: "write_file", args: {} };
+	const event = {
+		type: "tool_execution_start",
+		toolName: "write_file",
+		args: {},
+	};
 	assert.equal(isYieldEvent(event), false);
 });
 
@@ -55,12 +71,21 @@ test("extractYieldResult parses structured data", () => {
 	assert.ok(result);
 	assert.equal(result!.summary, "Task completed successfully");
 	assert.equal(result!.toolCallId, "call-123");
-	assert.deepEqual(result!.artifacts, { "result.txt": "/path/to/result.txt" });
-	assert.deepEqual(result!.structuredData, { filesChanged: 3, testsPassed: true });
+	assert.deepEqual(result!.artifacts, {
+		"result.txt": "/path/to/result.txt",
+	});
+	assert.deepEqual(result!.structuredData, {
+		filesChanged: 3,
+		testsPassed: true,
+	});
 });
 
 test("extractYieldResult returns undefined for non-yield events", () => {
-	const event = { type: "tool_execution_start", toolName: "write_file", args: {} };
+	const event = {
+		type: "tool_execution_start",
+		toolName: "write_file",
+		args: {},
+	};
 	assert.equal(extractYieldResult(event), undefined);
 });
 
@@ -70,7 +95,11 @@ test("extractYieldResult returns undefined when args is missing", () => {
 });
 
 test("extractYieldResult returns undefined when summary is missing", () => {
-	const event = { type: "tool_execution_start", toolName: "submit_result", args: {} };
+	const event = {
+		type: "tool_execution_start",
+		toolName: "submit_result",
+		args: {},
+	};
 	assert.equal(extractYieldResult(event), undefined);
 });
 
@@ -92,7 +121,11 @@ test("hasYieldInOutput detects yield in event sequence", () => {
 	const events = [
 		{ type: "tool_execution_start", toolName: "write_file", args: {} },
 		{ type: "tool_execution_end", toolName: "write_file" },
-		{ type: "tool_execution_start", toolName: "submit_result", args: { summary: "done" } },
+		{
+			type: "tool_execution_start",
+			toolName: "submit_result",
+			args: { summary: "done" },
+		},
 	];
 	assert.equal(hasYieldInOutput(events), true);
 });
@@ -128,11 +161,20 @@ test("registerYieldTool registers in subprocessToolRegistry", () => {
 	assert.equal(subprocessToolRegistry.hasHandler(YIELD_TOOL_NAME), true);
 	const handler = subprocessToolRegistry.getHandler(YIELD_TOOL_NAME);
 	assert.ok(handler);
-	assert.equal(handler!.shouldTerminate?.({ toolName: YIELD_TOOL_NAME, toolCallId: "test" } as any), true);
+	assert.equal(
+		handler!.shouldTerminate?.({
+			toolName: YIELD_TOOL_NAME,
+			toolCallId: "test",
+		} as any),
+		true,
+	);
 	const extracted = handler!.extractData?.({
 		toolName: YIELD_TOOL_NAME,
 		toolCallId: "call-789",
-		args: { summary: "Extracted result", artifacts: { "a.txt": "content" } },
+		args: {
+			summary: "Extracted result",
+			artifacts: { "a.txt": "content" },
+		},
 	} as any);
 	assert.ok(extracted);
 	assert.equal((extracted as any).summary, "Extracted result");

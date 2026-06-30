@@ -30,9 +30,7 @@ function textFromContent(content: unknown): string {
 
 /** Safely cast unknown to a record for property access. */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: undefined;
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 /** Detect if an event type is a tool invocation (call/use/start). */
@@ -48,10 +46,13 @@ function isToolResultType(type: string): boolean {
 /** Extract tool name from various event shapes. */
 function extractToolName(obj: Record<string, unknown>): string | undefined {
 	const name =
-		typeof obj.toolName === "string" ? obj.toolName :
-		typeof obj.name === "string" ? obj.name :
-		typeof obj.tool === "string" ? obj.tool :
-		undefined;
+		typeof obj.toolName === "string"
+			? obj.toolName
+			: typeof obj.name === "string"
+				? obj.name
+				: typeof obj.tool === "string"
+					? obj.tool
+					: undefined;
 	return name;
 }
 
@@ -105,9 +106,7 @@ export function parseTranscriptEntries(lines: string[]): TranscriptEntry[] {
 		if (isToolCallType(type)) {
 			// Look ahead for matching tool_result
 			const toolName = extractToolName(obj) ?? "unknown";
-			const inputText =
-				typeof obj.input === "string" ? obj.input :
-				obj.input !== undefined ? JSON.stringify(obj.input) : "";
+			const inputText = typeof obj.input === "string" ? obj.input : obj.input !== undefined ? JSON.stringify(obj.input) : "";
 			let resultText = "";
 			let isError = false;
 			let resultTimestamp = timestamp;
@@ -120,9 +119,13 @@ export function parseTranscriptEntries(lines: string[]): TranscriptEntry[] {
 				if (isToolResultType(nextType) || /tool/i.test(nextType)) {
 					const robj = parsed[j]!.obj;
 					const rt =
-						typeof robj.text === "string" ? robj.text :
-						typeof robj.result === "string" ? robj.result :
-						robj.result !== undefined ? JSON.stringify(robj.result) : "";
+						typeof robj.text === "string"
+							? robj.text
+							: typeof robj.result === "string"
+								? robj.result
+								: robj.result !== undefined
+									? JSON.stringify(robj.result)
+									: "";
 					resultText = rt;
 					isError = robj.isError === true;
 					resultTimestamp = typeof robj.timestamp === "number" ? robj.timestamp : resultTimestamp;
@@ -159,15 +162,16 @@ export function parseTranscriptEntries(lines: string[]): TranscriptEntry[] {
 			const toolName = extractToolName(obj) ?? "unknown";
 			const isError = obj.isError === true;
 			const text =
-				typeof obj.text === "string" ? obj.text :
-				typeof obj.result === "string" ? obj.result :
-				obj.result !== undefined ? JSON.stringify(obj.result) : "";
+				typeof obj.text === "string"
+					? obj.text
+					: typeof obj.result === "string"
+						? obj.result
+						: obj.result !== undefined
+							? JSON.stringify(obj.result)
+							: "";
 
 			const summary = summarize(`${isError ? "✗" : "✓"} ${toolName}${text ? ": " + summarize(text, 60) : ""}`, SUMMARY_MAX);
-			const content = [
-				`[Tool Result: ${toolName}${isError ? " (error)" : ""}]`,
-				text || "(no output)",
-			].join("\n");
+			const content = [`[Tool Result: ${toolName}${isError ? " (error)" : ""}]`, text || "(no output)"].join("\n");
 
 			entries.push({
 				id: id++,
@@ -225,9 +229,7 @@ export function parseTranscriptEntries(lines: string[]): TranscriptEntry[] {
 
 /** Toggle expand/collapse for an entry by index. Returns a new array. */
 export function toggleEntry(entries: TranscriptEntry[], index: number): TranscriptEntry[] {
-	return entries.map((entry, i) =>
-		i === index ? { ...entry, expanded: !entry.expanded } : entry,
-	);
+	return entries.map((entry, i) => (i === index ? { ...entry, expanded: !entry.expanded } : entry));
 }
 
 /** Render entries into display lines, respecting expand/collapse.

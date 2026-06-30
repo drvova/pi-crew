@@ -61,7 +61,12 @@ export function discoverPiThemes(): PiThemeInfo[] {
 	for (const name of BUILTIN_PI_THEMES) {
 		if (seen.has(name)) continue;
 		seen.add(name);
-		out.push({ name, source: "builtin", displayName: name, mode: name === "light" ? "light" : "dark" });
+		out.push({
+			name,
+			source: "builtin",
+			displayName: name,
+			mode: name === "light" ? "light" : "dark",
+		});
 	}
 
 	// Custom themes from ~/.pi/agent/themes/
@@ -85,7 +90,13 @@ export function discoverPiThemes(): PiThemeInfo[] {
 					// keep undefined
 				}
 				seen.add(name);
-				out.push({ name, source: "custom", path: fullPath, displayName, mode });
+				out.push({
+					name,
+					source: "custom",
+					path: fullPath,
+					displayName,
+					mode,
+				});
 			}
 		}
 	} catch {

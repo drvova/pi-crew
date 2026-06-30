@@ -6,15 +6,16 @@
  * immunity + stale override for "read", and digest notice generation for
  * bash/grep/search.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
 	buildStalenessIndex,
+	DEFAULT_PRUNE_CONFIG,
+	type PruneConfig,
 	pruneToolOutputs,
 	resultDigest,
-	DEFAULT_PRUNE_CONFIG,
 	type ToolResultEntry,
-	type PruneConfig,
 } from "../../src/runtime/tool-output-pruner.ts";
 
 // ---------------------------------------------------------------------------
@@ -54,29 +55,20 @@ const BIG = "x".repeat(10_000);
 
 describe("buildStalenessIndex", () => {
 	it("marks older result stale when same file is read twice", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", "old content"),
-			makeRead("r2", "/src/a.ts", "new content"),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", "old content"), makeRead("r2", "/src/a.ts", "new content")];
 		const { staleIndices } = buildStalenessIndex(results);
 		assert.ok(staleIndices.has(0), "older read should be stale");
 		assert.ok(!staleIndices.has(1), "latest read should NOT be stale");
 	});
 
 	it("does NOT mark stale when targets differ", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", "content a"),
-			makeRead("r2", "/src/b.ts", "content b"),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", "content a"), makeRead("r2", "/src/b.ts", "content b")];
 		const { staleIndices } = buildStalenessIndex(results);
 		assert.equal(staleIndices.size, 0);
 	});
 
 	it("marks read stale when file is edited after read", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", "original"),
-			makeRead("r2", "/src/b.ts", "unrelated"),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", "original"), makeRead("r2", "/src/b.ts", "unrelated")];
 		const fileEdits = [{ target: "/src/a.ts", index: 3 }];
 		const { staleIndices } = buildStalenessIndex(results, fileEdits);
 		assert.ok(staleIndices.has(0), "read of edited file should be stale");
@@ -84,18 +76,14 @@ describe("buildStalenessIndex", () => {
 	});
 
 	it("does NOT mark read stale when edit happens before read", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", "original"),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", "original")];
 		const fileEdits = [{ target: "/src/a.ts", index: 0 }];
 		const { staleIndices } = buildStalenessIndex(results, fileEdits);
 		assert.equal(staleIndices.size, 0, "edit before read does not invalidate");
 	});
 
 	it("strips read selectors when matching edit targets", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts:50-200", "content"),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts:50-200", "content")];
 		const fileEdits = [{ target: "/src/a.ts", index: 1 }];
 		const { staleIndices } = buildStalenessIndex(results, fileEdits);
 		assert.ok(staleIndices.has(0), "read with selector should match base path edit");
@@ -111,10 +99,7 @@ describe("buildStalenessIndex", () => {
 	});
 
 	it("marks grep stale when same pattern re-run", () => {
-		const results: ToolResultEntry[] = [
-			makeGrep("g1", "TODO", "old matches"),
-			makeGrep("g2", "TODO", "new matches"),
-		];
+		const results: ToolResultEntry[] = [makeGrep("g1", "TODO", "old matches"), makeGrep("g2", "TODO", "new matches")];
 		const { staleIndices } = buildStalenessIndex(results);
 		assert.ok(staleIndices.has(0));
 		assert.ok(!staleIndices.has(1));
@@ -128,10 +113,7 @@ describe("buildStalenessIndex", () => {
 describe("pruneToolOutputs — protect window", () => {
 	it("never prunes non-stale results inside the protect window", () => {
 		// Different files → no staleness. Huge protect window → both protected.
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", BIG),
-			makeRead("r2", "/src/b.ts", BIG),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", BIG), makeRead("r2", "/src/b.ts", BIG)];
 		const config: PruneConfig = {
 			protectTokens: 100_000, // huge window
 			minimumSavings: 1,
@@ -143,10 +125,7 @@ describe("pruneToolOutputs — protect window", () => {
 	});
 
 	it("prunes stale results even inside the protect window (staleness overrides recency)", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", BIG),
-			makeRead("r2", "/src/a.ts", BIG),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", BIG), makeRead("r2", "/src/a.ts", BIG)];
 		const config: PruneConfig = {
 			protectTokens: 100_000, // huge window
 			minimumSavings: 1,
@@ -164,10 +143,7 @@ describe("pruneToolOutputs — protect window", () => {
 
 describe("pruneToolOutputs — minimumSavings hysteresis", () => {
 	it("does NOT prune when savings are below minimumSavings", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", "tiny"),
-			makeRead("r2", "/src/a.ts", "tiny"),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", "tiny"), makeRead("r2", "/src/a.ts", "tiny")];
 		// AGGRESSIVE_CONFIG has minimumSavings=1 but content is so small savings may be 0.
 		const config: PruneConfig = {
 			protectTokens: 0,
@@ -180,10 +156,7 @@ describe("pruneToolOutputs — minimumSavings hysteresis", () => {
 	});
 
 	it("prunes when savings exceed minimumSavings", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", BIG),
-			makeRead("r2", "/src/a.ts", BIG),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", BIG), makeRead("r2", "/src/a.ts", BIG)];
 		const config: PruneConfig = {
 			protectTokens: 0,
 			minimumSavings: 100,
@@ -202,10 +175,7 @@ describe("pruneToolOutputs — minimumSavings hysteresis", () => {
 
 describe("pruneToolOutputs — protected tools", () => {
 	it("protected tool is never pruned even when stale (no override)", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", BIG),
-			makeRead("r2", "/src/a.ts", BIG),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", BIG), makeRead("r2", "/src/a.ts", BIG)];
 		const config: PruneConfig = {
 			protectTokens: 0,
 			minimumSavings: 1,
@@ -217,10 +187,7 @@ describe("pruneToolOutputs — protected tools", () => {
 	});
 
 	it("protected tool WITH stale override is pruned when superseded", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", BIG),
-			makeRead("r2", "/src/a.ts", BIG),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", BIG), makeRead("r2", "/src/a.ts", BIG)];
 		const config: PruneConfig = {
 			protectTokens: 0,
 			minimumSavings: 1,
@@ -234,10 +201,7 @@ describe("pruneToolOutputs — protected tools", () => {
 	});
 
 	it("most recent result per target is never pruned even with override", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", BIG),
-			makeRead("r2", "/src/a.ts", BIG),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", BIG), makeRead("r2", "/src/a.ts", BIG)];
 		// Window large enough to protect the latest result (≈2500 tokens),
 		// but stale override ensures the older one is still prunable.
 		const config: PruneConfig = {
@@ -252,11 +216,11 @@ describe("pruneToolOutputs — protected tools", () => {
 	});
 
 	it("non-protected tool (bash) is pruned outside protect window", () => {
-		const results: ToolResultEntry[] = [
-			makeBash("b1", BIG),
-			makeBash("b2", BIG),
-		];
-		const result = pruneToolOutputs(results, { ...AGGRESSIVE_CONFIG, protectedTools: [] });
+		const results: ToolResultEntry[] = [makeBash("b1", BIG), makeBash("b2", BIG)];
+		const result = pruneToolOutputs(results, {
+			...AGGRESSIVE_CONFIG,
+			protectedTools: [],
+		});
 		// bash results are not stale (no target key), but they're old and outside protect window.
 		// The newest is protected by recency window (0 tokens, so everything is outside).
 		// Actually with protectTokens=0, all non-stale non-protected results are candidates.
@@ -274,7 +238,10 @@ describe("pruneToolOutputs — digest notices", () => {
 			makeBash("b1", `Building...\nLinking...\nDone. Build successful\n${"x".repeat(9000)}`),
 			makeBash("b2", "latest bash output"),
 		];
-		const result = pruneToolOutputs(results, { ...AGGRESSIVE_CONFIG, protectedTools: [] });
+		const result = pruneToolOutputs(results, {
+			...AGGRESSIVE_CONFIG,
+			protectedTools: [],
+		});
 		assert.ok(result.prunedCount >= 1);
 		const pruned = result.results[0]!;
 		// The digest notice includes exit code (digest may be truncated by
@@ -307,10 +274,7 @@ describe("pruneToolOutputs — digest notices", () => {
 	});
 
 	it("generates generic notice for tools without a known digest (read)", () => {
-		const results: ToolResultEntry[] = [
-			makeRead("r1", "/src/a.ts", BIG),
-			makeRead("r2", "/src/a.ts", BIG),
-		];
+		const results: ToolResultEntry[] = [makeRead("r1", "/src/a.ts", BIG), makeRead("r2", "/src/a.ts", BIG)];
 		const result = pruneToolOutputs(results, AGGRESSIVE_CONFIG);
 		assert.ok(result.prunedCount >= 1);
 		const pruned = result.results[0]!;

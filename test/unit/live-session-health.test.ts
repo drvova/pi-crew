@@ -1,10 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	collectLiveSessionHealth,
-	formatLiveSessionDiagnostics,
-} from "../../src/runtime/live-session-health.ts";
+import test from "node:test";
 import type { LiveSessionHealth } from "../../src/runtime/live-session-health.ts";
+import { collectLiveSessionHealth, formatLiveSessionDiagnostics } from "../../src/runtime/live-session-health.ts";
 
 /**
  * Round 28 (test coverage gaps): `live-session-health.ts` provides health
@@ -35,13 +32,7 @@ test("collectLiveSessionHealth: counts running agents", () => {
 });
 
 test("collectLiveSessionHealth: counts all status types", () => {
-	const agents = [
-		{ status: "running" },
-		{ status: "idle" },
-		{ status: "completed" },
-		{ status: "failed" },
-		{ status: "queued" },
-	];
+	const agents = [{ status: "running" }, { status: "idle" }, { status: "completed" }, { status: "failed" }, { status: "queued" }];
 	const health = collectLiveSessionHealth(agents, () => undefined);
 	assert.equal(health.runningAgents, 1);
 	assert.equal(health.idleAgents, 1);

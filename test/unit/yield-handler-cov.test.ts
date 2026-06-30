@@ -3,17 +3,18 @@
  * Focuses on validateYieldData, extractYieldDataFromArgs, and edge cases
  * not covered by the primary yield-handler.test.ts.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
-	validateYieldData,
-	extractYieldDataFromArgs,
-	YIELD_TOOL_NAME,
-	DEFAULT_YIELD_CONFIG,
 	buildYieldReminder,
-	isYieldEvent,
+	DEFAULT_YIELD_CONFIG,
+	extractYieldDataFromArgs,
 	extractYieldResult,
 	hasYieldInOutput,
+	isYieldEvent,
+	validateYieldData,
+	YIELD_TOOL_NAME,
 } from "../../src/runtime/yield-handler.ts";
 
 // ─── validateYieldData ───────────────────────────────────────────────────
@@ -80,20 +81,14 @@ describe("validateYieldData rejects number when type is string", () => {
 
 describe("validateYieldData validates required fields", () => {
 	it("accepts data with all required fields", async () => {
-		const result = await validateYieldData(
-			{ name: "test", value: 42 },
-			{ type: "object", required: ["name", "value"] },
-		);
+		const result = await validateYieldData({ name: "test", value: 42 }, { type: "object", required: ["name", "value"] });
 		assert.equal(result.valid, true);
 	});
 });
 
 describe("validateYieldData rejects missing required fields", () => {
 	it("returns invalid when required field is missing", async () => {
-		const result = await validateYieldData(
-			{ name: "test" },
-			{ type: "object", required: ["name", "missing"] },
-		);
+		const result = await validateYieldData({ name: "test" }, { type: "object", required: ["name", "missing"] });
 		assert.equal(result.valid, false);
 		assert.ok(result.error?.includes("missing"));
 	});
@@ -122,7 +117,11 @@ describe("extractYieldDataFromArgs returns undefined when summary is missing", (
 describe("extractYieldDataFromArgs extracts structured result correctly", () => {
 	it("returns result with summary and toolCallId", () => {
 		const result = extractYieldDataFromArgs(
-			{ summary: "Task done", artifacts: { "a.txt": "/path/a" }, structuredData: { count: 5 } },
+			{
+				summary: "Task done",
+				artifacts: { "a.txt": "/path/a" },
+				structuredData: { count: 5 },
+			},
 			"call-123",
 		);
 		assert.ok(result);
@@ -135,10 +134,7 @@ describe("extractYieldDataFromArgs extracts structured result correctly", () => 
 
 describe("extractYieldDataFromArgs rejects non-string artifacts", () => {
 	it("skips artifacts when values are not all strings", () => {
-		const result = extractYieldDataFromArgs(
-			{ summary: "Done", artifacts: { "a.txt": 123 } },
-			"call-1",
-		);
+		const result = extractYieldDataFromArgs({ summary: "Done", artifacts: { "a.txt": 123 } }, "call-1");
 		assert.ok(result);
 		assert.equal(result!.artifacts, undefined, "non-string artifact values should be rejected");
 	});
@@ -146,10 +142,7 @@ describe("extractYieldDataFromArgs rejects non-string artifacts", () => {
 
 describe("extractYieldDataFromArgs rejects non-object structuredData", () => {
 	it("skips structuredData when it is not a plain object", () => {
-		const result = extractYieldDataFromArgs(
-			{ summary: "Done", structuredData: "not-an-object" },
-			"call-1",
-		);
+		const result = extractYieldDataFromArgs({ summary: "Done", structuredData: "not-an-object" }, "call-1");
 		assert.ok(result);
 		assert.equal(result!.structuredData, undefined);
 	});
@@ -159,7 +152,13 @@ describe("extractYieldDataFromArgs rejects non-object structuredData", () => {
 
 describe("isYieldEvent handles various tool name fields", () => {
 	it("checks toolName, name, and tool fields", () => {
-		assert.equal(isYieldEvent({ type: "tool_execution_start", toolName: YIELD_TOOL_NAME }), true);
+		assert.equal(
+			isYieldEvent({
+				type: "tool_execution_start",
+				toolName: YIELD_TOOL_NAME,
+			}),
+			true,
+		);
 		assert.equal(isYieldEvent({ type: "toolCall", name: YIELD_TOOL_NAME }), true);
 		assert.equal(isYieldEvent({ type: "tool_call", tool: YIELD_TOOL_NAME }), true);
 		assert.equal(isYieldEvent({ type: "tool_execution_start", toolName: "other" }), false);

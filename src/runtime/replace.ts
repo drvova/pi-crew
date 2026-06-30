@@ -462,12 +462,7 @@ const REPLACERS: Replacer[] = [
  *   occurrences. Only safe for exact matches (simple replacer).
  * @returns ReplaceResult with the new content and match strategy info.
  */
-export function replace(
-	content: string,
-	oldString: string,
-	newString: string,
-	options?: { replaceAll?: boolean },
-): ReplaceResult {
+export function replace(content: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): ReplaceResult {
 	if (oldString.length === 0) {
 		return { content, changed: false, strategy: "none", count: 0 };
 	}
@@ -482,7 +477,12 @@ export function replace(
 		const result = content.replaceAll(oldString, newString);
 		if (result !== content) {
 			const count = countOccurrences(content, oldString);
-			return { content: result, changed: true, strategy: "simple-replaceAll", count };
+			return {
+				content: result,
+				changed: true,
+				strategy: "simple-replaceAll",
+				count,
+			};
 		}
 	}
 
@@ -494,7 +494,12 @@ export function replace(
 			if (idx === lastIdx) {
 				// Exactly one occurrence
 				const result = content.slice(0, idx) + newString + content.slice(idx + oldString.length);
-				return { content: result, changed: true, strategy: "simple", count: 1 };
+				return {
+					content: result,
+					changed: true,
+					strategy: "simple",
+					count: 1,
+				};
 			}
 			// Multiple occurrences — fall through to fuzzy strategies
 			// (we never auto-pick among duplicates)
@@ -529,7 +534,12 @@ export function replace(
 					.replace("Replacer", "")
 					.replace(/([a-z])([A-Z])/g, "$1-$2")
 					.toLowerCase();
-				return { content: result, changed: true, strategy: `${strategyName}-replaceAll`, count: totalCount };
+				return {
+					content: result,
+					changed: true,
+					strategy: `${strategyName}-replaceAll`,
+					count: totalCount,
+				};
 			}
 			continue;
 		}
@@ -544,7 +554,12 @@ export function replace(
 					.replace("Replacer", "")
 					.replace(/([a-z])([A-Z])/g, "$1-$2")
 					.toLowerCase();
-				return { content: result, changed: true, strategy: strategyName, count: 1 };
+				return {
+					content: result,
+					changed: true,
+					strategy: strategyName,
+					count: 1,
+				};
 			}
 		}
 		// Multiple candidates — skip this strategy (safety first)

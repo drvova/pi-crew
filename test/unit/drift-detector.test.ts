@@ -1,10 +1,14 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { detectDrift, formatDriftReport, type DriftReport } from "../../src/config/drift-detector.ts";
+import test from "node:test";
+import { type DriftReport, detectDrift, formatDriftReport } from "../../src/config/drift-detector.ts";
 
 test("detectDrift returns no drift when everything matches", () => {
 	const report = detectDrift(
-		{ agents: ["explorer", "planner"], teams: ["implementation"], workflows: ["default"] },
+		{
+			agents: ["explorer", "planner"],
+			teams: ["implementation"],
+			workflows: ["default"],
+		},
 		{},
 	);
 	assert.equal(report.hasDrift, false);
@@ -26,10 +30,10 @@ test("detectDrift detects missing agent referenced in overrides", () => {
 });
 
 test("detectDrift detects extra config keys not in schema", () => {
-	const report = detectDrift(
-		{ agents: [], teams: [], workflows: [] },
-		{ unknownKey: true, anotherBadKey: 42 } as Record<string, unknown> as Parameters<typeof detectDrift>[1],
-	);
+	const report = detectDrift({ agents: [], teams: [], workflows: [] }, {
+		unknownKey: true,
+		anotherBadKey: 42,
+	} as Record<string, unknown> as Parameters<typeof detectDrift>[1]);
 	assert.equal(report.hasDrift, true);
 	const extraKeys = report.items.filter((i) => i.kind === "config-key" && i.status === "extra");
 	assert.equal(extraKeys.length, 2);
@@ -41,16 +45,16 @@ test("detectDrift detects extra config keys not in schema", () => {
 });
 
 test("detectDrift detects mismatched agent override keys", () => {
-	const report = detectDrift(
-		{ agents: ["explorer"], teams: [], workflows: [] },
-		{
-			agents: {
-				overrides: {
-					explorer: { unknownProp: "value", anotherBadProp: 123 } as Record<string, unknown>,
-				},
+	const report = detectDrift({ agents: ["explorer"], teams: [], workflows: [] }, {
+		agents: {
+			overrides: {
+				explorer: {
+					unknownProp: "value",
+					anotherBadProp: 123,
+				} as Record<string, unknown>,
 			},
-		} as Record<string, unknown> as Parameters<typeof detectDrift>[1],
-	);
+		},
+	} as Record<string, unknown> as Parameters<typeof detectDrift>[1]);
 	assert.equal(report.hasDrift, true);
 	const mismatched = report.items.filter((i) => i.status === "mismatched");
 	assert.equal(mismatched.length, 1);
@@ -60,13 +64,10 @@ test("detectDrift detects mismatched agent override keys", () => {
 });
 
 test("detectDrift summary counts are correct", () => {
-	const report = detectDrift(
-		{ agents: [], teams: [], workflows: [] },
-		{
-			agents: { overrides: { "missing-agent": { model: "gpt-4" } } },
-			bogusKey: true,
-		} as Record<string, unknown> as Parameters<typeof detectDrift>[1],
-	);
+	const report = detectDrift({ agents: [], teams: [], workflows: [] }, {
+		agents: { overrides: { "missing-agent": { model: "gpt-4" } } },
+		bogusKey: true,
+	} as Record<string, unknown> as Parameters<typeof detectDrift>[1]);
 	assert.equal(report.summary.missing, 1);
 	assert.equal(report.summary.extra, 1);
 	assert.equal(report.summary.mismatched, 0);
@@ -75,7 +76,11 @@ test("detectDrift summary counts are correct", () => {
 
 test("detectDrift handles empty config gracefully", () => {
 	const report = detectDrift(
-		{ agents: ["explorer", "planner"], teams: ["default"], workflows: ["run"] },
+		{
+			agents: ["explorer", "planner"],
+			teams: ["default"],
+			workflows: ["run"],
+		},
 		{},
 	);
 	assert.equal(report.hasDrift, false);
@@ -83,29 +88,22 @@ test("detectDrift handles empty config gracefully", () => {
 });
 
 test("detectDrift handles empty discovered gracefully", () => {
-	const report = detectDrift(
-		{ agents: [], teams: [], workflows: [] },
-		{},
-	);
+	const report = detectDrift({ agents: [], teams: [], workflows: [] }, {});
 	assert.equal(report.hasDrift, false);
 	assert.deepEqual(report.items, []);
 });
 
 test("detectDrift missing agent has correct severity error", () => {
-	const report = detectDrift(
-		{ agents: [], teams: [], workflows: [] },
-		{ agents: { overrides: { ghost: { model: "test" } } } },
-	);
+	const report = detectDrift({ agents: [], teams: [], workflows: [] }, { agents: { overrides: { ghost: { model: "test" } } } });
 	const missing = report.items.filter((i) => i.status === "missing");
 	assert.equal(missing.length, 1);
 	assert.equal(missing[0]?.severity, "error");
 });
 
 test("detectDrift config-key extra has severity warning", () => {
-	const report = detectDrift(
-		{ agents: [], teams: [], workflows: [] },
-		{ totallyUnknown: 123 } as Record<string, unknown> as Parameters<typeof detectDrift>[1],
-	);
+	const report = detectDrift({ agents: [], teams: [], workflows: [] }, {
+		totallyUnknown: 123,
+	} as Record<string, unknown> as Parameters<typeof detectDrift>[1]);
 	const extras = report.items.filter((i) => i.kind === "config-key");
 	assert.equal(extras.length, 1);
 	assert.equal(extras[0]?.severity, "warning");
@@ -158,8 +156,22 @@ test("formatDriftReport formats drift items correctly", () => {
 	const report: DriftReport = {
 		hasDrift: true,
 		items: [
-			{ kind: "agent", name: "ghost", status: "missing", expected: "agent file discovered", actual: "not found", severity: "error" },
-			{ kind: "config-key", name: "badKey", status: "extra", expected: "key not in schema", actual: "present in config", severity: "warning" },
+			{
+				kind: "agent",
+				name: "ghost",
+				status: "missing",
+				expected: "agent file discovered",
+				actual: "not found",
+				severity: "error",
+			},
+			{
+				kind: "config-key",
+				name: "badKey",
+				status: "extra",
+				expected: "key not in schema",
+				actual: "present in config",
+				severity: "warning",
+			},
 		],
 		summary: { missing: 1, extra: 1, mismatched: 0 },
 	};

@@ -5,13 +5,20 @@ import { isSecretKey } from "./redaction.ts";
 // These are "secret" by pattern (contain KEY/API) but are safe to allowlist
 // because they are standard provider credentials, not arbitrary secrets.
 const KNOWN_PROVIDER_KEYS = new Set([
-	"MINIMAX_API_KEY", "MINIMAX_GROUP_ID",
-	"OPENAI_API_KEY", "OPENAI_ORG_ID",
+	"MINIMAX_API_KEY",
+	"MINIMAX_GROUP_ID",
+	"OPENAI_API_KEY",
+	"OPENAI_ORG_ID",
 	"ANTHROPIC_API_KEY",
-	"GOOGLE_API_KEY", "GOOGLE_GENERATIVE_LANGUAGE_API_KEY",
-	"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
-	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION",
-	"ZEU_API_KEY", "ZERODEV_API_KEY",
+	"GOOGLE_API_KEY",
+	"GOOGLE_GENERATIVE_LANGUAGE_API_KEY",
+	"AZURE_OPENAI_API_KEY",
+	"AZURE_OPENAI_ENDPOINT",
+	"AWS_ACCESS_KEY_ID",
+	"AWS_SECRET_ACCESS_KEY",
+	"AWS_REGION",
+	"ZEU_API_KEY",
+	"ZERODEV_API_KEY",
 ]);
 
 function isKnownProviderKey(key: string): boolean {

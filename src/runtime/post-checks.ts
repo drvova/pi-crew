@@ -7,8 +7,8 @@
 import { execFileSync } from "node:child_process";
 import * as path from "node:path";
 import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
-import { resolveShellForScript } from "../utils/resolve-shell.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
+import { resolveShellForScript } from "../utils/resolve-shell.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 
 /** Default timeout for post-check scripts (5 minutes). */
@@ -92,12 +92,17 @@ export async function runPostCheck(config: PostCheckConfig, cwd: string): Promis
 	return new Promise<PostCheckResult>((resolve) => {
 		try {
 			const { command, args } = resolveShellForScript(scriptPath);
-		const output = execFileSync(command, args, {
+			const output = execFileSync(command, args, {
 				cwd,
 				timeout: timeoutMs,
 				encoding: "utf-8",
 				maxBuffer: 10 * 1024 * 1024, // 10 MB
-				env: { ...sanitizeEnvSecrets(process.env, { allowList: ["PATH", "HOME", "USER", ...WINDOWS_ESSENTIAL_ENV_VARS, "TMPDIR", "LANG", "LC_ALL", "PI_CREW_*"] }), PI_CREW_POST_CHECK: "1" },
+				env: {
+					...sanitizeEnvSecrets(process.env, {
+						allowList: ["PATH", "HOME", "USER", ...WINDOWS_ESSENTIAL_ENV_VARS, "TMPDIR", "LANG", "LC_ALL", "PI_CREW_*"],
+					}),
+					PI_CREW_POST_CHECK: "1",
+				},
 			});
 
 			const durationMs = Date.now() - startTime;
@@ -118,7 +123,10 @@ export async function runPostCheck(config: PostCheckConfig, cwd: string): Promis
 
 			let output = "";
 			if (error instanceof Error) {
-				const execError = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+				const execError = error as NodeJS.ErrnoException & {
+					stdout?: string;
+					stderr?: string;
+				};
 				output = [execError.stdout ?? "", execError.stderr ?? "", execError.message ?? ""].join("\n").trim();
 			} else {
 				output = String(error);

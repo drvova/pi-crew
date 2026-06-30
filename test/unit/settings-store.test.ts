@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { loadCrewSettings, saveCrewSettings, applyCrewSettingsToConfig } from "../../src/runtime/settings-store.ts";
+import test from "node:test";
+import { applyCrewSettingsToConfig, loadCrewSettings, saveCrewSettings } from "../../src/runtime/settings-store.ts";
 
 test("loadCrewSettings returns defaults when file missing", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "settings-store-missing-"));
@@ -56,9 +56,15 @@ test("applyCrewSettingsToConfig merges into runtime config", () => {
 });
 
 test("applyCrewSettingsToConfig handles missing config sections gracefully", () => {
-	const configWithoutLimits = { runtime: { maxTurns: 50, graceTurns: 5, groupJoin: "smart" as const } } as {
+	const configWithoutLimits = {
+		runtime: { maxTurns: 50, graceTurns: 5, groupJoin: "smart" as const },
+	} as {
 		limits?: { maxConcurrentWorkers?: number };
-		runtime?: { maxTurns?: number; graceTurns?: number; groupJoin?: string };
+		runtime?: {
+			maxTurns?: number;
+			graceTurns?: number;
+			groupJoin?: string;
+		};
 		notifierIntervalMs?: number;
 	};
 	const settings = {
@@ -74,7 +80,11 @@ test("applyCrewSettingsToConfig handles missing config sections gracefully", () 
 
 	const configWithoutRuntime = { limits: { maxConcurrentWorkers: 2 } } as {
 		limits?: { maxConcurrentWorkers?: number };
-		runtime?: { maxTurns?: number; graceTurns?: number; groupJoin?: string };
+		runtime?: {
+			maxTurns?: number;
+			graceTurns?: number;
+			groupJoin?: string;
+		};
 		notifierIntervalMs?: number;
 	};
 	assert.doesNotThrow(() => applyCrewSettingsToConfig(configWithoutRuntime, settings));

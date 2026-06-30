@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { readEvents } from "../../src/state/event-log.ts";
 import { loadRunManifestById } from "../../src/state/state-store.ts";
@@ -22,13 +22,15 @@ test("run surfaces config.warning event when config is malformed", async () => {
 		// loadConfig records a warning/error. reliability is an object; a number
 		// is invalid → produces a config warning.
 		fs.mkdirSync(path.join(cwd, ".pi"), { recursive: true });
-		fs.writeFileSync(
-			path.join(cwd, ".pi", "pi-crew.json"),
-			JSON.stringify({ reliability: "not-an-object" }),
-		);
+		fs.writeFileSync(path.join(cwd, ".pi", "pi-crew.json"), JSON.stringify({ reliability: "not-an-object" }));
 
 		const run = await handleTeamTool(
-			{ action: "run", team: "default", config: { runtime: { mode: "scaffold" } }, goal: "test F4 config warning surfacing" },
+			{
+				action: "run",
+				team: "default",
+				config: { runtime: { mode: "scaffold" } },
+				goal: "test F4 config warning surfacing",
+			},
 			{ cwd },
 		);
 		assert.equal(run.isError, false, `run should not hard-fail on a config warning; got: ${JSON.stringify(run.content)}`);
@@ -50,7 +52,12 @@ test("run surfaces config.warning event when config is malformed", async () => {
 		}
 	} finally {
 		for (let attempt = 0; attempt < 5; attempt++) {
-			try { fs.rmSync(cwd, { recursive: true, force: true }); break; } catch { /* retry */ }
+			try {
+				fs.rmSync(cwd, { recursive: true, force: true });
+				break;
+			} catch {
+				/* retry */
+			}
 		}
 	}
 });
@@ -62,7 +69,12 @@ test("run does NOT emit config.warning when config is clean", async () => {
 		fs.mkdirSync(path.join(cwd, "Source", "pi-x"), { recursive: true });
 		// No config file → defaults, no issues.
 		const run = await handleTeamTool(
-			{ action: "run", team: "default", config: { runtime: { mode: "scaffold" } }, goal: "clean config baseline" },
+			{
+				action: "run",
+				team: "default",
+				config: { runtime: { mode: "scaffold" } },
+				goal: "clean config baseline",
+			},
 			{ cwd },
 		);
 		assert.equal(run.isError, false);
@@ -73,7 +85,12 @@ test("run does NOT emit config.warning when config is clean", async () => {
 		assert.equal(warnings.length, 0, "clean config → no config.warning events");
 	} finally {
 		for (let attempt = 0; attempt < 5; attempt++) {
-			try { fs.rmSync(cwd, { recursive: true, force: true }); break; } catch { /* retry */ }
+			try {
+				fs.rmSync(cwd, { recursive: true, force: true });
+				break;
+			} catch {
+				/* retry */
+			}
 		}
 	}
 });

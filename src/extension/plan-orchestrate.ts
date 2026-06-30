@@ -102,10 +102,7 @@ function parsePlanDocumentContent(content: string): OrchestratedStep[] {
 		// Find the heading by looking back from the tag position.
 		// Use global regex to find ALL headings in the window, then take the LAST
 		// (nearest to the tag) — simple `.match()` only finds the FIRST heading.
-		const textBeforeTag = content.slice(
-			Math.max(0, current.start - 500),
-			current.start,
-		);
+		const textBeforeTag = content.slice(Math.max(0, current.start - 500), current.start);
 		const headingRegex = /(^|\n)(#{1,6})\s+(.+?)(\n|$)/g;
 		let lastHeadingMatch: RegExpExecArray | null = null;
 		let hm: RegExpExecArray | null;
@@ -120,10 +117,7 @@ function parsePlanDocumentContent(content: string): OrchestratedStep[] {
 
 		// Find the section content: capture until next heading (##) or next tag
 		const sectionEndMatch = afterTagContent.search(/(^|\n)(#{1,6}\s|\n<!--\s*tag:)/m);
-		const sectionContent =
-			sectionEndMatch >= 0
-				? afterTagContent.slice(0, sectionEndMatch)
-				: afterTagContent;
+		const sectionContent = sectionEndMatch >= 0 ? afterTagContent.slice(0, sectionEndMatch) : afterTagContent;
 
 		// Extract prompt text - remove the tag comment lines and empty lines
 		const promptLines: string[] = [];
@@ -191,8 +185,7 @@ function detectImplicitTag(content: string): string | undefined {
 	const lowerContent = content.toLowerCase();
 	// Use word-boundary regex to avoid substring false matches.
 	// E.g., "implementation" must NOT trigger "impl" — only the word "implement" should.
-	const hasWord = (word: string): boolean =>
-		new RegExp(`\\b${word}\\b`).test(lowerContent);
+	const hasWord = (word: string): boolean => new RegExp(`\\b${word}\\b`).test(lowerContent);
 
 	if (hasWord("design") || hasWord("architecture")) return "design";
 	if (hasWord("implement") || hasWord("coding")) return "impl";
@@ -224,9 +217,7 @@ export function buildAgentChain(steps: OrchestratedStep[]): string[] {
  * @param steps - Array of OrchestratedStep to convert.
  * @returns Array of chain objects with step data and commands.
  */
-export function buildChainData(
-	steps: OrchestratedStep[],
-): Array<{
+export function buildChainData(steps: OrchestratedStep[]): Array<{
 	step: OrchestratedStep;
 	commands: string[];
 }> {
@@ -258,10 +249,7 @@ export function formatPlanOverview(planPath: string): string {
 }
 
 function formatStepsOverview(steps: OrchestratedStep[]): string {
-	const lines: string[] = [
-		`Plan Orchestration: ${steps.length} step(s)`,
-		"",
-	];
+	const lines: string[] = [`Plan Orchestration: ${steps.length} step(s)`, ""];
 
 	const tagCounts: Record<string, number> = {};
 	for (const step of steps) {
@@ -276,15 +264,10 @@ function formatStepsOverview(steps: OrchestratedStep[]): string {
 
 	lines.push("", "Steps:");
 	for (const step of steps) {
-		const preview =
-			step.prompt.length > 60
-				? step.prompt.slice(0, 60) + "..."
-				: step.prompt;
+		const preview = step.prompt.length > 60 ? step.prompt.slice(0, 60) + "..." : step.prompt;
 		// Include heading if available (e.g., "Security Review" from the plan's heading)
 		const headingPrefix = step.heading ? `${step.heading}: ` : "";
-		lines.push(
-			`  ${step.stepId} [${step.tag}] ${step.chain.join(",")}: ${headingPrefix}${preview}`,
-		);
+		lines.push(`  ${step.stepId} [${step.tag}] ${step.chain.join(",")}: ${headingPrefix}${preview}`);
 	}
 
 	return lines.join("\n");
@@ -293,9 +276,7 @@ function formatStepsOverview(steps: OrchestratedStep[]): string {
 /**
  * Main orchestration function that parses a plan and returns pre-formatted output.
  */
-export async function orchestratePlan(
-	options: OrchestrateOptions,
-): Promise<{
+export async function orchestratePlan(options: OrchestrateOptions): Promise<{
 	steps: OrchestratedStep[];
 	chain: string[];
 	overview: string;

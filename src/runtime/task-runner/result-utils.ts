@@ -10,5 +10,7 @@ export function cleanResultText(text: string | undefined): string | undefined {
 }
 
 export function isFinalChildEvent(event: unknown): boolean {
-	return Boolean(event && typeof event === "object" && !Array.isArray(event) && (event as Record<string, unknown>).type === "message_end");
+	return Boolean(
+		event && typeof event === "object" && !Array.isArray(event) && (event as Record<string, unknown>).type === "message_end",
+	);
 }

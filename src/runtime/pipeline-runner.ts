@@ -1,9 +1,9 @@
-import type { TeamTaskState } from "../state/types.ts";
-import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
-import type { TeamConfig } from "../teams/team-config.ts";
 import type { AgentConfig } from "../agents/agent-config.ts";
-import { appendEventAsync } from "../state/event-log.ts";
 import { errors } from "../errors.ts";
+import { appendEventAsync } from "../state/event-log.ts";
+import type { TeamTaskState } from "../state/types.ts";
+import type { TeamConfig } from "../teams/team-config.ts";
+import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { mapConcurrent } from "./parallel-utils.ts";
 
 /**
@@ -80,7 +80,10 @@ export class PipelineRunner {
 	private stopOnError: boolean;
 	private defaultMaxConcurrency: number;
 
-	constructor(options?: { stopOnError?: boolean; defaultMaxConcurrency?: number }) {
+	constructor(options?: {
+		stopOnError?: boolean;
+		defaultMaxConcurrency?: number;
+	}) {
 		this.stopOnError = options?.stopOnError ?? true;
 		this.defaultMaxConcurrency = options?.defaultMaxConcurrency ?? 5;
 	}
@@ -139,12 +142,7 @@ export class PipelineRunner {
 				const inputs = this.resolveInputs(stage.inputs, previousResults, context);
 
 				// Execute stage (handle fan-out if enabled)
-				const results = await this.executeStageInternal(
-					stage,
-					inputs,
-					stageContext,
-					executeStage,
-				);
+				const results = await this.executeStageInternal(stage, inputs, stageContext, executeStage);
 
 				const duration = Date.now() - stageStartTime;
 				stages.push({
@@ -161,7 +159,12 @@ export class PipelineRunner {
 					type: "pipeline:stage_completed",
 					runId,
 					message: `Stage '${stage.name}' completed`,
-					data: { stageIndex: i, stageName: stage.name, duration, resultCount: results.length },
+					data: {
+						stageIndex: i,
+						stageName: stage.name,
+						duration,
+						resultCount: results.length,
+					},
 				});
 			} catch (error) {
 				const duration = Date.now() - stageStartTime;
@@ -180,7 +183,12 @@ export class PipelineRunner {
 						type: "pipeline:stage_failed",
 						runId,
 						message: `Stage '${stage.name}' failed: ${errorMessage}`,
-						data: { stageIndex: i, stageName: stage.name, duration, error: errorMessage },
+						data: {
+							stageIndex: i,
+							stageName: stage.name,
+							duration,
+							error: errorMessage,
+						},
 					});
 
 					await appendEventAsync(eventsPath, {
@@ -209,7 +217,12 @@ export class PipelineRunner {
 						type: "pipeline:stage_skipped",
 						runId,
 						message: `Stage '${stage.name}' skipped due to error`,
-						data: { stageIndex: i, stageName: stage.name, duration, error: errorMessage },
+						data: {
+							stageIndex: i,
+							stageName: stage.name,
+							duration,
+							error: errorMessage,
+						},
 					});
 				}
 			}
@@ -219,7 +232,9 @@ export class PipelineRunner {
 			type: "pipeline:completed",
 			runId,
 			message: `Pipeline '${workflow.name}' completed`,
-			data: { stages: stages.map((s) => ({ name: s.name, status: s.status })) },
+			data: {
+				stages: stages.map((s) => ({ name: s.name, status: s.status })),
+			},
 		});
 
 		return {
@@ -266,18 +281,20 @@ export class PipelineRunner {
 			}));
 
 			// Execute with concurrency limit - pass each item to callback
-			const results = await mapConcurrent(
-				tasks,
-				maxConcurrency,
-				async (task) => {
-					// Call the user-provided callback with each item
-					const result = await this.executeStageInternal(stage, task.item, {
+			const results = await mapConcurrent(tasks, maxConcurrency, async (task) => {
+				// Call the user-provided callback with each item
+				const result = await this.executeStageInternal(
+					stage,
+					task.item,
+					{
 						...stageContext,
 						stageName: task.name,
-					}, callback, nextDepth);
-					return result;
-				},
-			);
+					},
+					callback,
+					nextDepth,
+				);
+				return result;
+			});
 
 			return results;
 		}
@@ -294,14 +311,10 @@ export class PipelineRunner {
 	 * - ${previous[0]} -> previousResults[0]
 	 * - ${context.key} -> context.key
 	 * - ${args.x} -> context.args.x
-	 * 
+	 *
 	 * C5: Validates template inputs to prevent injection.
 	 */
-	private resolveInputs(
-		inputs: unknown,
-		previousResults: unknown[],
-		context: Record<string, unknown>,
-	): unknown {
+	private resolveInputs(inputs: unknown, previousResults: unknown[], context: Record<string, unknown>): unknown {
 		// If inputs is an array, resolve each element
 		if (Array.isArray(inputs)) {
 			// H4: Type safety - limit array size to prevent memory issues
@@ -337,13 +350,13 @@ export class PipelineRunner {
 	private isValidObjectKey(key: string): boolean {
 		// Reject dangerous keys
 		const dangerousKeys = [
-			'__proto__',
-			'constructor',
-			'prototype',
-			'__defineGetter__',
-			'__defineSetter__',
-			'__lookupGetter__',
-			'__lookupSetter__',
+			"__proto__",
+			"constructor",
+			"prototype",
+			"__defineGetter__",
+			"__defineSetter__",
+			"__lookupGetter__",
+			"__lookupSetter__",
 		];
 		if (dangerousKeys.includes(key)) {
 			return false;
@@ -373,11 +386,11 @@ export class PipelineRunner {
 			return false;
 		}
 		// Reject paths with empty segments
-		if (path.includes('..')) {
+		if (path.includes("..")) {
 			return false;
 		}
 		// Validate each path segment
-		const parts = path.split('.');
+		const parts = path.split(".");
 		for (const part of parts) {
 			if (!this.isValidObjectKey(part)) {
 				return false;
@@ -390,11 +403,7 @@ export class PipelineRunner {
 	 * Resolve a single template string.
 	 * C5: Validates template inputs to prevent injection.
 	 */
-	private resolveTemplate(
-		template: string,
-		previousResults: unknown[],
-		context: Record<string, unknown>,
-	): unknown {
+	private resolveTemplate(template: string, previousResults: unknown[], context: Record<string, unknown>): unknown {
 		// C5: Validate template length to prevent DoS
 		if (template.length > 10000) {
 			return template;
@@ -473,10 +482,7 @@ export class PipelineRunner {
 	 * Parse a pipeline workflow from a workflow configuration.
 	 * Converts standard WorkflowConfig to PipelineWorkflow.
 	 */
-	static fromWorkflowConfig(
-		workflow: WorkflowConfig,
-		goal: string,
-	): PipelineWorkflow {
+	static fromWorkflowConfig(workflow: WorkflowConfig, goal: string): PipelineWorkflow {
 		const stages: PipelineStage[] = workflow.steps.map((step) => ({
 			name: step.id,
 			team: step.role, // Using role as team identifier
@@ -498,12 +504,7 @@ export class PipelineRunner {
 /**
  * Create a pipeline workflow from a goal and stage definitions.
  */
-export function createPipelineWorkflow(
-	name: string,
-	description: string,
-	goal: string,
-	stages: PipelineStage[],
-): PipelineWorkflow {
+export function createPipelineWorkflow(name: string, description: string, goal: string, stages: PipelineStage[]): PipelineWorkflow {
 	return {
 		name,
 		description,

@@ -1,4 +1,4 @@
-import { readDeliveryState, readMailbox, type MailboxMessage } from "../../state/mailbox.ts";
+import { type MailboxMessage, readDeliveryState, readMailbox } from "../../state/mailbox.ts";
 import { loadRunManifestById } from "../../state/state-store.ts";
 import { pad, truncate } from "../../utils/visual.ts";
 import { asCrewTheme, type CrewTheme } from "../theme-adapter.ts";
@@ -23,7 +23,12 @@ export class MailboxDetailOverlay {
 	private lastRefreshedTaskCount = 0;
 	private needsRefresh = true;
 
-	constructor(opts: { runId: string; cwd: string; done: (action: MailboxAction | undefined) => void; theme?: unknown }) {
+	constructor(opts: {
+		runId: string;
+		cwd: string;
+		done: (action: MailboxAction | undefined) => void;
+		theme?: unknown;
+	}) {
 		this.runId = opts.runId;
 		this.cwd = opts.cwd;
 		this.done = opts.done;
@@ -41,10 +46,23 @@ export class MailboxDetailOverlay {
 			this.needsRefresh = true;
 		}
 		const delivery = readDeliveryState(loaded.manifest).messages;
-		const applyDelivery = (message: MailboxMessage): MailboxMessage => ({ ...message, status: delivery[message.id] ?? message.status });
+		const applyDelivery = (message: MailboxMessage): MailboxMessage => ({
+			...message,
+			status: delivery[message.id] ?? message.status,
+		});
 		const taskIds = loaded.tasks.map((task) => task.id);
-		this.inbox = [...readMailbox(loaded.manifest, "inbox"), ...taskIds.flatMap((taskId) => readMailbox(loaded.manifest, "inbox", taskId))].map(applyDelivery).reverse();
-		this.outbox = [...readMailbox(loaded.manifest, "outbox"), ...taskIds.flatMap((taskId) => readMailbox(loaded.manifest, "outbox", taskId))].map(applyDelivery).reverse();
+		this.inbox = [
+			...readMailbox(loaded.manifest, "inbox"),
+			...taskIds.flatMap((taskId) => readMailbox(loaded.manifest, "inbox", taskId)),
+		]
+			.map(applyDelivery)
+			.reverse();
+		this.outbox = [
+			...readMailbox(loaded.manifest, "outbox"),
+			...taskIds.flatMap((taskId) => readMailbox(loaded.manifest, "outbox", taskId)),
+		]
+			.map(applyDelivery)
+			.reverse();
 		this.selected = Math.min(this.selected, Math.max(0, this.current().length - 1));
 	}
 
@@ -121,7 +139,10 @@ export class MailboxDetailOverlay {
 			return;
 		}
 		if (data === "N") {
-			this.done({ type: "nudge", agentId: this.selectedMessage()?.taskId });
+			this.done({
+				type: "nudge",
+				agentId: this.selectedMessage()?.taskId,
+			});
 			return;
 		}
 		if (data === "C") {

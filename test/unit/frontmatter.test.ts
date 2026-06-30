@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseFrontmatter, parseCsv } from "../../src/utils/frontmatter.ts";
+import { describe, it } from "node:test";
+import { parseCsv, parseFrontmatter } from "../../src/utils/frontmatter.ts";
 
 describe("parseFrontmatter", () => {
 	it("returns empty frontmatter for content without frontmatter", () => {
@@ -76,10 +76,7 @@ describe("parseCsv", () => {
 	});
 
 	it("handles quoted values with commas inside", () => {
-		assert.deepEqual(parseCsv('"hello, world", other'), [
-			"hello, world",
-			"other",
-		]);
+		assert.deepEqual(parseCsv('"hello, world", other'), ["hello, world", "other"]);
 	});
 
 	it("deduplicates values", () => {

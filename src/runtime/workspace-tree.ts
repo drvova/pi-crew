@@ -82,15 +82,15 @@ function compareByRecency(a: TreeNode, b: TreeNode): number {
 	return a.name.localeCompare(b.name);
 }
 
-function applyDirLimit(
-	children: TreeNode[],
-	limit: number,
-): { visible: TreeNode[]; dropped: number } {
+function applyDirLimit(children: TreeNode[], limit: number): { visible: TreeNode[]; dropped: number } {
 	if (children.length <= limit) {
 		return { visible: children, dropped: 0 };
 	}
 	if (limit <= 1) {
-		return { visible: children.slice(0, limit), dropped: children.length - limit };
+		return {
+			visible: children.slice(0, limit),
+			dropped: children.length - limit,
+		};
 	}
 	// Keep first (limit-1) by recency + always keep the oldest (last after sort)
 	const recent = children.slice(0, limit - 1);
@@ -99,14 +99,8 @@ function applyDirLimit(
 	return { visible, dropped: children.length - limit };
 }
 
-async function readChildren(
-	rootPath: string,
-	parent: TreeNode,
-	excludedDirs: ReadonlySet<string>,
-): Promise<TreeNode[]> {
-	const dirPath = parent.relativePath
-		? path.join(rootPath, parent.relativePath)
-		: rootPath;
+async function readChildren(rootPath: string, parent: TreeNode, excludedDirs: ReadonlySet<string>): Promise<TreeNode[]> {
+	const dirPath = parent.relativePath ? path.join(rootPath, parent.relativePath) : rootPath;
 
 	let names: string[];
 	try {
@@ -119,9 +113,7 @@ async function readChildren(
 		names.map(async (name): Promise<TreeNode | null> => {
 			// Skip hidden entries
 			if (name.startsWith(".")) return null;
-			const relativePath = parent.relativePath
-				? `${parent.relativePath}/${name}`
-				: name;
+			const relativePath = parent.relativePath ? `${parent.relativePath}/${name}` : name;
 			const absolutePath = path.join(rootPath, relativePath);
 			try {
 				const stat = await fs.stat(absolutePath);
@@ -201,7 +193,11 @@ function collectLines(node: TreeNode, nowMs: number, lines: RenderLine[]): void 
 			const ageSeconds = Math.max(0, Math.floor((nowMs - node.mtimeMs) / 1000));
 			const size = formatBytes(node.size);
 			const age = formatAge(ageSeconds);
-			lines.push({ text: `${label}  ${size}  ${age}`, depth: node.depth, isRoot: false });
+			lines.push({
+				text: `${label}  ${size}  ${age}`,
+				depth: node.depth,
+				isRoot: false,
+			});
 		}
 	}
 
@@ -225,10 +221,7 @@ function collectLines(node: TreeNode, nowMs: number, lines: RenderLine[]): void 
 	}
 }
 
-function applyLineCap(
-	lines: RenderLine[],
-	cap: number,
-): { lines: RenderLine[]; elided: number } {
+function applyLineCap(lines: RenderLine[], cap: number): { lines: RenderLine[]; elided: number } {
 	if (lines.length <= cap) return { lines, elided: 0 };
 
 	const target = Math.max(1, cap - 1);
@@ -280,10 +273,7 @@ function treeCacheKey(cwd: string, options?: WorkspaceTreeOptions): string {
 	return `${path.resolve(cwd)}|${options?.maxDepth ?? ""}|${options?.dirLimit ?? ""}|${options?.lineCap ?? ""}`;
 }
 
-export async function buildWorkspaceTree(
-	cwd: string,
-	options?: WorkspaceTreeOptions,
-): Promise<WorkspaceTree> {
+export async function buildWorkspaceTree(cwd: string, options?: WorkspaceTreeOptions): Promise<WorkspaceTree> {
 	const rootPath = path.resolve(cwd);
 	const cacheKey = treeCacheKey(cwd, options);
 	const cached = treeCache.get(cacheKey);
@@ -296,12 +286,7 @@ export async function buildWorkspaceTree(
 		const lineCap = options?.lineCap ?? DEFAULT_LINE_CAP;
 		const excludedDirs = options?.excludedDirs ?? DEFAULT_EXCLUDED_DIRS;
 
-		const { root, truncated: dirTruncated } = await collectTree(
-			rootPath,
-			maxDepth,
-			dirLimit,
-			excludedDirs,
-		);
+		const { root, truncated: dirTruncated } = await collectTree(rootPath, maxDepth, dirLimit, excludedDirs);
 
 		const nowMs = Date.now();
 		const lines: RenderLine[] = [];
@@ -316,7 +301,10 @@ export async function buildWorkspaceTree(
 			truncated: dirTruncated || elided > 0,
 			totalLines: capped.length,
 		};
-		treeCache.set(cacheKey, { tree: result, expiresAt: Date.now() + TREE_CACHE_TTL_MS });
+		treeCache.set(cacheKey, {
+			tree: result,
+			expiresAt: Date.now() + TREE_CACHE_TTL_MS,
+		});
 		return result;
 	} catch {
 		return emptyResult(rootPath);

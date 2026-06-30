@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseMetricLines, DENIED_METRIC_NAMES } from "../../src/runtime/metric-parser.ts";
+import { describe, it } from "node:test";
+import { DENIED_METRIC_NAMES, parseMetricLines } from "../../src/runtime/metric-parser.ts";
 
 describe("parseMetricLines", () => {
 	it("parses a single valid CREW_METRIC line", () => {
@@ -48,21 +48,13 @@ describe("parseMetricLines", () => {
 	});
 
 	it("skips denied metric names (prototype pollution prevention)", () => {
-		const output = [
-			"CREW_METRIC __proto__=42",
-			"CREW_METRIC constructor=99",
-			"CREW_METRIC prototype=100",
-		].join("\n");
+		const output = ["CREW_METRIC __proto__=42", "CREW_METRIC constructor=99", "CREW_METRIC prototype=100"].join("\n");
 		const result = parseMetricLines(output);
 		assert.deepStrictEqual(result, {});
 	});
 
 	it("parses valid metrics alongside denied names", () => {
-		const output = [
-			"CREW_METRIC __proto__=42",
-			"CREW_METRIC valid_count=7",
-			"CREW_METRIC constructor=99",
-		].join("\n");
+		const output = ["CREW_METRIC __proto__=42", "CREW_METRIC valid_count=7", "CREW_METRIC constructor=99"].join("\n");
 		const result = parseMetricLines(output);
 		assert.deepStrictEqual(result, { valid_count: 7 });
 	});
@@ -83,10 +75,7 @@ describe("parseMetricLines", () => {
 	});
 
 	it("overwrites duplicate metric names with last value", () => {
-		const output = [
-			"CREW_METRIC count=1",
-			"CREW_METRIC count=2",
-		].join("\n");
+		const output = ["CREW_METRIC count=1", "CREW_METRIC count=2"].join("\n");
 		const result = parseMetricLines(output);
 		assert.deepStrictEqual(result, { count: 2 });
 	});

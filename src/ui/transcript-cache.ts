@@ -22,7 +22,12 @@ const DEFAULT_TAIL_BYTES = 256 * 1024;
 const MAX_CACHE_SIZE = 100;
 const transcriptCache = new Map<string, TranscriptCacheEntry>();
 
-function cacheKey(path: string, options: Required<Pick<TranscriptReadOptions, "full">> & { maxTailBytes: number }): string {
+function cacheKey(
+	path: string,
+	options: Required<Pick<TranscriptReadOptions, "full">> & {
+		maxTailBytes: number;
+	},
+): string {
 	return `${path}:${options.full ? "full" : `tail:${options.maxTailBytes}`}`;
 }
 
@@ -35,13 +40,26 @@ export function clearTranscriptCache(path?: string): void {
 }
 
 export function getTranscriptCacheEntry(path: string, options: TranscriptReadOptions = {}): TranscriptCacheEntry | undefined {
-	const normalized = { full: options.full === true, maxTailBytes: options.maxTailBytes ?? DEFAULT_TAIL_BYTES };
+	const normalized = {
+		full: options.full === true,
+		maxTailBytes: options.maxTailBytes ?? DEFAULT_TAIL_BYTES,
+	};
 	return transcriptCache.get(cacheKey(path, normalized)) ?? transcriptCache.get(path);
 }
 
-function readTranscriptText(path: string, stat: fs.Stats, options: Required<Pick<TranscriptReadOptions, "full">> & { maxTailBytes: number }): { text: string; bytesRead: number; truncated: boolean } {
+function readTranscriptText(
+	path: string,
+	stat: fs.Stats,
+	options: Required<Pick<TranscriptReadOptions, "full">> & {
+		maxTailBytes: number;
+	},
+): { text: string; bytesRead: number; truncated: boolean } {
 	if (options.full || stat.size <= options.maxTailBytes) {
-		return { text: fs.readFileSync(path, "utf-8"), bytesRead: stat.size, truncated: false };
+		return {
+			text: fs.readFileSync(path, "utf-8"),
+			bytesRead: stat.size,
+			truncated: false,
+		};
 	}
 	const bytesToRead = Math.min(stat.size, options.maxTailBytes);
 	const fd = fs.openSync(path, "r");
@@ -57,8 +75,16 @@ function readTranscriptText(path: string, stat: fs.Stats, options: Required<Pick
 	}
 }
 
-export function readTranscriptLinesCached(path: string, parse: (text: string) => string[], now = Date.now(), options: TranscriptReadOptions = {}): string[] {
-	const normalized = { full: options.full === true, maxTailBytes: Math.max(1024, options.maxTailBytes ?? DEFAULT_TAIL_BYTES) };
+export function readTranscriptLinesCached(
+	path: string,
+	parse: (text: string) => string[],
+	now = Date.now(),
+	options: TranscriptReadOptions = {},
+): string[] {
+	const normalized = {
+		full: options.full === true,
+		maxTailBytes: Math.max(1024, options.maxTailBytes ?? DEFAULT_TAIL_BYTES),
+	};
 	const key = cacheKey(path, normalized);
 	const previous = transcriptCache.get(key);
 	let stat: fs.Stats;

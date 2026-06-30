@@ -4,19 +4,22 @@
  * The CAS guard makes stuck↔resume transitions atomic so a racing `goal
  * resume` / idle-sweeper / background-loop cannot lose updates.
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { describe, it, afterEach } from "node:test";
-import assert from "node:assert/strict";
+import { afterEach, describe, it } from "node:test";
 import { GoalStore } from "../../src/runtime/goal-state-store.ts";
-import { clearProjectRootCache } from "../../src/utils/paths.ts";
 import type { GoalLoopState } from "../../src/state/types.ts";
+import { clearProjectRootCache } from "../../src/utils/paths.ts";
 
 function makeTmpCwd(): string {
 	clearProjectRootCache();
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-goal-cas-"));
-	fs.mkdirSync(path.join(cwd, ".crew", "state", "goals"), { recursive: true });
+	fs.mkdirSync(path.join(cwd, ".crew", "state", "goals"), {
+		recursive: true,
+	});
 	return cwd;
 }
 
@@ -81,11 +84,7 @@ describe("GoalStore.compareAndSetStatus", () => {
 		// Expecting 'stuck' but actual is 'running' → CAS must fail.
 		const result = store.compareAndSetStatus(id, "stuck", "cancelled");
 		assert.equal(result, undefined, "CAS must return undefined on mismatch");
-		assert.equal(
-			store.load(id)?.state,
-			"running",
-			"state must be UNCHANGED on CAS failure (no partial mutation)",
-		);
+		assert.equal(store.load(id)?.state, "running", "state must be UNCHANGED on CAS failure (no partial mutation)");
 	});
 
 	it("returns undefined for an unknown goalId", () => {

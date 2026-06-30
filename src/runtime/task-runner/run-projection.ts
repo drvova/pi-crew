@@ -1,6 +1,5 @@
-import type { TeamRunManifest, TeamTaskState } from "../../state/types.ts";
 import type { MailboxMessage } from "../../state/mailbox.ts";
-import type { ArtifactDescriptor } from "../../state/types.ts";
+import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../../state/types.ts";
 
 export interface RunProjectionSource {
 	kind: "events" | "mailbox" | "artifacts" | "ui_metadata" | "runtime_metadata";
@@ -44,7 +43,11 @@ export function transformRunContextBeforeWorkerStart(input: {
 	const completedTasks = input.tasks.filter((t) => t.status === "completed" || t.status === "failed");
 	if (completedTasks.length > 0) {
 		const tasks = completedTasks.slice(0, maxEvents);
-		sources.push({ kind: "events", bounded: true, reference: `tasks:${tasks.length}/${completedTasks.length}` });
+		sources.push({
+			kind: "events",
+			bounded: true,
+			reference: `tasks:${tasks.length}/${completedTasks.length}`,
+		});
 		lines.push(`Previous tasks (${tasks.length}/${completedTasks.length}):`);
 		for (const task of tasks) {
 			lines.push(`- ${task.id}: ${task.status}${task.error ? ` (${task.error})` : ""}`);
@@ -54,7 +57,11 @@ export function transformRunContextBeforeWorkerStart(input: {
 	// Project pending mailbox that is relevant to this worker
 	if (input.pendingMailbox.length > 0) {
 		const messages = input.pendingMailbox.slice(0, maxMailbox);
-		sources.push({ kind: "mailbox", bounded: true, reference: `mailbox:${messages.length}/${input.pendingMailbox.length}` });
+		sources.push({
+			kind: "mailbox",
+			bounded: true,
+			reference: `mailbox:${messages.length}/${input.pendingMailbox.length}`,
+		});
 		lines.push(`Pending messages (${messages.length}/${input.pendingMailbox.length}):`);
 		for (const msg of messages) {
 			lines.push(`- ${msg.kind ?? "message"}: ${msg.body.slice(0, 100)}`);
@@ -64,7 +71,11 @@ export function transformRunContextBeforeWorkerStart(input: {
 	// Project artifact references (not content)
 	if (input.artifacts.length > 0) {
 		const artifacts = input.artifacts.slice(0, maxArtifacts);
-		sources.push({ kind: "artifacts", bounded: true, reference: `artifacts:${artifacts.length}/${input.artifacts.length}` });
+		sources.push({
+			kind: "artifacts",
+			bounded: true,
+			reference: `artifacts:${artifacts.length}/${input.artifacts.length}`,
+		});
 		lines.push(`Available artifacts (${artifacts.length}/${input.artifacts.length}):`);
 		for (const art of artifacts) {
 			lines.push(`- ${art.kind} (${art.producer})`);
@@ -72,8 +83,16 @@ export function transformRunContextBeforeWorkerStart(input: {
 	}
 
 	// Metadata markers — not injected as prompt instructions
-	sources.push({ kind: "ui_metadata", bounded: false, reference: "excluded_from_prompt" });
-	sources.push({ kind: "runtime_metadata", bounded: false, reference: "excluded_from_prompt" });
+	sources.push({
+		kind: "ui_metadata",
+		bounded: false,
+		reference: "excluded_from_prompt",
+	});
+	sources.push({
+		kind: "runtime_metadata",
+		bounded: false,
+		reference: "excluded_from_prompt",
+	});
 
 	return {
 		sources,

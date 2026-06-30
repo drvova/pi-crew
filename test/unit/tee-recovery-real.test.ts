@@ -22,22 +22,32 @@
  *   7. Worker prompt augmentation: when sharedReads has fullOutputPath, the
  *      rendered prompt includes the tee path line.
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { test } from "node:test";
 import {
 	MAX_RESULT_INLINE_BYTES,
-	TEE_THRESHOLD_MULTIPLIER,
 	readIfSmall,
 	readIfSmallWithTee,
+	TEE_THRESHOLD_MULTIPLIER,
 	teePathForArtifact,
 } from "../../src/runtime/task-output-context.ts";
 
 function makeTmpDir(prefix: string): { dir: string; cleanup: () => void } {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-	return { dir, cleanup: () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ } } };
+	return {
+		dir,
+		cleanup: () => {
+			try {
+				fs.rmSync(dir, { recursive: true, force: true });
+			} catch {
+				/* best-effort */
+			}
+		},
+	};
 }
 
 // --- readIfSmallWithTee: core behavior ---
@@ -54,7 +64,9 @@ test("readIfSmallWithTee returns full content (no tee) when file is at or below 
 		const content = "hello world\n".repeat(100); // 1200 chars, well below threshold
 		fs.writeFileSync(filePath, content, "utf-8");
 		const teePath = path.join(dir, "tee", "should-not-exist.txt");
-		const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: teePath } });
+		const result = readIfSmallWithTee(filePath, {
+			tee: { fullOutputPath: teePath },
+		});
 		assert.ok(result);
 		assert.equal(result.content, content, "small files are returned verbatim");
 		assert.equal(result.fullOutputPath, undefined, "no tee for small files");
@@ -73,7 +85,9 @@ test("readIfSmallWithTee returns truncated content WITHOUT tee when file is betw
 		const content = "A".repeat(MAX_RESULT_INLINE_BYTES + 1000);
 		fs.writeFileSync(filePath, content, "utf-8");
 		const teePath = path.join(dir, "tee", "should-not-exist.txt");
-		const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: teePath } });
+		const result = readIfSmallWithTee(filePath, {
+			tee: { fullOutputPath: teePath },
+		});
 		assert.ok(result);
 		assert.ok(result.content.length < content.length, "content must be truncated");
 		assert.match(result.content, /head\+tail preserved/, "truncation marker must be present");
@@ -94,7 +108,9 @@ test("R2: readIfSmallWithTee tees (recovery path) when file is between TEE_THRES
 		const content = "R".repeat(50_000);
 		fs.writeFileSync(filePath, content, "utf-8");
 		const teePath = path.join(dir, "tee", "task-R2-r2band.full.txt");
-		const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: teePath } });
+		const result = readIfSmallWithTee(filePath, {
+			tee: { fullOutputPath: teePath },
+		});
 		assert.ok(result);
 		assert.ok(result.content.length < content.length, "content must be truncated inline");
 		assert.match(result.content, /head\+tail preserved/);
@@ -115,7 +131,9 @@ test("readIfSmallWithTee tees the full content and returns fullOutputPath when f
 		const content = "A".repeat(MAX_RESULT_INLINE_BYTES * 3 + 1000);
 		fs.writeFileSync(filePath, content, "utf-8");
 		const teePath = path.join(dir, "tee", "task-X-large.full.txt");
-		const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: teePath } });
+		const result = readIfSmallWithTee(filePath, {
+			tee: { fullOutputPath: teePath },
+		});
 		assert.ok(result);
 		assert.ok(result.content.length < content.length, "content must be truncated");
 		assert.match(result.content, /head\+tail preserved/);
@@ -139,7 +157,9 @@ test("readIfSmallWithTee creates the tee directory if it does not exist (mkdir r
 		const teeDir = path.join(dir, "deeply", "nested", "tee");
 		const teePath = path.join(teeDir, "x.full.txt");
 		assert.ok(!fs.existsSync(teeDir), "precondition: nested tee dir does not exist");
-		const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: teePath } });
+		const result = readIfSmallWithTee(filePath, {
+			tee: { fullOutputPath: teePath },
+		});
 		assert.ok(result);
 		assert.equal(result.fullOutputPath, teePath);
 		assert.ok(fs.existsSync(teeDir), "nested tee directory must be created");
@@ -158,7 +178,9 @@ test("readIfSmallWithTee returns truncated content WITHOUT fullOutputPath when t
 		const blocker = path.join(dir, "blocker");
 		fs.writeFileSync(blocker, "not a directory");
 		const badTeePath = path.join(blocker, "should-fail.txt");
-		const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: badTeePath } });
+		const result = readIfSmallWithTee(filePath, {
+			tee: { fullOutputPath: badTeePath },
+		});
 		assert.ok(result, "read must still succeed even when tee fails");
 		assert.ok(result.content.length < content.length, "truncation still applied");
 		assert.equal(result.fullOutputPath, undefined, "fullOutputPath must be omitted when tee write fails");
@@ -249,18 +271,31 @@ test("sharedReads entry includes fullOutputPath only when file size > tee thresh
 		fs.writeFileSync(path.join(sharedDir, "large.txt"), "L".repeat(MAX_RESULT_INLINE_BYTES * 3), "utf-8");
 		// Replicate the construction logic from collectDependencyOutputContext to
 		// verify the entry shape end-to-end.
-		const step = { reads: ["small.txt", "medium.txt", "recoverable.txt", "large.txt"] };
-		const manifest = { artifactsRoot: dir } as unknown as Parameters<typeof import("../../src/runtime/task-output-context.ts").collectDependencyOutputContext>[0];
-		const task = { id: "t-1" } as unknown as Parameters<typeof import("../../src/runtime/task-output-context.ts").collectDependencyOutputContext>[2];
+		const step = {
+			reads: ["small.txt", "medium.txt", "recoverable.txt", "large.txt"],
+		};
+		const manifest = { artifactsRoot: dir } as unknown as Parameters<
+			typeof import("../../src/runtime/task-output-context.ts").collectDependencyOutputContext
+		>[0];
+		const task = { id: "t-1" } as unknown as Parameters<
+			typeof import("../../src/runtime/task-output-context.ts").collectDependencyOutputContext
+		>[2];
 		// Inline the same map logic to assert entry shape (this is integration —
 		// the production code path is one line of indirection).
 		const entries = (step.reads ?? []).map((name: string) => {
 			const filePath = path.join(sharedDir, name);
 			const teePath = teePathForArtifact(dir, task.id, name);
-			const result = readIfSmallWithTee(filePath, { tee: { fullOutputPath: teePath } });
+			const result = readIfSmallWithTee(filePath, {
+				tee: { fullOutputPath: teePath },
+			});
 			if (!result) return { name, path: filePath, content: "" };
 			return result.fullOutputPath
-				? { name, path: filePath, content: result.content, fullOutputPath: result.fullOutputPath }
+				? {
+						name,
+						path: filePath,
+						content: result.content,
+						fullOutputPath: result.fullOutputPath,
+					}
 				: { name, path: filePath, content: result.content };
 		});
 		// Small: no fullOutputPath, content is verbatim

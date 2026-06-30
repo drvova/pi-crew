@@ -1,10 +1,10 @@
 import type { AgentConfig } from "../agents/agent-config.ts";
-import type { TeamConfig } from "../teams/team-config.ts";
-import type { WorkflowConfig } from "../workflows/workflow-config.ts";
 import type { SkillDescriptor } from "../skills/discover-skills.ts";
-import type { ExportContent } from "./types.ts";
-import { adapterRegistry } from "./registry.ts";
+import type { TeamConfig } from "../teams/team-config.ts";
 import { resolveContainedPath } from "../utils/safe-paths.ts";
+import type { WorkflowConfig } from "../workflows/workflow-config.ts";
+import { adapterRegistry } from "./registry.ts";
+import type { ExportContent } from "./types.ts";
 
 function slugify(value: string): string {
 	return value
@@ -30,9 +30,7 @@ export function agentToExportContent(agent: AgentConfig): ExportContent {
 export function teamToExportContent(team: TeamConfig): ExportContent {
 	const category = team.routing?.category ?? "team";
 	const tags = team.routing?.triggers ?? [];
-	const rolesDesc = team.roles
-		.map((role) => `- **${role.name}**: ${role.description ?? role.agent}`)
-		.join("\n");
+	const rolesDesc = team.roles.map((role) => `- **${role.name}**: ${role.description ?? role.agent}`).join("\n");
 	const body = `${team.description}\n\n### Roles\n${rolesDesc}`;
 	return {
 		id: slugify(team.name),
@@ -46,9 +44,7 @@ export function teamToExportContent(team: TeamConfig): ExportContent {
 }
 
 export function workflowToExportContent(workflow: WorkflowConfig): ExportContent {
-	const stepsDesc = workflow.steps
-		.map((step) => `- **${step.id}** (${step.role}): ${step.task}`)
-		.join("\n");
+	const stepsDesc = workflow.steps.map((step) => `- **${step.id}** (${step.role}): ${step.task}`).join("\n");
 	const body = `${workflow.description}\n\n### Steps\n${stepsDesc}`;
 	return {
 		id: slugify(workflow.name),
@@ -105,14 +101,15 @@ export interface ToolExportResult {
 	files: Array<{ path: string; content: string }>;
 }
 
-export function generateToolExport(
-	toolId: string,
-	resources: ExportableResource[],
-	projectRoot?: string,
-): ToolExportResult {
+export function generateToolExport(toolId: string, resources: ExportableResource[], projectRoot?: string): ToolExportResult {
 	const adapter = adapterRegistry.get(toolId);
 	if (!adapter) {
-		throw new Error(`Unknown export adapter: ${toolId}. Available: ${adapterRegistry.getAll().map((a) => a.toolId).join(", ")}`);
+		throw new Error(
+			`Unknown export adapter: ${toolId}. Available: ${adapterRegistry
+				.getAll()
+				.map((a) => a.toolId)
+				.join(", ")}`,
+		);
 	}
 	const contents = resourcesToExportContent(resources);
 	const files = contents.map((content): { path: string; content: string } => {
@@ -138,6 +135,9 @@ export function generateToolExport(
 		const existing = merged.get(f.path);
 		merged.set(f.path, existing ? `${existing}\n\n${f.content}` : f.content);
 	}
-	const mergedFiles = [...merged.entries()].map(([p, content]) => ({ path: p, content }));
+	const mergedFiles = [...merged.entries()].map(([p, content]) => ({
+		path: p,
+		content,
+	}));
 	return { toolId, files: mergedFiles };
 }

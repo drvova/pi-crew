@@ -1,14 +1,14 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import {
-	liveAgentControlPath,
-	appendLiveAgentControlRequest,
-	readLiveAgentControlRequests,
-	applyLiveAgentControlRequest,
-} from "../../src/runtime/live-agent-control.ts";
+import { describe, it } from "node:test";
 import type { LiveAgentControlRequest } from "../../src/runtime/live-agent-control.ts";
+import {
+	appendLiveAgentControlRequest,
+	applyLiveAgentControlRequest,
+	liveAgentControlPath,
+	readLiveAgentControlRequests,
+} from "../../src/runtime/live-agent-control.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
@@ -71,8 +71,14 @@ describe("appendLiveAgentControlRequest", () => {
 		const tmp = createTrackedTempDir("pi-crew-lc-");
 		try {
 			const manifest = makeManifest(tmp);
-			const r1 = appendLiveAgentControlRequest(manifest, { taskId: "task1", operation: "steer" });
-			const r2 = appendLiveAgentControlRequest(manifest, { taskId: "task1", operation: "stop" });
+			const r1 = appendLiveAgentControlRequest(manifest, {
+				taskId: "task1",
+				operation: "steer",
+			});
+			const r2 = appendLiveAgentControlRequest(manifest, {
+				taskId: "task1",
+				operation: "stop",
+			});
 			assert.notEqual(r1.id, r2.id);
 			const { requests } = readLiveAgentControlRequests(manifest, "task1");
 			assert.equal(requests.length, 2);
@@ -117,13 +123,23 @@ describe("readLiveAgentControlRequests", () => {
 		const tmp = createTrackedTempDir("pi-crew-lc-");
 		try {
 			const manifest = makeManifest(tmp);
-			appendLiveAgentControlRequest(manifest, { taskId: "task1", operation: "steer" });
-			appendLiveAgentControlRequest(manifest, { taskId: "task1", operation: "stop" });
-			const page1 = readLiveAgentControlRequests(manifest, "task1", { offset: 0 });
+			appendLiveAgentControlRequest(manifest, {
+				taskId: "task1",
+				operation: "steer",
+			});
+			appendLiveAgentControlRequest(manifest, {
+				taskId: "task1",
+				operation: "stop",
+			});
+			const page1 = readLiveAgentControlRequests(manifest, "task1", {
+				offset: 0,
+			});
 			assert.equal(page1.requests.length, 2);
 			assert.equal(page1.cursor.offset, 2);
 			// Read with cursor past first entry
-			const page2 = readLiveAgentControlRequests(manifest, "task1", { offset: 1 });
+			const page2 = readLiveAgentControlRequests(manifest, "task1", {
+				offset: 1,
+			});
 			assert.equal(page2.requests.length, 1);
 			assert.equal(page2.requests[0]!.operation, "stop");
 		} finally {
@@ -135,7 +151,10 @@ describe("readLiveAgentControlRequests", () => {
 		const tmp = createTrackedTempDir("pi-crew-lc-");
 		try {
 			const manifest = makeManifest(tmp);
-			appendLiveAgentControlRequest(manifest, { taskId: "task1", operation: "steer" });
+			appendLiveAgentControlRequest(manifest, {
+				taskId: "task1",
+				operation: "steer",
+			});
 			// Corrupt the file with a line that has wrong runId
 			const controlPath = liveAgentControlPath(manifest, "task1");
 			const badRequest: LiveAgentControlRequest = {
@@ -170,7 +189,9 @@ describe("applyLiveAgentControlRequest", () => {
 			taskId: "task1",
 			agentId: "task1",
 			session: {
-				steer: async (text) => { steered.push(text); },
+				steer: async (text) => {
+					steered.push(text);
+				},
 			},
 		});
 		assert.equal(applied, true);
@@ -190,7 +211,11 @@ describe("applyLiveAgentControlRequest", () => {
 			request,
 			taskId: "task1",
 			agentId: "task1",
-			session: { abort: async () => { aborted = true; } },
+			session: {
+				abort: async () => {
+					aborted = true;
+				},
+			},
 		});
 		assert.equal(aborted, true);
 	});

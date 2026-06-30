@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { CrewBorderedLoader, CountdownTimer } from "../../src/ui/loaders.ts";
-import { asCrewTheme } from "../../src/ui/theme-adapter.ts";
+import test from "node:test";
 import { DynamicCrewBorder } from "../../src/ui/dynamic-border.ts";
+import { CountdownTimer, CrewBorderedLoader } from "../../src/ui/loaders.ts";
+import { asCrewTheme } from "../../src/ui/theme-adapter.ts";
 
 function wait(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,12 +28,17 @@ test("CrewBorderedLoader signals abort on cancel key", () => {
 });
 
 test("DynamicCrewBorder renders horizontal lines", () => {
-	const border = new DynamicCrewBorder(asCrewTheme(undefined), { color: (value) => value });
+	const border = new DynamicCrewBorder(asCrewTheme(undefined), {
+		color: (value) => value,
+	});
 	assert.deepEqual(border.render(20), ["─".repeat(20)]);
 });
 
 test("DynamicCrewBorder supports custom characters", () => {
-	const border = new DynamicCrewBorder(asCrewTheme(undefined), { char: "═", color: (value) => value });
+	const border = new DynamicCrewBorder(asCrewTheme(undefined), {
+		char: "═",
+		color: (value) => value,
+	});
 	assert.deepEqual(border.render(4), ["════"]);
 });
 

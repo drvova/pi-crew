@@ -43,11 +43,8 @@ export function isStringArray(value: unknown): value is readonly string[] {
  * @example
  * const isNumberArray = isArrayOf(isNumber);
  */
-export function isArrayOf<T>(
-	guard: (item: unknown) => item is T,
-): (value: unknown) => value is readonly T[] {
-	return (value: unknown): value is readonly T[] =>
-		Array.isArray(value) && value.every(guard);
+export function isArrayOf<T>(guard: (item: unknown) => item is T): (value: unknown) => value is readonly T[] {
+	return (value: unknown): value is readonly T[] => Array.isArray(value) && value.every(guard);
 }
 
 // ── Record field extractors ───────────────────────────────────────────

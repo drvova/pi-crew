@@ -1,6 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { parseSchedule, nextRunTime, humanizeSchedule } from "../../src/runtime/scheduler.ts";
+import test from "node:test";
+import { humanizeSchedule, nextRunTime, parseSchedule } from "../../src/runtime/scheduler.ts";
 
 test("parseSchedule detects ISO datetime for once kind", () => {
 	const result = parseSchedule("2026-05-15T10:30:00.000Z");

@@ -10,13 +10,13 @@ const MAX_HANDOFFS_PER_ANCHOR = 100;
 
 /**
  * AnchorManager - Creates shared summary points where multiple handoffs accumulate.
- * 
+ *
  * Based on pi-boomerang's anchorMode pattern:
  * - setAnchor() creates a shared summary point for a session
  * - accumulateHandoff() adds handoffs to the anchor
  * - clearAnchor() finalizes and returns accumulated summaries
  * - getAnchorHandoff() retrieves accumulated summary without clearing
- * 
+ *
  * @see docs/pi-boomerang-integration-plan.md
  */
 
@@ -89,7 +89,7 @@ export class AnchorManager {
 	/**
 	 * Set an anchor point for a session.
 	 * All subsequent handoffs will accumulate to this anchor.
-	 * 
+	 *
 	 * @param sessionId - The session ID to create anchor for
 	 * @param context - Initial context for the anchor
 	 * @returns The anchor ID
@@ -121,7 +121,7 @@ export class AnchorManager {
 
 	/**
 	 * Get the current anchor for a session.
-	 * 
+	 *
 	 * @param sessionId - The session ID
 	 * @returns The anchor if exists, null otherwise
 	 */
@@ -134,7 +134,7 @@ export class AnchorManager {
 
 	/**
 	 * Get the anchor ID for a session.
-	 * 
+	 *
 	 * @param sessionId - The session ID
 	 * @returns The anchor ID if exists, undefined otherwise
 	 */
@@ -145,7 +145,7 @@ export class AnchorManager {
 	/**
 	 * Clear an anchor and return the accumulated handoff summary.
 	 * This removes the anchor and returns merged handoffs.
-	 * 
+	 *
 	 * @param anchorId - The anchor ID to clear
 	 * @returns The accumulated handoff summary
 	 * @throws Error if anchor not found or no handoffs accumulated
@@ -163,14 +163,17 @@ export class AnchorManager {
 		this.sessionAnchors.delete(anchor.sessionId);
 		this.anchors.delete(anchorId);
 
-		this.options.eventEmitter?.emit("anchor:cleared", { anchorId, accumulated });
+		this.options.eventEmitter?.emit("anchor:cleared", {
+			anchorId,
+			accumulated,
+		});
 
 		return accumulated;
 	}
 
 	/**
 	 * Clear anchor by session ID.
-	 * 
+	 *
 	 * @param sessionId - The session ID
 	 * @returns The accumulated handoff summary
 	 */
@@ -183,7 +186,7 @@ export class AnchorManager {
 	/**
 	 * Accumulate a handoff to an anchor.
 	 * If anchor doesn't exist, creates an implicit anchor.
-	 * 
+	 *
 	 * @param anchorId - The anchor ID
 	 * @param handoff - The handoff summary to accumulate
 	 */
@@ -224,7 +227,7 @@ export class AnchorManager {
 
 	/**
 	 * Accumulate handoff by session ID.
-	 * 
+	 *
 	 * @param sessionId - The session ID
 	 * @param handoff - The handoff summary to accumulate
 	 */
@@ -241,7 +244,7 @@ export class AnchorManager {
 
 	/**
 	 * Get the accumulated handoff for an anchor without clearing it.
-	 * 
+	 *
 	 * @param anchorId - The anchor ID
 	 * @returns The accumulated handoff summary, or null if anchor not found or no handoffs
 	 */
@@ -254,7 +257,7 @@ export class AnchorManager {
 
 	/**
 	 * Get accumulated handoff by session ID.
-	 * 
+	 *
 	 * @param sessionId - The session ID
 	 * @returns The accumulated handoff summary, or null if no anchor or handoffs
 	 */
@@ -266,7 +269,7 @@ export class AnchorManager {
 
 	/**
 	 * Get status information for an anchor.
-	 * 
+	 *
 	 * @param anchorId - The anchor ID
 	 * @returns Status object or null if anchor not found
 	 */
@@ -279,21 +282,15 @@ export class AnchorManager {
 			sessionId: anchor.sessionId,
 			createdAt: anchor.createdAt,
 			handoffCount: anchor.handoffs.length,
-			totalTokens: anchor.handoffs.reduce(
-				(sum, h) => sum + h.metrics.tokensUsed,
-				0,
-			),
-			totalDuration: anchor.handoffs.reduce(
-				(sum, h) => sum + h.metrics.duration,
-				0,
-			),
+			totalTokens: anchor.handoffs.reduce((sum, h) => sum + h.metrics.tokensUsed, 0),
+			totalDuration: anchor.handoffs.reduce((sum, h) => sum + h.metrics.duration, 0),
 			context: anchor.context,
 		};
 	}
 
 	/**
 	 * Get status by session ID.
-	 * 
+	 *
 	 * @param sessionId - The session ID
 	 * @returns Status object or null if no anchor
 	 */
@@ -305,7 +302,7 @@ export class AnchorManager {
 
 	/**
 	 * Check if an anchor has handoffs accumulated.
-	 * 
+	 *
 	 * @param anchorId - The anchor ID
 	 * @returns True if anchor has handoffs
 	 */
@@ -316,7 +313,7 @@ export class AnchorManager {
 
 	/**
 	 * Get all anchors.
-	 * 
+	 *
 	 * @returns Array of all anchors
 	 */
 	getAllAnchors(): Anchor[] {
@@ -347,7 +344,12 @@ export class AnchorManager {
 				iterations: acc.iterations + h.metrics.iterations,
 				toolsUsed: [...acc.toolsUsed, ...h.metrics.toolsUsed],
 			}),
-			{ tokensUsed: 0, duration: 0, iterations: 0, toolsUsed: [] as string[] },
+			{
+				tokensUsed: 0,
+				duration: 0,
+				iterations: 0,
+				toolsUsed: [] as string[],
+			},
 		);
 
 		// Deduplicate tools

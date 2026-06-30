@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { DEFAULT_CACHE, DEFAULT_PATHS } from "../config/defaults.ts";
+import { activeRunEntries } from "../state/active-run-registry.ts";
+import type { TeamRunManifest } from "../state/types.ts";
 import { closeWatcher, watchWithErrorHandler } from "../utils/fs-watch.ts";
 import { findRepoRoot, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
-import { activeRunEntries } from "../state/active-run-registry.ts";
 import { isSafePathId, resolveContainedRelativePath, resolveRealContainedPath } from "../utils/safe-paths.ts";
-import type { TeamRunManifest } from "../state/types.ts";
-import { DEFAULT_CACHE, DEFAULT_PATHS } from "../config/defaults.ts";
 
 export interface ManifestCache {
 	list(limit?: number): TeamRunManifest[];
@@ -74,7 +74,14 @@ function validateManifestForRoot(root: string, runId: string, manifest: TeamRunM
 		const stateRoot = resolveContainedRelativePath(root, runId, "runId");
 		const crewRoot = path.dirname(path.dirname(root));
 		const artifactsRoot = resolveContainedRelativePath(path.join(crewRoot, DEFAULT_PATHS.state.artifactsSubdir), runId, "runId");
-		if (manifest.runId !== runId || !sameFilesystemPath(manifest.stateRoot, stateRoot) || !sameFilesystemPath(manifest.tasksPath, path.join(stateRoot, DEFAULT_PATHS.state.tasksFile)) || !sameFilesystemPath(manifest.eventsPath, path.join(stateRoot, DEFAULT_PATHS.state.eventsFile)) || !sameFilesystemPath(manifest.artifactsRoot, artifactsRoot)) return false;
+		if (
+			manifest.runId !== runId ||
+			!sameFilesystemPath(manifest.stateRoot, stateRoot) ||
+			!sameFilesystemPath(manifest.tasksPath, path.join(stateRoot, DEFAULT_PATHS.state.tasksFile)) ||
+			!sameFilesystemPath(manifest.eventsPath, path.join(stateRoot, DEFAULT_PATHS.state.eventsFile)) ||
+			!sameFilesystemPath(manifest.artifactsRoot, artifactsRoot)
+		)
+			return false;
 		if (fs.existsSync(artifactsRoot)) {
 			if (fs.lstatSync(artifactsRoot).isSymbolicLink()) return false;
 			resolveRealContainedPath(path.dirname(artifactsRoot), path.basename(artifactsRoot));
@@ -125,7 +132,10 @@ function collectRoots(root: string): ParsedEntry[] {
 	}
 	return entries
 		.filter((entry) => entry.length > 0 && isSafePathId(entry))
-		.map((entry) => ({ runId: entry, path: manifestPathForRun(root, entry) }))
+		.map((entry) => ({
+			runId: entry,
+			path: manifestPathForRun(root, entry),
+		}))
 		.filter((entry): entry is ParsedEntry => entry.path !== undefined);
 }
 
@@ -201,7 +211,10 @@ export function createManifestCache(cwd: string, options: ManifestCacheOptions =
 		}
 		const parsedEntries = [
 			...roots.flatMap((root) => collectRoots(root)),
-			...activeRunEntries().map((entry) => ({ runId: entry.runId, path: entry.manifestPath })),
+			...activeRunEntries().map((entry) => ({
+				runId: entry.runId,
+				path: entry.manifestPath,
+			})),
 		];
 		const unique = new Map<string, CachedManifest | undefined>();
 		for (const entry of parsedEntries) {
@@ -215,7 +228,6 @@ export function createManifestCache(cwd: string, options: ManifestCacheOptions =
 			}
 			if (cached) unique.set(entry.runId, cached);
 		}
-
 
 		const runs = [...unique.values()].filter((value): value is CachedManifest => value !== undefined).map((value) => value.manifest);
 		const sorted = runs.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
@@ -238,11 +250,15 @@ export function createManifestCache(cwd: string, options: ManifestCacheOptions =
 
 	if (options.watch ?? true) {
 		for (const root of roots) {
-			const watcher = watchWithErrorHandler(root, () => {
-				scheduleListRefresh();
-			}, () => {
-				scheduleListRefresh();
-			});
+			const watcher = watchWithErrorHandler(
+				root,
+				() => {
+					scheduleListRefresh();
+				},
+				() => {
+					scheduleListRefresh();
+				},
+			);
 			if (watcher) {
 				watcher.unref();
 				watchers.push(watcher);

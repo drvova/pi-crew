@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildCompletionKey, getGlobalSeenMap, markSeenWithTtl } from "../utils/completion-dedupe.ts";
-import { closeWatcher, watchWithErrorHandler } from "../utils/fs-watch.ts";
 import { createFileCoalescer } from "../utils/file-coalescer.ts";
+import { closeWatcher, watchWithErrorHandler } from "../utils/fs-watch.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 
 export interface ResultWatcherEvents {
@@ -42,7 +42,11 @@ function readJson(filePath: string): unknown | undefined {
 	}
 }
 
-export function createResultWatcher(events: ResultWatcherEvents, resultsDir: string, eventNameOrOptions: string | ResultWatcherOptions = "pi-crew:run-result"): ResultWatcherHandle {
+export function createResultWatcher(
+	events: ResultWatcherEvents,
+	resultsDir: string,
+	eventNameOrOptions: string | ResultWatcherOptions = "pi-crew:run-result",
+): ResultWatcherHandle {
 	const options: ResultWatcherOptions = typeof eventNameOrOptions === "string" ? { eventName: eventNameOrOptions } : eventNameOrOptions;
 	const eventName = options.eventName ?? "pi-crew:run-result";
 	const completionTtlMs = options.completionTtlMs ?? 5 * 60_000;
@@ -61,7 +65,10 @@ export function createResultWatcher(events: ResultWatcherEvents, resultsDir: str
 			coalescer.schedule(file, RESULT_WATCHER_POLL_MS);
 			return;
 		}
-		const key = buildCompletionKey(payload && typeof payload === "object" && !Array.isArray(payload) ? payload as Record<string, unknown> : {}, `file:${file}`);
+		const key = buildCompletionKey(
+			payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {},
+			`file:${file}`,
+		);
 		if (!markSeenWithTtl(seen, key, Date.now(), completionTtlMs)) {
 			events.emit(eventName, payload);
 		}
@@ -105,10 +112,14 @@ export function createResultWatcher(events: ResultWatcherEvents, resultsDir: str
 			if (!isCurrent()) return;
 			fs.mkdirSync(resultsDir, { recursive: true });
 			if (watcher) closeWatcher(watcher);
-			watcher = watch(resultsDir, (event, fileName) => {
-				if (event !== "rename" || !fileName) return;
-				coalescer.schedule(fileName.toString());
-			}, scheduleRestart);
+			watcher = watch(
+				resultsDir,
+				(event, fileName) => {
+					if (event !== "rename" || !fileName) return;
+					coalescer.schedule(fileName.toString());
+				},
+				scheduleRestart,
+			);
 			if (watcher) stopPolling();
 			watcher?.unref();
 		},

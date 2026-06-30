@@ -22,7 +22,11 @@ export function readLinesSince(filePath: string, state: IncrementalReadState): I
 	try {
 		fd = fs.openSync(filePath, "r");
 	} catch {
-		return { lines: [], state: { byteOffset: state.byteOffset, lineCount: state.lineCount }, eof: true };
+		return {
+			lines: [],
+			state: { byteOffset: state.byteOffset, lineCount: state.lineCount },
+			eof: true,
+		};
 	}
 
 	try {
@@ -75,7 +79,11 @@ export function readLinesSince(filePath: string, state: IncrementalReadState): I
 		};
 	} finally {
 		if (fd !== undefined) {
-			try { fs.closeSync(fd); } catch { /* ignore */ }
+			try {
+				fs.closeSync(fd);
+			} catch {
+				/* ignore */
+			}
 		}
 	}
 }
@@ -84,7 +92,10 @@ export function readLinesSince(filePath: string, state: IncrementalReadState): I
  * Read parsed JSON objects from a JSONL file since last known byte offset.
  * Skips malformed lines.
  */
-export function readJsonlSince<T>(filePath: string, state: IncrementalReadState): { items: T[]; state: IncrementalReadState; eof: boolean } {
+export function readJsonlSince<T>(
+	filePath: string,
+	state: IncrementalReadState,
+): { items: T[]; state: IncrementalReadState; eof: boolean } {
 	const result = readLinesSince(filePath, state);
 	const items: T[] = [];
 

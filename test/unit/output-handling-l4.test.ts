@@ -11,11 +11,12 @@
  * measured max 9226 bytes, 100% < 16KB → 16KB/8KB thresholds cut 0% of real
  * outputs while still bounding memory.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 import { DEFAULT_CHILD_PI } from "../../src/config/defaults.ts";
 
 // compactString is private in child-pi.ts; we assert via DEFAULT_CHILD_PI that

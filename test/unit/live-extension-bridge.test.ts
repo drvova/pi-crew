@@ -1,8 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	buildExtensionBridge,
-} from "../../src/runtime/live-extension-bridge.ts";
+import test from "node:test";
+import { buildExtensionBridge } from "../../src/runtime/live-extension-bridge.ts";
 
 /**
  * Round 27 (test coverage gaps): `live-extension-bridge.ts` bridges pi-crew's
@@ -59,7 +57,9 @@ test("buildExtensionBridge: returns apis and host for valid session", () => {
 test("apis.sendMessage: delegates to session.sendCustomMessage", () => {
 	const messages: unknown[] = [];
 	const session = makeMockSession({
-		sendCustomMessage: (msg: unknown) => { messages.push(msg); },
+		sendCustomMessage: (msg: unknown) => {
+			messages.push(msg);
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	bridge!.apis.sendMessage("hello");
@@ -69,7 +69,9 @@ test("apis.sendMessage: delegates to session.sendCustomMessage", () => {
 
 test("apis.sendMessage: swallows errors", () => {
 	const session = makeMockSession({
-		sendCustomMessage: () => { throw new Error("boom"); },
+		sendCustomMessage: () => {
+			throw new Error("boom");
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	// Should not throw
@@ -79,7 +81,9 @@ test("apis.sendMessage: swallows errors", () => {
 test("apis.sendUserMessage: delegates to session.sendUserMessage", () => {
 	const messages: unknown[] = [];
 	const session = makeMockSession({
-		sendUserMessage: (content: unknown) => { messages.push(content); },
+		sendUserMessage: (content: unknown) => {
+			messages.push(content);
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	bridge!.apis.sendUserMessage("user says hi");
@@ -88,7 +92,9 @@ test("apis.sendUserMessage: delegates to session.sendUserMessage", () => {
 
 test("apis.sendUserMessage: swallows errors", () => {
 	const session = makeMockSession({
-		sendUserMessage: () => { throw new Error("fail"); },
+		sendUserMessage: () => {
+			throw new Error("fail");
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	bridge!.apis.sendUserMessage("test");
@@ -101,7 +107,9 @@ test("apis.getActiveTools: delegates to session.getActiveToolNames", () => {
 
 test("apis.getActiveTools: returns [] on error", () => {
 	const session = makeMockSession({
-		getActiveToolNames: () => { throw new Error("fail"); },
+		getActiveToolNames: () => {
+			throw new Error("fail");
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	assert.deepEqual(bridge!.apis.getActiveTools(), []);
@@ -114,7 +122,9 @@ test("apis.getAllTools: delegates to session.getAllTools", () => {
 
 test("apis.getAllTools: falls back to getActiveToolNames on error", () => {
 	const session = makeMockSession({
-		getAllTools: () => { throw new Error("fail"); },
+		getAllTools: () => {
+			throw new Error("fail");
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	assert.deepEqual(bridge!.apis.getAllTools(), ["read", "write"]);
@@ -123,7 +133,9 @@ test("apis.getAllTools: falls back to getActiveToolNames on error", () => {
 test("apis.setActiveTools: delegates to session.setActiveToolsByName", () => {
 	const setCalls: string[][] = [];
 	const session = makeMockSession({
-		setActiveToolsByName: (tools: string[]) => { setCalls.push(tools); },
+		setActiveToolsByName: (tools: string[]) => {
+			setCalls.push(tools);
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	bridge!.apis.setActiveTools(["read"]);
@@ -132,7 +144,9 @@ test("apis.setActiveTools: delegates to session.setActiveToolsByName", () => {
 
 test("apis.setActiveTools: swallows errors", () => {
 	const session = makeMockSession({
-		setActiveToolsByName: () => { throw new Error("fail"); },
+		setActiveToolsByName: () => {
+			throw new Error("fail");
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	bridge!.apis.setActiveTools(["read"]);
@@ -187,7 +201,9 @@ test("host.getContextUsage: delegates to session", () => {
 
 test("host.getContextUsage: returns undefined on error", () => {
 	const session = makeMockSession({
-		getContextUsage: () => { throw new Error("fail"); },
+		getContextUsage: () => {
+			throw new Error("fail");
+		},
 	});
 	const bridge = buildExtensionBridge(session);
 	assert.equal(bridge!.host.getContextUsage(), undefined);

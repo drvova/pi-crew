@@ -1,12 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
+import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 import type { WorkflowStep } from "../workflows/workflow-config.ts";
-import { pruneToolOutputs, type ToolResultEntry, type FileEditEvent, DEFAULT_PRUNE_CONFIG } from "./tool-output-pruner.ts";
 import { applyCompactPipeline } from "./compact-pipeline.ts";
 import { ANSI_STRIP_STAGE, BLANK_COLLAPSE_STAGE, TruncationStage } from "./compact-stages/index.ts";
+import { DEFAULT_PRUNE_CONFIG, type FileEditEvent, pruneToolOutputs, type ToolResultEntry } from "./tool-output-pruner.ts";
 
 export interface DependencyContextEntry {
 	taskId: string;
@@ -34,7 +34,12 @@ export interface DependencyOutputContext {
 	 * and the path is exposed via `fullOutputPath` so the downstream worker
 	 * can `read` it back if it needs the dropped middle.
 	 */
-	sharedReads: Array<{ name: string; path: string; content: string; fullOutputPath?: string }>;
+	sharedReads: Array<{
+		name: string;
+		path: string;
+		content: string;
+		fullOutputPath?: string;
+	}>;
 }
 
 function containedExists(filePath: string, baseDir?: string): boolean {
@@ -161,7 +166,12 @@ export function readIfSmallWithTee(
 				BLANK_COLLAPSE_STAGE,
 				new TruncationStage(maxChars, {
 					preserveImportant: true,
-					marker: { verb: "truncated", unit: "chars", headSeparator: "\n\n", tailSeparator: "\n" },
+					marker: {
+						verb: "truncated",
+						unit: "chars",
+						headSeparator: "\n\n",
+						tailSeparator: "\n",
+					},
 				}),
 			]);
 			return fullOutputPath ? { content: result.text, fullOutputPath } : { content: result.text };
@@ -190,7 +200,8 @@ export function readIfSmall(filePath: string, baseDir?: string): string | undefi
 
 function safeSharedName(name: string): string {
 	const normalized = name.replaceAll("\\", "/").replace(/^\.\/+/, "");
-	if (!normalized || normalized.split("/").some((segment) => segment === "..") || path.isAbsolute(normalized)) throw new Error(`Invalid shared artifact name: ${name}`);
+	if (!normalized || normalized.split("/").some((segment) => segment === "..") || path.isAbsolute(normalized))
+		throw new Error(`Invalid shared artifact name: ${name}`);
 	return normalized;
 }
 
@@ -273,60 +284,84 @@ function pruneSharedReads(
 			if (typeof artifact !== "string") continue;
 			// Map artifact path (relative to artifactsRoot) to absolute and
 			// check against read targets.
-			fileEdits.push({ target: path.resolve(artifactsRoot, artifact), index: reads.length + depIndex });
+			fileEdits.push({
+				target: path.resolve(artifactsRoot, artifact),
+				index: reads.length + depIndex,
+			});
 		}
 	}
 	const pruned = pruneToolOutputs(entries, DEFAULT_PRUNE_CONFIG);
 	if (pruned.prunedCount === 0) return reads;
 	// Map pruned entries back to the shared-read shape.
-	return pruned.results.map((entry, index) => ({ ...reads[index]!, content: entry.content }));
+	return pruned.results.map((entry, index) => ({
+		...reads[index]!,
+		content: entry.content,
+	}));
 }
 
-export function collectDependencyOutputContext(manifest: TeamRunManifest, tasks: TeamTaskState[], task: TeamTaskState, step: WorkflowStep): DependencyOutputContext {
+export function collectDependencyOutputContext(
+	manifest: TeamRunManifest,
+	tasks: TeamTaskState[],
+	task: TeamTaskState,
+	step: WorkflowStep,
+): DependencyOutputContext {
 	const byStep = new Map(tasks.map((item) => [item.stepId, item]).filter((entry): entry is [string, TeamTaskState] => Boolean(entry[0])));
 	const byId = new Map(tasks.map((item) => [item.id, item]));
-	const dependencies = task.dependsOn.map((dep) => byStep.get(dep) ?? byId.get(dep)).filter((item): item is TeamTaskState => Boolean(item)).map((item) => {
-		const fullOutputPath = item.resultArtifact ? teePathForArtifact(manifest.artifactsRoot, task.id, item.id) : undefined;
-		const teeResult = item.resultArtifact
-			? readIfSmallWithTee(item.resultArtifact.path, { baseDir: manifest.artifactsRoot, ...(fullOutputPath ? { tee: { fullOutputPath } } : {}) })
-			: undefined;
-		const resultText = teeResult?.content;
-		return {
-			taskId: item.id,
-			role: item.role,
-			status: item.status,
-			resultSummary: resultText ?? "",
-			resultPath: item.resultArtifact?.path,
-			...(teeResult?.fullOutputPath ? { fullOutputPath: teeResult.fullOutputPath } : {}),
-			structuredResults: resultText ? tryParseJson(resultText) : undefined,
-			artifactsProduced: listTaskArtifacts(manifest, item.id),
-			usage: aggregateUsage(item),
-		};
-	});
-	const rawSharedReads = (step.reads === false ? [] : step.reads ?? []).map((name) => {
-		const filePath = sharedPath(manifest, name);
-		// P1-A tee-recovery: when the shared artifact is large enough that the
-		// 75/25 head+tail split is materially lossy (>2× MAX_RESULT_INLINE_BYTES),
-		// tee the full content to ${artifactsRoot}/tee/${taskId}-${name}.full.txt
-		// and expose the path so the downstream worker can `read` the full file
-		// if it needs the dropped middle. The truncated content is still
-		// included inline; tee is an enhancement, not a hard dependency. Tee
-		// write is best-effort (writeTeeFile swallows I/O errors and the result
-		// simply omits fullOutputPath in that case).
-		const teePath = teePathForArtifact(manifest.artifactsRoot, task.id, name);
-		const teeResult = readIfSmallWithTee(filePath, {
-			baseDir: path.resolve(manifest.artifactsRoot, "shared"),
-			tee: { fullOutputPath: teePath },
+	const dependencies = task.dependsOn
+		.map((dep) => byStep.get(dep) ?? byId.get(dep))
+		.filter((item): item is TeamTaskState => Boolean(item))
+		.map((item) => {
+			const fullOutputPath = item.resultArtifact ? teePathForArtifact(manifest.artifactsRoot, task.id, item.id) : undefined;
+			const teeResult = item.resultArtifact
+				? readIfSmallWithTee(item.resultArtifact.path, {
+						baseDir: manifest.artifactsRoot,
+						...(fullOutputPath ? { tee: { fullOutputPath } } : {}),
+					})
+				: undefined;
+			const resultText = teeResult?.content;
+			return {
+				taskId: item.id,
+				role: item.role,
+				status: item.status,
+				resultSummary: resultText ?? "",
+				resultPath: item.resultArtifact?.path,
+				...(teeResult?.fullOutputPath ? { fullOutputPath: teeResult.fullOutputPath } : {}),
+				structuredResults: resultText ? tryParseJson(resultText) : undefined,
+				artifactsProduced: listTaskArtifacts(manifest, item.id),
+				usage: aggregateUsage(item),
+			};
 		});
-		if (teeResult === undefined) return { name, path: filePath, content: "" };
-		const entry: { name: string; path: string; content: string; fullOutputPath?: string } = {
-			name,
-			path: filePath,
-			content: teeResult.content,
-		};
-		if (teeResult.fullOutputPath) entry.fullOutputPath = teeResult.fullOutputPath;
-		return entry;
-	}).filter((item) => item.content.trim().length > 0);
+	const rawSharedReads = (step.reads === false ? [] : (step.reads ?? []))
+		.map((name) => {
+			const filePath = sharedPath(manifest, name);
+			// P1-A tee-recovery: when the shared artifact is large enough that the
+			// 75/25 head+tail split is materially lossy (>2× MAX_RESULT_INLINE_BYTES),
+			// tee the full content to ${artifactsRoot}/tee/${taskId}-${name}.full.txt
+			// and expose the path so the downstream worker can `read` the full file
+			// if it needs the dropped middle. The truncated content is still
+			// included inline; tee is an enhancement, not a hard dependency. Tee
+			// write is best-effort (writeTeeFile swallows I/O errors and the result
+			// simply omits fullOutputPath in that case).
+			const teePath = teePathForArtifact(manifest.artifactsRoot, task.id, name);
+			const teeResult = readIfSmallWithTee(filePath, {
+				baseDir: path.resolve(manifest.artifactsRoot, "shared"),
+				tee: { fullOutputPath: teePath },
+			});
+			if (teeResult === undefined) return { name, path: filePath, content: "" };
+			const entry: {
+				name: string;
+				path: string;
+				content: string;
+				fullOutputPath?: string;
+			} = {
+				name,
+				path: filePath,
+				content: teeResult.content,
+			};
+			if (teeResult.fullOutputPath) entry.fullOutputPath = teeResult.fullOutputPath;
+			return entry;
+		})
+		.filter((item) => item.content.trim().length > 0);
 	// Apply staleness-aware pruning to shared reads: drops superseded reads
 	// (same file re-read with different selectors) and replaces stale large
 	// outputs with compact digest notices before injecting into the worker
@@ -340,7 +375,14 @@ export function renderDependencyOutputContext(context: DependencyOutputContext):
 	if (context.dependencies.length) {
 		parts.push("# Dependency Outputs", "");
 		for (const dep of context.dependencies) {
-			parts.push(`## ${dep.taskId} (${dep.role})`, `Status: ${dep.status}`, dep.resultPath ? `Result artifact: ${dep.resultPath}` : "", "", dep.resultSummary?.trim() || "(no result output)", "");
+			parts.push(
+				`## ${dep.taskId} (${dep.role})`,
+				`Status: ${dep.status}`,
+				dep.resultPath ? `Result artifact: ${dep.resultPath}` : "",
+				"",
+				dep.resultSummary?.trim() || "(no result output)",
+				"",
+			);
 			// P1-A dependency tee-recovery hint: when the dependency's result was
 			// materially truncated (>1.25× MAX_RESULT_INLINE_BYTES) the full RAW
 			// content was teed to fullOutputPath. Mirrors the sharedReads hint so the
@@ -348,7 +390,11 @@ export function renderDependencyOutputContext(context: DependencyOutputContext):
 			if (dep.fullOutputPath) parts.push(`Full output (if you need the missing middle): ${dep.fullOutputPath}`, "");
 			if (dep.structuredResults) parts.push("Structured results:", JSON.stringify(dep.structuredResults, null, 2), "");
 			if (dep.artifactsProduced?.length) parts.push(`Artifacts produced: ${dep.artifactsProduced.join(", ")}`, "");
-			if (dep.usage) parts.push(`Usage: ${dep.usage.inputTokens} input tokens, ${dep.usage.outputTokens} output tokens, ${dep.usage.durationMs}ms`, "");
+			if (dep.usage)
+				parts.push(
+					`Usage: ${dep.usage.inputTokens} input tokens, ${dep.usage.outputTokens} output tokens, ${dep.usage.durationMs}ms`,
+					"",
+				);
 		}
 	}
 	if (context.sharedReads.length) {
@@ -379,7 +425,11 @@ export function writeTaskSharedOutput(manifest: TeamRunManifest, step: WorkflowS
 	});
 }
 
-export function writeTaskInputsArtifact(manifest: TeamRunManifest, task: TeamTaskState, context: DependencyOutputContext): ArtifactDescriptor {
+export function writeTaskInputsArtifact(
+	manifest: TeamRunManifest,
+	task: TeamTaskState,
+	context: DependencyOutputContext,
+): ArtifactDescriptor {
 	return writeArtifact(manifest.artifactsRoot, {
 		kind: "metadata",
 		relativePath: `metadata/${task.id}.inputs.json`,
@@ -389,29 +439,34 @@ export function writeTaskInputsArtifact(manifest: TeamRunManifest, task: TeamTas
 }
 
 export function aggregateTaskOutputs(tasks: TeamTaskState[], manifest?: TeamRunManifest): string {
-	return tasks.map((task, index) => {
-		const body = task.resultArtifact ? readIfSmall(task.resultArtifact.path, manifest?.artifactsRoot) : undefined;
-		const hasBody = Boolean(body?.trim());
-		const expectedMissing = task.resultArtifact && !containedExists(task.resultArtifact.path, manifest?.artifactsRoot);
-		const status = task.status === "skipped"
-			? "SKIPPED"
-			: task.status === "failed"
-				? `FAILED${task.exitCode !== undefined ? ` (exit code ${task.exitCode ?? "null"})` : ""}${task.error ? `: ${task.error}` : ""}`
-				: expectedMissing
-					? `EMPTY OUTPUT (expected result artifact missing: ${task.resultArtifact?.path})`
-					: !hasBody
-						? "EMPTY OUTPUT (no textual response returned)"
-						: task.status.toUpperCase();
-		return [
-			`=== Task ${index + 1}: ${task.id} (${task.agent}) ===`,
-			`Status: ${status}`,
-			task.role ? `Role: ${task.role}` : "",
-			task.resultArtifact?.path ? `Result artifact: ${task.resultArtifact.path}` : "",
-			task.logArtifact?.path ? `Log artifact: ${task.logArtifact.path}` : "",
-			task.transcriptArtifact?.path ? `Transcript: ${task.transcriptArtifact.path}` : "",
-			task.usage ? `Usage: ${JSON.stringify(task.usage)}` : "",
-			"",
-			hasBody ? body!.trim() : status,
-		].filter(Boolean).join("\n");
-	}).join("\n\n");
+	return tasks
+		.map((task, index) => {
+			const body = task.resultArtifact ? readIfSmall(task.resultArtifact.path, manifest?.artifactsRoot) : undefined;
+			const hasBody = Boolean(body?.trim());
+			const expectedMissing = task.resultArtifact && !containedExists(task.resultArtifact.path, manifest?.artifactsRoot);
+			const status =
+				task.status === "skipped"
+					? "SKIPPED"
+					: task.status === "failed"
+						? `FAILED${task.exitCode !== undefined ? ` (exit code ${task.exitCode ?? "null"})` : ""}${task.error ? `: ${task.error}` : ""}`
+						: expectedMissing
+							? `EMPTY OUTPUT (expected result artifact missing: ${task.resultArtifact?.path})`
+							: !hasBody
+								? "EMPTY OUTPUT (no textual response returned)"
+								: task.status.toUpperCase();
+			return [
+				`=== Task ${index + 1}: ${task.id} (${task.agent}) ===`,
+				`Status: ${status}`,
+				task.role ? `Role: ${task.role}` : "",
+				task.resultArtifact?.path ? `Result artifact: ${task.resultArtifact.path}` : "",
+				task.logArtifact?.path ? `Log artifact: ${task.logArtifact.path}` : "",
+				task.transcriptArtifact?.path ? `Transcript: ${task.transcriptArtifact.path}` : "",
+				task.usage ? `Usage: ${JSON.stringify(task.usage)}` : "",
+				"",
+				hasBody ? body!.trim() : status,
+			]
+				.filter(Boolean)
+				.join("\n");
+		})
+		.join("\n\n");
 }

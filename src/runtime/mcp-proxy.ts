@@ -34,10 +34,7 @@ export interface McpProxyConfig {
  * @param options.parentMcpTools — MCP tool names from the parent session (if available)
  * @param options.shareMcp — Whether to share MCP connections (default: true)
  */
-export function buildMcpProxyConfig(options: {
-	parentMcpTools?: string[];
-	shareMcp?: boolean;
-}): McpProxyConfig {
+export function buildMcpProxyConfig(options: { parentMcpTools?: string[]; shareMcp?: boolean }): McpProxyConfig {
 	if (options.shareMcp === false) {
 		return { enableMcp: true, proxyTools: [], proxyToolNames: [] };
 	}
@@ -74,9 +71,7 @@ export function buildMcpProxyConfig(options: {
  * In a future iteration, these can be wired to the actual MCP connections
  * via an inter-process bridge.
  */
-function createMcpProxyTools(
-	toolNames: string[],
-): Array<ToolDefinition<TSchema, unknown>> {
+function createMcpProxyTools(toolNames: string[]): Array<ToolDefinition<TSchema, unknown>> {
 	// For now, we don't create individual proxy tools because we can't
 	// forward MCP calls without the parent's MCP manager reference.
 	//
@@ -93,10 +88,7 @@ function createMcpProxyTools(
  */
 export function discoverMcpToolNames(activeToolNames: string[]): string[] {
 	return activeToolNames.filter(
-		(name) =>
-			name.startsWith("mcp__") ||
-			name.startsWith("mcp-") ||
-			(name.includes("__") && !name.startsWith("submit_result")),
+		(name) => name.startsWith("mcp__") || name.startsWith("mcp-") || (name.includes("__") && !name.startsWith("submit_result")),
 	);
 }
 
@@ -104,10 +96,10 @@ export function discoverMcpToolNames(activeToolNames: string[]): string[] {
  * Build MCP proxy config from a real Pi SDK session's active tools.
  * This is the preferred way — inspect what the parent session has available.
  */
-export function buildMcpProxyFromSession(
-	activeToolNames: string[],
-	options?: { shareMcp?: boolean },
-): McpProxyConfig {
+export function buildMcpProxyFromSession(activeToolNames: string[], options?: { shareMcp?: boolean }): McpProxyConfig {
 	const mcpTools = discoverMcpToolNames(activeToolNames);
-	return buildMcpProxyConfig({ parentMcpTools: mcpTools, shareMcp: options?.shareMcp });
+	return buildMcpProxyConfig({
+		parentMcpTools: mcpTools,
+		shareMcp: options?.shareMcp,
+	});
 }

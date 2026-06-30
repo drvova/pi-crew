@@ -4,20 +4,36 @@
  * (setManifestCache evicts entries older than MANIFEST_CACHE_TTL_MS) had
  * zero coverage.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
+import type { ManifestCacheEntry } from "../../src/state/state-store.ts";
 import {
 	__test__clearManifestCache,
+	__test__getManifestCacheEntry,
 	__test__manifestCacheSize,
 	__test__setManifestCache,
-	__test__getManifestCacheEntry,
 	MANIFEST_CACHE_TTL_MS_VALUE,
 } from "../../src/state/state-store.ts";
-import type { ManifestCacheEntry } from "../../src/state/state-store.ts";
 
 function makeEntry(cachedAt: number): ManifestCacheEntry {
 	return {
-		manifest: { schemaVersion: 1, runId: "team_test", team: "t", status: "running", goal: "g", workspaceMode: "single", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", stateRoot: "/s", artifactsRoot: "/a", tasksPath: "/t", eventsPath: "/e", artifacts: [], cwd: "/c" },
+		manifest: {
+			schemaVersion: 1,
+			runId: "team_test",
+			team: "t",
+			status: "running",
+			goal: "g",
+			workspaceMode: "single",
+			createdAt: "2026-01-01T00:00:00.000Z",
+			updatedAt: "2026-01-01T00:00:00.000Z",
+			stateRoot: "/s",
+			artifactsRoot: "/a",
+			tasksPath: "/t",
+			eventsPath: "/e",
+			artifacts: [],
+			cwd: "/c",
+		},
 		tasks: [],
 		cachedAt,
 		generation: 0,
@@ -41,10 +57,7 @@ test("setManifestCache evicts entries older than the TTL on the next set", () =>
 
 		// Now insert a third entry; the sweep should evict the stale one.
 		__test__setManifestCache("/run/trigger", makeEntry(Date.now()));
-		assert.ok(
-			!__test__getManifestCacheEntry("/run/stale"),
-			"stale (TTL-expired) entry must be evicted when a new entry is set",
-		);
+		assert.ok(!__test__getManifestCacheEntry("/run/stale"), "stale (TTL-expired) entry must be evicted when a new entry is set");
 		assert.ok(__test__getManifestCacheEntry("/run/fresh"), "fresh entry survives");
 		assert.ok(__test__getManifestCacheEntry("/run/trigger"), "new entry present");
 	} finally {

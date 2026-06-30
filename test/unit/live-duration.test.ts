@@ -3,8 +3,9 @@
  * and must tolerate garbage/missing timestamps. This was the root cause of
  * every running live agent showing a giant negative duration in the dashboard.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { computeLiveDurationMs, formatLiveDuration, type LiveActivity } from "../../src/ui/live-duration.ts";
 
 const NOW = 1_780_000_000_000; // fixed "now" for determinism
@@ -16,7 +17,10 @@ test("running agent: now - startedAtMs (ms units)", () => {
 });
 
 test("completed agent: uses completedAtMs", () => {
-	const act: LiveActivity = { startedAtMs: NOW - 30_000, completedAtMs: NOW - 10_000 };
+	const act: LiveActivity = {
+		startedAtMs: NOW - 30_000,
+		completedAtMs: NOW - 10_000,
+	};
 	assert.equal(computeLiveDurationMs(act, NOW), 20_000);
 });
 
@@ -30,7 +34,10 @@ test("BUG 1 regression: missing startedAtMs → 0, NOT a giant negative", () => 
 
 test("BUG 1 regression: completedAtMs < startedAtMs (race) → clamped >= 0", () => {
 	// A race where completion was recorded before start. Old math gave negative.
-	const act: LiveActivity = { startedAtMs: NOW - 5_000, completedAtMs: NOW - 10_000 };
+	const act: LiveActivity = {
+		startedAtMs: NOW - 5_000,
+		completedAtMs: NOW - 10_000,
+	};
 	const ms = computeLiveDurationMs(act, NOW);
 	assert.ok(ms >= 0, `race must not yield negative duration, got ${ms}`);
 });

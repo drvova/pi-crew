@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
+import { clearLiveAgentsForTest } from "../../src/runtime/live-agent-manager.ts";
 import {
 	buildCrewTitleSegment,
 	buildIdleTitle,
@@ -19,7 +20,6 @@ import {
 	setGhosttyWriterForTest,
 	setTerminalTitle,
 } from "../../src/ui/terminal-status.ts";
-import { clearLiveAgentsForTest } from "../../src/runtime/live-agent-manager.ts";
 
 function capturingWriter(): { write: (s: string) => void; seqs: string[] } {
 	const seqs: string[] = [];
@@ -31,7 +31,10 @@ function capturingWriter(): { write: (s: string) => void; seqs: string[] } {
 	};
 }
 
-function mockCtx(hasUI = true): { hasUI: boolean; ui: { setTitle(title: string): void; titles: string[] } } {
+function mockCtx(hasUI = true): {
+	hasUI: boolean;
+	ui: { setTitle(title: string): void; titles: string[] };
+} {
 	const titles: string[] = [];
 	return {
 		hasUI,
@@ -120,7 +123,14 @@ describe("T4: setTerminalTitle", () => {
 	});
 
 	test("setTitle swallows errors (cosmetic, never surfaces)", () => {
-		const ctx = { hasUI: true, ui: { setTitle() { throw new Error("boom"); } } };
+		const ctx = {
+			hasUI: true,
+			ui: {
+				setTitle() {
+					throw new Error("boom");
+				},
+			},
+		};
 		assert.doesNotThrow(() => setTerminalTitle(ctx, "hello"));
 	});
 });

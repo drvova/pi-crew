@@ -1,11 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { listImportedRuns } from "../../src/extension/import-index.ts";
-import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
-import { projectCrewRoot } from "../../src/utils/paths.ts";
-import { DEFAULT_PATHS } from "../../src/config/defaults.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
+import { DEFAULT_PATHS } from "../../src/config/defaults.ts";
+import { listImportedRuns } from "../../src/extension/import-index.ts";
+import { projectCrewRoot } from "../../src/utils/paths.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function getImportsRoot(cwd: string): string {
 	return path.join(projectCrewRoot(cwd), DEFAULT_PATHS.state.importsSubdir);

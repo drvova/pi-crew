@@ -1,19 +1,19 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
+import type { AgentConfig } from "../../src/agents/agent-config.ts";
 import {
 	allAgents,
-	discoverAgents,
-	invalidateAgentDiscoveryCache,
-	registerDynamicAgent,
-	unregisterDynamicAgent,
-	listDynamicAgents,
-	getSecurityEventLog,
 	clearSecurityEventLog,
+	discoverAgents,
+	getSecurityEventLog,
+	invalidateAgentDiscoveryCache,
+	listDynamicAgents,
+	registerDynamicAgent,
 	sanitizeAgentSystemPrompt,
+	unregisterDynamicAgent,
 } from "../../src/agents/discover-agents.ts";
-import type { AgentConfig } from "../../src/agents/agent-config.ts";
 
 function makeTestAgent(name: string, overrides?: Partial<AgentConfig>): AgentConfig {
 	return {
@@ -66,16 +66,27 @@ test("invalidateAgentDiscoveryCache with specific cwd only clears that entry", (
 
 test("registerDynamicAgent adds agent to list", () => {
 	// Clean up any previous registration
-	try { unregisterDynamicAgent("test-dynamic-1"); } catch { /* ok */ }
+	try {
+		unregisterDynamicAgent("test-dynamic-1");
+	} catch {
+		/* ok */
+	}
 	registerDynamicAgent(makeTestAgent("test-dynamic-1"));
 	const dynamic = listDynamicAgents();
-	assert.ok(dynamic.some((a) => a.name === "test-dynamic-1"), "Agent should appear in dynamic list");
+	assert.ok(
+		dynamic.some((a) => a.name === "test-dynamic-1"),
+		"Agent should appear in dynamic list",
+	);
 	// Clean up
 	unregisterDynamicAgent("test-dynamic-1");
 });
 
 test("registerDynamicAgent throws on duplicate name (case-insensitive)", () => {
-	try { unregisterDynamicAgent("dup-test"); } catch { /* ok */ }
+	try {
+		unregisterDynamicAgent("dup-test");
+	} catch {
+		/* ok */
+	}
 	registerDynamicAgent(makeTestAgent("dup-test"));
 	assert.throws(() => registerDynamicAgent(makeTestAgent("DUP-TEST")), /already registered/);
 	unregisterDynamicAgent("dup-test");
@@ -88,17 +99,28 @@ test("unregisterDynamicAgent throws when agent not found", () => {
 test("dynamic agents cannot shadow protected builtin agents (SEC-001 security fix)", () => {
 	clearSecurityEventLog();
 	// Protected names are blocked at registration time
-	const protectedNames = ["executor", "test-engineer", "explorer", "planner", "analyst", "critic", "reviewer", "verifier", "cold-verifier", "writer"];
+	const protectedNames = [
+		"executor",
+		"test-engineer",
+		"explorer",
+		"planner",
+		"analyst",
+		"critic",
+		"reviewer",
+		"verifier",
+		"cold-verifier",
+		"writer",
+	];
 	for (const name of protectedNames) {
 		assert.throws(
 			() => registerDynamicAgent(makeTestAgent(name)),
 			/SECURITY:.*protected builtin name/,
-			`Agent '${name}' should be protected`
+			`Agent '${name}' should be protected`,
 		);
 	}
 	// Verify security events were logged
 	const events = getSecurityEventLog();
-	const blockedEvents = events.filter(e => e.type === "AGENT_REGISTRATION_BLOCKED");
+	const blockedEvents = events.filter((e) => e.type === "AGENT_REGISTRATION_BLOCKED");
 	assert.equal(blockedEvents.length, protectedNames.length, "All blocked registrations should be logged");
 });
 
@@ -121,15 +143,13 @@ test("pattern-based protection blocks similar names (SEC-001)", () => {
 		assert.throws(
 			() => registerDynamicAgent(makeTestAgent(name)),
 			/SECURITY:.*name matches protected pattern/,
-			`Pattern '${name}' should be blocked`
+			`Pattern '${name}' should be blocked`,
 		);
 	}
 
 	// Verify security events for pattern matches
 	const events = getSecurityEventLog();
-	const patternBlockedEvents = events.filter(e =>
-		e.type === "AGENT_REGISTRATION_BLOCKED" && e.reason.includes("pattern_match")
-	);
+	const patternBlockedEvents = events.filter((e) => e.type === "AGENT_REGISTRATION_BLOCKED" && e.reason.includes("pattern_match"));
 	assert.equal(patternBlockedEvents.length, blockedPatterns.length, "All pattern matches should be logged");
 });
 
@@ -140,25 +160,33 @@ test("allowed names are not blocked (SEC-001)", () => {
 		"data-processor",
 		"api-integration",
 		"report-generator",
-		"code-reviewer",  // Not "reviewer" exactly
-		"test-data-generator",  // Not "test-engineer" exactly
-		"security-scanner",  // Not "security-reviewer" exactly
+		"code-reviewer", // Not "reviewer" exactly
+		"test-data-generator", // Not "test-engineer" exactly
+		"security-scanner", // Not "security-reviewer" exactly
 	];
 
 	for (const name of allowedNames) {
-		try { unregisterDynamicAgent(name); } catch { /* ok */ }
+		try {
+			unregisterDynamicAgent(name);
+		} catch {
+			/* ok */
+		}
 		registerDynamicAgent(makeTestAgent(name));
 		unregisterDynamicAgent(name);
 	}
 
 	// Should have no blocked events
 	const events = getSecurityEventLog();
-	const blockedEvents = events.filter(e => e.type === "AGENT_REGISTRATION_BLOCKED");
+	const blockedEvents = events.filter((e) => e.type === "AGENT_REGISTRATION_BLOCKED");
 	assert.equal(blockedEvents.length, 0, "Allowed names should not be blocked");
 });
 
 test("dynamic agents fill gaps but cannot override builtin/user agents (SEC-001)", () => {
-	try { unregisterDynamicAgent("gap-filler-test"); } catch { /* ok */ }
+	try {
+		unregisterDynamicAgent("gap-filler-test");
+	} catch {
+		/* ok */
+	}
 	const discovery = discoverAgents(process.cwd());
 	const originalExecutor = allAgents(discovery).find((a) => a.name === "executor");
 	assert.ok(originalExecutor, "Should have builtin executor");
@@ -176,7 +204,11 @@ test("dynamic agents fill gaps but cannot override builtin/user agents (SEC-001)
 });
 
 test("dynamic agent source defaults to 'dynamic' (not 'project') for security attribution", () => {
-	try { unregisterDynamicAgent("source-test"); } catch { /* ok */ }
+	try {
+		unregisterDynamicAgent("source-test");
+	} catch {
+		/* ok */
+	}
 	registerDynamicAgent(makeTestAgent("source-test"));
 	const dynamic = listDynamicAgents();
 	const agent = dynamic.find((a) => a.name === "source-test");
@@ -186,7 +218,11 @@ test("dynamic agent source defaults to 'dynamic' (not 'project') for security at
 
 test("registerDynamicAgent invalidates discovery cache", () => {
 	invalidateAgentDiscoveryCache();
-	try { unregisterDynamicAgent("cache-inval-test"); } catch { /* ok */ }
+	try {
+		unregisterDynamicAgent("cache-inval-test");
+	} catch {
+		/* ok */
+	}
 	const cwd = process.cwd();
 	const before = discoverAgents(cwd);
 	registerDynamicAgent(makeTestAgent("cache-inval-test"));
@@ -198,7 +234,11 @@ test("registerDynamicAgent invalidates discovery cache", () => {
 
 test("unregisterDynamicAgent invalidates discovery cache", () => {
 	invalidateAgentDiscoveryCache();
-	try { unregisterDynamicAgent("cache-inval-test2"); } catch { /* ok */ }
+	try {
+		unregisterDynamicAgent("cache-inval-test2");
+	} catch {
+		/* ok */
+	}
 	registerDynamicAgent(makeTestAgent("cache-inval-test2"));
 	const cwd = process.cwd();
 	const before = discoverAgents(cwd);

@@ -1,13 +1,9 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import {
-	resolveContainedPath,
-	resolveContainedRelativePath,
-	resolveRealContainedPath,
-} from "../../src/utils/safe-paths.ts";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { resolveContainedPath, resolveContainedRelativePath, resolveRealContainedPath } from "../../src/utils/safe-paths.ts";
 
 const realTmp = fs.realpathSync(os.tmpdir());
 
@@ -18,7 +14,11 @@ function beforeEachFn() {
 }
 
 function afterEachFn() {
-	try { fs.rmSync(tmpBase, { recursive: true, force: true }); } catch { /* ignore */ }
+	try {
+		fs.rmSync(tmpBase, { recursive: true, force: true });
+	} catch {
+		/* ignore */
+	}
 }
 
 describe("resolveContainedPath — path traversal defense", () => {
@@ -26,24 +26,15 @@ describe("resolveContainedPath — path traversal defense", () => {
 	afterEach(afterEachFn);
 
 	it("rejects '../etc/passwd' (escapes baseDir)", () => {
-		assert.throws(
-			() => resolveContainedPath(tmpBase, "../etc/passwd"),
-			/Path is outside/,
-		);
+		assert.throws(() => resolveContainedPath(tmpBase, "../etc/passwd"), /Path is outside/);
 	});
 
 	it("rejects absolute paths that escape the base dir", () => {
-		assert.throws(
-			() => resolveContainedPath(tmpBase, "/etc/passwd"),
-			/Path is outside/,
-		);
+		assert.throws(() => resolveContainedPath(tmpBase, "/etc/passwd"), /Path is outside/);
 	});
 
 	it("rejects '/etc/shadow' absolute path", () => {
-		assert.throws(
-			() => resolveContainedPath(tmpBase, "/etc/shadow"),
-			/Path is outside/,
-		);
+		assert.throws(() => resolveContainedPath(tmpBase, "/etc/shadow"), /Path is outside/);
 	});
 
 	it("accepts a valid contained relative path", () => {
@@ -57,17 +48,11 @@ describe("resolveContainedPath — path traversal defense", () => {
 	});
 
 	it("rejects null-byte injection", () => {
-		assert.throws(
-			() => resolveContainedPath(tmpBase, "file\0.txt"),
-			/null byte/,
-		);
+		assert.throws(() => resolveContainedPath(tmpBase, "file\0.txt"), /null byte/);
 	});
 
 	it("rejects multi-level escape '../../../..'", () => {
-		assert.throws(
-			() => resolveContainedPath(tmpBase, "../../../../etc/passwd"),
-			/Path is outside/,
-		);
+		assert.throws(() => resolveContainedPath(tmpBase, "../../../../etc/passwd"), /Path is outside/);
 	});
 });
 
@@ -76,45 +61,27 @@ describe("resolveContainedRelativePath — relative path validation", () => {
 	afterEach(afterEachFn);
 
 	it("rejects '../escape'", () => {
-		assert.throws(
-			() => resolveContainedRelativePath(tmpBase, "../escape", "file"),
-			/Invalid file/,
-		);
+		assert.throws(() => resolveContainedRelativePath(tmpBase, "../escape", "file"), /Invalid file/);
 	});
 
 	it("rejects 'a/../../b' (escapes via nested ..)", () => {
-		assert.throws(
-			() => resolveContainedRelativePath(tmpBase, "a/../../b", "file"),
-			/Invalid file/,
-		);
+		assert.throws(() => resolveContainedRelativePath(tmpBase, "a/../../b", "file"), /Invalid file/);
 	});
 
 	it("rejects absolute path '/etc/passwd'", () => {
-		assert.throws(
-			() => resolveContainedRelativePath(tmpBase, "/etc/passwd", "file"),
-			/Invalid file/,
-		);
+		assert.throws(() => resolveContainedRelativePath(tmpBase, "/etc/passwd", "file"), /Invalid file/);
 	});
 
 	it("rejects a single '..' segment", () => {
-		assert.throws(
-			() => resolveContainedRelativePath(tmpBase, "..", "path"),
-			/Invalid path/,
-		);
+		assert.throws(() => resolveContainedRelativePath(tmpBase, "..", "path"), /Invalid path/);
 	});
 
 	it("rejects null-byte injection", () => {
-		assert.throws(
-			() => resolveContainedRelativePath(tmpBase, "evil\0.txt", "file"),
-			/null byte/,
-		);
+		assert.throws(() => resolveContainedRelativePath(tmpBase, "evil\0.txt", "file"), /null byte/);
 	});
 
 	it("rejects Windows-style drive letter 'C:\\evil'", () => {
-		assert.throws(
-			() => resolveContainedRelativePath(tmpBase, "C:\\evil", "file"),
-			/Invalid file/,
-		);
+		assert.throws(() => resolveContainedRelativePath(tmpBase, "C:\\evil", "file"), /Invalid file/);
 	});
 
 	it("accepts a valid relative path", () => {
@@ -147,12 +114,13 @@ describe("resolveRealContainedPath — symlink rejection", () => {
 		fs.symlinkSync(outsideFile, linkPath);
 
 		try {
-			assert.throws(
-				() => resolveRealContainedPath(tmpBase, "evil-link"),
-				/(outside|symlink)/i,
-			);
+			assert.throws(() => resolveRealContainedPath(tmpBase, "evil-link"), /(outside|symlink)/i);
 		} finally {
-			try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch { /* ignore */ }
+			try {
+				fs.rmSync(outsideDir, { recursive: true, force: true });
+			} catch {
+				/* ignore */
+			}
 		}
 	});
 
@@ -164,12 +132,13 @@ describe("resolveRealContainedPath — symlink rejection", () => {
 		fs.symlinkSync(outsideDir, symlinkedSubdir);
 
 		try {
-			assert.throws(
-				() => resolveRealContainedPath(tmpBase, "linked-dir/file.txt"),
-				/(outside|symlink)/i,
-			);
+			assert.throws(() => resolveRealContainedPath(tmpBase, "linked-dir/file.txt"), /(outside|symlink)/i);
 		} finally {
-			try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch { /* ignore */ }
+			try {
+				fs.rmSync(outsideDir, { recursive: true, force: true });
+			} catch {
+				/* ignore */
+			}
 		}
 	});
 
@@ -191,17 +160,11 @@ describe("resolveRealContainedPath — symlink rejection", () => {
 	});
 
 	it("rejects '../etc/passwd' (path traversal)", () => {
-		assert.throws(
-			() => resolveRealContainedPath(tmpBase, "../etc/passwd"),
-			/Path is outside/,
-		);
+		assert.throws(() => resolveRealContainedPath(tmpBase, "../etc/passwd"), /Path is outside/);
 	});
 
 	it("rejects null-byte injection", () => {
-		assert.throws(
-			() => resolveRealContainedPath(tmpBase, "file\0.txt"),
-			/null byte/,
-		);
+		assert.throws(() => resolveRealContainedPath(tmpBase, "file\0.txt"), /null byte/);
 	});
 });
 
@@ -223,14 +186,15 @@ darwinOnly("macOS: accepts a target reached via /var when base is the /private/v
 		return;
 	}
 	try {
-		fs.mkdirSync(path.join(symlinkForm, "workflows"), { recursive: true });
+		fs.mkdirSync(path.join(symlinkForm, "workflows"), {
+			recursive: true,
+		});
 		const fileViaSymlink = path.join(symlinkForm, "workflows", "dwf.ts");
 		fs.writeFileSync(fileViaSymlink, "export default async function(){}\n");
 		// base uses the CANONICAL (/private/var) form; target uses the SYMLINK (/var) form.
 		const baseCanonical = path.join(canonicalForm, "workflows");
 		const result = resolveRealContainedPath(baseCanonical, fileViaSymlink);
-		assert.equal(result, fs.realpathSync(fileViaSymlink),
-			"target via /var must resolve when base is the /private/var canonical form");
+		assert.equal(result, fs.realpathSync(fileViaSymlink), "target via /var must resolve when base is the /private/var canonical form");
 	} finally {
 		fs.rmSync(symlinkForm, { recursive: true, force: true });
 	}

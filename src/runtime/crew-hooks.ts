@@ -25,12 +25,7 @@
 import { logInternalError } from "../utils/internal-error.ts";
 
 /** Valid hook event types in the crew lifecycle. */
-export type CrewHookEventType =
-	| 'task_started'
-	| 'task_completed'
-	| 'task_failed'
-	| 'run_completed'
-	| 'run_failed';
+export type CrewHookEventType = "task_started" | "task_completed" | "task_failed" | "run_completed" | "run_failed";
 
 /**
  * A hook event emitted by the crew runtime.
@@ -59,11 +54,7 @@ export type CrewHook = (event: CrewHookEvent) => void | Promise<void>;
  */
 export function isValidEventType(type: string): type is CrewHookEventType {
 	return (
-		type === 'task_started' ||
-		type === 'task_completed' ||
-		type === 'task_failed' ||
-		type === 'run_completed' ||
-		type === 'run_failed'
+		type === "task_started" || type === "task_completed" || type === "task_failed" || type === "run_completed" || type === "run_failed"
 	);
 }
 
@@ -71,15 +62,15 @@ export function isValidEventType(type: string): type is CrewHookEventType {
  * Type guard to check if an object is a valid CrewHookEvent.
  */
 export function isHookEvent(obj: unknown): obj is CrewHookEvent {
-	if (typeof obj !== 'object' || obj === null) return false;
+	if (typeof obj !== "object" || obj === null) return false;
 	const event = obj as Record<string, unknown>;
 	return (
-		typeof event.type === 'string' &&
+		typeof event.type === "string" &&
 		isValidEventType(event.type) &&
-		typeof event.timestamp === 'string' &&
-		typeof event.runId === 'string' &&
-		(event.taskId === undefined || typeof event.taskId === 'string') &&
-		(event.data === undefined || typeof event.data === 'object')
+		typeof event.timestamp === "string" &&
+		typeof event.runId === "string" &&
+		(event.taskId === undefined || typeof event.taskId === "string") &&
+		(event.data === undefined || typeof event.data === "object")
 	);
 }
 
@@ -96,13 +87,7 @@ export class HookRegistry {
 	constructor() {
 		this.hooks = new Map();
 		// Initialize with empty Sets for all event types
-		const eventTypes: CrewHookEventType[] = [
-			'task_started',
-			'task_completed',
-			'task_failed',
-			'run_completed',
-			'run_failed',
-		];
+		const eventTypes: CrewHookEventType[] = ["task_started", "task_completed", "task_failed", "run_completed", "run_failed"];
 		for (const type of eventTypes) {
 			this.hooks.set(type, new Set());
 		}

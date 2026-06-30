@@ -1,14 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { atomicWriteJson, atomicWriteJsonCoalesced, flushPendingAtomicWrites, readJsonFile } from "../state/atomic-write.ts";
+import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { redactSecretString, redactSecrets } from "../utils/redaction.ts";
+import { assertSafePathId, resolveRealContainedPath } from "../utils/safe-paths.ts";
+import { sleepSync } from "../utils/sleep.ts";
 import type { CrewAgentProgress, CrewAgentRecord, CrewRuntimeKind } from "./crew-agent-runtime.ts";
 import { taskStatusToAgentStatus } from "./crew-agent-runtime.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import { assertSafePathId, resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { redactSecretString, redactSecrets } from "../utils/redaction.ts";
-import { sleepSync } from "../utils/sleep.ts";
 
 export function agentsPath(manifest: TeamRunManifest): string {
 	return path.join(manifest.stateRoot, "agents.json");
@@ -65,7 +65,14 @@ const AGENT_READER_TTL_MS = 200;
 const ASYNC_AGENT_READER_CACHE_MAX_ENTRIES = 128;
 const AGENTS_LOCK_STALE_MS = 30_000;
 
-const asyncAgentReaderCache = new Map<string, { expiresAt: number; records: CrewAgentRecord[]; inFlight?: Promise<CrewAgentRecord[]> }>();
+const asyncAgentReaderCache = new Map<
+	string,
+	{
+		expiresAt: number;
+		records: CrewAgentRecord[];
+		inFlight?: Promise<CrewAgentRecord[]>;
+	}
+>();
 
 function agentsLockPath(manifest: TeamRunManifest): string {
 	return `${agentsPath(manifest)}.lock`;
@@ -76,12 +83,20 @@ function removeStaleAgentsLock(lockPath: string, staleMs: number): boolean {
 		const stat = fs.statSync(lockPath);
 		if (stat.size > 1024) return false;
 		const raw = fs.readFileSync(lockPath, "utf-8");
-		const parsed = JSON.parse(raw) as { createdAt?: unknown; pid?: unknown };
+		const parsed = JSON.parse(raw) as {
+			createdAt?: unknown;
+			pid?: unknown;
+		};
 		const createdAt = typeof parsed.createdAt === "string" ? Date.parse(parsed.createdAt) : NaN;
 		if (Number.isFinite(createdAt) && Date.now() - createdAt <= staleMs) return false;
 		const pid = typeof parsed.pid === "number" ? parsed.pid : undefined;
 		if (pid && pid !== process.pid) {
-			try { process.kill(pid, 0); return false; } catch { /* owner dead */ }
+			try {
+				process.kill(pid, 0);
+				return false;
+			} catch {
+				/* owner dead */
+			}
 		}
 		fs.rmSync(lockPath, { force: true });
 		return true;
@@ -99,7 +114,13 @@ function withAgentsLock<T>(manifest: TeamRunManifest, fn: () => T): T {
 		try {
 			const fd = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o644);
 			try {
-				fs.writeSync(fd, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+				fs.writeSync(
+					fd,
+					JSON.stringify({
+						pid: process.pid,
+						createdAt: new Date().toISOString(),
+					}),
+				);
 			} finally {
 				fs.closeSync(fd);
 			}
@@ -108,10 +129,15 @@ function withAgentsLock<T>(manifest: TeamRunManifest, fn: () => T): T {
 			const code = (error as NodeJS.ErrnoException).code;
 			if (code !== "EEXIST" && code !== "EISDIR") throw error;
 			if (code === "EISDIR") {
-				try { fs.rmSync(filePath, { recursive: true, force: true }); } catch { /* ignore */ }
+				try {
+					fs.rmSync(filePath, { recursive: true, force: true });
+				} catch {
+					/* ignore */
+				}
 				continue;
 			}
-			if (!removeStaleAgentsLock(filePath, AGENTS_LOCK_STALE_MS) && Date.now() > deadline) throw new Error(`Crew agents file is locked by another operation: ${agentsPath(manifest)}`);
+			if (!removeStaleAgentsLock(filePath, AGENTS_LOCK_STALE_MS) && Date.now() > deadline)
+				throw new Error(`Crew agents file is locked by another operation: ${agentsPath(manifest)}`);
 			sleepSync(Math.min(250, 25 * 2 ** attempt));
 			attempt += 1;
 		}
@@ -119,11 +145,22 @@ function withAgentsLock<T>(manifest: TeamRunManifest, fn: () => T): T {
 	try {
 		return fn();
 	} finally {
-		try { fs.rmSync(filePath, { force: true }); } catch { /* best-effort */ }
+		try {
+			fs.rmSync(filePath, { force: true });
+		} catch {
+			/* best-effort */
+		}
 	}
 }
 
-function setAsyncAgentReaderCache(filePath: string, entry: { expiresAt: number; records: CrewAgentRecord[]; inFlight?: Promise<CrewAgentRecord[]> }): void {
+function setAsyncAgentReaderCache(
+	filePath: string,
+	entry: {
+		expiresAt: number;
+		records: CrewAgentRecord[];
+		inFlight?: Promise<CrewAgentRecord[]>;
+	},
+): void {
 	const now = Date.now();
 	for (const [key, cached] of asyncAgentReaderCache) {
 		if (cached.expiresAt <= now && !cached.inFlight) asyncAgentReaderCache.delete(key);
@@ -143,7 +180,11 @@ export function readCrewAgents(manifest: TeamRunManifest): CrewAgentRecord[] {
 	// after at most one coalesce window (250 ms).
 	flushPendingAtomicWrites();
 	try {
-		const records = readJsonFileCoalesced(agentsPath(manifest), AGENT_READER_TTL_MS, () => readJsonFile<CrewAgentRecord[]>(agentsPath(manifest)) ?? []);
+		const records = readJsonFileCoalesced(
+			agentsPath(manifest),
+			AGENT_READER_TTL_MS,
+			() => readJsonFile<CrewAgentRecord[]>(agentsPath(manifest)) ?? [],
+		);
 		// Validate schema and deduplicate by id to handle concurrent write conflicts
 		const seen = new Set<string>();
 		const deduped = records.filter((r) => {
@@ -171,7 +212,7 @@ export async function readCrewAgentsAsync(manifest: TeamRunManifest): Promise<Cr
 	const inFlight = (async (): Promise<CrewAgentRecord[]> => {
 		try {
 			const parsed = JSON.parse(await fs.promises.readFile(filePath, "utf-8")) as unknown;
-			const raw = Array.isArray(parsed) ? redactSecrets(parsed) as CrewAgentRecord[] : [];
+			const raw = Array.isArray(parsed) ? (redactSecrets(parsed) as CrewAgentRecord[]) : [];
 			// Deduplicate by id to handle concurrent write conflicts
 			const seen = new Set<string>();
 			const deduped = raw.filter((r) => {
@@ -181,16 +222,30 @@ export async function readCrewAgentsAsync(manifest: TeamRunManifest): Promise<Cr
 				return true;
 			});
 			if (deduped.length !== raw.length) {
-				try { saveCrewAgents(manifest, deduped); } catch { /* best-effort */ }
+				try {
+					saveCrewAgents(manifest, deduped);
+				} catch {
+					/* best-effort */
+				}
 			}
-			setAsyncAgentReaderCache(filePath, { expiresAt: Date.now() + AGENT_READER_TTL_MS, records: deduped });
+			setAsyncAgentReaderCache(filePath, {
+				expiresAt: Date.now() + AGENT_READER_TTL_MS,
+				records: deduped,
+			});
 			return deduped;
 		} catch {
-			setAsyncAgentReaderCache(filePath, { expiresAt: Date.now() + AGENT_READER_TTL_MS, records: [] });
+			setAsyncAgentReaderCache(filePath, {
+				expiresAt: Date.now() + AGENT_READER_TTL_MS,
+				records: [],
+			});
 			return [];
 		}
 	})();
-	setAsyncAgentReaderCache(filePath, { expiresAt: now + AGENT_READER_TTL_MS, records: cached?.records ?? [], inFlight });
+	setAsyncAgentReaderCache(filePath, {
+		expiresAt: now + AGENT_READER_TTL_MS,
+		records: cached?.records ?? [],
+		inFlight,
+	});
 	return inFlight;
 }
 
@@ -210,9 +265,7 @@ const TERMINAL_AGENT_STATUSES = new Set(["completed", "failed", "cancelled", "bl
  * User policy (v0.9.16): cancelled / stopped crew-agent records leave NO trace.
  * `failed` records keep their audit trail (different from cancel — agent errored).
  */
-export function shouldDeleteCrewAgentOnTerminalStatus(
-	record: Pick<CrewAgentRecord, "status">,
-): boolean {
+export function shouldDeleteCrewAgentOnTerminalStatus(record: Pick<CrewAgentRecord, "status">): boolean {
 	const s = record.status;
 	return s === "cancelled" || s === "stopped";
 }
@@ -222,10 +275,7 @@ export function shouldDeleteCrewAgentOnTerminalStatus(
  * and the per-task `status.json`. Called on cancellation to wipe the trace.
  * Safe-fail: missing files are treated as success (already removed).
  */
-export function removeCrewAgent(
-	manifest: TeamRunManifest,
-	taskId: string,
-): { removedIndex: boolean; removedStatus: boolean } {
+export function removeCrewAgent(manifest: TeamRunManifest, taskId: string): { removedIndex: boolean; removedStatus: boolean } {
 	let removedIndex = false;
 	let removedStatus = false;
 	// 1. Remove from agents.json index
@@ -254,7 +304,11 @@ export function removeCrewAgent(
 
 export function upsertCrewAgent(manifest: TeamRunManifest, record: CrewAgentRecord): void {
 	// Guard: skip if run state has been deleted (prune/forget/cleanup)
-	try { fs.statSync(manifest.stateRoot); } catch { return; }
+	try {
+		fs.statSync(manifest.stateRoot);
+	} catch {
+		return;
+	}
 	// User policy (v0.9.16): cancelled / stopped crew agents leave NO trace.
 	// We delete BOTH the index entry (agents.json) and the per-task status.json
 	// immediately so the UI dashboard/widget never see the cancelled agent again.
@@ -268,7 +322,7 @@ export function upsertCrewAgent(manifest: TeamRunManifest, record: CrewAgentReco
 	const existing = readCrewAgents(manifest);
 	// Deduplicate by id: keep newer record when same id appears
 	const idIndex = new Map(existing.map((item, i) => [item.id, i]));
-	const merged: CrewAgentRecord[] = existing.map((item) => item.id === record.id ? record : item);
+	const merged: CrewAgentRecord[] = existing.map((item) => (item.id === record.id ? record : item));
 	if (!idIndex.has(record.id)) merged.push(record);
 	// 2.5 caller migration: coalesce non-terminal progress writes; flush
 	// terminal statuses (completed/failed/cancelled/blocked) durably so
@@ -363,7 +417,9 @@ function writeSeqToSidecar(filePath: string, seq: number): void {
 function nextAgentEventSeq(filePath: string): number {
 	if (!fs.existsSync(filePath)) {
 		// Clean up stale sidecar when main file is gone.
-		try { fs.unlinkSync(`${filePath}.${AGENT_EVENT_SEQ_SIDECAR}`); } catch {}
+		try {
+			fs.unlinkSync(`${filePath}.${AGENT_EVENT_SEQ_SIDECAR}`);
+		} catch {}
 		return 1;
 	}
 	const stat = fs.statSync(filePath);
@@ -372,7 +428,11 @@ function nextAgentEventSeq(filePath: string): number {
 	// FIX: Try sidecar file for O(1) lookup before falling back to O(n) scan.
 	const sidecarSeq = readSeqFromSidecar(filePath);
 	if (sidecarSeq !== undefined) {
-		setAgentEventSeqCache(filePath, { size: stat.size, mtimeMs: stat.mtimeMs, seq: sidecarSeq });
+		setAgentEventSeqCache(filePath, {
+			size: stat.size,
+			mtimeMs: stat.mtimeMs,
+			seq: sidecarSeq,
+		});
 		return sidecarSeq + 1;
 	}
 	let max = 0;
@@ -386,7 +446,11 @@ function nextAgentEventSeq(filePath: string): number {
 			max += 1;
 		}
 	}
-	setAgentEventSeqCache(filePath, { size: stat.size, mtimeMs: stat.mtimeMs, seq: max });
+	setAgentEventSeqCache(filePath, {
+		size: stat.size,
+		mtimeMs: stat.mtimeMs,
+		seq: max,
+	});
 	writeSeqToSidecar(filePath, max);
 	return max + 1;
 }
@@ -398,7 +462,11 @@ export function appendCrewAgentEvent(manifest: TeamRunManifest, taskId: string, 
 	fs.appendFileSync(filePath, `${JSON.stringify(redactSecrets({ seq, time: new Date().toISOString(), event }))}\n`, "utf-8");
 	try {
 		const stat = fs.statSync(filePath);
-		setAgentEventSeqCache(filePath, { size: stat.size, mtimeMs: stat.mtimeMs, seq });
+		setAgentEventSeqCache(filePath, {
+			size: stat.size,
+			mtimeMs: stat.mtimeMs,
+			seq,
+		});
 		writeSeqToSidecar(filePath, seq);
 	} catch (error) {
 		logInternalError("crew-agent-records.stat", error, `filePath=${filePath}`);
@@ -415,34 +483,64 @@ function readCrewAgentEvents(manifest: TeamRunManifest, taskId: string): unknown
 	return readCrewAgentEventsCursor(manifest, taskId).events;
 }
 
-export function readCrewAgentEventsCursor(manifest: TeamRunManifest, taskId: string, options: CrewAgentEventCursorOptions = {}): { path: string; events: unknown[]; nextSeq: number; total: number } {
+export function readCrewAgentEventsCursor(
+	manifest: TeamRunManifest,
+	taskId: string,
+	options: CrewAgentEventCursorOptions = {},
+): { path: string; events: unknown[]; nextSeq: number; total: number } {
 	let filePath: string;
 	try {
 		filePath = agentEventsPath(manifest, taskId);
 	} catch {
-		return { path: "", events: [], nextSeq: options.sinceSeq ?? 0, total: 0 };
+		return {
+			path: "",
+			events: [],
+			nextSeq: options.sinceSeq ?? 0,
+			total: 0,
+		};
 	}
-	if (!fs.existsSync(filePath)) return { path: filePath, events: [], nextSeq: options.sinceSeq ?? 0, total: 0 };
+	if (!fs.existsSync(filePath))
+		return {
+			path: filePath,
+			events: [],
+			nextSeq: options.sinceSeq ?? 0,
+			total: 0,
+		};
 	try {
 		filePath = safeExistingAgentFile(manifest, taskId, "events.jsonl");
 	} catch {
-		return { path: "", events: [], nextSeq: options.sinceSeq ?? 0, total: 0 };
+		return {
+			path: "",
+			events: [],
+			nextSeq: options.sinceSeq ?? 0,
+			total: 0,
+		};
 	}
-	const sinceSeq = typeof options.sinceSeq === "number" && Number.isInteger(options.sinceSeq) && options.sinceSeq >= 0 ? options.sinceSeq : 0;
+	const sinceSeq =
+		typeof options.sinceSeq === "number" && Number.isInteger(options.sinceSeq) && options.sinceSeq >= 0 ? options.sinceSeq : 0;
 	const limit = typeof options.limit === "number" && Number.isInteger(options.limit) && options.limit >= 0 ? options.limit : undefined;
-	const parsed = fs.readFileSync(filePath, "utf-8").split(/\r?\n/).filter(Boolean).map((line, index) => {
-		try {
-			const event = JSON.parse(line) as Record<string, unknown>;
-			if (typeof event.seq !== "number") event.seq = index + 1;
-			return event;
-		} catch {
-			return { seq: index + 1, raw: line };
-		}
-	});
+	const parsed = fs
+		.readFileSync(filePath, "utf-8")
+		.split(/\r?\n/)
+		.filter(Boolean)
+		.map((line, index) => {
+			try {
+				const event = JSON.parse(line) as Record<string, unknown>;
+				if (typeof event.seq !== "number") event.seq = index + 1;
+				return event;
+			} catch {
+				return { seq: index + 1, raw: line };
+			}
+		});
 	const filtered = parsed.filter((event) => typeof event.seq === "number" && event.seq > sinceSeq);
 	const events = limit !== undefined ? filtered.slice(0, limit) : filtered;
-	const returnedMaxSeq = events.reduce((max, event) => typeof event.seq === "number" ? Math.max(max, event.seq) : max, sinceSeq);
-	return { path: filePath, events, nextSeq: returnedMaxSeq, total: filtered.length };
+	const returnedMaxSeq = events.reduce((max, event) => (typeof event.seq === "number" ? Math.max(max, event.seq) : max), sinceSeq);
+	return {
+		path: filePath,
+		events,
+		nextSeq: returnedMaxSeq,
+		total: filtered.length,
+	};
 }
 
 export function appendCrewAgentOutput(manifest: TeamRunManifest, taskId: string, text: string): void {

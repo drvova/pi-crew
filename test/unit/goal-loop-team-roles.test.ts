@@ -12,8 +12,9 @@
  * Fix: use workerAgent as the role NAME so adaptive plans with matching
  * role names are accepted.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { buildGoalTeam } from "../../src/runtime/goal-loop-runner.ts";
 
 function fakeGoal(workerAgent: string): Parameters<typeof buildGoalTeam>[0] {
@@ -43,7 +44,11 @@ function fakeGoal(workerAgent: string): Parameters<typeof buildGoalTeam>[0] {
 test("buildGoalTeam: role NAME equals workerAgent so adaptive plans with matching role names are accepted", () => {
 	const team = buildGoalTeam(fakeGoal("executor"));
 	assert.equal(team.roles.length, 1);
-	assert.equal(team.roles[0]?.name, "executor", "role name MUST match workerAgent so parseAdaptivePlan accepts plans with role='executor'");
+	assert.equal(
+		team.roles[0]?.name,
+		"executor",
+		"role name MUST match workerAgent so parseAdaptivePlan accepts plans with role='executor'",
+	);
 	assert.equal(team.roles[0]?.agent, "executor");
 });
 

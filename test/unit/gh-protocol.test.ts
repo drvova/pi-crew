@@ -2,11 +2,12 @@
  * Unit tests for gh-protocol.ts
  * GitHub issue/PR URL protocol handlers.
  */
-import { describe, it, mock } from "node:test";
+
 import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { describe, it, mock } from "node:test";
 import { parseGitHubUrl, resolveGitHubUrl } from "../../src/utils/gh-protocol.ts";
 
 function tempGitDir(): string {
@@ -27,7 +28,11 @@ describe("parseGitHubUrl", () => {
 		it("parses issue://123 as single item", () => {
 			const result = parseGitHubUrl("issue://123", "issue");
 			assert.strictEqual(result.kind, "single");
-			const r = result as { number: number; repo?: string; comments: boolean };
+			const r = result as {
+				number: number;
+				repo?: string;
+				comments: boolean;
+			};
 			assert.strictEqual(r.number, 123);
 			assert.strictEqual(r.repo, undefined);
 		});
@@ -76,17 +81,11 @@ describe("parseGitHubUrl", () => {
 		});
 
 		it("rejects issue://owner/repo/123/diff", () => {
-			assert.throws(
-				() => parseGitHubUrl("issue://owner/repo/123/diff", "issue"),
-				/issue views do not have a diff/i,
-			);
+			assert.throws(() => parseGitHubUrl("issue://owner/repo/123/diff", "issue"), /issue views do not have a diff/i);
 		});
 
 		it("rejects issue://owner alone (needs owner/repo)", () => {
-			assert.throws(
-				() => parseGitHubUrl("issue://owner", "issue"),
-				/invalid.*issue.*number.*owner/i,
-			);
+			assert.throws(() => parseGitHubUrl("issue://owner", "issue"), /invalid.*issue.*number.*owner/i);
 		});
 	});
 
@@ -140,10 +139,7 @@ describe("parseGitHubUrl", () => {
 		});
 
 		it("rejects pr://N/diff with invalid sub-path", () => {
-			assert.throws(
-				() => parseGitHubUrl("pr://123/diff/foo", "pr"),
-				/diff sub-path/i,
-			);
+			assert.throws(() => parseGitHubUrl("pr://123/diff/foo", "pr"), /diff sub-path/i);
 		});
 
 		it("parses pr:// with state=merged", () => {
@@ -183,11 +179,17 @@ describe("parseGitHubUrl", () => {
 
 describe("resolveGitHubUrl — list operations", () => {
 	it("resolves issue list with mocked gh", () => {
-		const mockExec = mock.fn(() => '[]');
+		const mockExec = mock.fn(() => "[]");
 		// Can't easily mock execSync; test parse path instead
 		const parsed = parseGitHubUrl("issue://owner/repo?state=closed&limit=20", "issue");
 		assert.strictEqual(parsed.kind, "list");
-		const r = parsed as { repo: string; state: string; limit: number; author?: string; label?: string };
+		const r = parsed as {
+			repo: string;
+			state: string;
+			limit: number;
+			author?: string;
+			label?: string;
+		};
 		assert.strictEqual(r.repo, "owner/repo");
 		assert.strictEqual(r.state, "closed");
 		assert.strictEqual(r.limit, 20);
@@ -196,7 +198,13 @@ describe("resolveGitHubUrl — list operations", () => {
 	it("resolves pr list with mocked gh", () => {
 		const parsed = parseGitHubUrl("pr://owner/repo?state=open&limit=15&author=mojombo&label=enhancement", "pr");
 		assert.strictEqual(parsed.kind, "list");
-		const r = parsed as { repo: string; state: string; limit: number; author?: string; label?: string };
+		const r = parsed as {
+			repo: string;
+			state: string;
+			limit: number;
+			author?: string;
+			label?: string;
+		};
 		assert.strictEqual(r.repo, "owner/repo");
 		assert.strictEqual(r.state, "open");
 		assert.strictEqual(r.limit, 15);
@@ -209,7 +217,11 @@ describe("resolveGitHubUrl — single item", () => {
 	it("parse issue://123 for single item resolution", () => {
 		const parsed = parseGitHubUrl("issue://123", "issue");
 		assert.strictEqual(parsed.kind, "single");
-		const r = parsed as { number: number; repo?: string; comments: boolean };
+		const r = parsed as {
+			number: number;
+			repo?: string;
+			comments: boolean;
+		};
 		assert.strictEqual(r.number, 123);
 		assert.strictEqual(r.repo, undefined);
 		assert.strictEqual(r.comments, true);

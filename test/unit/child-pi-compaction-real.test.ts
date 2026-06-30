@@ -6,18 +6,16 @@
  * copies. This guards against the algorithm drifting from the real
  * implementation (the bug that output-handling-l4.test.ts had).
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { compactString, compactValue } from "../../src/runtime/child-pi.ts";
 import { redactSecretString } from "../../src/utils/redaction.ts";
 
 test("BUG-3: compactString must NOT expand input just over threshold (monotonic shrink)", () => {
 	const input = "x".repeat(8193);
 	const result = compactString(input, 8192);
-	assert.ok(
-		result.length <= input.length,
-		`result (${result.length}) must be <= input (${input.length}) — compaction must never expand`,
-	);
+	assert.ok(result.length <= input.length, `result (${result.length}) must be <= input (${input.length}) — compaction must never expand`);
 });
 
 test("BUG-3: compactString monotonic-shrink across the boundary window (threshold+1 .. threshold+60)", () => {
@@ -25,10 +23,7 @@ test("BUG-3: compactString monotonic-shrink across the boundary window (threshol
 	for (let over = 1; over <= 60; over++) {
 		const input = "y".repeat(threshold + over);
 		const result = compactString(input, threshold);
-		assert.ok(
-			result.length <= input.length,
-			`over=${over}: result (${result.length}) must be <= input (${input.length})`,
-		);
+		assert.ok(result.length <= input.length, `over=${over}: result (${result.length}) must be <= input (${input.length})`);
 	}
 });
 
@@ -85,10 +80,7 @@ test("SEC-1: redactSecretString scrubs a GitHub PAT pattern from a stderr-like s
 	const pat = "ghp_" + "0123456789abcdefghijklmnopqrstuvwxyz0123456789".slice(0, 36);
 	const stderrLike = `worker error: auth failed for token ${pat}\nstack: ...`;
 	const redacted = redactSecretString(stderrLike);
-	assert.ok(
-		!redacted.includes(pat),
-		"the raw GitHub PAT must NOT survive redaction",
-	);
+	assert.ok(!redacted.includes(pat), "the raw GitHub PAT must NOT survive redaction");
 	assert.ok(!redacted.includes("ghp_"), "the ghp_ prefix must be scrubbed");
 });
 

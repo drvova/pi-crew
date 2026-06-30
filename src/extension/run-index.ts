@@ -1,13 +1,13 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { TeamRunManifest } from "../state/types.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
-import { findRepoRoot, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
+import { createCancellationToken } from "../runtime/cancellation-token.ts";
 import { activeRunEntries } from "../state/active-run-registry.ts";
+import type { TeamRunManifest } from "../state/types.ts";
+import { findRepoRoot, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
 import { isSafePathId, resolveRealContainedPath } from "../utils/safe-paths.ts";
 import { sharedScanCache } from "../utils/scan-cache.ts";
-import { createCancellationToken } from "../runtime/cancellation-token.ts";
 
 function readManifest(filePath: string): TeamRunManifest | undefined {
 	const cached = sharedScanCache.readAndCache("manifests", filePath, filePath);
@@ -29,7 +29,8 @@ function collectRuns(root: string, maxEntries?: number, signal?: AbortSignal): T
 	const tempDirs = [os.tmpdir(), "/var/tmp", "/tmp"];
 	const isTempRoot = tempDirs.some((t) => root.startsWith(t + path.sep));
 	const token = createCancellationToken({ signal });
-	const entries = fs.readdirSync(runsRoot, { withFileTypes: true })
+	const entries = fs
+		.readdirSync(runsRoot, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory() && isSafePathId(entry.name))
 		.map((entry) => entry.name)
 		.sort((a, b) => (b ?? "").localeCompare(a ?? ""));
@@ -42,7 +43,12 @@ function collectRuns(root: string, maxEntries?: number, signal?: AbortSignal): T
 			if (!manifest) continue;
 			// Filter out ghost runs: active status but CWD no longer exists.
 			// These are deadletter/replay/temp runs whose temp dirs were cleaned up.
-			if ((manifest.status === "queued" || manifest.status === "running" || manifest.status === "planning") && manifest.cwd && !fs.existsSync(manifest.cwd)) continue;
+			if (
+				(manifest.status === "queued" || manifest.status === "running" || manifest.status === "planning") &&
+				manifest.cwd &&
+				!fs.existsSync(manifest.cwd)
+			)
+				continue;
 			// 2.19 — for runs in temp directories, verify the background process is alive.
 			// Without this, runs that completed/crashed but left stale manifests will still show.
 			if (isTempRoot && (manifest.status === "running" || manifest.status === "queued" || manifest.status === "planning")) {
@@ -51,12 +57,20 @@ function collectRuns(root: string, maxEntries?: number, signal?: AbortSignal): T
 					const pidData = JSON.parse(fs.readFileSync(asyncPidPath, "utf-8"));
 					const pid = pidData?.pid;
 					if (pid && typeof pid === "number") {
-						try { process.kill(pid, 0); } catch { continue; } // PID dead, skip this run
+						try {
+							process.kill(pid, 0);
+						} catch {
+							continue;
+						} // PID dead, skip this run
 					}
-				} catch { /* no async.pid or parse error — keep the run */ }
+				} catch {
+					/* no async.pid or parse error — keep the run */
+				}
 			}
 			results.push(manifest);
-		} catch { /* skip unreadable manifests */ }
+		} catch {
+			/* skip unreadable manifests */
+		}
 	}
 	return results;
 }
@@ -98,7 +112,12 @@ export function listRecentRuns(cwd: string, max = 20, signal?: AbortSignal): Tea
  * - "user": only runs in the user crew root
  * - "all" (default): merge both scopes (current behavior)
  */
-export function listRunsByScope(cwd: string, scope: "project" | "user" | "all" = "all", max?: number, signal?: AbortSignal): TeamRunManifest[] {
+export function listRunsByScope(
+	cwd: string,
+	scope: "project" | "user" | "all" = "all",
+	max?: number,
+	signal?: AbortSignal,
+): TeamRunManifest[] {
 	const projectRoot = findRepoRoot(cwd);
 	switch (scope) {
 		case "project":

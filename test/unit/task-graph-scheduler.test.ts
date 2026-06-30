@@ -1,7 +1,15 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import {
+	cancelTaskSubtree,
+	failTaskAndBlockChildren,
+	getReadyTasks,
+	markTaskDone,
+	markTaskRunning,
+	refreshTaskGraphQueues,
+	taskGraphSnapshot,
+} from "../../src/runtime/task-graph-scheduler.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
-import { cancelTaskSubtree, failTaskAndBlockChildren, getReadyTasks, markTaskDone, markTaskRunning, refreshTaskGraphQueues, taskGraphSnapshot } from "../../src/runtime/task-graph-scheduler.ts";
 
 function task(id: string, stepId: string, dependsOn: string[] = [], children: string[] = []): TeamTaskState {
 	return {
@@ -14,7 +22,12 @@ function task(id: string, stepId: string, dependsOn: string[] = [], children: st
 		status: "queued",
 		dependsOn,
 		cwd: "/repo",
-		graph: { taskId: id, dependencies: dependsOn, children, queue: dependsOn.length ? "blocked" : "ready" },
+		graph: {
+			taskId: id,
+			dependencies: dependsOn,
+			children,
+			queue: dependsOn.length ? "blocked" : "ready",
+		},
 	};
 }
 
@@ -33,9 +46,15 @@ test("task graph scheduler exposes ready queue and advances dependencies", () =>
 	tasks = markTaskRunning(tasks, "01_a");
 	assert.deepEqual(taskGraphSnapshot(tasks).running, ["01_a"]);
 	tasks = markTaskDone(tasks, "01_a");
-	assert.deepEqual(getReadyTasks(tasks, 10).map((item) => item.id), ["02_b", "03_c"]);
+	assert.deepEqual(
+		getReadyTasks(tasks, 10).map((item) => item.id),
+		["02_b", "03_c"],
+	);
 	tasks = markTaskDone(tasks, "02_b");
-	assert.deepEqual(getReadyTasks(tasks, 10).map((item) => item.id), ["03_c", "04_d"]);
+	assert.deepEqual(
+		getReadyTasks(tasks, 10).map((item) => item.id),
+		["03_c", "04_d"],
+	);
 });
 
 test("task graph scheduler can cancel a subtree", () => {

@@ -1,5 +1,5 @@
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
 import { resetRpcRateLimit } from "../../src/extension/cross-extension-rpc.ts";
 
 // We test the rate limiter logic by importing the module and exercising
@@ -66,10 +66,18 @@ describe("RPC rate limiting", () => {
 		// We need to send 5 requests that get past rate limit, then the 6th should be rate-limited.
 
 		for (let i = 0; i < 5; i++) {
-			runHandler({ requestId: `r${i}`, goal: "test", config: { intent: "test" } });
+			runHandler({
+				requestId: `r${i}`,
+				goal: "test",
+				config: { intent: "test" },
+			});
 		}
 		// 6th request should be rate limited
-		runHandler({ requestId: `r5`, goal: "test", config: { intent: "test" } });
+		runHandler({
+			requestId: `r5`,
+			goal: "test",
+			config: { intent: "test" },
+		});
 
 		// Wait for async handlers to resolve
 		await new Promise((r) => setTimeout(r, 100));
@@ -84,7 +92,10 @@ describe("RPC rate limiting", () => {
 		const rateLimitReplies = replies.filter(
 			(r: any) => r?.success === false && typeof r?.error === "string" && r.error.includes("rate limit"),
 		);
-		assert.ok(rateLimitReplies.length >= 1, `Expected at least 1 rate-limited reply, got ${rateLimitReplies.length} out of ${replies.length} total. Replies: ${JSON.stringify(replies)}`);
+		assert.ok(
+			rateLimitReplies.length >= 1,
+			`Expected at least 1 rate-limited reply, got ${rateLimitReplies.length} out of ${replies.length} total. Replies: ${JSON.stringify(replies)}`,
+		);
 	});
 
 	it("resets rate limit counter", async () => {
@@ -108,29 +119,37 @@ describe("RPC rate limiting", () => {
 
 		// Exhaust rate limit
 		for (let i = 0; i < 5; i++) {
-			runHandler({ requestId: `r${i}`, goal: "test", config: { intent: "test" } });
+			runHandler({
+				requestId: `r${i}`,
+				goal: "test",
+				config: { intent: "test" },
+			});
 		}
-		runHandler({ requestId: "exhausted", goal: "test", config: { intent: "test" } });
+		runHandler({
+			requestId: "exhausted",
+			goal: "test",
+			config: { intent: "test" },
+		});
 
 		await new Promise((r) => setTimeout(r, 100));
 
-		const beforeReset = replies.filter(
-			(r: any) => r?.success === false && r?.error?.includes("rate limit"),
-		);
+		const beforeReset = replies.filter((r: any) => r?.success === false && r?.error?.includes("rate limit"));
 		assert.ok(beforeReset.length >= 1, "Should have at least one rate-limited reply before reset");
 
 		// Reset and verify we can make requests again
 		replies.length = 0;
 		resetRpcRateLimit();
 
-		runHandler({ requestId: "after-reset", goal: "test", config: { intent: "test" } });
+		runHandler({
+			requestId: "after-reset",
+			goal: "test",
+			config: { intent: "test" },
+		});
 
 		await new Promise((r) => setTimeout(r, 100));
 
 		// After reset, should get "No active session" (not rate limit)
-		const afterReset = replies.filter(
-			(r: any) => r?.success === false && r?.error?.includes("rate limit"),
-		);
+		const afterReset = replies.filter((r: any) => r?.success === false && r?.error?.includes("rate limit"));
 		assert.equal(afterReset.length, 0, `Should have 0 rate-limited replies after reset, got ${afterReset.length}`);
 	});
 });

@@ -89,10 +89,7 @@ function parseRoot(start: string): string {
 		const rest = start.slice(2);
 		const firstSep = Math.max(rest.indexOf("\\"), rest.indexOf("/"));
 		if (firstSep === -1) return start;
-		const secondSep = Math.max(
-			rest.indexOf("\\", firstSep + 1),
-			rest.indexOf("/", firstSep + 1),
-		);
+		const secondSep = Math.max(rest.indexOf("\\", firstSep + 1), rest.indexOf("/", firstSep + 1));
 		if (secondSep === -1) return start;
 		// secondSep is an index into `rest`; add 2 to map back to `start`.
 		return start.slice(0, 2 + secondSep);
@@ -136,17 +133,11 @@ function safeJoin(...parts: string[]): string {
 	}
 	// Strip the leading separator(s) from the first part before joining, so
 	// the collapse regex doesn't re-collapse them.
-	const firstPartStripped =
-		sep === "\\"
-			? firstPart.replace(/^\\{1,2}/, "")
-			: firstPart.replace(/^\/+/, "");
+	const firstPartStripped = sep === "\\" ? firstPart.replace(/^\\{1,2}/, "") : firstPart.replace(/^\/+/, "");
 	const rest = filtered.slice(1);
 	const joined = [firstPartStripped, ...rest].filter(Boolean).join(sep);
 	// Collapse internal runs of the separator.
-	const collapsed = joined.replace(
-		new RegExp(`${sep === "\\" ? "\\\\" : "/"}{2,}`, "g"),
-		sep,
-	);
+	const collapsed = joined.replace(new RegExp(`${sep === "\\" ? "\\\\" : "/"}{2,}`, "g"), sep);
 	return leading + collapsed;
 }
 
@@ -171,17 +162,9 @@ function safeResolve(p: string, pathDep?: typeof path): string {
 	return p;
 }
 
-function findProjectRoot(
-	start: string,
-	pathDep?: typeof path,
-): string | undefined {
+function findProjectRoot(start: string, pathDep?: typeof path): string | undefined {
 	const dirMarkers = [".git", ".hg", ".svn"];
-	const fileMarkers = [
-		"package.json",
-		"pyproject.toml",
-		"Cargo.toml",
-		"go.mod",
-	];
+	const fileMarkers = ["package.json", "pyproject.toml", "Cargo.toml", "go.mod"];
 	// Use `parseRoot` (inlined above) to avoid `path.parse` for the critical
 	// termination root — fixes the jiti namespace race in issue #28.
 	const root = parseRoot(start);

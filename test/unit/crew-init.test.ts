@@ -32,14 +32,10 @@ import test from "node:test";
 // We test the modules directly via dynamic import so they resolve
 // relative to the source tree correctly.
 const { ensureCrewDirectory } = await import("../../src/state/crew-init.ts");
-const { updateGitignore } = await import(
-	"../../src/state/gitignore-manager.ts"
-);
+const { updateGitignore } = await import("../../src/state/gitignore-manager.ts");
 
 function makeTempProject(): string {
-	const dir = fs.mkdtempSync(
-		path.join(os.tmpdir(), "pi-crew-crew-init-test-"),
-	);
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-crew-init-test-"));
 	// Add a .git marker so projectCrewRoot resolves to .crew/ inside this dir
 	fs.mkdirSync(path.join(dir, ".git"), { recursive: true });
 	return dir;
@@ -66,10 +62,7 @@ test("ensureCrewDirectory creates required directory structure", async () => {
 			".crew/audit",
 		];
 		for (const sub of expectedDirs) {
-			assert.ok(
-				fs.statSync(path.join(dir, sub)).isDirectory(),
-				`Expected directory: ${sub}`,
-			);
+			assert.ok(fs.statSync(path.join(dir, sub)).isDirectory(), `Expected directory: ${sub}`);
 		}
 	} finally {
 		cleanup(dir);
@@ -81,12 +74,7 @@ test("ensureCrewDirectory creates .gitkeep placeholders", async () => {
 	try {
 		await ensureCrewDirectory(dir);
 		const crewRoot = path.join(dir, ".crew");
-		const placeholders = [
-			"artifacts/.gitkeep",
-			"cache/.gitkeep",
-			"graphs/.gitkeep",
-			"audit/.gitkeep",
-		];
+		const placeholders = ["artifacts/.gitkeep", "cache/.gitkeep", "graphs/.gitkeep", "audit/.gitkeep"];
 		for (const p of placeholders) {
 			const fullPath = path.join(crewRoot, p);
 			assert.ok(fs.existsSync(fullPath), `Expected placeholder: ${p}`);
@@ -105,10 +93,7 @@ test("ensureCrewDirectory writes README.md", async () => {
 		assert.ok(fs.existsSync(readmePath), "README.md should exist");
 		const content = fs.readFileSync(readmePath, "utf-8");
 		assert.ok(content.includes("pi-crew"), "README should mention pi-crew");
-		assert.ok(
-			content.includes("state/runs"),
-			"README should describe state/runs",
-		);
+		assert.ok(content.includes("state/runs"), "README should describe state/runs");
 	} finally {
 		cleanup(dir);
 	}
@@ -118,22 +103,14 @@ test("ensureCrewDirectory is idempotent", async () => {
 	const dir = makeTempProject();
 	try {
 		await ensureCrewDirectory(dir);
-		const readmeBefore = fs.readFileSync(
-			path.join(dir, ".crew", "README.md"),
-			"utf-8",
-		);
+		const readmeBefore = fs.readFileSync(path.join(dir, ".crew", "README.md"), "utf-8");
 		// Call again — should not throw
 		await ensureCrewDirectory(dir);
-		const readmeAfter = fs.readFileSync(
-			path.join(dir, ".crew", "README.md"),
-			"utf-8",
-		);
+		const readmeAfter = fs.readFileSync(path.join(dir, ".crew", "README.md"), "utf-8");
 		// README content should be the same (overwritten with same content)
 		assert.equal(readmeBefore, readmeAfter);
 		// Directories should still exist
-		assert.ok(
-			fs.statSync(path.join(dir, ".crew", "state", "runs")).isDirectory(),
-		);
+		assert.ok(fs.statSync(path.join(dir, ".crew", "state", "runs")).isDirectory());
 	} finally {
 		cleanup(dir);
 	}
@@ -142,32 +119,22 @@ test("ensureCrewDirectory is idempotent", async () => {
 // --- gitignore-manager tests ---
 
 test("updateGitignore creates .gitignore if it doesn't exist", async () => {
-	const dir = fs.mkdtempSync(
-		path.join(os.tmpdir(), "pi-crew-gitignore-test-"),
-	);
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-gitignore-test-"));
 	try {
 		const gitignorePath = path.join(dir, ".gitignore");
 		await updateGitignore(gitignorePath);
 		assert.ok(fs.existsSync(gitignorePath));
 		const content = fs.readFileSync(gitignorePath, "utf-8");
 		assert.ok(content.includes("/.crew/"), "Should contain /.crew/");
-		assert.ok(
-			content.includes("!.crew/artifacts/"),
-			"Should contain !.crew/artifacts/",
-		);
-		assert.ok(
-			content.includes("!.crew/graphs/.gitkeep"),
-			"Should contain !.crew/graphs/.gitkeep",
-		);
+		assert.ok(content.includes("!.crew/artifacts/"), "Should contain !.crew/artifacts/");
+		assert.ok(content.includes("!.crew/graphs/.gitkeep"), "Should contain !.crew/graphs/.gitkeep");
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
 });
 
 test("updateGitignore adds entries to existing .gitignore", async () => {
-	const dir = fs.mkdtempSync(
-		path.join(os.tmpdir(), "pi-crew-gitignore-test-"),
-	);
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-gitignore-test-"));
 	try {
 		const gitignorePath = path.join(dir, ".gitignore");
 		fs.writeFileSync(gitignorePath, "node_modules/\ndist/\n", "utf-8");
@@ -185,29 +152,21 @@ test("updateGitignore adds entries to existing .gitignore", async () => {
 });
 
 test("updateGitignore does not duplicate existing entries", async () => {
-	const dir = fs.mkdtempSync(
-		path.join(os.tmpdir(), "pi-crew-gitignore-test-"),
-	);
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-gitignore-test-"));
 	try {
 		const gitignorePath = path.join(dir, ".gitignore");
 		await updateGitignore(gitignorePath);
 		const content1 = fs.readFileSync(gitignorePath, "utf-8");
 		await updateGitignore(gitignorePath);
 		const content2 = fs.readFileSync(gitignorePath, "utf-8");
-		assert.equal(
-			content1,
-			content2,
-			"Content should not change on second call",
-		);
+		assert.equal(content1, content2, "Content should not change on second call");
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
 });
 
 test("updateGitignore preserves existing content", async () => {
-	const dir = fs.mkdtempSync(
-		path.join(os.tmpdir(), "pi-crew-gitignore-test-"),
-	);
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-gitignore-test-"));
 	try {
 		const gitignorePath = path.join(dir, ".gitignore");
 		const existingContent = "# My project\n*.log\nbuild/\n";
@@ -254,9 +213,7 @@ test("ensureCrewDirectory is safe under concurrent invocation (issue #28)", asyn
 		// Structure should still be correct after the race.
 		const crewRoot = path.join(dir, ".crew");
 		assert.ok(fs.statSync(crewRoot).isDirectory());
-		assert.ok(
-			fs.statSync(path.join(crewRoot, "state", "runs")).isDirectory(),
-		);
+		assert.ok(fs.statSync(path.join(crewRoot, "state", "runs")).isDirectory());
 	} finally {
 		cleanup(dir);
 	}
@@ -268,8 +225,7 @@ test("ensureCrewDirectory survives a corrupted `path` namespace binding (issue #
 	// to lock in their behavior — this is the same code path that runs when
 	// `path.parse` is `undefined` in the jiti race.
 	const crewInitModule = await import("../../src/state/crew-init.ts");
-	const { parseRoot, safeJoin, safeDirname, safeResolve, findProjectRoot } =
-		crewInitModule.__test__internals;
+	const { parseRoot, safeJoin, safeDirname, safeResolve, findProjectRoot } = crewInitModule.__test__internals;
 
 	// parseRoot: POSIX
 	assert.equal(parseRoot("/"), "/");
@@ -303,10 +259,7 @@ test("ensureCrewDirectory survives a corrupted `path` namespace binding (issue #
 	assert.equal(safeJoin("C:\\", "foo", "bar"), "C:\\foo\\bar");
 	// safeJoin — UNC (F-1 regression)
 	assert.equal(safeJoin("\\\\server", "share"), "\\\\server\\share");
-	assert.equal(
-		safeJoin("\\\\server", "share", "foo", "bar"),
-		"\\\\server\\share\\foo\\bar",
-	);
+	assert.equal(safeJoin("\\\\server", "share", "foo", "bar"), "\\\\server\\share\\foo\\bar");
 	// safeJoin — collapses middle runs of separator
 	assert.equal(safeJoin("a", "b//c"), "a/b/c");
 	assert.equal(safeJoin("a\\\\b", "c"), "a\\b\\c");
@@ -346,9 +299,7 @@ test("ensureCrewDirectory survives a corrupted `path` namespace binding (issue #
 	);
 	// Use a real temp directory; with the inline helpers, the stub `path`
 	// should never be called and the loop should walk up to the .git marker.
-	const realProject = fs.mkdtempSync(
-		path.join(os.tmpdir(), "pi-crew-jiti-race-test-"),
-	);
+	const realProject = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-jiti-race-test-"));
 	fs.mkdirSync(path.join(realProject, ".git"), { recursive: true });
 	const nested = path.join(realProject, "a", "b", "c", "d");
 	fs.mkdirSync(nested, { recursive: true });
@@ -356,15 +307,8 @@ test("ensureCrewDirectory survives a corrupted `path` namespace binding (issue #
 		// Pass the stubbed `path` dependency to the source's findProjectRoot.
 		// With the fix, the inline helpers (parseRoot, safeJoin, safeDirname,
 		// safeResolve) don't delegate to `path`, so the loop completes.
-		const result = findProjectRoot(
-			realProject,
-			stubPath as unknown as typeof path,
-		);
-		assert.equal(
-			result,
-			realProject,
-			"findProjectRoot should walk up via .git marker even with stubbed path",
-		);
+		const result = findProjectRoot(realProject, stubPath as unknown as typeof path);
+		assert.equal(result, realProject, "findProjectRoot should walk up via .git marker even with stubbed path");
 	} finally {
 		fs.rmSync(realProject, { recursive: true, force: true });
 	}
@@ -386,10 +330,7 @@ test("ensureCrewDirectory survives a corrupted `path` namespace binding (issue #
 	);
 	assert.doesNotThrow(() => {
 		// Should not throw; returns undefined (no .git anywhere up the tree).
-		const result = findProjectRoot(
-			"/some/absolute/path",
-			stubNoResolve as unknown as typeof path,
-		);
+		const result = findProjectRoot("/some/absolute/path", stubNoResolve as unknown as typeof path);
 		assert.equal(result, undefined);
 	});
 });
@@ -407,19 +348,14 @@ test("ensureCrewDirectory walks up to .git marker from a deeply nested cwd", asy
 	fs.mkdirSync(nested, { recursive: true });
 	try {
 		await ensureCrewDirectory(nested);
-		assert.ok(
-			fs.statSync(path.join(dir, ".crew")).isDirectory(),
-			"Should locate project root via .git marker and create .crew/ there",
-		);
+		assert.ok(fs.statSync(path.join(dir, ".crew")).isDirectory(), "Should locate project root via .git marker and create .crew/ there");
 	} finally {
 		cleanup(dir);
 	}
 });
 
 test("ensureCrewDirectory walks up to package.json marker", async () => {
-	const dir = fs.mkdtempSync(
-		path.join(os.tmpdir(), "pi-crew-crew-init-pkgjson-"),
-	);
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-crew-init-pkgjson-"));
 	fs.writeFileSync(path.join(dir, "package.json"), "{}", "utf-8");
 	const nested = path.join(dir, "src", "lib");
 	fs.mkdirSync(nested, { recursive: true });

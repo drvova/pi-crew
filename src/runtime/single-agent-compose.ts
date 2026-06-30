@@ -49,10 +49,7 @@ function orderSteps(steps: WorkflowStep[]): WorkflowStep[] {
  * The agent executes each phase in dependency order, writing outputs to the
  * named artifacts, mimicking what the multi-agent team would produce.
  */
-export function composeSingleAgentPrompt(
-	workflow: WorkflowConfig,
-	goal: string,
-): SingleAgentPrompt {
+export function composeSingleAgentPrompt(workflow: WorkflowConfig, goal: string): SingleAgentPrompt {
 	const ordered = orderSteps(workflow.steps);
 	const lines: string[] = [];
 	lines.push(`# Single-agent workflow execution: ${workflow.name}`);

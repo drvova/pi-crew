@@ -5,7 +5,7 @@
  * Falls back to plain text (theme.fg on every line) if the language is
  * unsupported or highlighting fails.
  */
-import { supportsLanguage, highlight } from "cli-highlight";
+import { highlight, supportsLanguage } from "cli-highlight";
 import type { CrewTheme } from "./theme-adapter.ts";
 import { asCrewTheme } from "./theme-adapter.ts";
 

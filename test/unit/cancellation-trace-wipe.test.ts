@@ -5,18 +5,11 @@
 //   (a) .crew/state/subagents/<id>.json — file deleted on cancelled/stopped terminal status
 //   (b) agents.json + per-task status.json — record removed from run's agent index
 
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-
-import {
-	removePersistedSubagentRecord,
-	savePersistedSubagentRecord,
-	shouldDeleteOnTerminalStatus,
-} from "../../src/runtime/subagent-manager.ts";
-
+import test from "node:test";
 import {
 	agentStatusPath,
 	readCrewAgents,
@@ -26,6 +19,11 @@ import {
 	upsertCrewAgent,
 } from "../../src/runtime/crew-agent-records.ts";
 import type { CrewAgentRecord } from "../../src/runtime/crew-agent-runtime.ts";
+import {
+	removePersistedSubagentRecord,
+	savePersistedSubagentRecord,
+	shouldDeleteOnTerminalStatus,
+} from "../../src/runtime/subagent-manager.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 
 // `persistedSubagentPath` is module-private. Reconstruct its layout for tests:
@@ -109,7 +107,13 @@ test("shouldDeleteOnTerminalStatus: stopped → true", () => {
 });
 
 test("shouldDeleteOnTerminalStatus: terminated flag → true", () => {
-	assert.equal(shouldDeleteOnTerminalStatus({ status: "completed", terminated: true } as never), true);
+	assert.equal(
+		shouldDeleteOnTerminalStatus({
+			status: "completed",
+			terminated: true,
+		} as never),
+		true,
+	);
 });
 
 test("shouldDeleteOnTerminalStatus: completed → false (audit value)", () => {
@@ -197,11 +201,19 @@ test("upsertCrewAgent: cancelled status triggers removal (no save)", () => {
 	try {
 		const manifest = makeManifest(cwd);
 		// First: agent is running
-		const running = makeCrewRecord({ id: "a", taskId: "01_a", status: "running" });
+		const running = makeCrewRecord({
+			id: "a",
+			taskId: "01_a",
+			status: "running",
+		});
 		upsertCrewAgent(manifest, running);
 		assert.equal(readCrewAgents(manifest).length, 1);
 		// Then: transition to cancelled
-		const cancelled = makeCrewRecord({ id: "a", taskId: "01_a", status: "cancelled" });
+		const cancelled = makeCrewRecord({
+			id: "a",
+			taskId: "01_a",
+			status: "cancelled",
+		});
 		upsertCrewAgent(manifest, cancelled);
 		// Should be removed from index
 		assert.equal(readCrewAgents(manifest).length, 0, "cancelled agent should be wiped");
@@ -214,7 +226,11 @@ test("upsertCrewAgent: completed status keeps audit trail", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-wipe-completed-"));
 	try {
 		const manifest = makeManifest(cwd);
-		const completed = makeCrewRecord({ id: "a", taskId: "01_a", status: "completed" });
+		const completed = makeCrewRecord({
+			id: "a",
+			taskId: "01_a",
+			status: "completed",
+		});
 		upsertCrewAgent(manifest, completed);
 		assert.equal(readCrewAgents(manifest).length, 1, "completed agent should be preserved");
 	} finally {
@@ -226,7 +242,11 @@ test("upsertCrewAgent: failed status keeps audit trail", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-wipe-failed-"));
 	try {
 		const manifest = makeManifest(cwd);
-		const failed = makeCrewRecord({ id: "a", taskId: "01_a", status: "failed" });
+		const failed = makeCrewRecord({
+			id: "a",
+			taskId: "01_a",
+			status: "failed",
+		});
 		upsertCrewAgent(manifest, failed);
 		assert.equal(readCrewAgents(manifest).length, 1, "failed agent should be preserved");
 	} finally {

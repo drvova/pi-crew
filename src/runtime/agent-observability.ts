@@ -28,7 +28,12 @@ export function readTextTail(filePath: string, maxBytes = 64_000): TextTailResul
 	try {
 		const buffer = Buffer.alloc(bytesToRead);
 		fs.readSync(fd, buffer, 0, bytesToRead, stat.size - bytesToRead);
-		return { path: filePath, text: buffer.toString("utf-8"), bytes: stat.size, truncated: stat.size > bytesToRead };
+		return {
+			path: filePath,
+			text: buffer.toString("utf-8"),
+			bytes: stat.size,
+			truncated: stat.size > bytesToRead,
+		};
 	} finally {
 		fs.closeSync(fd);
 	}
@@ -85,7 +90,10 @@ function agentLine(manifest: TeamRunManifest, agent: CrewAgentRecord): string {
 	return `- ${statusGlyph(agent.status)} ${agent.taskId} ${agent.role} → ${agent.agent} · ${agent.status} · ${agent.runtime} · ${activityText(agent)}${outputWarning(manifest, agent)}${agent.error ? ` · error=${agent.error}` : ""}`;
 }
 
-export function buildAgentDashboard(manifest: TeamRunManifest): { text: string; groups: Record<string, CrewAgentRecord[]> } {
+export function buildAgentDashboard(manifest: TeamRunManifest): {
+	text: string;
+	groups: Record<string, CrewAgentRecord[]>;
+} {
 	const agents = readCrewAgents(manifest);
 	const groups: Record<string, CrewAgentRecord[]> = {
 		running: agents.filter((agent) => agent.status === "running"),

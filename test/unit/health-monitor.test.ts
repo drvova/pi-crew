@@ -11,10 +11,7 @@ import {
 	STUCK_TASK_THRESHOLD_MS,
 	scanZombieTempWorkspaces,
 } from "../../src/extension/team-tool/health-monitor.ts";
-import {
-	registerActiveRun,
-	unregisterActiveRun,
-} from "../../src/state/active-run-registry.ts";
+import { registerActiveRun, unregisterActiveRun } from "../../src/state/active-run-registry.ts";
 import {
 	__test__clearManifestCache,
 	createRunManifest,
@@ -84,9 +81,7 @@ function createIsolatedTmpDir(): string {
 }
 
 /** Extract report text from the health-monitor tool result. */
-function reportText(result: {
-	content: Array<{ type: string; text?: string }>;
-}): string {
+function reportText(result: { content: Array<{ type: string; text?: string }> }): string {
 	return result.content.map((item) => item.text ?? "").join("\n");
 }
 
@@ -122,10 +117,7 @@ test("should detect ghost run when manifest cwd no longer exists but registry en
 			// The registry entry still points to realDir (which exists),
 			// so activeRunEntries() includes this run.  But the health
 			// monitor reads manifest.cwd = ghostDir and detects the ghost.
-			const ghostDir = path.join(
-				isolatedTmp,
-				"pi-crew-health-ghost-" + Date.now(),
-			);
+			const ghostDir = path.join(isolatedTmp, "pi-crew-health-ghost-" + Date.now());
 			const ghostManifest: TeamRunManifest = {
 				...created.manifest,
 				status: "running",
@@ -137,19 +129,12 @@ test("should detect ghost run when manifest cwd no longer exists but registry en
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 1);
 			assert.equal(counts.ghost, 1);
 			assert.match(text, /Ghost \(dead cwd\): 1/);
-			assert.ok(
-				text.includes(created.manifest.runId),
-				"report should list the ghost runId",
-			);
+			assert.ok(text.includes(created.manifest.runId), "report should list the ghost runId");
 			assert.match(text, /Ghost runs:/);
 		} finally {
 			try {
@@ -168,9 +153,7 @@ test("should not crash when ghost run is fully deleted (cwd gone, registry filte
 	withIsolatedHome(() => {
 		const isolatedTmp = createIsolatedTmpDir();
 		const projectCwd = createProjectCwd(isolatedTmp);
-		const ghostCwd = fs.mkdtempSync(
-			path.join(isolatedTmp, "pi-crew-health-ghost-"),
-		);
+		const ghostCwd = fs.mkdtempSync(path.join(isolatedTmp, "pi-crew-health-ghost-"));
 
 		try {
 			// Create a run, register it, then delete the cwd entirely.
@@ -182,11 +165,7 @@ test("should not crash when ghost run is fully deleted (cwd gone, registry filte
 				goal: "ghost run",
 			});
 			registerActiveRun(created.manifest);
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 
 			fs.rmSync(ghostCwd, { recursive: true, force: true });
 
@@ -196,11 +175,7 @@ test("should not crash when ghost run is fully deleted (cwd gone, registry filte
 
 			// The run is filtered by both paths; the health monitor should
 			// produce a clean report without crashing.
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 0);
 			assert.match(text, /All runs healthy\./);
@@ -235,16 +210,10 @@ test("should detect orphaned run with stale async PID past threshold", () => {
 				workflow,
 				goal: "stale async pid",
 			});
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 
 			// Simulate an async run with a non-existent PID and updatedAt 31 minutes ago.
-			const staleTime = new Date(
-				Date.now() - 31 * 60 * 1000,
-			).toISOString();
+			const staleTime = new Date(Date.now() - 31 * 60 * 1000).toISOString();
 			const staleManifest: TeamRunManifest = {
 				...running,
 				async: {
@@ -260,11 +229,7 @@ test("should detect orphaned run with stale async PID past threshold", () => {
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 1);
 			assert.match(text, /Orphaned \(stale process\): 1/);
@@ -290,16 +255,10 @@ test("should detect orphaned non-async stale run with no agent progress", () => 
 				workflow,
 				goal: "stale no-progress run",
 			});
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 
 			// Set updatedAt to 3 minutes ago (past ORPHANED_ACTIVE_RUN_MS = 2 min).
-			const staleTime = new Date(
-				Date.now() - 3 * 60 * 1000,
-			).toISOString();
+			const staleTime = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 			const staleManifest: TeamRunManifest = {
 				...running,
 				updatedAt: staleTime,
@@ -307,10 +266,7 @@ test("should detect orphaned non-async stale run with no agent progress", () => 
 			saveRunManifest(staleManifest);
 
 			// Write agents.json with all agents in "queued" status and no progress.
-			const agentsPath = path.join(
-				staleManifest.stateRoot,
-				"agents.json",
-			);
+			const agentsPath = path.join(staleManifest.stateRoot, "agents.json");
 			fs.writeFileSync(
 				agentsPath,
 				JSON.stringify([
@@ -331,11 +287,7 @@ test("should detect orphaned non-async stale run with no agent progress", () => 
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 1);
 			assert.match(text, /Orphaned \(stale process\): 1/);
@@ -361,11 +313,7 @@ test("should detect corrupted run when artifacts root is missing", () => {
 				workflow,
 				goal: "corrupted run",
 			});
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 
 			// Delete the artifacts root but keep the state root (manifest survives).
 			fs.rmSync(running.artifactsRoot, { recursive: true, force: true });
@@ -374,18 +322,11 @@ test("should detect corrupted run when artifacts root is missing", () => {
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 1);
 			assert.match(text, /Corrupted \(missing state\): 1/);
-			assert.ok(
-				text.includes(running.runId),
-				`report should contain runId ${running.runId}`,
-			);
+			assert.ok(text.includes(running.runId), `report should contain runId ${running.runId}`);
 			assert.match(text, /Corrupted runs:/);
 		} finally {
 			fs.rmSync(projectCwd, { recursive: true, force: true });
@@ -430,11 +371,7 @@ test("should detect corrupted run when state root is missing", () => {
 			__test__clearManifestCache();
 
 			// The health monitor should produce a valid report without crashing.
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 			assert.ok(text.includes("pi-crew health report"));
 		} finally {
 			fs.rmSync(projectCwd, { recursive: true, force: true });
@@ -457,22 +394,14 @@ test("should report all runs healthy when no issues found", () => {
 				workflow,
 				goal: "healthy run",
 			});
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 			updateRunStatus(running, "completed", "done");
 
 			clearProjectRootCache();
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 1);
 			assert.match(text, /All runs healthy\./);
@@ -501,11 +430,7 @@ test("should scan both project and user level runs", () => {
 				workflow,
 				goal: "project run",
 			});
-			const projectRunning = updateRunStatus(
-				projectRun.manifest,
-				"running",
-				"started",
-			);
+			const projectRunning = updateRunStatus(projectRun.manifest, "running", "started");
 			updateRunStatus(projectRunning, "completed", "project done");
 
 			// User-level run: use a cwd WITHOUT .crew so it falls back to user scope.
@@ -518,22 +443,14 @@ test("should scan both project and user level runs", () => {
 					workflow,
 					goal: "user run",
 				});
-				const userRunning = updateRunStatus(
-					userRun.manifest,
-					"running",
-					"started",
-				);
+				const userRunning = updateRunStatus(userRun.manifest, "running", "started");
 				updateRunStatus(userRunning, "completed", "user done");
 
 				clearProjectRootCache();
 				sharedScanCache.clear();
 				__test__clearManifestCache();
 
-				const { text, counts } = buildHealthReport(
-					{ cwd: projectCwd },
-					{},
-					{ tmpDir: isolatedTmp },
-				);
+				const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 				// Both runs should be scanned: 1 project + 1 user = 2.
 				assert.equal(counts.total, 2);
@@ -556,11 +473,7 @@ test("should report zero runs and healthy when no runs exist", () => {
 		const projectCwd = createProjectCwd(isolatedTmp);
 
 		try {
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 0);
 			assert.match(text, /All runs healthy\./);
@@ -586,14 +499,8 @@ test("should report multiple issue types in a single scan", () => {
 				workflow,
 				goal: "orphaned",
 			});
-			const run1Running = updateRunStatus(
-				run1.manifest,
-				"running",
-				"started",
-			);
-			const staleTime = new Date(
-				Date.now() - 31 * 60 * 1000,
-			).toISOString();
+			const run1Running = updateRunStatus(run1.manifest, "running", "started");
+			const staleTime = new Date(Date.now() - 31 * 60 * 1000).toISOString();
 			saveRunManifest({
 				...run1Running,
 				async: {
@@ -620,11 +527,7 @@ test("should report multiple issue types in a single scan", () => {
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 2);
 			assert.match(text, /Orphaned \(stale process\): 1/);
@@ -688,11 +591,7 @@ test("should count status accurately across runs", () => {
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 4);
 			assert.equal(counts.completed, 1);
@@ -757,11 +656,7 @@ test("should count running and queued runs", () => {
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.total, 2);
 			assert.equal(counts.queued, 1);
@@ -787,23 +682,15 @@ test("should detect stuck tasks with stale heartbeat", () => {
 				workflow,
 				goal: "stuck task",
 			});
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 
 			// Create a task with status "running" and stale lastActivityAt (10 minutes ago)
-			const staleActivity = new Date(
-				Date.now() - 10 * 60 * 1000,
-			).toISOString();
+			const staleActivity = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 			const staleTasks: TeamTaskState[] = [
 				{
 					...created.tasks[0]!,
 					status: "running",
-					startedAt: new Date(
-						Date.now() - 15 * 60 * 1000,
-					).toISOString(),
+					startedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
 					agentProgress: {
 						recentTools: [],
 						recentOutput: [],
@@ -842,19 +729,12 @@ test("should detect stuck tasks with stale heartbeat", () => {
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { text, counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text, counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.equal(counts.stuck, 1, "should detect 1 stuck task");
 			assert.match(text, /Stuck tasks \(heartbeat >5min\): 1/);
 			assert.match(text, /Stuck tasks:/);
-			assert.ok(
-				text.includes(staleTasks[0]!.id),
-				"should list the stuck task ID",
-			);
+			assert.ok(text.includes(staleTasks[0]!.id), "should list the stuck task ID");
 		} finally {
 			fs.rmSync(projectCwd, { recursive: true, force: true });
 			fs.rmSync(isolatedTmp, { recursive: true, force: true });
@@ -874,16 +754,10 @@ test("should not flag recently active tasks as stuck", () => {
 				workflow,
 				goal: "active task",
 			});
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 
 			// Task with very recent activity (1 minute ago)
-			const recentActivity = new Date(
-				Date.now() - 1 * 60 * 1000,
-			).toISOString();
+			const recentActivity = new Date(Date.now() - 1 * 60 * 1000).toISOString();
 			const activeTasks: TeamTaskState[] = [
 				{
 					...created.tasks[0]!,
@@ -927,17 +801,9 @@ test("should not flag recently active tasks as stuck", () => {
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
-			assert.equal(
-				counts.stuck,
-				0,
-				"recently active task should not be stuck",
-			);
+			assert.equal(counts.stuck, 0, "recently active task should not be stuck");
 		} finally {
 			fs.rmSync(projectCwd, { recursive: true, force: true });
 			fs.rmSync(isolatedTmp, { recursive: true, force: true });
@@ -969,14 +835,7 @@ test("should count zombie /tmp/ workspaces with run manifests", () => {
 			recursive: true,
 		});
 		fs.writeFileSync(
-			path.join(
-				ws2,
-				".crew",
-				"state",
-				"runs",
-				"run-002",
-				"manifest.json",
-			),
+			path.join(ws2, ".crew", "state", "runs", "run-002", "manifest.json"),
 			JSON.stringify({
 				runId: "run-002",
 				status: "completed",
@@ -986,14 +845,7 @@ test("should count zombie /tmp/ workspaces with run manifests", () => {
 			recursive: true,
 		});
 		fs.writeFileSync(
-			path.join(
-				ws2,
-				".crew",
-				"state",
-				"runs",
-				"run-003",
-				"manifest.json",
-			),
+			path.join(ws2, ".crew", "state", "runs", "run-003", "manifest.json"),
 			JSON.stringify({
 				runId: "run-003",
 				status: "failed",
@@ -1036,11 +888,7 @@ test("should not count non-pi-crew dirs as zombie workspaces", () => {
 		});
 
 		const zombies = scanZombieTempWorkspaces(isolatedTmp, Date.now());
-		assert.equal(
-			zombies.length,
-			0,
-			"non-pi-crew dirs should not be zombies",
-		);
+		assert.equal(zombies.length, 0, "non-pi-crew dirs should not be zombies");
 	} finally {
 		fs.rmSync(isolatedTmp, { recursive: true, force: true });
 	}
@@ -1060,28 +908,17 @@ test("should include compact TUI summary line", () => {
 				workflow,
 				goal: "summary test",
 			});
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 			updateRunStatus(running, "completed", "done");
 
 			clearProjectRootCache();
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { text } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { text } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			// Verify compact summary format
-			assert.match(
-				text,
-				/Summary: total=1 running=0 completed=1 failed=0 cancelled=0 blocked=0 \| stuck=0 zombie=0/,
-			);
+			assert.match(text, /Summary: total=1 running=0 completed=1 failed=0 cancelled=0 blocked=0 \| stuck=0 zombie=0/);
 		} finally {
 			fs.rmSync(projectCwd, { recursive: true, force: true });
 			fs.rmSync(isolatedTmp, { recursive: true, force: true });
@@ -1101,22 +938,14 @@ test("should include structured data in result details", () => {
 				workflow,
 				goal: "data test",
 			});
-			const running = updateRunStatus(
-				created.manifest,
-				"running",
-				"started",
-			);
+			const running = updateRunStatus(created.manifest, "running", "started");
 			updateRunStatus(running, "completed", "done");
 
 			clearProjectRootCache();
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			assert.ok(counts, "should have counts");
 			assert.equal(counts.total, 1);
@@ -1130,15 +959,8 @@ test("should include structured data in result details", () => {
 
 			// Also test that handleHealthMonitor puts data into details
 			const toolResult = handleHealthMonitor({ cwd: projectCwd }, {});
-			assert.ok(
-				toolResult.details.data,
-				"details should have a data object",
-			);
-			assert.equal(
-				typeof (toolResult.details.data as Record<string, unknown>)
-					.total,
-				"number",
-			);
+			assert.ok(toolResult.details.data, "details should have a data object");
+			assert.equal(typeof (toolResult.details.data as Record<string, unknown>).total, "number");
 		} finally {
 			fs.rmSync(projectCwd, { recursive: true, force: true });
 			fs.rmSync(isolatedTmp, { recursive: true, force: true });
@@ -1201,20 +1023,9 @@ test("should merge temp workspace runs with primary runs", () => {
 
 			// Create a temp workspace run OUTSIDE the project cwd (simulating a live-session workspace)
 			const tempWs = path.join(isolatedTmp, "pi-crew-test-ws");
-			const tempStateRoot = path.join(
-				tempWs,
-				".crew",
-				"state",
-				"runs",
-				"temp-run-001",
-			);
+			const tempStateRoot = path.join(tempWs, ".crew", "state", "runs", "temp-run-001");
 			fs.mkdirSync(tempStateRoot, { recursive: true });
-			const tempArtifactsRoot = path.join(
-				tempWs,
-				".crew",
-				"artifacts",
-				"temp-run-001",
-			);
+			const tempArtifactsRoot = path.join(tempWs, ".crew", "artifacts", "temp-run-001");
 			fs.mkdirSync(tempArtifactsRoot, { recursive: true });
 
 			const tempManifest = {
@@ -1233,24 +1044,14 @@ test("should merge temp workspace runs with primary runs", () => {
 				eventsPath: path.join(tempStateRoot, "events.jsonl"),
 				artifacts: [],
 			};
-			fs.writeFileSync(
-				path.join(tempStateRoot, "manifest.json"),
-				JSON.stringify(tempManifest),
-			);
-			fs.writeFileSync(
-				path.join(tempStateRoot, "tasks.json"),
-				JSON.stringify([]),
-			);
+			fs.writeFileSync(path.join(tempStateRoot, "manifest.json"), JSON.stringify(tempManifest));
+			fs.writeFileSync(path.join(tempStateRoot, "tasks.json"), JSON.stringify([]));
 
 			clearProjectRootCache();
 			sharedScanCache.clear();
 			__test__clearManifestCache();
 
-			const { counts } = buildHealthReport(
-				{ cwd: projectCwd },
-				{},
-				{ tmpDir: isolatedTmp },
-			);
+			const { counts } = buildHealthReport({ cwd: projectCwd }, {}, { tmpDir: isolatedTmp });
 
 			// 1 primary + 1 temp = 2
 			assert.equal(counts.total, 2);

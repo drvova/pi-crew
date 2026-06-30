@@ -15,14 +15,17 @@
  * printing version. If it doesn't validate, this test degrades to a baseline
  * "pi runs" check. The authoritative guard is test #2-4 which run real agents.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import test from "node:test";
 import { buildPiWorkerArgs } from "../../src/runtime/pi-args.ts";
 import { getPiSpawnCommand } from "../../src/runtime/pi-spawn.ts";
-import { SMOKE_ENABLED, SKIP_REASON, fakeExecutorAgent } from "./_helpers.ts";
+import { fakeExecutorAgent, SKIP_REASON, SMOKE_ENABLED } from "./_helpers.ts";
 
-test("smoke: buildPiWorkerArgs emits NO unknown argv flag (pi --version still works)", { skip: SMOKE_ENABLED ? false : SKIP_REASON }, () => {
+test("smoke: buildPiWorkerArgs emits NO unknown argv flag (pi --version still works)", {
+	skip: SMOKE_ENABLED ? false : SKIP_REASON,
+}, () => {
 	// Build the args the way child-pi.ts would, then verify pi doesn't choke on
 	// any of them by running pi --version with the same leading flags. We can't
 	// run the full task here (token cost) — but a flag pi rejects will error
@@ -52,7 +55,11 @@ test("smoke: buildPiWorkerArgs emits NO unknown argv flag (pi --version still wo
 	// resolves to node + cli.js directly, which is the production code path).
 	try {
 		const spec = getPiSpawnCommand(["--version"]);
-		const out = execFileSync(spec.command, spec.args, { encoding: "utf-8", timeout: 15_000, stdio: ["ignore", "pipe", "pipe"] });
+		const out = execFileSync(spec.command, spec.args, {
+			encoding: "utf-8",
+			timeout: 15_000,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
 		assert.match(out.trim(), /\d+\.\d+\.\d+/, "pi --version should print a semver");
 	} catch (error) {
 		// On smoke-disabled CI we skip; if smoke is on and pi is missing, surface it.

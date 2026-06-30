@@ -2,8 +2,12 @@ import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { listRuns } from "./run-index.ts";
 // Lazy-loaded: team-tool.ts pulls in entire runtime chain.
 import type { handleTeamTool as HandleTeamToolFn } from "./team-tool.ts";
+
 let _cachedHandleTeamTool: typeof HandleTeamToolFn | undefined;
-async function handleTeamTool(params: Parameters<typeof HandleTeamToolFn>[0], ctx: Parameters<typeof HandleTeamToolFn>[1]): Promise<Awaited<ReturnType<typeof HandleTeamToolFn>>> {
+async function handleTeamTool(
+	params: Parameters<typeof HandleTeamToolFn>[0],
+	ctx: Parameters<typeof HandleTeamToolFn>[1],
+): Promise<Awaited<ReturnType<typeof HandleTeamToolFn>>> {
 	if (!_cachedHandleTeamTool) {
 		// LAZY: team-tool.ts pulls in the entire runtime chain.
 		const mod = await import("./team-tool.ts");
@@ -11,6 +15,7 @@ async function handleTeamTool(params: Parameters<typeof HandleTeamToolFn>[0], ct
 	}
 	return _cachedHandleTeamTool(params, ctx);
 }
+
 import { isToolError, textFromToolResult } from "./tool-result.ts";
 
 async function notifyResult(ctx: ExtensionCommandContext, result: Awaited<ReturnType<typeof handleTeamTool>>): Promise<void> {
@@ -53,14 +58,48 @@ export async function handleTeamManagerCommand(_args: string, ctx: ExtensionComm
 		const avoidWhen = await ctx.ui.input("Avoid when (comma-separated)", "");
 		const cost = await ctx.ui.select("Cost", ["cheap", "free", "expensive"]);
 		const category = await ctx.ui.input("Category", "custom");
-		const baseConfig = { name, description, scope: "project", triggers, useWhen, avoidWhen, cost, category };
+		const baseConfig = {
+			name,
+			description,
+			scope: "project",
+			triggers,
+			useWhen,
+			avoidWhen,
+			cost,
+			category,
+		};
 		if (resource === "agent") {
 			const systemPrompt = isUpdate ? undefined : `You are ${name}.`;
-			await notifyResult(ctx, await handleTeamTool({ action: isUpdate ? "update" : "create", resource, agent: name, config: { ...baseConfig, systemPrompt } }, ctx));
+			await notifyResult(
+				ctx,
+				await handleTeamTool(
+					{
+						action: isUpdate ? "update" : "create",
+						resource,
+						agent: name,
+						config: { ...baseConfig, systemPrompt },
+					},
+					ctx,
+				),
+			);
 			return;
 		}
 		const agent = await ctx.ui.input("Role agent", "executor");
-		await notifyResult(ctx, await handleTeamTool({ action: isUpdate ? "update" : "create", resource, team: name, config: { ...baseConfig, roles: [{ name: "executor", agent: agent || "executor" }] } }, ctx));
+		await notifyResult(
+			ctx,
+			await handleTeamTool(
+				{
+					action: isUpdate ? "update" : "create",
+					resource,
+					team: name,
+					config: {
+						...baseConfig,
+						roles: [{ name: "executor", agent: agent || "executor" }],
+					},
+				},
+				ctx,
+			),
+		);
 		return;
 	}
 
@@ -71,7 +110,19 @@ export async function handleTeamManagerCommand(_args: string, ctx: ExtensionComm
 		if (!goal) return;
 		const asyncRun = await ctx.ui.confirm("Async run?", "Run in detached background mode?");
 		const worktree = await ctx.ui.confirm("Worktree mode?", "Use git worktrees for task workspaces? Requires a clean repo by default.");
-		await notifyResult(ctx, await handleTeamTool({ action: "run", team: team || "default", goal, async: asyncRun, workspaceMode: worktree ? "worktree" : "single" }, ctx));
+		await notifyResult(
+			ctx,
+			await handleTeamTool(
+				{
+					action: "run",
+					team: team || "default",
+					goal,
+					async: asyncRun,
+					workspaceMode: worktree ? "worktree" : "single",
+				},
+				ctx,
+			),
+		);
 		return;
 	}
 
@@ -80,7 +131,10 @@ export async function handleTeamManagerCommand(_args: string, ctx: ExtensionComm
 		ctx.ui.notify("No pi-crew runs found.", "info");
 		return;
 	}
-	const selected = await ctx.ui.select("Select run", runs.map((run) => `${run.runId} [${run.status}] ${run.team}/${run.workflow ?? "none"}`));
+	const selected = await ctx.ui.select(
+		"Select run",
+		runs.map((run) => `${run.runId} [${run.status}] ${run.team}/${run.workflow ?? "none"}`),
+	);
 	if (!selected) return;
 	const runId = selected.split(" ")[0];
 	if (!runId) return;
@@ -90,7 +144,10 @@ export async function handleTeamManagerCommand(_args: string, ctx: ExtensionComm
 		return;
 	}
 	if (action === "Cleanup run worktrees") {
-		const force = await ctx.ui.confirm("Force cleanup?", "Force may remove dirty worktrees. Choose false to preserve dirty worktrees and capture cleanup diffs.");
+		const force = await ctx.ui.confirm(
+			"Force cleanup?",
+			"Force may remove dirty worktrees. Choose false to preserve dirty worktrees and capture cleanup diffs.",
+		);
 		await notifyResult(ctx, await handleTeamTool({ action: "cleanup", runId, force }, ctx));
 	}
 }

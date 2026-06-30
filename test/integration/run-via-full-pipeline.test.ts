@@ -26,13 +26,14 @@
  * Without the fix, this test fails with one of the TDZ errors above.
  * With the fix, it passes — proving the full pi-pipeline load works.
  */
-import { fileURLToPath, pathToFileURL } from "node:url";
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createRequire } from "node:module";
 import test from "node:test";
-import assert from "node:assert/strict";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(import.meta.url);
@@ -43,10 +44,15 @@ test("team-tool via full pi pipeline: handleRun reaches dwf dispatch (RFC 17 fix
 	const createJiti = jitiMod.default ?? jitiMod;
 
 	const jiti = createJiti(thisFile);
-	const factory = await jiti.import(path.join(repoRoot, "index.ts"), { default: true });
+	const factory = await jiti.import(path.join(repoRoot, "index.ts"), {
+		default: true,
+	});
 	assert.equal(typeof factory, "function", "index.ts must export default function(pi)");
 
-	const registeredTools: Array<{ name: string; execute: (...args: unknown[]) => Promise<unknown> }> = [];
+	const registeredTools: Array<{
+		name: string;
+		execute: (...args: unknown[]) => Promise<unknown>;
+	}> = [];
 	const pi = {
 		registerTool: (tool: { name: string; execute: (...args: unknown[]) => Promise<unknown> }) => registeredTools.push(tool),
 		registerCommand: () => {},
@@ -109,25 +115,32 @@ test("team-tool via full pi pipeline: handleRun reaches dwf dispatch (RFC 17 fix
 	// local `deps`. To exercise this path we'd need a full pi harness. For
 	// this regression test we just confirm handleRun is reachable without
 	// TDZ by calling it through a simpler entry: handleRun via dynamic import.
-	const { runDynamicWorkflow } = await import(
-		pathToFileURL(path.join(repoRoot, "src/runtime/dynamic-workflow-runner.ts")).href
-	).catch(async () => {
-		// Fallback: run handleRun directly to surface any TDZ in its module graph.
-		const runModule = await import(pathToFileURL(path.join(repoRoot, "src/extension/team-tool/run.ts")).href);
-		return { runDynamicWorkflow: null, handleRun: runModule.handleRun };
-	});
+	const { runDynamicWorkflow } = await import(pathToFileURL(path.join(repoRoot, "src/runtime/dynamic-workflow-runner.ts")).href).catch(
+		async () => {
+			// Fallback: run handleRun directly to surface any TDZ in its module graph.
+			const runModule = await import(pathToFileURL(path.join(repoRoot, "src/extension/team-tool/run.ts")).href);
+			return { runDynamicWorkflow: null, handleRun: runModule.handleRun };
+		},
+	);
 
 	// Direct handleRun invocation (catches TDZ in its module graph when loaded
 	// via jiti, even without the team-tool execute wrapper).
 	// On Windows, absolute paths passed to dynamic import() must be file:// URLs
 	// (Node rejects `D:\...` with ERR_UNSUPPORTED_ESM_URL_SCHEME: protocol 'd:').
 	const runModule = await import(pathToFileURL(path.join(repoRoot, "src/extension/team-tool/run.ts")).href);
-	const handleRun: (...args: unknown[]) => Promise<{ details?: { status?: string }; content?: Array<{ text?: string }> }> = runModule.handleRun;
+	const handleRun: (...args: unknown[]) => Promise<{
+		details?: { status?: string };
+		content?: Array<{ text?: string }>;
+	}> = runModule.handleRun;
 	assert.equal(typeof handleRun, "function", "handleRun must be exported");
 
 	const result = await handleRun(
 		{ action: "run", workflow: "rfc17-test", goal: "verify rfc17 fix" },
-		{ cwd: tmpCwd, sessionId: "rfc17-test", signal: AbortSignal.timeout(5000) },
+		{
+			cwd: tmpCwd,
+			sessionId: "rfc17-test",
+			signal: AbortSignal.timeout(5000),
+		},
 	);
 
 	// Either success OR a known-non-TDZ error. The KEY assertion is no TDZ.

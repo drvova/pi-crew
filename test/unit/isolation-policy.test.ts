@@ -1,15 +1,37 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { resolveTaskRuntimeKind } from "../../src/runtime/runtime-policy.ts";
 
 test("isolation policy defaults non-isolated roles to configured runtime", () => {
-	assert.equal(resolveTaskRuntimeKind("live-session", "reviewer", { defaultRuntime: "child-process" }), "child-process");
-	assert.equal(resolveTaskRuntimeKind("child-process", "reviewer", { defaultRuntime: "live-session" }), "live-session");
+	assert.equal(
+		resolveTaskRuntimeKind("live-session", "reviewer", {
+			defaultRuntime: "child-process",
+		}),
+		"child-process",
+	);
+	assert.equal(
+		resolveTaskRuntimeKind("child-process", "reviewer", {
+			defaultRuntime: "live-session",
+		}),
+		"live-session",
+	);
 });
 
 test("isolation policy isolated roles always use child-process unless scaffold", () => {
-	assert.equal(resolveTaskRuntimeKind("live-session", "executor", { isolatedRoles: ["executor"], defaultRuntime: "live-session" }), "child-process");
-	assert.equal(resolveTaskRuntimeKind("scaffold", "executor", { isolatedRoles: ["executor"], defaultRuntime: "child-process" }), "scaffold");
+	assert.equal(
+		resolveTaskRuntimeKind("live-session", "executor", {
+			isolatedRoles: ["executor"],
+			defaultRuntime: "live-session",
+		}),
+		"child-process",
+	);
+	assert.equal(
+		resolveTaskRuntimeKind("scaffold", "executor", {
+			isolatedRoles: ["executor"],
+			defaultRuntime: "child-process",
+		}),
+		"scaffold",
+	);
 });
 
 test("depth guard forces child-process when PI_CREW_DEPTH > 0", () => {

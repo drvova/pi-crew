@@ -14,24 +14,20 @@
  *   - workflow-delete : remove a dynamic workflow file (confirm-gated).
  */
 
-import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
-import { dirname, join, basename } from "node:path";
-import { result, type TeamContext } from "./context.ts";
-import { assertSafePathId, resolveRealContainedPath } from "../../utils/safe-paths.ts";
-import { projectCrewRoot, userPiRoot, packageRoot } from "../../utils/paths.ts";
-import { allWorkflows, discoverWorkflows } from "../../workflows/discover-workflows.ts";
-import { logInternalError } from "../../utils/internal-error.ts";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
+import { logInternalError } from "../../utils/internal-error.ts";
+import { packageRoot, projectCrewRoot, userPiRoot } from "../../utils/paths.ts";
+import { assertSafePathId, resolveRealContainedPath } from "../../utils/safe-paths.ts";
+import { allWorkflows, discoverWorkflows } from "../../workflows/discover-workflows.ts";
+import { result, type TeamContext } from "./context.ts";
 
 /** The 3 allowed bases for dynamic-workflow scripts (§0c C5). */
 function allowedWorkflowDirs(cwd: string): string[] {
 	// Fix round-6: align with discoverWorkflows (which reads userPiRoot/workflows, NOT
 	// userCrewRoot/workflows). The old userCrewRoot path silently orphaned user-scope workflows.
-	return [
-		join(projectCrewRoot(cwd), "workflows"),
-		join(userPiRoot(), "workflows"),
-		join(packageRoot(), "workflows"),
-	];
+	return [join(projectCrewRoot(cwd), "workflows"), join(userPiRoot(), "workflows"), join(packageRoot(), "workflows")];
 }
 
 /** Best-effort ADVISORY content check (review H-3): trivially bypassable
@@ -70,12 +66,20 @@ export function handleWorkflowCreate(params: TeamToolParamsValue, ctx: TeamConte
 	// runs (the run is blocked at the tool_call layer if confirm is missing). We re-check here
 	// as defense-in-depth in case the gate is bypassed.
 	if (params.confirm !== true) {
-		return result("workflow-create is a new arbitrary-code-execution surface and requires confirm:true. Add the action to DESTRUCTIVE_TEAM_ACTIONS (destructive-gate.ts) so the runtime gate enforces this.", { action: "workflow-create", status: "error" }, true);
+		return result(
+			"workflow-create is a new arbitrary-code-execution surface and requires confirm:true. Add the action to DESTRUCTIVE_TEAM_ACTIONS (destructive-gate.ts) so the runtime gate enforces this.",
+			{ action: "workflow-create", status: "error" },
+			true,
+		);
 	}
 	const name = params.config?.name as string | undefined;
 	const script = params.config?.script as string | undefined;
 	if (!name || typeof name !== "string") {
-		return result("workflow-create requires config.name (the workflow name, path-safe).", { action: "workflow-create", status: "error" }, true);
+		return result(
+			"workflow-create requires config.name (the workflow name, path-safe).",
+			{ action: "workflow-create", status: "error" },
+			true,
+		);
 	}
 	if (!script || typeof script !== "string") {
 		return result("workflow-create requires config.script (the .dwf.ts source).", { action: "workflow-create", status: "error" }, true);
@@ -88,7 +92,15 @@ export function handleWorkflowCreate(params: TeamToolParamsValue, ctx: TeamConte
 		const scope = (params.scope === "user" ? "user" : "project") as "user" | "project";
 		const filePath = resolveWorkflowWritePath(ctx.cwd, name, scope);
 		writeFileSync(filePath, script, "utf-8");
-		return result(`Dynamic workflow '${name}' created at ${filePath}.\n\nIt is now runnable via: team action='run' workflow='${name}' goal='...'\n/scripts are commit-reviewed (postinstall-equivalent trust — see docs/dynamic-workflows.md).`, { action: "workflow-create", status: "ok", data: { name, filePath, scope } }, false);
+		return result(
+			`Dynamic workflow '${name}' created at ${filePath}.\n\nIt is now runnable via: team action='run' workflow='${name}' goal='...'\n/scripts are commit-reviewed (postinstall-equivalent trust — see docs/dynamic-workflows.md).`,
+			{
+				action: "workflow-create",
+				status: "ok",
+				data: { name, filePath, scope },
+			},
+			false,
+		);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return result(`workflow-create failed: ${message}`, { action: "workflow-create", status: "error" }, true);
@@ -121,8 +133,18 @@ export function handleWorkflowGet(params: TeamToolParamsValue, ctx: TeamContext)
 			isDynamic ? "```" : "",
 			isDynamic ? source : "",
 			isDynamic ? "```" : "",
-		].filter(Boolean).join("\n"),
-		{ action: "workflow-get", status: "ok", data: { name: wf.name, runtime: wf.runtime ?? "static", filePath: wf.filePath } },
+		]
+			.filter(Boolean)
+			.join("\n"),
+		{
+			action: "workflow-get",
+			status: "ok",
+			data: {
+				name: wf.name,
+				runtime: wf.runtime ?? "static",
+				filePath: wf.filePath,
+			},
+		},
 		false,
 	);
 }
@@ -132,29 +154,52 @@ export function handleWorkflowList(params: TeamToolParamsValue, ctx: TeamContext
 	if (workflows.length === 0) return result("No workflows found.", { action: "workflow-list", status: "ok" }, false);
 	const lines = workflows.map((w) => {
 		const tag = w.runtime === "dynamic" ? "[dynamic]" : "[static] ";
-		const detail = w.runtime === "dynamic" ? w.dynamicScript ?? w.filePath : `${w.steps.length} steps`;
+		const detail = w.runtime === "dynamic" ? (w.dynamicScript ?? w.filePath) : `${w.steps.length} steps`;
 		return `  ${tag} ${w.name.padEnd(20)} ${detail}`;
 	});
-	return result(`Workflows (${workflows.length}):\n${lines.join("\n")}`, { action: "workflow-list", status: "ok", data: { count: workflows.length, workflows: workflows.map((w) => ({ name: w.name, runtime: w.runtime ?? "static" })) } }, false);
+	return result(
+		`Workflows (${workflows.length}):\n${lines.join("\n")}`,
+		{
+			action: "workflow-list",
+			status: "ok",
+			data: {
+				count: workflows.length,
+				workflows: workflows.map((w) => ({
+					name: w.name,
+					runtime: w.runtime ?? "static",
+				})),
+			},
+		},
+		false,
+	);
 }
 
 export function handleWorkflowSave(params: TeamToolParamsValue, ctx: TeamContext): ReturnType<typeof result> {
 	// H-1 (review): workflow-save writes an arbitrary .dwf.ts (ACE-equivalent) — gate it
 	// via destructive-gate.ts confirm:true (now in DESTRUCTIVE_TEAM_ACTIONS) + re-check here.
 	if (params.confirm !== true) {
-		return result("workflow-save writes an executable .dwf.ts and requires confirm:true (gated by destructive-gate.ts).", { action: "workflow-save", status: "error" }, true);
+		return result(
+			"workflow-save writes an executable .dwf.ts and requires confirm:true (gated by destructive-gate.ts).",
+			{ action: "workflow-save", status: "error" },
+			true,
+		);
 	}
 	// workflow-save: persist an ephemeral run's script as a named reusable workflow.
 	// Reads the source from config.script (the caller provides what to save).
 	const name = params.config?.name as string | undefined;
 	const script = params.config?.script as string | undefined;
-	if (!name || !script) return result("workflow-save requires config.name + config.script.", { action: "workflow-save", status: "error" }, true);
+	if (!name || !script)
+		return result("workflow-save requires config.name + config.script.", { action: "workflow-save", status: "error" }, true);
 	const validationError = validateScriptContent(script);
 	if (validationError) return result(`workflow-save rejected: ${validationError}`, { action: "workflow-save", status: "error" }, true);
 	try {
 		const filePath = resolveWorkflowWritePath(ctx.cwd, name, "project");
 		writeFileSync(filePath, script, "utf-8");
-		return result(`Saved dynamic workflow '${name}' → ${filePath}.`, { action: "workflow-save", status: "ok", data: { name, filePath } }, false);
+		return result(
+			`Saved dynamic workflow '${name}' → ${filePath}.`,
+			{ action: "workflow-save", status: "ok", data: { name, filePath } },
+			false,
+		);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return result(`workflow-save failed: ${message}`, { action: "workflow-save", status: "error" }, true);
@@ -164,13 +209,22 @@ export function handleWorkflowSave(params: TeamToolParamsValue, ctx: TeamContext
 export function handleWorkflowDelete(params: TeamToolParamsValue, ctx: TeamContext): ReturnType<typeof result> {
 	// workflow-delete is destructive (removes a file) — gated by destructive-gate.ts confirm:true.
 	if (params.confirm !== true) {
-		return result("workflow-delete requires confirm:true (gated by destructive-gate.ts).", { action: "workflow-delete", status: "error" }, true);
+		return result(
+			"workflow-delete requires confirm:true (gated by destructive-gate.ts).",
+			{ action: "workflow-delete", status: "error" },
+			true,
+		);
 	}
 	const name = (params.config?.name as string | undefined) ?? params.workflow;
 	if (!name) return result("workflow-delete requires config.name.", { action: "workflow-delete", status: "error" }, true);
 	const wf = allWorkflows(discoverWorkflows(ctx.cwd)).find((w) => w.name === name);
 	if (!wf) return result(`Workflow '${name}' not found.`, { action: "workflow-delete", status: "error" }, true);
-	if (wf.runtime !== "dynamic") return result(`Workflow '${name}' is not a dynamic workflow (only .dwf.ts files can be deleted via this action).`, { action: "workflow-delete", status: "error" }, true);
+	if (wf.runtime !== "dynamic")
+		return result(
+			`Workflow '${name}' is not a dynamic workflow (only .dwf.ts files can be deleted via this action).`,
+			{ action: "workflow-delete", status: "error" },
+			true,
+		);
 	try {
 		assertSafePathId("workflowName", name);
 		// Verify the file is inside an allowed dir before deleting.
@@ -182,9 +236,22 @@ export function handleWorkflowDelete(params: TeamToolParamsValue, ctx: TeamConte
 				return false;
 			}
 		});
-		if (!contained) return result(`Refusing to delete '${wf.filePath}': not inside an allowed workflows directory.`, { action: "workflow-delete", status: "error" }, true);
+		if (!contained)
+			return result(
+				`Refusing to delete '${wf.filePath}': not inside an allowed workflows directory.`,
+				{ action: "workflow-delete", status: "error" },
+				true,
+			);
 		rmSync(wf.filePath, { force: true });
-		return result(`Deleted dynamic workflow '${name}' (${wf.filePath}).`, { action: "workflow-delete", status: "ok", data: { name, filePath: wf.filePath } }, false);
+		return result(
+			`Deleted dynamic workflow '${name}' (${wf.filePath}).`,
+			{
+				action: "workflow-delete",
+				status: "ok",
+				data: { name, filePath: wf.filePath },
+			},
+			false,
+		);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return result(`workflow-delete failed: ${message}`, { action: "workflow-delete", status: "error" }, true);

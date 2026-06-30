@@ -14,16 +14,16 @@
  *       §0c C11 (control path: cooperative flag + handleCancel(currentRunId) via abortOwned).
  */
 
-import { result, type TeamContext } from "./context.ts";
-import { createRunPaths, saveRunManifest } from "../../state/state-store.ts";
-import { appendEvent } from "../../state/event-log.ts";
-import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
 import { GoalStore } from "../../runtime/goal-state-store.ts";
-import { logInternalError } from "../../utils/internal-error.ts";
 import { snapshotManifests } from "../../runtime/verification-integrity.ts";
 import { acquireWorkspaceLock, isWorkspaceBusy, type WorkspaceLockHandle } from "../../runtime/workspace-lock.ts";
-import type { GoalLoopState, GoalLoopStatus, TeamRunManifest } from "../../state/types.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
+import { appendEvent } from "../../state/event-log.ts";
+import { createRunPaths, saveRunManifest } from "../../state/state-store.ts";
+import type { GoalLoopState, GoalLoopStatus, TeamRunManifest } from "../../state/types.ts";
+import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
+import { logInternalError } from "../../utils/internal-error.ts";
+import { result, type TeamContext } from "./context.ts";
 
 const MAX_GOAL_OBJECTIVE_CHARS = 4000;
 
@@ -63,10 +63,14 @@ function formatGoalStatus(goal: GoalLoopState): string {
 		`  objective: ${goal.objective.slice(0, 200)}${goal.objective.length > 200 ? "…" : ""}`,
 		`  turn: ${goal.turnsUsed}/${goal.maxTurns}   budget: ${goal.budgetUsed}/${goal.budgetTotal ?? "∞"} (${budgetPct})`,
 		`  evaluator: ${goal.evaluatorModel}   worker: ${goal.workerAgent ?? "executor"}`,
-		last ? `  last verdict (turn ${last.turn}): ${last.achieved ? "ACHIEVED" : "not-achieved"} — ${last.reason.slice(0, 300)}` : "  (no verdicts yet)",
+		last
+			? `  last verdict (turn ${last.turn}): ${last.achieved ? "ACHIEVED" : "not-achieved"} — ${last.reason.slice(0, 300)}`
+			: "  (no verdicts yet)",
 		goal.nextTurnFeedback ? `  next-turn feedback: ${goal.nextTurnFeedback.slice(0, 200)}` : "",
 		goal.currentRunId ? `  current turn runId: ${goal.currentRunId}` : "",
-	].filter(Boolean).join("\n");
+	]
+		.filter(Boolean)
+		.join("\n");
 }
 
 /** `goal start` — create state + spawn background process (P0: writes state; spawn wiring TBD per host). */
@@ -79,16 +83,16 @@ async function handleStart(input: GoalSubActionInput): Promise<ReturnType<typeof
 		const goalId = store.createGoalId();
 		const ownerSessionId = ctx.sessionId ?? "unknown";
 		const now = new Date().toISOString();
-		const maxTurns = typeof params.config?.maxTurns === "number" && params.config.maxTurns > 0
-			? params.config.maxTurns
-			: 20; // Claude/Codex parity default
+		const maxTurns = typeof params.config?.maxTurns === "number" && params.config.maxTurns > 0 ? params.config.maxTurns : 20; // Claude/Codex parity default
 		// P1d (RFC v0.5 §P1d): budget is REQUIRED. Either an explicit budgetTotal (>=1000, enforced
 		// by schema) OR an explicit budgetUnlimited:true opt-out (audit-logged). No silent unbounded
 		// default — without a cap the loop could spend unboundedly across many turns × workers.
 		const budgetUnlimited = params.config?.budgetUnlimited === true;
 		const hasBudgetTotal = typeof params.budgetTotal === "number" && params.budgetTotal >= 1000;
 		if (!budgetUnlimited && !hasBudgetTotal) {
-			throw new Error("`goal start` requires either config.budgetTotal (>=1000, schema-enforced) OR config.budgetUnlimited:true (audit-logged opt-out). No silent unbounded-spend default.");
+			throw new Error(
+				"`goal start` requires either config.budgetTotal (>=1000, schema-enforced) OR config.budgetUnlimited:true (audit-logged opt-out). No silent unbounded-spend default.",
+			);
 		}
 		// Cold-review #2 nit: reject the mutually-exclusive combination. If both are set the
 		// runner silently lets budgetUnlimited win, surprising the user.
@@ -101,9 +105,17 @@ async function handleStart(input: GoalSubActionInput): Promise<ReturnType<typeof
 		// acquiring. The authoritative acquisition happens in runGoalLoop.
 		const busyOwner = isWorkspaceBusy(cwd);
 		if (busyOwner) {
-			throw new Error(`Workspace '${cwd}' is already locked by goal '${busyOwner}'. Concurrent goals on the same single-workspace cwd are serialized to prevent edit clobbering. Stop the other goal first, or use a separate workspace.`);
+			throw new Error(
+				`Workspace '${cwd}' is already locked by goal '${busyOwner}'. Concurrent goals on the same single-workspace cwd are serialized to prevent edit clobbering. Stop the other goal first, or use a separate workspace.`,
+			);
 		}
-		const verification = params.config?.verification as { commands: string[]; allowManualEvidence?: boolean; mode?: string } | undefined;
+		const verification = params.config?.verification as
+			| {
+					commands: string[];
+					allowManualEvidence?: boolean;
+					mode?: string;
+			  }
+			| undefined;
 		const isTextOnly = verification?.mode === "text-only";
 		// P1a (RFC v0.5 §P1a): take manifest-integrity snapshot at start IF verification.commands
 		// declared. For text-only mode (no objective oracle), mark "none-text-only" explicitly so
@@ -180,22 +192,46 @@ async function handleStart(input: GoalSubActionInput): Promise<ReturnType<typeof
 			runKind: "goal-loop",
 		};
 		saveRunManifest(goalLoopManifest);
-		appendEvent(paths.eventsPath, { type: "goal.loop_start", runId: goalId, data: { goalId, objective, maxTurns, statePath: `${cwd}/.crew/state/goals/${goalId}.json` } });
+		appendEvent(paths.eventsPath, {
+			type: "goal.loop_start",
+			runId: goalId,
+			data: {
+				goalId,
+				objective,
+				maxTurns,
+				statePath: `${cwd}/.crew/state/goals/${goalId}.json`,
+			},
+		});
 
 		try {
 			const spawned = await spawnBackgroundTeamRun(goalLoopManifest);
 			const pid = spawned.pid ?? 0;
-			const withAsync = { ...goalState, async: { pid, logPath: spawned.logPath, spawnedAt: new Date().toISOString() } };
+			const withAsync = {
+				...goalState,
+				async: {
+					pid,
+					logPath: spawned.logPath,
+					spawnedAt: new Date().toISOString(),
+				},
+			};
 			store.save(withAsync);
 			return result(
 				`Goal loop started (background pid=${pid}).\n${formatGoalStatus(withAsync)}\n\nNext: \`team action='goal' config.subAction='status' config.goalId='${goalId}'\`. The loop runs up to ${maxTurns} turns, judging each against the objective. Log: ${spawned.logPath}`,
-				{ action: "goal", status: "ok", data: { goalId, state: goalState.state, maxTurns, pid } },
+				{
+					action: "goal",
+					status: "ok",
+					data: { goalId, state: goalState.state, maxTurns, pid },
+				},
 				false,
 			);
 		} catch (spawnError) {
 			const message = spawnError instanceof Error ? spawnError.message : String(spawnError);
 			store.setStatus(goalId, "blocked", paths.eventsPath);
-			return result(`goal start: state saved but background spawn failed: ${message}`, { action: "goal", status: "error", data: { goalId } }, true);
+			return result(
+				`goal start: state saved but background spawn failed: ${message}`,
+				{ action: "goal", status: "error", data: { goalId } },
+				true,
+			);
 		}
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
@@ -210,11 +246,28 @@ function handleStatus(input: GoalSubActionInput): ReturnType<typeof result> {
 	if (goalId) {
 		const goal = store.load(goalId);
 		if (!goal) return result(`Goal '${goalId}' not found.`, { action: "goal", status: "error" }, true);
-		return result(formatGoalStatus(goal), { action: "goal", status: "ok", data: { goalId, state: goal.state, turnsUsed: goal.turnsUsed } }, false);
+		return result(
+			formatGoalStatus(goal),
+			{
+				action: "goal",
+				status: "ok",
+				data: { goalId, state: goal.state, turnsUsed: goal.turnsUsed },
+			},
+			false,
+		);
 	}
 	const goals = store.list();
-	if (goals.length === 0) return result("No goals found. Start one with `team action='goal' config.subAction='start' config.objective='...' config.evaluatorModel='...'`.", { action: "goal", status: "ok" }, false);
-	return result(`Goals (${goals.length}):\n\n${goals.map(formatGoalStatus).join("\n\n")}`, { action: "goal", status: "ok", data: { count: goals.length } }, false);
+	if (goals.length === 0)
+		return result(
+			"No goals found. Start one with `team action='goal' config.subAction='start' config.objective='...' config.evaluatorModel='...'`.",
+			{ action: "goal", status: "ok" },
+			false,
+		);
+	return result(
+		`Goals (${goals.length}):\n\n${goals.map(formatGoalStatus).join("\n\n")}`,
+		{ action: "goal", status: "ok", data: { count: goals.length } },
+		false,
+	);
 }
 
 /** Cooperative pause/resume/stop/clear — flip GoalLoopState.state. */
@@ -227,7 +280,15 @@ function assertGoalOwnership(goal: GoalLoopState, ctx: TeamContext, action: stri
 	// an in-flight turn potentially). Previously only 'running' was gated — a paused goal
 	// with an active currentRunId could be stop/cancelled by a foreign session without force.
 	if (owner && current && owner !== current && (goal.state === "running" || goal.state === "paused")) {
-		return result(`Goal '${goal.goalId}' belongs to session '${owner}' (you are '${current}') and is still running. Use force:true to override.`, { action, status: "error", data: { goalId: goal.goalId, ownerSessionId: owner } }, true);
+		return result(
+			`Goal '${goal.goalId}' belongs to session '${owner}' (you are '${current}') and is still running. Use force:true to override.`,
+			{
+				action,
+				status: "error",
+				data: { goalId: goal.goalId, ownerSessionId: owner },
+			},
+			true,
+		);
 	}
 	return undefined;
 }
@@ -245,7 +306,15 @@ function handleStateFlip(input: GoalSubActionInput, nextState: GoalLoopStatus, l
 	const eventsPath = createRunPaths(ctx.cwd, goalId).eventsPath;
 	const updated = store.setStatus(goalId, nextState, eventsPath);
 	if (!updated) return result(`Goal '${goalId}' not found.`, { action: "goal", status: "error" }, true);
-	return result(`Goal ${goalId} ${label} (state='${updated.state}').`, { action: "goal", status: "ok", data: { goalId, state: updated.state } }, false);
+	return result(
+		`Goal ${goalId} ${label} (state='${updated.state}').`,
+		{
+			action: "goal",
+			status: "ok",
+			data: { goalId, state: updated.state },
+		},
+		false,
+	);
 }
 
 /**
@@ -269,15 +338,35 @@ async function handleStop(input: GoalSubActionInput): Promise<ReturnType<typeof 
 	let cancelMsg = "";
 	if (updated.currentRunId) {
 		try {
-		// LAZY: defer dynamic import of ./cancel.ts to its call site.
+			// LAZY: defer dynamic import of ./cancel.ts to its call site.
 			const { handleCancel } = await import("./cancel.ts");
-			const cancelResult = await handleCancel({ action: "cancel", runId: updated.currentRunId, force: true, config: { intent: "user requested goal stop" } }, ctx);
+			const cancelResult = await handleCancel(
+				{
+					action: "cancel",
+					runId: updated.currentRunId,
+					force: true,
+					config: { intent: "user requested goal stop" },
+				},
+				ctx,
+			);
 			cancelMsg = ` In-flight turn ${updated.currentRunId} cancel: ${(cancelResult.content[0] as { text?: string } | undefined)?.text ?? "ok"}.`;
 		} catch (error) {
 			cancelMsg = ` (in-flight turn ${updated.currentRunId} cancel failed: ${error instanceof Error ? error.message : String(error)}; the loop will still exit at the next turn boundary.)`;
 		}
 	}
-	return result(`Goal ${goalId} stopped (state='cancelled').${cancelMsg}`, { action: "goal", status: "ok", data: { goalId, state: "cancelled", cancelledRunId: updated.currentRunId } }, false);
+	return result(
+		`Goal ${goalId} stopped (state='cancelled').${cancelMsg}`,
+		{
+			action: "goal",
+			status: "ok",
+			data: {
+				goalId,
+				state: "cancelled",
+				cancelledRunId: updated.currentRunId,
+			},
+		},
+		false,
+	);
 }
 
 /**
@@ -307,21 +396,37 @@ async function handleResume(input: GoalSubActionInput): Promise<ReturnType<typeo
 	// Only paused/stuck goals are resumable. (running = already running; terminal states
 	// achieved/max_turns/blocked/cancelled/budget_exceeded are done.)
 	if (existing.state !== "paused" && existing.state !== "stuck") {
-		return result(`Goal '${goalId}' is in state '${existing.state}' — only 'paused' or 'stuck' goals can be resumed.`, { action: "goal", status: "error", data: { goalId, state: existing.state } }, true);
+		return result(
+			`Goal '${goalId}' is in state '${existing.state}' — only 'paused' or 'stuck' goals can be resumed.`,
+			{
+				action: "goal",
+				status: "error",
+				data: { goalId, state: existing.state },
+			},
+			true,
+		);
 	}
 	const hint = typeof params.config?.hint === "string" ? params.config.hint.trim() : undefined;
 	const eventsPath = createRunPaths(ctx.cwd, goalId).eventsPath;
 	// CAS: only resume if the state is still what we loaded. A concurrent stop/cancel wins.
 	const updated = store.compareAndSetStatus(goalId, existing.state, "running", eventsPath);
 	if (!updated) {
-		return result(`Goal '${goalId}' state changed concurrently (resume aborted; another actor won the race).`, { action: "goal", status: "error", data: { goalId } }, true);
+		return result(
+			`Goal '${goalId}' state changed concurrently (resume aborted; another actor won the race).`,
+			{ action: "goal", status: "error", data: { goalId } },
+			true,
+		);
 	}
 	// Inject the hint as next-turn feedback (applies to turn N+1's worker prompt).
 	let withHint = updated;
 	if (hint) {
 		withHint = store.patch(goalId, { nextTurnFeedback: hint }, eventsPath) ?? updated;
 	}
-	appendEvent(eventsPath, { type: "goal.resumed", runId: goalId, data: { goalId, fromState: existing.state, hint: hint?.slice(0, 200) } });
+	appendEvent(eventsPath, {
+		type: "goal.resumed",
+		runId: goalId,
+		data: { goalId, fromState: existing.state, hint: hint?.slice(0, 200) },
+	});
 	// Re-spawn the background loop. The loop checks goal.state === "running" before each
 	// turn; since we just set it to running, it proceeds.
 	try {
@@ -346,15 +451,40 @@ async function handleResume(input: GoalSubActionInput): Promise<ReturnType<typeo
 			runKind: "goal-loop",
 		};
 		const spawned = await spawnBackgroundTeamRun(manifest);
-		return result(`Goal ${goalId} resumed from '${existing.state}' (background pid=${spawned.pid ?? 0}).${hint ? ` Hint injected for next turn.` : ""}`, { action: "goal", status: "ok", data: { goalId, state: "running", fromState: existing.state, pid: spawned.pid } }, false);
+		return result(
+			`Goal ${goalId} resumed from '${existing.state}' (background pid=${spawned.pid ?? 0}).${hint ? ` Hint injected for next turn.` : ""}`,
+			{
+				action: "goal",
+				status: "ok",
+				data: {
+					goalId,
+					state: "running",
+					fromState: existing.state,
+					pid: spawned.pid,
+				},
+			},
+			false,
+		);
 	} catch (spawnError) {
 		const msg = spawnError instanceof Error ? spawnError.message : String(spawnError);
 		// Cold-review #2 nit: roll back to the PRIOR state (paused/stuck) so the user can retry
 		// 'goal resume' (which requires paused/stuck). Leaving it at 'running' with no process made
 		// the goal un-resumable — the user had to pause-then-resume as a workaround.
 		store.compareAndSetStatus(goalId, "running", existing.state, eventsPath);
-		appendEvent(eventsPath, { type: "goal.resume_spawn_failed", runId: goalId, data: { goalId, error: msg, rolledBackTo: existing.state } });
-		return result(`Goal ${goalId} background re-spawn failed: ${msg}. State rolled back to '${existing.state}'. Retry 'goal resume' to re-attempt.`, { action: "goal", status: "error", data: { goalId, spawnFailed: true, state: existing.state } }, true);
+		appendEvent(eventsPath, {
+			type: "goal.resume_spawn_failed",
+			runId: goalId,
+			data: { goalId, error: msg, rolledBackTo: existing.state },
+		});
+		return result(
+			`Goal ${goalId} background re-spawn failed: ${msg}. State rolled back to '${existing.state}'. Retry 'goal resume' to re-attempt.`,
+			{
+				action: "goal",
+				status: "error",
+				data: { goalId, spawnFailed: true, state: existing.state },
+			},
+			true,
+		);
 	}
 }
 
@@ -388,17 +518,37 @@ export async function handleGoal(params: TeamToolParamsValue, ctx: TeamContext):
 				if (denied) return denied;
 			}
 			if (existing.state === "running" || existing.state === "paused") {
-				return result(`Goal '${clearGoalId}' is still ${existing.state}. Stop it first (team action='goal' subAction='stop' goalId='${clearGoalId}'), then clear.`, { action: "goal", status: "error", data: { goalId: clearGoalId, state: existing.state } }, true);
+				return result(
+					`Goal '${clearGoalId}' is still ${existing.state}. Stop it first (team action='goal' subAction='stop' goalId='${clearGoalId}'), then clear.`,
+					{
+						action: "goal",
+						status: "error",
+						data: { goalId: clearGoalId, state: existing.state },
+					},
+					true,
+				);
 			}
 			const removed = store.remove(clearGoalId);
 			if (!removed) return result(`Goal '${clearGoalId}' could not be removed.`, { action: "goal", status: "error" }, true);
-			return result(`Goal '${clearGoalId}' cleared (file removed).`, { action: "goal", status: "ok", data: { goalId: clearGoalId, cleared: true } }, false);
+			return result(
+				`Goal '${clearGoalId}' cleared (file removed).`,
+				{
+					action: "goal",
+					status: "ok",
+					data: { goalId: clearGoalId, cleared: true },
+				},
+				false,
+			);
 		}
 		case "step":
 			// P0: step is a status-only stub — single-turn execution lands with P1.
 			return handleStatus(input);
 		default:
-			return result(`Unknown goal subAction '${subAction}'. Known: start, status, pause, resume, stop, step, clear.`, { action: "goal", status: "error" }, true);
+			return result(
+				`Unknown goal subAction '${subAction}'. Known: start, status, pause, resume, stop, step, clear.`,
+				{ action: "goal", status: "error" },
+				true,
+			);
 	}
 }
 

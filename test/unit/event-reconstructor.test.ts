@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import type { TeamEvent } from "../../src/state/event-log.ts";
 import { reconstructTasksFromEvents, reconstructTasksFromLines } from "../../src/state/event-reconstructor.ts";
 
@@ -28,7 +28,11 @@ describe("reconstructTasksFromEvents", () => {
 	describe("single task.created event", () => {
 		it("creates a task with status 'created'", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1" }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			assert.equal(result.tasks.size, 1);
@@ -45,9 +49,24 @@ describe("reconstructTasksFromEvents", () => {
 	describe("full lifecycle: created → started → completed", () => {
 		it("reconstructs a completed task with correct timing", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1", time: "2026-01-01T00:00:00.000Z" }),
-				makeEvent({ type: "task.started", runId: "run-1", taskId: "task-1", time: "2026-01-01T00:00:01.000Z" }),
-				makeEvent({ type: "task.completed", runId: "run-1", taskId: "task-1", time: "2026-01-01T00:00:10.000Z" }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+					time: "2026-01-01T00:00:00.000Z",
+				}),
+				makeEvent({
+					type: "task.started",
+					runId: "run-1",
+					taskId: "task-1",
+					time: "2026-01-01T00:00:01.000Z",
+				}),
+				makeEvent({
+					type: "task.completed",
+					runId: "run-1",
+					taskId: "task-1",
+					time: "2026-01-01T00:00:10.000Z",
+				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			assert.equal(result.tasks.size, 1);
@@ -63,11 +82,31 @@ describe("reconstructTasksFromEvents", () => {
 	describe("multiple tasks", () => {
 		it("reconstructs all tasks independently", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1" }),
-				makeEvent({ type: "task.started", runId: "run-1", taskId: "task-1" }),
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-2" }),
-				makeEvent({ type: "task.started", runId: "run-1", taskId: "task-2" }),
-				makeEvent({ type: "task.completed", runId: "run-1", taskId: "task-1" }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
+				makeEvent({
+					type: "task.started",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-2",
+				}),
+				makeEvent({
+					type: "task.started",
+					runId: "run-1",
+					taskId: "task-2",
+				}),
+				makeEvent({
+					type: "task.completed",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			assert.equal(result.tasks.size, 2);
@@ -85,9 +124,22 @@ describe("reconstructTasksFromEvents", () => {
 	describe("failed task with error message", () => {
 		it("captures error message from task.failed event", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1" }),
-				makeEvent({ type: "task.started", runId: "run-1", taskId: "task-1" }),
-				makeEvent({ type: "task.failed", runId: "run-1", taskId: "task-1", message: "build error: missing dependency" }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
+				makeEvent({
+					type: "task.started",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
+				makeEvent({
+					type: "task.failed",
+					runId: "run-1",
+					taskId: "task-1",
+					message: "build error: missing dependency",
+				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			const task = result.tasks.get("task-1");
@@ -106,14 +158,22 @@ describe("reconstructTasksFromEvents", () => {
 					runId: "run-1",
 					taskId: "task-1",
 					data: {
-						diagnostics: { toolCalls: 5, filesEdited: 3, phase: "implementation" },
+						diagnostics: {
+							toolCalls: 5,
+							filesEdited: 3,
+							phase: "implementation",
+						},
 					},
 				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			const task = result.tasks.get("task-1");
 			assert.ok(task);
-			assert.deepEqual(task.diagnostics, { toolCalls: 5, filesEdited: 3, phase: "implementation" });
+			assert.deepEqual(task.diagnostics, {
+				toolCalls: 5,
+				filesEdited: 3,
+				phase: "implementation",
+			});
 		});
 
 		it("ignores non-object diagnostics", () => {
@@ -140,14 +200,22 @@ describe("reconstructTasksFromEvents", () => {
 					runId: "run-1",
 					taskId: "task-1",
 					data: {
-						metrics: { linesAdded: 150, linesRemoved: 30, filesChanged: 5 },
+						metrics: {
+							linesAdded: 150,
+							linesRemoved: 30,
+							filesChanged: 5,
+						},
 					},
 				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			const task = result.tasks.get("task-1");
 			assert.ok(task);
-			assert.deepEqual(task.metrics, { linesAdded: 150, linesRemoved: 30, filesChanged: 5 });
+			assert.deepEqual(task.metrics, {
+				linesAdded: 150,
+				linesRemoved: 30,
+				filesChanged: 5,
+			});
 		});
 
 		it("filters non-numeric metric values", () => {
@@ -157,7 +225,11 @@ describe("reconstructTasksFromEvents", () => {
 					runId: "run-1",
 					taskId: "task-1",
 					data: {
-						metrics: { validMetric: 42, invalidMetric: "string", nanMetric: NaN },
+						metrics: {
+							validMetric: 42,
+							invalidMetric: "string",
+							nanMetric: NaN,
+						},
 					},
 				}),
 			];
@@ -171,7 +243,11 @@ describe("reconstructTasksFromEvents", () => {
 	describe("segment tracking", () => {
 		it("preserves segment number from event data", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1" }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
 				makeEvent({
 					type: "task.started",
 					runId: "run-1",
@@ -187,12 +263,42 @@ describe("reconstructTasksFromEvents", () => {
 
 		it("tracks segment through retry lifecycle", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1", data: { segment: 0 } }),
-				makeEvent({ type: "task.started", runId: "run-1", taskId: "task-1", data: { segment: 0 } }),
-				makeEvent({ type: "task.failed", runId: "run-1", taskId: "task-1", message: "first attempt failed" }),
-				makeEvent({ type: "task.retried", runId: "run-1", taskId: "task-1", data: { segment: 1 } }),
-				makeEvent({ type: "task.started", runId: "run-1", taskId: "task-1", data: { segment: 1 } }),
-				makeEvent({ type: "task.completed", runId: "run-1", taskId: "task-1", data: { segment: 1 } }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+					data: { segment: 0 },
+				}),
+				makeEvent({
+					type: "task.started",
+					runId: "run-1",
+					taskId: "task-1",
+					data: { segment: 0 },
+				}),
+				makeEvent({
+					type: "task.failed",
+					runId: "run-1",
+					taskId: "task-1",
+					message: "first attempt failed",
+				}),
+				makeEvent({
+					type: "task.retried",
+					runId: "run-1",
+					taskId: "task-1",
+					data: { segment: 1 },
+				}),
+				makeEvent({
+					type: "task.started",
+					runId: "run-1",
+					taskId: "task-1",
+					data: { segment: 1 },
+				}),
+				makeEvent({
+					type: "task.completed",
+					runId: "run-1",
+					taskId: "task-1",
+					data: { segment: 1 },
+				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			const task = result.tasks.get("task-1");
@@ -205,9 +311,24 @@ describe("reconstructTasksFromEvents", () => {
 	describe("later events override earlier state", () => {
 		it("applies events in sequence with last-wins semantics", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1", data: { segment: 0 } }),
-				makeEvent({ type: "task.started", runId: "run-1", taskId: "task-1", data: { metrics: { attempts: 1 } } }),
-				makeEvent({ type: "task.completed", runId: "run-1", taskId: "task-1", data: { metrics: { attempts: 1, success: 1 } } }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+					data: { segment: 0 },
+				}),
+				makeEvent({
+					type: "task.started",
+					runId: "run-1",
+					taskId: "task-1",
+					data: { metrics: { attempts: 1 } },
+				}),
+				makeEvent({
+					type: "task.completed",
+					runId: "run-1",
+					taskId: "task-1",
+					data: { metrics: { attempts: 1, success: 1 } },
+				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			const task = result.tasks.get("task-1");
@@ -231,7 +352,11 @@ describe("reconstructTasksFromEvents", () => {
 
 		it("skips non-lifecycle task events", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.progress", runId: "run-1", taskId: "task-1" }),
+				makeEvent({
+					type: "task.progress",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
 			];
 			// task.progress is a lifecycle event but doesn't change status — task is created implicitly
 			const result = reconstructTasksFromEvents(events);
@@ -245,9 +370,21 @@ describe("reconstructTasksFromEvents", () => {
 	describe("cancelled and skipped tasks", () => {
 		it("reconstructs cancelled task", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1" }),
-				makeEvent({ type: "task.started", runId: "run-1", taskId: "task-1" }),
-				makeEvent({ type: "task.cancelled", runId: "run-1", taskId: "task-1" }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
+				makeEvent({
+					type: "task.started",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
+				makeEvent({
+					type: "task.cancelled",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			const task = result.tasks.get("task-1");
@@ -258,8 +395,16 @@ describe("reconstructTasksFromEvents", () => {
 
 		it("reconstructs skipped task", () => {
 			const events: TeamEvent[] = [
-				makeEvent({ type: "task.created", runId: "run-1", taskId: "task-1" }),
-				makeEvent({ type: "task.skipped", runId: "run-1", taskId: "task-1" }),
+				makeEvent({
+					type: "task.created",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
+				makeEvent({
+					type: "task.skipped",
+					runId: "run-1",
+					taskId: "task-1",
+				}),
 			];
 			const result = reconstructTasksFromEvents(events);
 			const task = result.tasks.get("task-1");

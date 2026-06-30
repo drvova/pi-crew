@@ -1,11 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	getToolConfig,
-	hasToolRestrictions,
-	getRestrictedRoles,
-	type RoleToolConfig,
-} from "../../src/config/role-tools.ts";
+import test from "node:test";
+import { getRestrictedRoles, getToolConfig, hasToolRestrictions, type RoleToolConfig } from "../../src/config/role-tools.ts";
 
 test("getToolConfig returns config for known roles", () => {
 	const explorer = getToolConfig("explorer");

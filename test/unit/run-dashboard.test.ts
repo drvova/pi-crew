@@ -1,14 +1,14 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { RunDashboard, type RunDashboardSelection } from "../../src/ui/run-dashboard.ts";
 import { saveCrewAgents } from "../../src/runtime/crew-agent-records.ts";
 import { appendMailboxMessage } from "../../src/state/mailbox.ts";
 import { createRunManifest, saveRunManifest } from "../../src/state/state-store.ts";
-import { createRunSnapshotCache } from "../../src/ui/run-snapshot-cache.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
+import { RunDashboard, type RunDashboardSelection } from "../../src/ui/run-dashboard.ts";
+import { createRunSnapshotCache } from "../../src/ui/run-snapshot-cache.ts";
 
 function run(id: string, status: TeamRunManifest["status"]): TeamRunManifest {
 	return {
@@ -54,7 +54,9 @@ test("RunDashboard renders a visibly right-sidebar title when requested", () => 
 
 test("RunDashboard emits health and notification actions", () => {
 	const selections: RunDashboardSelection[] = [];
-	const dashboard = new RunDashboard([run("team_health", "running")], (selection) => { if (selection) selections.push(selection); });
+	const dashboard = new RunDashboard([run("team_health", "running")], (selection) => {
+		if (selection) selections.push(selection);
+	});
 	dashboard.handleInput("5");
 	dashboard.handleInput("R");
 	dashboard.handleInput("5");
@@ -62,7 +64,10 @@ test("RunDashboard emits health and notification actions", () => {
 	dashboard.handleInput("5");
 	dashboard.handleInput("D");
 	dashboard.handleInput("H");
-	assert.deepEqual(selections.map((selection) => selection.action), ["health-recovery", "health-kill-stale", "health-diagnostic-export", "notifications-dismiss"]);
+	assert.deepEqual(
+		selections.map((selection) => selection.action),
+		["health-recovery", "health-kill-stale", "health-diagnostic-export", "notifications-dismiss"],
+	);
 });
 
 test("RunDashboard supports phase 5 observability hotkeys", () => {
@@ -77,7 +82,10 @@ test("RunDashboard supports phase 5 observability hotkeys", () => {
 	dashboard.handleInput("o");
 	assert.deepEqual(selected, { runId: "team_obs", action: "agent-output" });
 	dashboard.handleInput("v");
-	assert.deepEqual(selected, { runId: "team_obs", action: "agent-transcript" });
+	assert.deepEqual(selected, {
+		runId: "team_obs",
+		action: "agent-transcript",
+	});
 });
 
 test("RunDashboard renders compact agent preview", () => {
@@ -85,17 +93,27 @@ test("RunDashboard renders compact agent preview", () => {
 	try {
 		const manifest = run("team_agents", "running");
 		manifest.stateRoot = tmp;
-		saveCrewAgents(manifest, [{
-			id: "team_agents:01",
-			runId: "team_agents",
-			taskId: "01",
-			agent: "executor",
-			role: "executor",
-			runtime: "child-process",
-			status: "running",
-			startedAt: "2026-04-26T00:00:00.000Z",
-			progress: { recentTools: [], recentOutput: ["npm test"], toolCount: 1, currentTool: "bash", tokens: 42, turns: 2, activityState: "active" },
-		}]);
+		saveCrewAgents(manifest, [
+			{
+				id: "team_agents:01",
+				runId: "team_agents",
+				taskId: "01",
+				agent: "executor",
+				role: "executor",
+				runtime: "child-process",
+				status: "running",
+				startedAt: "2026-04-26T00:00:00.000Z",
+				progress: {
+					recentTools: [],
+					recentOutput: ["npm test"],
+					toolCount: 1,
+					currentTool: "bash",
+					tokens: 42,
+					turns: 2,
+					activityState: "active",
+				},
+			},
+		]);
 		const dashboard = new RunDashboard([manifest], () => {});
 		const lines = dashboard.render(120);
 		assert.ok(lines.some((line) => line.includes("Agents:")));
@@ -112,19 +130,37 @@ test("RunDashboard renders model and token details from task state", () => {
 		const manifest = run("team_usage", "completed");
 		manifest.stateRoot = tmp;
 		manifest.tasksPath = path.join(tmp, "tasks.json");
-		fs.writeFileSync(manifest.tasksPath, JSON.stringify([{ id: "01", status: "completed", usage: { input: 1000, output: 250, cacheRead: 750 }, modelAttempts: [{ model: "configured-provider/configured-model", success: true, exitCode: 0 }] }]));
-		saveCrewAgents(manifest, [{
-			id: "team_usage:01",
-			runId: "team_usage",
-			taskId: "01",
-			agent: "verifier",
-			role: "verifier",
-			runtime: "child-process",
-			status: "completed",
-			startedAt: "2026-04-26T00:00:00.000Z",
-			completedAt: "2026-04-26T00:00:05.000Z",
-			progress: { recentTools: [], recentOutput: [], toolCount: 0 },
-		}]);
+		fs.writeFileSync(
+			manifest.tasksPath,
+			JSON.stringify([
+				{
+					id: "01",
+					status: "completed",
+					usage: { input: 1000, output: 250, cacheRead: 750 },
+					modelAttempts: [
+						{
+							model: "configured-provider/configured-model",
+							success: true,
+							exitCode: 0,
+						},
+					],
+				},
+			]),
+		);
+		saveCrewAgents(manifest, [
+			{
+				id: "team_usage:01",
+				runId: "team_usage",
+				taskId: "01",
+				agent: "verifier",
+				role: "verifier",
+				runtime: "child-process",
+				status: "completed",
+				startedAt: "2026-04-26T00:00:00.000Z",
+				completedAt: "2026-04-26T00:00:05.000Z",
+				progress: { recentTools: [], recentOutput: [], toolCount: 0 },
+			},
+		]);
 		const dashboard = new RunDashboard([manifest], () => {}, {}, { showModel: true, showTokens: true });
 		const lines = dashboard.render(140);
 		assert.ok(lines.some((line) => line.includes("model=configured-provider/configured-model")));
@@ -138,14 +174,59 @@ test("RunDashboard switches live snapshot panes and shows mailbox badges", () =>
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-dashboard-panes-"));
 	try {
 		fs.mkdirSync(path.join(tmp, ".crew"), { recursive: true });
-		const team = { name: "pane-team", description: "", roles: [{ name: "worker", agent: "worker" }], source: "test", filePath: "builtin" } as never;
-		const workflow = { name: "pane-workflow", description: "", steps: [{ id: "one", role: "worker" }], source: "test", filePath: "builtin" } as never;
-		const created = createRunManifest({ cwd: tmp, team, workflow, goal: "panes" });
+		const team = {
+			name: "pane-team",
+			description: "",
+			roles: [{ name: "worker", agent: "worker" }],
+			source: "test",
+			filePath: "builtin",
+		} as never;
+		const workflow = {
+			name: "pane-workflow",
+			description: "",
+			steps: [{ id: "one", role: "worker" }],
+			source: "test",
+			filePath: "builtin",
+		} as never;
+		const created = createRunManifest({
+			cwd: tmp,
+			team,
+			workflow,
+			goal: "panes",
+		});
 		saveRunManifest({ ...created.manifest, status: "running" });
-		saveCrewAgents(created.manifest, [{ id: `${created.manifest.runId}:01`, runId: created.manifest.runId, taskId: created.tasks[0]?.id ?? "one", agent: "worker", role: "worker", runtime: "child-process", status: "running", startedAt: created.manifest.createdAt, progress: { recentTools: [], recentOutput: ["hello output"], toolCount: 1, currentTool: "bash", activityState: "needs_attention" } }]);
-		appendMailboxMessage(created.manifest, { direction: "inbox", from: "lead", to: "worker", body: "ping" });
+		saveCrewAgents(created.manifest, [
+			{
+				id: `${created.manifest.runId}:01`,
+				runId: created.manifest.runId,
+				taskId: created.tasks[0]?.id ?? "one",
+				agent: "worker",
+				role: "worker",
+				runtime: "child-process",
+				status: "running",
+				startedAt: created.manifest.createdAt,
+				progress: {
+					recentTools: [],
+					recentOutput: ["hello output"],
+					toolCount: 1,
+					currentTool: "bash",
+					activityState: "needs_attention",
+				},
+			},
+		]);
+		appendMailboxMessage(created.manifest, {
+			direction: "inbox",
+			from: "lead",
+			to: "worker",
+			body: "ping",
+		});
 		const cache = createRunSnapshotCache(tmp, { ttlMs: 0 });
-		const dashboard = new RunDashboard([created.manifest], () => {}, {}, { snapshotCache: cache, runProvider: () => [created.manifest] });
+		const dashboard = new RunDashboard(
+			[created.manifest],
+			() => {},
+			{},
+			{ snapshotCache: cache, runProvider: () => [created.manifest] },
+		);
 		dashboard.handleInput("3");
 		let lines = dashboard.render(120);
 		assert.ok(lines.some((line) => line.includes("Mailbox pane")));
@@ -166,7 +247,13 @@ test("RunDashboard renders progress preview", () => {
 		fs.writeFileSync(progressPath, "# Progress\nTask counts: completed=1\n", "utf-8");
 		const manifest = run("team_progress", "running");
 		manifest.artifactsRoot = tmp;
-		manifest.artifacts.push({ kind: "progress", path: progressPath, createdAt: "2026-04-26T00:00:00.000Z", producer: "test", retention: "run" });
+		manifest.artifacts.push({
+			kind: "progress",
+			path: progressPath,
+			createdAt: "2026-04-26T00:00:00.000Z",
+			producer: "test",
+			retention: "run",
+		});
 		const dashboard = new RunDashboard([manifest], () => {});
 		const lines = dashboard.render(100);
 		assert.ok(lines.some((line) => line.includes("Progress:")));

@@ -1,11 +1,7 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as path from "node:path";
-import {
-	detectProjectId,
-	getProjectStorageDir,
-	getGlobalStorageDir,
-} from "../../src/utils/project-detector.ts";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { detectProjectId, getGlobalStorageDir, getProjectStorageDir } from "../../src/utils/project-detector.ts";
 
 describe("detectProjectId", () => {
 	const originalEnv = process.env.CLAUDE_PROJECT_DIR;

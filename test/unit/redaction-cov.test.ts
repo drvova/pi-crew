@@ -1,12 +1,12 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
 	isSecretKey,
 	redactAuthHeader,
 	redactBearerTokens,
+	redactJsonLine,
 	redactSecretString,
 	redactSecrets,
-	redactJsonLine,
 } from "../../src/utils/redaction.ts";
 
 describe("isSecretKey", () => {
@@ -108,12 +108,12 @@ describe("isSecretKey", () => {
 
 describe("redactAuthHeader", () => {
 	it("adds redaction marker to Authorization header with non-Bearer value", () => {
-		const result = redactAuthHeader('authorization: Basic abc123');
+		const result = redactAuthHeader("authorization: Basic abc123");
 		assert.ok(result.includes("***"));
 	});
 
 	it("does not redact Bearer tokens (handled separately)", () => {
-		const result = redactAuthHeader('authorization: Bearer tok_12345678');
+		const result = redactAuthHeader("authorization: Bearer tok_12345678");
 		// Bearer tokens are handled by redactBearerTokens, not here
 		assert.ok(result.includes("Bearer"));
 	});
@@ -131,7 +131,7 @@ describe("redactAuthHeader", () => {
 
 describe("redactBearerTokens", () => {
 	it("redacts Bearer tokens with sufficient length", () => {
-		const result = redactBearerTokens('Bearer abcdefghijklmnop');
+		const result = redactBearerTokens("Bearer abcdefghijklmnop");
 		assert.ok(result.includes("Bearer "));
 		assert.ok(result.includes("***"));
 		assert.ok(!result.includes("abcdefghijklmn"));

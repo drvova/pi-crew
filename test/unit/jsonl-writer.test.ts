@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { createJsonlWriter, type DrainableSource, type JsonlWriteStream } from "../../src/state/jsonl-writer.ts";
 
 class MockSource implements DrainableSource {
@@ -42,10 +42,12 @@ class MockStream implements JsonlWriteStream {
 test("writes line and keeps trailing newline", () => {
 	const source = new MockSource();
 	const stream = new MockStream();
-	const writer = createJsonlWriter("/tmp/out.jsonl", source, { createWriteStream: () => stream });
+	const writer = createJsonlWriter("/tmp/out.jsonl", source, {
+		createWriteStream: () => stream,
+	});
 	writer.writeLine('{"type":"a"}');
 	writer.writeLine('{"type":"b"}');
-	assert.deepEqual(stream.writes, ["{\"type\":\"a\"}\n", "{\"type\":\"b\"}\n"]);
+	assert.deepEqual(stream.writes, ['{"type":"a"}\n', '{"type":"b"}\n']);
 	assert.equal(source.paused, 0);
 	assert.equal(source.resumed, 0);
 });
@@ -60,7 +62,7 @@ test("drops writes when max bytes exceeded", () => {
 	writer.writeLine('{"type":"a"}');
 	writer.writeLine('{"type":"b"}');
 	assert.equal(stream.writes.length, 1);
-	assert.equal(stream.writes[0], "{\"type\":\"a\"}\n");
+	assert.equal(stream.writes[0], '{"type":"a"}\n');
 	assert.equal(source.paused, 0);
 	assert.equal(source.resumed, 0);
 });
@@ -68,7 +70,9 @@ test("drops writes when max bytes exceeded", () => {
 test("pauses when backpressured and resumes on drain", async () => {
 	const source = new MockSource();
 	const stream = new MockStream([false, true]);
-	const writer = createJsonlWriter("/tmp/out.jsonl", source, { createWriteStream: () => stream });
+	const writer = createJsonlWriter("/tmp/out.jsonl", source, {
+		createWriteStream: () => stream,
+	});
 	writer.writeLine('{"type":"a"}');
 	assert.equal(source.paused, 1);
 	stream.emitDrain();
@@ -80,7 +84,9 @@ test("pauses when backpressured and resumes on drain", async () => {
 test("close() is safe idempotent", async () => {
 	const source = new MockSource();
 	const stream = new MockStream();
-	const writer = createJsonlWriter("/tmp/out.jsonl", source, { createWriteStream: () => stream });
+	const writer = createJsonlWriter("/tmp/out.jsonl", source, {
+		createWriteStream: () => stream,
+	});
 	await writer.close();
 	await writer.close();
 	assert.equal(stream.ended, true);
@@ -102,7 +108,7 @@ test("drops a single line that exceeds maxLineBytes (Round 21 per-line cap)", ()
 	// A normal-sized line should still go through.
 	writer.writeLine('{"type":"ok"}');
 	assert.equal(stream.writes.length, 1);
-	assert.equal(stream.writes[0], "{\"type\":\"ok\"}\n");
+	assert.equal(stream.writes[0], '{"type":"ok"}\n');
 });
 
 test("per-line cap is independent of total maxBytes (Round 21)", () => {

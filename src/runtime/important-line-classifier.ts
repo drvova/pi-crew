@@ -107,7 +107,12 @@ export function splitWithImportantLines(value: string, maxChars: number, opts: S
 	const tail = value.slice(value.length - tailLen);
 
 	if (opts.preserveImportant === false) {
-		return { head, tail, importantLines: [], baseDropped: value.length - maxChars };
+		return {
+			head,
+			tail,
+			importantLines: [],
+			baseDropped: value.length - maxChars,
+		};
 	}
 
 	const slackFactor = opts.slackFactor ?? 0.15;
@@ -126,5 +131,10 @@ export function splitWithImportantLines(value: string, maxChars: number, opts: S
 		used += addLen;
 	}
 
-	return { head, tail, importantLines: chosen, baseDropped: value.length - maxChars };
+	return {
+		head,
+		tail,
+		importantLines: chosen,
+		baseDropped: value.length - maxChars,
+	};
 }

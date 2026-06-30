@@ -21,13 +21,14 @@
  * cleanupOrphanWorkers) are protected by file locking to prevent concurrent
  * writes from causing lost updates.
  */
+
+import { execFileSync, execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execSync, execFileSync } from "node:child_process";
-import { userPiRoot } from "../utils/paths.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import { withFileLockSync } from "../state/locks.ts";
 import { isSymlinkSafePath } from "../state/atomic-write.ts";
+import { withFileLockSync } from "../state/locks.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { userPiRoot } from "../utils/paths.ts";
 
 const STALE_REGISTRATION_MS = 60 * 60 * 1000; // 1 hour
 // Grace period before a fresh worker can be cleaned up when parent is dead.
@@ -95,7 +96,10 @@ function getProcessStartTimeLinux(pid: number): number | undefined {
 		// utime(12) stime(13) cutime(14) cstime(15) priority(16) nice(17)
 		// num_threads(18) itrealvalue(19) starttime(20) vsize(21) rss(22)
 		// ...but we only need starttime which is field 22 (index 21 after comm)
-		const fieldsAfterComm = stat.slice(lastParen + 1).trim().split(/\s+/);
+		const fieldsAfterComm = stat
+			.slice(lastParen + 1)
+			.trim()
+			.split(/\s+/);
 		// starttime is at index 19 (the 20th field after comm)
 		const startTimeClockTicks = Number(fieldsAfterComm[19]);
 		if (!Number.isFinite(startTimeClockTicks)) return undefined;
@@ -139,11 +143,10 @@ function getProcessStartTimeWindows(pid: number): number | undefined {
 	// For Node.js without native modules, use tasklist /v and parse output
 	try {
 		// /v verbose, /fo csv, /nh no header
-		const output = execFileSync(
-			"powershell",
-			["-Command", `Get-Process -Id ${pid} | Select-Object -ExpandProperty StartTime`],
-			{ encoding: "utf-8", timeout: 5000 },
-		).trim();
+		const output = execFileSync("powershell", ["-Command", `Get-Process -Id ${pid} | Select-Object -ExpandProperty StartTime`], {
+			encoding: "utf-8",
+			timeout: 5000,
+		}).trim();
 		if (!output) return undefined;
 		const date = new Date(output);
 		if (Number.isNaN(date.getTime())) return undefined;
@@ -152,7 +155,6 @@ function getProcessStartTimeWindows(pid: number): number | undefined {
 		return undefined;
 	}
 }
-
 
 let REGISTRY_PATH = path.join(userPiRoot(), "state", "orphan-workers.json");
 
@@ -213,7 +215,11 @@ function writeRegistry(entries: OrphanWorkerEntry[]): void {
 	// writing to disk.
 	for (const entry of entries) {
 		if (!isValidId(entry.sessionId) || !isValidId(entry.runId)) {
-			logInternalError("orphan-worker-registry.write", new Error("Refusing to write: invalid sessionId or runId"), `sessionId=${entry.sessionId} runId=${entry.runId}`);
+			logInternalError(
+				"orphan-worker-registry.write",
+				new Error("Refusing to write: invalid sessionId or runId"),
+				`sessionId=${entry.sessionId} runId=${entry.runId}`,
+			);
 			return;
 		}
 	}
@@ -224,12 +230,20 @@ function writeRegistry(entries: OrphanWorkerEntry[]): void {
 	// isSymlinkSafePath walks the ancestor chain to detect any symlinks,
 	// preventing attacks where an intermediate ancestor is a symlink.
 	if (!isSymlinkSafePath(p)) {
-		logInternalError("orphan-worker-registry.write", new Error("Refusing to write: target is a symlink or inside untrusted directory"), `path=${p}`);
+		logInternalError(
+			"orphan-worker-registry.write",
+			new Error("Refusing to write: target is a symlink or inside untrusted directory"),
+			`path=${p}`,
+		);
 		return;
 	}
 	// Issue 2 fix: Check parent directory safety immediately before creating it.
 	if (!isSymlinkSafePath(dir)) {
-		logInternalError("orphan-worker-registry.write", new Error("Refusing to create: parent directory is a symlink or inside untrusted directory"), `dir=${dir}`);
+		logInternalError(
+			"orphan-worker-registry.write",
+			new Error("Refusing to create: parent directory is a symlink or inside untrusted directory"),
+			`dir=${dir}`,
+		);
 		return;
 	}
 	// Ensure parent directory exists to serialize directory
@@ -240,11 +254,7 @@ function writeRegistry(entries: OrphanWorkerEntry[]): void {
 	try {
 		fs.writeFileSync(p, JSON.stringify(entries, null, 2), { mode: 0o600 });
 	} catch (error) {
-		logInternalError(
-			"orphan-worker-registry.write",
-			error,
-			`path=${p} entries=${entries.length}`,
-		);
+		logInternalError("orphan-worker-registry.write", error, `path=${p} entries=${entries.length}`);
 	}
 }
 
@@ -266,9 +276,7 @@ export function registerWorker(
 	// Issue 3 fix: Validate sessionId and runId to prevent path traversal attacks.
 	if (!isValidId(sessionId) || !isValidId(runId)) return;
 	const startTime = getProcessStartTime(pid) ?? 0;
-	const parentPidStartTime = Number.isFinite(parentPid) && parentPid > 0
-		? (getProcessStartTime(parentPid) ?? 0)
-		: 0;
+	const parentPidStartTime = Number.isFinite(parentPid) && parentPid > 0 ? (getProcessStartTime(parentPid) ?? 0) : 0;
 	withFileLockSync(getRegistryPath(), () => {
 		const entries = readRegistry();
 		// Dedupe by PID
@@ -322,10 +330,13 @@ export interface CleanupOrphanWorkersResult {
  *   ALWAYS kept regardless of age. This protects concurrent sessions.
  *   Pass undefined for unconditional cleanup (e.g. from `pi-crew cleanup`).
  */
-export function cleanupOrphanWorkers(
-	currentSessionId?: string,
-): CleanupOrphanWorkersResult {
-	let result: CleanupOrphanWorkersResult = { scanned: 0, killed: 0, pruned: 0, kept: 0 };
+export function cleanupOrphanWorkers(currentSessionId?: string): CleanupOrphanWorkersResult {
+	let result: CleanupOrphanWorkersResult = {
+		scanned: 0,
+		killed: 0,
+		pruned: 0,
+		kept: 0,
+	};
 	withFileLockSync(getRegistryPath(), () => {
 		const entries = readRegistry();
 		const now = Date.now();

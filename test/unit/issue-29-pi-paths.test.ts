@@ -32,7 +32,13 @@ function canonicalizeDir(dir: string): string {
 	try {
 		const r = fs.realpathSync.native(dir);
 		return r.startsWith("\\\\?\\") ? r.slice(4) : r;
-	} catch { try { return fs.realpathSync(dir); } catch { return dir; } }
+	} catch {
+		try {
+			return fs.realpathSync(dir);
+		} catch {
+			return dir;
+		}
+	}
 }
 
 /** Make a temp dir that mimics a .pi-based project (no .crew/). */
@@ -117,8 +123,7 @@ test("issue #29 — run-tracker waitForRun error message points at .pi/teams/ in
 			`Error message should reference .pi/teams/ for .pi-based project; got: ${caught!.message}`,
 		);
 		assert.ok(
-			!caught!.message.includes(`.crew${path.sep}state${path.sep}runs`) &&
-				!caught!.message.includes(".crew/state/runs"),
+			!caught!.message.includes(`.crew${path.sep}state${path.sep}runs`) && !caught!.message.includes(".crew/state/runs"),
 			`Error message should NOT reference .crew/state/runs/ in .pi-based project; got: ${caught!.message}`,
 		);
 	} finally {
@@ -156,47 +161,17 @@ test("issue #29 — checkpoint save/load round-trips through .pi/teams/state/run
 		const ck = await import("../../src/runtime/checkpoint.ts");
 		const runId = "ck_pi_round_trip";
 		const taskId = "task-1";
-		ck.saveCheckpoint(
-			runId,
-			taskId,
-			1,
-			"ctx",
-			"progress",
-			"agent-1",
-			"model-x",
-			dir,
-		);
+		ck.saveCheckpoint(runId, taskId, 1, "ctx", "progress", "agent-1", "model-x", dir);
 		const loaded = ck.loadCheckpoint(runId, taskId, dir);
 		assert.ok(loaded, "Checkpoint should round-trip");
 		assert.equal(loaded!.taskId, taskId);
 		assert.equal(loaded!.progress, "progress");
 		// File should live at .pi/teams/state/runs/<runId>/checkpoints/<taskId>.json
-		const expectedDir = path.join(
-			dir,
-			".pi",
-			"teams",
-			"state",
-			"runs",
-			runId,
-			"checkpoints",
-		);
-		assert.ok(
-			fs.existsSync(path.join(expectedDir, `${taskId}.json`)),
-			`Checkpoint file should exist at ${expectedDir}/${taskId}.json`,
-		);
+		const expectedDir = path.join(dir, ".pi", "teams", "state", "runs", runId, "checkpoints");
+		assert.ok(fs.existsSync(path.join(expectedDir, `${taskId}.json`)), `Checkpoint file should exist at ${expectedDir}/${taskId}.json`);
 		// And NOT at .crew/state/runs/...
-		const wrongDir = path.join(
-			dir,
-			".crew",
-			"state",
-			"runs",
-			runId,
-			"checkpoints",
-		);
-		assert.ok(
-			!fs.existsSync(wrongDir),
-			`Checkpoint file should NOT exist at the wrong path: ${wrongDir}`,
-		);
+		const wrongDir = path.join(dir, ".crew", "state", "runs", runId, "checkpoints");
+		assert.ok(!fs.existsSync(wrongDir), `Checkpoint file should NOT exist at the wrong path: ${wrongDir}`);
 		// Cleanup
 		ck.clearCheckpoint(runId, taskId, dir);
 		ck.clearCheckpointStores();
@@ -225,31 +200,10 @@ test("issue #29 — skill-effectiveness paths land in .pi/teams/state/runs/ in a
 		assert.equal(activations.length, 1);
 		assert.equal(activations[0].skillId, "verification-before-done");
 		// File should exist at .pi/teams/state/runs/<runId>/skill-activations.jsonl
-		const expected = path.join(
-			dir,
-			".pi",
-			"teams",
-			"state",
-			"runs",
-			runId,
-			"skill-activations.jsonl",
-		);
-		assert.ok(
-			fs.existsSync(expected),
-			`Expected activations file at ${expected}`,
-		);
-		const wrong = path.join(
-			dir,
-			".crew",
-			"state",
-			"runs",
-			runId,
-			"skill-activations.jsonl",
-		);
-		assert.ok(
-			!fs.existsSync(wrong),
-			`Activations file should NOT exist at ${wrong}`,
-		);
+		const expected = path.join(dir, ".pi", "teams", "state", "runs", runId, "skill-activations.jsonl");
+		assert.ok(fs.existsSync(expected), `Expected activations file at ${expected}`);
+		const wrong = path.join(dir, ".crew", "state", "runs", runId, "skill-activations.jsonl");
+		assert.ok(!fs.existsSync(wrong), `Activations file should NOT exist at ${wrong}`);
 	} finally {
 		rmTemp(dir);
 	}
@@ -264,13 +218,7 @@ test("issue #29 — decision-ledger getLedgerPath uses projectCrewRoot() when st
 		const cwd = dir;
 		const runId = "ledger_pi_test";
 		// Build the expected path: projectCrewRoot(cwd)/state/runs/<runId>/decision-ledger.jsonl
-		const expected = path.join(
-			projectCrewRoot(cwd),
-			"state",
-			"runs",
-			runId,
-			"decision-ledger.jsonl",
-		);
+		const expected = path.join(projectCrewRoot(cwd), "state", "runs", runId, "decision-ledger.jsonl");
 		// The fix in decision-ledger.ts uses projectCrewRoot(cwd ?? process.cwd()).
 		// Since there's no production caller passing cwd, initLedger() will use
 		// process.cwd() — not the test cwd. So we can't directly exercise the
@@ -281,22 +229,10 @@ test("issue #29 — decision-ledger getLedgerPath uses projectCrewRoot() when st
 		const dl = await import("../../src/state/decision-ledger.ts");
 		dl.initLedger(runId);
 		const processCwdRoot = projectCrewRoot(process.cwd());
-		const expectedFromCwd = path.join(
-			processCwdRoot,
-			"state",
-			"runs",
-			runId,
-			"decision-ledger.jsonl",
-		);
-		assert.ok(
-			fs.existsSync(expectedFromCwd),
-			`Ledger should be created at ${expectedFromCwd} (process.cwd fallback)`,
-		);
+		const expectedFromCwd = path.join(processCwdRoot, "state", "runs", runId, "decision-ledger.jsonl");
+		assert.ok(fs.existsSync(expectedFromCwd), `Ledger should be created at ${expectedFromCwd} (process.cwd fallback)`);
 		// Sanity: the resolver-based path matches the structure we expect.
-		assert.ok(
-			expectedFromCwd.includes(path.join("state", "runs", runId)),
-			"Expected path structure should include state/runs/<runId>",
-		);
+		assert.ok(expectedFromCwd.includes(path.join("state", "runs", runId)), "Expected path structure should include state/runs/<runId>");
 		// Cleanup
 		try {
 			fs.rmSync(path.join(processCwdRoot, "state", "runs", runId), {

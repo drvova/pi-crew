@@ -2,24 +2,24 @@ import * as fs from "node:fs";
 import type { AgentConfig } from "../../agents/agent-config.ts";
 import type { CrewRuntimeConfig } from "../../config/config.ts";
 import { writeArtifact } from "../../state/artifact-store.ts";
-import {
-	appendEventFireAndForget,
-} from "../../state/event-log.ts";
-import type {
-	ArtifactDescriptor,
-	TeamRunManifest,
-	TeamTaskState,
-} from "../../state/types.ts";
+import { appendEventFireAndForget } from "../../state/event-log.ts";
 import { loadRunManifestById } from "../../state/state-store.ts";
-import { persistSingleTaskUpdate } from "./state-helpers.ts";
+import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../../state/types.ts";
 import type { WorkflowStep } from "../../workflows/workflow-config.ts";
-import { appendCrewAgentEvent, appendCrewAgentOutput, emptyCrewAgentProgress, recordFromTask, upsertCrewAgent } from "../crew-agent-records.ts";
+import {
+	appendCrewAgentEvent,
+	appendCrewAgentOutput,
+	emptyCrewAgentProgress,
+	recordFromTask,
+	upsertCrewAgent,
+} from "../crew-agent-records.ts";
+import { runLiveSessionTask } from "../live-session-runtime.ts";
+import type { ParsedPiJsonOutput } from "../pi-json-output.ts";
+import { type ProgressEventSummary, shouldAppendProgressEventUpdate } from "../progress-event-coalescer.ts";
 import { createWorkerHeartbeat, touchWorkerHeartbeat } from "../worker-heartbeat.ts";
 import { createStartupEvidence, type WorkerStartupEvidence } from "../worker-startup.ts";
-import { runLiveSessionTask } from "../live-session-runtime.ts";
-import { shouldAppendProgressEventUpdate, type ProgressEventSummary } from "../progress-event-coalescer.ts";
 import { applyAgentProgressEvent, applyUsageToProgress, progressEventSummary, shouldFlushProgressEvent } from "./progress.ts";
-import type { ParsedPiJsonOutput } from "../pi-json-output.ts";
+import { persistSingleTaskUpdate } from "./state-helpers.ts";
 
 export interface RunLiveTaskInput {
 	manifest: TeamRunManifest;
@@ -55,7 +55,7 @@ export interface RunLiveTaskOutput {
 }
 
 function updateTask(tasks: TeamTaskState[], updated: TeamTaskState): TeamTaskState[] {
-	return tasks.map((task) => task.id === updated.id ? updated : task);
+	return tasks.map((task) => (task.id === updated.id ? updated : task));
 }
 
 export async function runLiveTask(input: RunLiveTaskInput): Promise<RunLiveTaskOutput> {
@@ -63,13 +63,15 @@ export async function runLiveTask(input: RunLiveTaskInput): Promise<RunLiveTaskO
 	let task = input.task;
 	let tasks = input.tasks;
 	const transcriptPath = `${manifest.artifactsRoot}/transcripts/${task.id}.jsonl`;
-	const isCurrent = input.isCurrent ?? (() => {
-		if (input.signal?.aborted) return false;
-		const loaded = loadRunManifestById(manifest.cwd, manifest.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency;
-		const currentTask = loaded?.tasks.find((item) => item.id === task.id);
-		if (loaded?.manifest.status && loaded.manifest.status !== "running") return false;
-		return currentTask ? currentTask.status === "running" : true;
-	});
+	const isCurrent =
+		input.isCurrent ??
+		(() => {
+			if (input.signal?.aborted) return false;
+			const loaded = loadRunManifestById(manifest.cwd, manifest.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency;
+			const currentTask = loaded?.tasks.find((item) => item.id === task.id);
+			if (loaded?.manifest.status && loaded.manifest.status !== "running") return false;
+			return currentTask ? currentTask.status === "running" : true;
+		});
 	let lastAgentRecordPersistedAt = 0;
 	let lastRunProgressPersistedAt = 0;
 	let lastHeartbeatPersistedAt = 0;
@@ -91,10 +93,22 @@ export async function runLiveTask(input: RunLiveTaskInput): Promise<RunLiveTaskO
 			lastHeartbeatPersistedAt = now;
 		}
 		const summary = progressEventSummary(task, event);
-		const decision = shouldAppendProgressEventUpdate({ previous: lastRunProgressSummary, next: summary, nowMs: now, lastAppendMs: lastRunProgressPersistedAt || undefined, minIntervalMs: 1000, force });
+		const decision = shouldAppendProgressEventUpdate({
+			previous: lastRunProgressSummary,
+			next: summary,
+			nowMs: now,
+			lastAppendMs: lastRunProgressPersistedAt || undefined,
+			minIntervalMs: 1000,
+			force,
+		});
 		if (decision.shouldAppend) {
 			// 2.2 caller migration: see task-runner.ts.
-			appendEventFireAndForget(manifest.eventsPath, { type: "task.progress", runId: manifest.runId, taskId: task.id, data: { ...summary, coalesceReason: decision.reason } });
+			appendEventFireAndForget(manifest.eventsPath, {
+				type: "task.progress",
+				runId: manifest.runId,
+				taskId: task.id,
+				data: { ...summary, coalesceReason: decision.reason },
+			});
 			lastRunProgressSummary = summary;
 			lastRunProgressPersistedAt = now;
 		}
@@ -102,10 +116,10 @@ export async function runLiveTask(input: RunLiveTaskInput): Promise<RunLiveTaskO
 	const attemptStartedAt = new Date();
 	// Apply agent-level maxTurns override if specified (only positive integers)
 	const agentMax = agent.maxTurns;
-	const effectiveRuntimeConfig = (agentMax != null && agentMax > 0 &&
-		(!input.runtimeConfig?.maxTurns || agentMax < input.runtimeConfig.maxTurns))
-		? { ...input.runtimeConfig, maxTurns: agentMax }
-		: input.runtimeConfig;
+	const effectiveRuntimeConfig =
+		agentMax != null && agentMax > 0 && (!input.runtimeConfig?.maxTurns || agentMax < input.runtimeConfig.maxTurns)
+			? { ...input.runtimeConfig, maxTurns: agentMax }
+			: input.runtimeConfig;
 	const liveResult = await runLiveSessionTask({
 		manifest,
 		task,
@@ -131,19 +145,83 @@ export async function runLiveTask(input: RunLiveTaskInput): Promise<RunLiveTaskO
 		onEvent: (event) => {
 			if (!isCurrent()) return;
 			appendCrewAgentEvent(manifest, task.id, event);
-			task = { ...task, agentProgress: applyAgentProgressEvent(task.agentProgress ?? emptyCrewAgentProgress(), event, task.startedAt) };
+			task = {
+				...task,
+				agentProgress: applyAgentProgressEvent(task.agentProgress ?? emptyCrewAgentProgress(), event, task.startedAt),
+			};
 			tasks = updateTask(tasks, task);
 			persistLiveProgress(event);
 		},
 	});
-	const startupEvidence = createStartupEvidence({ command: "live-session", startedAt: attemptStartedAt, finishedAt: new Date(), promptSentAt: attemptStartedAt, promptAccepted: liveResult.exitCode === 0 && !liveResult.error, stderr: liveResult.stderr, error: liveResult.error, exitCode: liveResult.exitCode });
+	const startupEvidence = createStartupEvidence({
+		command: "live-session",
+		startedAt: attemptStartedAt,
+		finishedAt: new Date(),
+		promptSentAt: attemptStartedAt,
+		promptAccepted: liveResult.exitCode === 0 && !liveResult.error,
+		stderr: liveResult.stderr,
+		error: liveResult.error,
+		exitCode: liveResult.exitCode,
+	});
 	const exitCode = liveResult.exitCode;
-	const error = liveResult.error || (liveResult.exitCode && liveResult.exitCode !== 0 ? liveResult.stderr || `Live session exited with ${liveResult.exitCode}` : undefined);
-	const parsedOutput = { finalText: liveResult.stdout, textEvents: liveResult.stdout ? [liveResult.stdout] : [], jsonEvents: liveResult.jsonEvents, usage: liveResult.usage };
-	if (liveResult.usage && isCurrent()) task = { ...task, usage: liveResult.usage, agentProgress: applyUsageToProgress(task.agentProgress, liveResult.usage) };
+	const error =
+		liveResult.error ||
+		(liveResult.exitCode && liveResult.exitCode !== 0
+			? liveResult.stderr || `Live session exited with ${liveResult.exitCode}`
+			: undefined);
+	const parsedOutput = {
+		finalText: liveResult.stdout,
+		textEvents: liveResult.stdout ? [liveResult.stdout] : [],
+		jsonEvents: liveResult.jsonEvents,
+		usage: liveResult.usage,
+	};
+	if (liveResult.usage && isCurrent())
+		task = {
+			...task,
+			usage: liveResult.usage,
+			agentProgress: applyUsageToProgress(task.agentProgress, liveResult.usage),
+		};
 	persistLiveProgress({ type: "attempt_finished" }, true);
-	const resultArtifact = writeArtifact(manifest.artifactsRoot, { kind: "result", relativePath: `results/${task.id}.txt`, content: liveResult.stdout || liveResult.stderr || "(no output)", producer: task.id });
-	const logArtifact = writeArtifact(manifest.artifactsRoot, { kind: "log", relativePath: `logs/${task.id}.log`, content: [`runtime=live-session`, `finalExitCode=${exitCode ?? "null"}`, `jsonEvents=${liveResult.jsonEvents}`, liveResult.usage ? `usage=${JSON.stringify(liveResult.usage)}` : "", "", "STDOUT:", liveResult.stdout, "", "STDERR:", liveResult.stderr].join("\n"), producer: task.id });
-	const transcriptArtifact = fs.existsSync(transcriptPath) ? writeArtifact(manifest.artifactsRoot, { kind: "log", relativePath: `transcripts/${task.id}.jsonl`, content: fs.readFileSync(transcriptPath, "utf-8"), producer: task.id }) : undefined;
-	return { task, tasks, startupEvidence, exitCode, error: error || undefined, parsedOutput, resultArtifact, logArtifact, transcriptArtifact };
+	const resultArtifact = writeArtifact(manifest.artifactsRoot, {
+		kind: "result",
+		relativePath: `results/${task.id}.txt`,
+		content: liveResult.stdout || liveResult.stderr || "(no output)",
+		producer: task.id,
+	});
+	const logArtifact = writeArtifact(manifest.artifactsRoot, {
+		kind: "log",
+		relativePath: `logs/${task.id}.log`,
+		content: [
+			`runtime=live-session`,
+			`finalExitCode=${exitCode ?? "null"}`,
+			`jsonEvents=${liveResult.jsonEvents}`,
+			liveResult.usage ? `usage=${JSON.stringify(liveResult.usage)}` : "",
+			"",
+			"STDOUT:",
+			liveResult.stdout,
+			"",
+			"STDERR:",
+			liveResult.stderr,
+		].join("\n"),
+		producer: task.id,
+	});
+	const transcriptArtifact = fs.existsSync(transcriptPath)
+		? writeArtifact(manifest.artifactsRoot, {
+				kind: "log",
+				relativePath: `transcripts/${task.id}.jsonl`,
+				content: fs.readFileSync(transcriptPath, "utf-8"),
+				producer: task.id,
+			})
+		: undefined;
+	return {
+		task,
+		tasks,
+		startupEvidence,
+		exitCode,
+		error: error || undefined,
+		parsedOutput,
+		resultArtifact,
+		logArtifact,
+		transcriptArtifact,
+	};
 }

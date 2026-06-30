@@ -29,10 +29,7 @@ const MAX_BACKGROUND_RUN_MS = (() => {
 	return Number.isFinite(env) && env > 0 ? env : 2 * 60 * 60 * 1000; // 2h default
 })();
 
-const HARD_KILL_GRACE_MS = Number.parseInt(
-	process.env.PI_CREW_HARD_KILL_GRACE_MS ?? "",
-	10,
-) || 15_000;
+const HARD_KILL_GRACE_MS = Number.parseInt(process.env.PI_CREW_HARD_KILL_GRACE_MS ?? "", 10) || 15_000;
 
 // ─── Global error handlers (mirror background-runner.ts patterns) ─────────────
 // These prevent unhandled exceptions/rejections from crashing the process

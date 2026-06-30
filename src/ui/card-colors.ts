@@ -13,12 +13,17 @@
  *   15-18% — line background (visible but not loud)
  *   30-35% — word-level emphasis (prominent)
  */
-import type { CrewTheme } from "./theme-adapter.ts";
+
 import { visibleWidth as visualWidth } from "../utils/visual.ts";
+import type { CrewTheme } from "./theme-adapter.ts";
 
 // ── ANSI parsing ────────────────────────────────────────────────────────
 
-interface Rgb { r: number; g: number; b: number; }
+interface Rgb {
+	r: number;
+	g: number;
+	b: number;
+}
 
 const ANSI_RGB_FG_RE = /^\x1b?\[?38;2;(\d+);(\d+);(\d+)m?$/;
 const ANSI_RGB_BG_RE = /^\x1b?\[?48;2;(\d+);(\d+);(\d+)m?$/;
@@ -80,7 +85,9 @@ export function deriveCardBackground(
 			const bg = themeAny.getBgAnsi("background");
 			const parsed = parseAnsiRgb(bg);
 			if (parsed) base = parsed;
-		} catch { /* fall back to black */ }
+		} catch {
+			/* fall back to black */
+		}
 	}
 
 	// Get the accent from the theme's fg for the requested slot.
@@ -88,7 +95,9 @@ export function deriveCardBackground(
 	if (themeAny.getFgAnsi) {
 		try {
 			accentRgb = parseAnsiRgb(themeAny.getFgAnsi(statusSlot));
-		} catch { /* accent stays null */ }
+		} catch {
+			/* accent stays null */
+		}
 	}
 	if (!accentRgb) return ""; // can't derive — render without bg tint
 

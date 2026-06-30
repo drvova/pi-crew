@@ -3,15 +3,15 @@
  * @see src/runtime/anchor-manager.ts
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	AnchorManager,
-	createAnchorManager,
-	AnchorNotFoundError,
-	NoHandoffsError,
 	type Anchor,
+	AnchorManager,
+	AnchorNotFoundError,
 	type AnchorStatus,
+	createAnchorManager,
+	NoHandoffsError,
 } from "../../src/runtime/anchor-manager.ts";
 import type { HandoffSummary } from "../../src/runtime/handoff-manager.ts";
 
@@ -155,7 +155,13 @@ test("AnchorManager - getAnchorHandoff merges handoffs", () => {
 	const anchorId = manager.setAnchor("session-1");
 
 	manager.accumulateHandoff(anchorId, createHandoffSummary({ task: "Task 1", filesCreated: ["a.ts"] }));
-	manager.accumulateHandoff(anchorId, createHandoffSummary({ task: "Task 2", filesCreated: ["b.ts", "a.ts"] }));
+	manager.accumulateHandoff(
+		anchorId,
+		createHandoffSummary({
+			task: "Task 2",
+			filesCreated: ["b.ts", "a.ts"],
+		}),
+	);
 
 	const accumulated = manager.getAnchorHandoff(anchorId);
 	assert.ok(accumulated !== null);
@@ -169,12 +175,28 @@ test("AnchorManager - getAnchorHandoff merges metrics correctly", () => {
 	const manager = new AnchorManager();
 	const anchorId = manager.setAnchor("session-1");
 
-	manager.accumulateHandoff(anchorId, createHandoffSummary({
-		metrics: { tokensUsed: 1000, duration: 5000, iterations: 1, toolsUsed: ["read"] }
-	}));
-	manager.accumulateHandoff(anchorId, createHandoffSummary({
-		metrics: { tokensUsed: 2000, duration: 3000, iterations: 2, toolsUsed: ["write"] }
-	}));
+	manager.accumulateHandoff(
+		anchorId,
+		createHandoffSummary({
+			metrics: {
+				tokensUsed: 1000,
+				duration: 5000,
+				iterations: 1,
+				toolsUsed: ["read"],
+			},
+		}),
+	);
+	manager.accumulateHandoff(
+		anchorId,
+		createHandoffSummary({
+			metrics: {
+				tokensUsed: 2000,
+				duration: 3000,
+				iterations: 2,
+				toolsUsed: ["write"],
+			},
+		}),
+	);
 
 	const accumulated = manager.getAnchorHandoff(anchorId);
 	assert.ok(accumulated !== null);
@@ -225,31 +247,41 @@ test("AnchorManager - clearAnchorBySession clears anchor by session ID", () => {
 test("AnchorManager - clearAnchor throws AnchorNotFoundError for unknown anchor", () => {
 	const manager = new AnchorManager();
 
-	assert.throws(
-		() => manager.clearAnchor("unknown-anchor"),
-		AnchorNotFoundError,
-	);
+	assert.throws(() => manager.clearAnchor("unknown-anchor"), AnchorNotFoundError);
 });
 
 test("AnchorManager - clearAnchor throws NoHandoffsError when no handoffs", () => {
 	const manager = new AnchorManager();
 	const anchorId = manager.setAnchor("session-1");
 
-	assert.throws(
-		() => manager.clearAnchor(anchorId),
-		NoHandoffsError,
-	);
+	assert.throws(() => manager.clearAnchor(anchorId), NoHandoffsError);
 });
 
 test("AnchorManager - getAnchorStatus returns correct status", () => {
 	const manager = new AnchorManager();
 	const anchorId = manager.setAnchor("session-1", { initial: "context" });
-	manager.accumulateHandoff(anchorId, createHandoffSummary({
-		metrics: { tokensUsed: 1000, duration: 5000, iterations: 1, toolsUsed: ["read"] }
-	}));
-	manager.accumulateHandoff(anchorId, createHandoffSummary({
-		metrics: { tokensUsed: 2000, duration: 3000, iterations: 2, toolsUsed: ["write"] }
-	}));
+	manager.accumulateHandoff(
+		anchorId,
+		createHandoffSummary({
+			metrics: {
+				tokensUsed: 1000,
+				duration: 5000,
+				iterations: 1,
+				toolsUsed: ["read"],
+			},
+		}),
+	);
+	manager.accumulateHandoff(
+		anchorId,
+		createHandoffSummary({
+			metrics: {
+				tokensUsed: 2000,
+				duration: 3000,
+				iterations: 2,
+				toolsUsed: ["write"],
+			},
+		}),
+	);
 
 	const status = manager.getAnchorStatus(anchorId);
 
@@ -316,8 +348,8 @@ test("AnchorManager - getAllAnchors returns all anchors", () => {
 	const anchors = manager.getAllAnchors();
 
 	assert.strictEqual(anchors.length, 2);
-	assert.ok(anchors.some(a => a.sessionId === "session-1"));
-	assert.ok(anchors.some(a => a.sessionId === "session-2"));
+	assert.ok(anchors.some((a) => a.sessionId === "session-1"));
+	assert.ok(anchors.some((a) => a.sessionId === "session-2"));
 });
 
 test("AnchorManager - clearAll removes all anchors", () => {
@@ -369,12 +401,24 @@ test("AnchorManager - accumulates decisions across handoffs", () => {
 	const manager = new AnchorManager();
 	const anchorId = manager.setAnchor("session-1");
 
-	manager.accumulateHandoff(anchorId, createHandoffSummary({
-		decisions: [createDecision()]
-	}));
-	manager.accumulateHandoff(anchorId, createHandoffSummary({
-		decisions: [{ rationale: "Second decision", outcome: "Done", alternativesConsidered: [] }]
-	}));
+	manager.accumulateHandoff(
+		anchorId,
+		createHandoffSummary({
+			decisions: [createDecision()],
+		}),
+	);
+	manager.accumulateHandoff(
+		anchorId,
+		createHandoffSummary({
+			decisions: [
+				{
+					rationale: "Second decision",
+					outcome: "Done",
+					alternativesConsidered: [],
+				},
+			],
+		}),
+	);
 
 	const accumulated = manager.getAnchorHandoff(anchorId);
 	assert.strictEqual(accumulated!.decisions.length, 2);
@@ -427,7 +471,7 @@ test("AnchorManager - emits anchor:created event", () => {
 
 	manager.setAnchor("session-1");
 
-	assert.ok(emittedEvents.some(e => e.event === "anchor:created"));
+	assert.ok(emittedEvents.some((e) => e.event === "anchor:created"));
 });
 
 test("AnchorManager - emits anchor:handoffAccumulated event", () => {
@@ -443,7 +487,7 @@ test("AnchorManager - emits anchor:handoffAccumulated event", () => {
 	const anchorId = manager.setAnchor("session-1");
 	manager.accumulateHandoff(anchorId, createHandoffSummary());
 
-	assert.ok(emittedEvents.some(e => e.event === "anchor:handoffAccumulated"));
+	assert.ok(emittedEvents.some((e) => e.event === "anchor:handoffAccumulated"));
 });
 
 test("AnchorManager - emits anchor:cleared event", () => {
@@ -460,7 +504,7 @@ test("AnchorManager - emits anchor:cleared event", () => {
 	manager.accumulateHandoff(anchorId, createHandoffSummary());
 	manager.clearAnchor(anchorId);
 
-	assert.ok(emittedEvents.some(e => e.event === "anchor:cleared"));
+	assert.ok(emittedEvents.some((e) => e.event === "anchor:cleared"));
 });
 
 test("AnchorManager - emits anchor:cleared_all event", () => {
@@ -477,7 +521,7 @@ test("AnchorManager - emits anchor:cleared_all event", () => {
 	manager.setAnchor("session-2");
 	manager.clearAll();
 
-	assert.ok(emittedEvents.some(e => e.event === "anchor:cleared_all"));
+	assert.ok(emittedEvents.some((e) => e.event === "anchor:cleared_all"));
 });
 
 test("createAnchorManager factory creates instance", () => {
@@ -507,11 +551,14 @@ test("AnchorManager - handles empty files array", () => {
 	const manager = new AnchorManager();
 	const anchorId = manager.setAnchor("session-1");
 
-	manager.accumulateHandoff(anchorId, createHandoffSummary({
-		filesCreated: [],
-		filesModified: [],
-		filesDeleted: [],
-	}));
+	manager.accumulateHandoff(
+		anchorId,
+		createHandoffSummary({
+			filesCreated: [],
+			filesModified: [],
+			filesDeleted: [],
+		}),
+	);
 
 	const accumulated = manager.getAnchorHandoff(anchorId);
 	assert.deepEqual(accumulated!.filesCreated, []);

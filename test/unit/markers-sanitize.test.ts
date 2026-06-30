@@ -1,11 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	MARKER_START,
-	MARKER_END,
-	sanitizeGuidanceContent,
-	extractGuidanceIds,
-} from "../../src/config/markers.ts";
+import test from "node:test";
+import { extractGuidanceIds, MARKER_END, MARKER_START, sanitizeGuidanceContent } from "../../src/config/markers.ts";
 
 /**
  * Round 24 (test coverage gaps): `markers.ts` provides HTML-comment-based
@@ -84,13 +79,9 @@ test("sanitizeGuidanceContent: leaves normal markdown intact", () => {
 // ─── extractGuidanceIds ────────────────────────────────────────────────────
 
 test("extractGuidanceIds: extracts single ID", () => {
-	const content = [
-		MARKER_START,
-		"<!-- PI-CREW:BLOCK:test-id -->",
-		"some content",
-		"<!-- PI-CREW:/BLOCK:test-id -->",
-		MARKER_END,
-	].join("\n");
+	const content = [MARKER_START, "<!-- PI-CREW:BLOCK:test-id -->", "some content", "<!-- PI-CREW:/BLOCK:test-id -->", MARKER_END].join(
+		"\n",
+	);
 	const ids = extractGuidanceIds(content);
 	assert.deepEqual(ids, ["test-id"]);
 });
@@ -121,11 +112,7 @@ test("extractGuidanceIds: returns empty array for empty string", () => {
 });
 
 test("extractGuidanceIds: extracts IDs even outside start/end markers", () => {
-	const content = [
-		"<!-- PI-CREW:BLOCK:outside -->",
-		"not inside start/end markers",
-		"<!-- PI-CREW:/BLOCK:outside -->",
-	].join("\n");
+	const content = ["<!-- PI-CREW:BLOCK:outside -->", "not inside start/end markers", "<!-- PI-CREW:/BLOCK:outside -->"].join("\n");
 	const ids = extractGuidanceIds(content);
 	// extractGuidanceIds uses a global regex and does not check for start/end
 	// markers — it extracts ALL block IDs in the content.

@@ -24,7 +24,10 @@ export const SMOKE_ENABLED = process.env.PI_CREW_SMOKE === "1";
 export const SKIP_REASON = "set PI_CREW_SMOKE=1 to run real-binary smoke tests (bills tokens)";
 
 /** Create a unique temp cwd and return it + a cleanup fn. */
-export function makeTmpCwd(prefix: string): { cwd: string; cleanup: () => void } {
+export function makeTmpCwd(prefix: string): {
+	cwd: string;
+	cleanup: () => void;
+} {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), `pi-crew-smoke-${prefix}-`));
 	return {
 		cwd,
@@ -60,8 +63,6 @@ export function fakeExecutorAgent(overrides: Partial<AgentConfig> = {}): AgentCo
  */
 export function assertHasAnswer(stdout: string, marker: string, context: string): void {
 	if (!stdout.includes(marker)) {
-		throw new Error(
-			`${context}: expected stdout to contain "${marker}". Got (last 200 chars): ${stdout.slice(-200) || "(empty)"}`,
-		);
+		throw new Error(`${context}: expected stdout to contain "${marker}". Got (last 200 chars): ${stdout.slice(-200) || "(empty)"}`);
 	}
 }

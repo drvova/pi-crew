@@ -1,6 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { clearLiveControlRealtimeForTest, liveControlRealtimeMessage, parseLiveControlRealtimeMessage, publishLiveControlRealtime, subscribeLiveControlRealtime } from "../../src/runtime/live-control-realtime.ts";
+import test from "node:test";
+import {
+	clearLiveControlRealtimeForTest,
+	liveControlRealtimeMessage,
+	parseLiveControlRealtimeMessage,
+	publishLiveControlRealtime,
+	subscribeLiveControlRealtime,
+} from "../../src/runtime/live-control-realtime.ts";
 
 const request = {
 	id: "ctrl_test",

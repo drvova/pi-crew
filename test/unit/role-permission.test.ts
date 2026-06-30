@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { checkSubagentSpawnPermission, currentCrewRole, permissionForRole } from "../../src/runtime/role-permission.ts";
 
 test("role permissions classify read-only and write roles", () => {

@@ -1,10 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	isDangerous,
-	validateCommand,
-	createSafeBash,
-} from "../../src/tools/safe-bash.ts";
+import { describe, it } from "node:test";
+import { createSafeBash, isDangerous, validateCommand } from "../../src/tools/safe-bash.ts";
 
 /**
  * safe-bash-extension.ts delegates to isDangerous() from safe-bash.ts.
@@ -67,7 +63,11 @@ describe("isDangerous", () => {
 	});
 
 	it("allows additional custom patterns", () => {
-		assert.ok(isDangerous("my-custom-danger", { additionalPatterns: [/my-custom-danger/] }));
+		assert.ok(
+			isDangerous("my-custom-danger", {
+				additionalPatterns: [/my-custom-danger/],
+			}),
+		);
 	});
 
 	it("allowPatterns override dangerous detection", () => {
@@ -75,10 +75,7 @@ describe("isDangerous", () => {
 	});
 
 	it("rejects overly permissive allowPattern", () => {
-		assert.throws(
-			() => isDangerous("rm -rf /", { allowPatterns: [/.*/] }),
-			/permissive/,
-		);
+		assert.throws(() => isDangerous("rm -rf /", { allowPatterns: [/.*/] }), /permissive/);
 	});
 
 	it("strips ANSI escapes before checking", () => {
@@ -94,10 +91,7 @@ describe("isDangerous", () => {
 
 describe("validateCommand", () => {
 	it("throws on dangerous command", () => {
-		assert.throws(
-			() => validateCommand("rm -rf /"),
-			/blocked/,
-		);
+		assert.throws(() => validateCommand("rm -rf /"), /blocked/);
 	});
 
 	it("does not throw on safe command", () => {

@@ -1,7 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { registerPiCrewRpc, type EventBusLike } from "../../src/extension/cross-extension-rpc.ts";
-import { clearLiveControlRealtimeForTest, liveControlRealtimeMessage, subscribeLiveControlRealtime } from "../../src/runtime/live-control-realtime.ts";
+import test from "node:test";
+import { type EventBusLike, registerPiCrewRpc } from "../../src/extension/cross-extension-rpc.ts";
+import {
+	clearLiveControlRealtimeForTest,
+	liveControlRealtimeMessage,
+	subscribeLiveControlRealtime,
+} from "../../src/runtime/live-control-realtime.ts";
 
 class Bus implements EventBusLike {
 	handlers = new Map<string, Array<(data: unknown) => void>>();
@@ -10,7 +14,11 @@ class Bus implements EventBusLike {
 		const list = this.handlers.get(event) ?? [];
 		list.push(handler);
 		this.handlers.set(event, list);
-		return () => this.handlers.set(event, (this.handlers.get(event) ?? []).filter((item) => item !== handler));
+		return () =>
+			this.handlers.set(
+				event,
+				(this.handlers.get(event) ?? []).filter((item) => item !== handler),
+			);
 	}
 	emit(event: string, data: unknown): void {
 		this.emitted.push({ event, data });
@@ -38,7 +46,13 @@ test("pi-crew event bus forwards realtime live-control messages", () => {
 		seen.push(request);
 	});
 	const handle = registerPiCrewRpc(bus, () => undefined as never)!;
-	const request = { id: "ctrl_rpc", runId: "run", taskId: "task", operation: "stop" as const, createdAt: "2026-04-27T00:00:00.000Z" };
+	const request = {
+		id: "ctrl_rpc",
+		runId: "run",
+		taskId: "task",
+		operation: "stop" as const,
+		createdAt: "2026-04-27T00:00:00.000Z",
+	};
 	try {
 		bus.emit("pi-crew:live-control", liveControlRealtimeMessage(request));
 		assert.deepEqual(seen, [request]);

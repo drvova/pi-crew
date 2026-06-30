@@ -16,32 +16,31 @@ export type RunEventType =
 	| "run.cache_invalidated";
 
 /** Typed channel names for category-based event subscription. */
-export type EventChannel =
-	| "worker:progress"
-	| "worker:lifecycle"
-	| "worker:stream"
-	| "run:state"
-	| "ui:invalidate";
+export type EventChannel = "worker:progress" | "worker:lifecycle" | "worker:stream" | "run:state" | "ui:invalidate";
 
 /** Sets used by classifyEventChannel for O(1) lookup. */
-const WORKER_PROGRESS_TYPES = new Set([
-	"tool_execution_start", "tool_result", "agent_progress", "worker_status",
-]);
+const WORKER_PROGRESS_TYPES = new Set(["tool_execution_start", "tool_result", "agent_progress", "worker_status"]);
 const WORKER_LIFECYCLE_TYPES = new Set([
-	"task.started", "task.completed", "task.failed", "task.needs_attention",
-	"task_started", "task_completed", "task_failed", "task_cancelled",
-	"run.started", "run.completed", "run.cancelled", "run.failed",
-	"run_started", "run_completed", "run_cancelled", "run_blocked",
+	"task.started",
+	"task.completed",
+	"task.failed",
+	"task.needs_attention",
+	"task_started",
+	"task_completed",
+	"task_failed",
+	"task_cancelled",
+	"run.started",
+	"run.completed",
+	"run.cancelled",
+	"run.failed",
+	"run_started",
+	"run_completed",
+	"run_cancelled",
+	"run_blocked",
 ]);
-const WORKER_STREAM_TYPES = new Set([
-	"stdout_chunk", "stderr_chunk", "stream",
-]);
-const RUN_STATE_TYPES = new Set([
-	"manifest.saved", "task.claimed", "task.unclaimed", "mailbox_updated",
-]);
-const UI_INVALIDATE_TYPES = new Set([
-	"effectiveness_changed", "snapshot_stale", "run.cache_invalidated",
-]);
+const WORKER_STREAM_TYPES = new Set(["stdout_chunk", "stderr_chunk", "stream"]);
+const RUN_STATE_TYPES = new Set(["manifest.saved", "task.claimed", "task.unclaimed", "mailbox_updated"]);
+const UI_INVALIDATE_TYPES = new Set(["effectiveness_changed", "snapshot_stale", "run.cache_invalidated"]);
 
 /** Classify an event type string into a typed channel. */
 export function classifyEventChannel(type: string): EventChannel {
@@ -86,12 +85,17 @@ class RunEventBus {
 		const listeners = this.#listeners.get(runId) ?? new Set();
 		listeners.add(callback);
 		this.#listeners.set(runId, listeners);
-		return () => { listeners.delete(callback); if (listeners.size === 0) this.#listeners.delete(runId); };
+		return () => {
+			listeners.delete(callback);
+			if (listeners.size === 0) this.#listeners.delete(runId);
+		};
 	}
 
 	onAny(callback: RunEventCallback): () => void {
 		this.#globalListeners.add(callback);
-		return () => { this.#globalListeners.delete(callback); };
+		return () => {
+			this.#globalListeners.delete(callback);
+		};
 	}
 
 	off(runId: string, callback: RunEventCallback): void {
@@ -151,17 +155,15 @@ class RunEventBus {
 	 *                    fan-out to other subscribers).
 	 * @returns unsubscribe handle (detaches the live listener).
 	 */
-	onWithReplay(
-		runId: string,
-		eventsPath: string,
-		lastSeenSeq: number,
-		callback: RunEventCallback,
-	): () => void {
+	onWithReplay(runId: string, eventsPath: string, lastSeenSeq: number, callback: RunEventCallback): () => void {
 		// Phase 1: replay missed events from the durable log directly to this
 		// callback. Bounded by limit; readEventsCursor already tail-caps.
 		let maxReplayedSeq = lastSeenSeq;
 		try {
-			const cursor = readEventsCursor(eventsPath, { sinceSeq: lastSeenSeq, limit: 1000 });
+			const cursor = readEventsCursor(eventsPath, {
+				sinceSeq: lastSeenSeq,
+				limit: 1000,
+			});
 			for (const teamEvent of cursor.events) {
 				const type = teamEventToRunEventType(teamEvent);
 				if (!type) continue; // not all TeamEvents map to a RunEventType
@@ -174,7 +176,11 @@ class RunEventBus {
 					channel: classifyEventChannel(type),
 					seq: teamEvent.metadata?.seq,
 				};
-				try { callback(payload); } catch { /* subscriber errors are non-fatal */ }
+				try {
+					callback(payload);
+				} catch {
+					/* subscriber errors are non-fatal */
+				}
 				if (typeof teamEvent.metadata?.seq === "number") {
 					maxReplayedSeq = Math.max(maxReplayedSeq, teamEvent.metadata.seq);
 				}
@@ -208,20 +214,32 @@ class RunEventBus {
 		const listeners = this.#listeners.get(event.runId);
 		if (listeners) {
 			for (const cb of listeners) {
-				try { cb(event); } catch { /* subscriber errors are non-fatal */ }
+				try {
+					cb(event);
+				} catch {
+					/* subscriber errors are non-fatal */
+				}
 			}
 		}
 
 		// Existing: global listeners
 		for (const cb of this.#globalListeners) {
-			try { cb(event); } catch { /* subscriber errors are non-fatal */ }
+			try {
+				cb(event);
+			} catch {
+				/* subscriber errors are non-fatal */
+			}
 		}
 
 		// New: channel listeners
 		const channelListeners = this.#channelListeners.get(channel);
 		if (channelListeners) {
 			for (const cb of channelListeners) {
-				try { cb(event); } catch { /* subscriber errors are non-fatal */ }
+				try {
+					cb(event);
+				} catch {
+					/* subscriber errors are non-fatal */
+				}
 			}
 		}
 
@@ -232,7 +250,11 @@ class RunEventBus {
 			const runChannelListeners = runMap.get(channel);
 			if (runChannelListeners) {
 				for (const cb of runChannelListeners) {
-					try { cb(event); } catch { /* subscriber errors are non-fatal */ }
+					try {
+						cb(event);
+					} catch {
+						/* subscriber errors are non-fatal */
+					}
 				}
 			}
 		}

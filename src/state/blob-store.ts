@@ -1,10 +1,10 @@
+import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { createHash, randomUUID } from "node:crypto";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
+import { sleepSync } from "../utils/sleep.ts";
 import { atomicWriteFile, renameWithRetry } from "./atomic-write.ts";
 import { withFileLockSync } from "./locks.ts";
-import { sleepSync } from "../utils/sleep.ts";
 
 const SHA256_HEX = /^[a-f0-9]{64}$/i;
 
@@ -32,11 +32,19 @@ function atomicWriteBuffer(filePath: string, content: Buffer): void {
 		fs.writeSync(fd, content, 0, content.length);
 		renameWithRetry(tempPath, filePath);
 	} catch (error) {
-		try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
+		try {
+			fs.rmSync(tempPath, { force: true });
+		} catch {
+			/* best-effort */
+		}
 		throw error;
 	} finally {
 		// Always close fd; closeSync is safe to call even if fd was already closed
-		try { fs.closeSync(fd); } catch { /* best-effort */ }
+		try {
+			fs.closeSync(fd);
+		} catch {
+			/* best-effort */
+		}
 	}
 }
 
@@ -75,7 +83,9 @@ export interface BlobWriteResult {
 }
 
 function sha256Of(content: string | Buffer): string {
-	return createHash("sha256").update(typeof content === "string" ? content : content).digest("hex");
+	return createHash("sha256")
+		.update(typeof content === "string" ? content : content)
+		.digest("hex");
 }
 
 /**
@@ -85,16 +95,19 @@ function sha256Of(content: string | Buffer): string {
  * partial writes on crash. The deduplication check is now advisory (the atomic
  * write handles concurrent writes correctly via O_EXCL temp file pattern).
  */
-export function writeBlob(artifactsRoot: string, input: {
-	content: string | Buffer;
-	runId: string;
-	taskId?: string;
-	mime?: string;
-	producer: string;
-	originalPath: string;
-	redacted?: boolean;
-	retention?: BlobMetadata["retention"];
-}): BlobWriteResult {
+export function writeBlob(
+	artifactsRoot: string,
+	input: {
+		content: string | Buffer;
+		runId: string;
+		taskId?: string;
+		mime?: string;
+		producer: string;
+		originalPath: string;
+		redacted?: boolean;
+		retention?: BlobMetadata["retention"];
+	},
+): BlobWriteResult {
 	const content = input.content;
 	const hash = sha256Of(content);
 	const algorithm = SHA256_PREFIX;
@@ -165,11 +178,15 @@ export function writeBlob(artifactsRoot: string, input: {
 				// taskId, the conflict check passes and both writes succeed — the
 				// final taskId reflects whichever write completed last.
 				// Callers should not rely on taskId for correctness-critical decisions.
-				if (existingMeta.mime !== metadata.mime ||
+				if (
+					existingMeta.mime !== metadata.mime ||
 					existingMeta.retention !== metadata.retention ||
 					existingMeta.producer !== metadata.producer ||
-					existingMeta.originalPath !== metadata.originalPath) {
-					throw new Error(`Concurrent metadata write conflict for blob ${hash}: different metadata values detected. Existing: ${JSON.stringify(existingMeta)}, New: ${JSON.stringify(metadata)}`);
+					existingMeta.originalPath !== metadata.originalPath
+				) {
+					throw new Error(
+						`Concurrent metadata write conflict for blob ${hash}: different metadata values detected. Existing: ${JSON.stringify(existingMeta)}, New: ${JSON.stringify(metadata)}`,
+					);
 				}
 			} catch (err) {
 				if (err instanceof Error && err.message.includes("ENOENT")) {
@@ -203,7 +220,11 @@ export function writeBlob(artifactsRoot: string, input: {
 		// file from a failed content write) — which is the only unambiguously-safe
 		// case to clean up here.
 		if (!blobContentWritten) {
-			try { fs.rmSync(blobPath, { force: true }); } catch { /* best-effort */ }
+			try {
+				fs.rmSync(blobPath, { force: true });
+			} catch {
+				/* best-effort */
+			}
 		}
 		throw error;
 	}
@@ -211,7 +232,13 @@ export function writeBlob(artifactsRoot: string, input: {
 	// Issue 2 fix: resolve paths before writes and return cached values
 	const resolvedBlobPath = resolveRealContainedPath(artifactsRoot, blobPath);
 	const resolvedMetadataPath = resolveRealContainedPath(artifactsRoot, metadataPath);
-	return { hash, algorithm, blobPath: resolvedBlobPath, metadataPath: resolvedMetadataPath, sizeBytes: metadata.sizeBytes };
+	return {
+		hash,
+		algorithm,
+		blobPath: resolvedBlobPath,
+		metadataPath: resolvedMetadataPath,
+		sizeBytes: metadata.sizeBytes,
+	};
 }
 
 /**

@@ -2,9 +2,9 @@
  * Widget type definitions.
  */
 
-import type { TeamRunManifest } from "../../state/types.ts";
 import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
 import type { ManifestCache } from "../../runtime/manifest-cache.ts";
+import type { TeamRunManifest } from "../../state/types.ts";
 import type { RunSnapshotCache, RunUiSnapshot } from "../snapshot-types.ts";
 
 export interface WidgetRun {

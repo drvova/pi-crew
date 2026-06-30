@@ -14,10 +14,11 @@
  *
  * Template origin: `confirm-overlay.ts`.
  */
-import { Box, Text } from "../layout-primitives.ts";
-import { asCrewTheme, type CrewTheme } from "../theme-adapter.ts";
+
 import { pad, truncate } from "../../utils/visual.ts";
 import { DASHBOARD_KEYS } from "../keybinding-map.ts";
+import { Box, Text } from "../layout-primitives.ts";
+import { asCrewTheme, type CrewTheme } from "../theme-adapter.ts";
 
 /** Translate a raw key sequence into a readable token for the cheatsheet. */
 function keyToken(key: string): string {
@@ -89,7 +90,10 @@ function buildHelpGroups(): HelpGroup[] {
 	}));
 	const mailboxEntries: HelpEntry[] = Object.entries(DASHBOARD_KEYS.mailbox)
 		.filter(([name]) => name !== "openDetail")
-		.map(([name, keys]) => ({ keys: keyList(keys), label: MAILBOX_LABELS[name] ?? name }));
+		.map(([name, keys]) => ({
+			keys: keyList(keys),
+			label: MAILBOX_LABELS[name] ?? name,
+		}));
 	const healthEntries: HelpEntry[] = Object.entries(DASHBOARD_KEYS.health).map(([name, keys]) => ({
 		keys: keyList(keys),
 		label: HEALTH_LABELS[name] ?? name,
@@ -98,15 +102,24 @@ function buildHelpGroups(): HelpGroup[] {
 		{
 			title: "General",
 			entries: [
-				{ keys: keyList(DASHBOARD_KEYS.close), label: "close dashboard" },
-				{ keys: keyList(DASHBOARD_KEYS.select), label: "open run status" },
+				{
+					keys: keyList(DASHBOARD_KEYS.close),
+					label: "close dashboard",
+				},
+				{
+					keys: keyList(DASHBOARD_KEYS.select),
+					label: "open run status",
+				},
 				{ keys: "?", label: "toggle this help" },
 			],
 		},
 		{
 			title: "Navigation",
 			entries: [
-				{ keys: `${keyList(DASHBOARD_KEYS.navigation.up)}/${keyList(DASHBOARD_KEYS.navigation.down)}`, label: "move selection" },
+				{
+					keys: `${keyList(DASHBOARD_KEYS.navigation.up)}/${keyList(DASHBOARD_KEYS.navigation.down)}`,
+					label: "move selection",
+				},
 			],
 		},
 		{ title: "Panes", entries: paneEntries },
@@ -116,7 +129,10 @@ function buildHelpGroups(): HelpGroup[] {
 			title: "Health & notifications",
 			entries: [
 				...healthEntries,
-				{ keys: keyList(DASHBOARD_KEYS.notification.dismissAll), label: "dismiss notifs" },
+				{
+					keys: keyList(DASHBOARD_KEYS.notification.dismissAll),
+					label: "dismiss notifs",
+				},
 			],
 		},
 	];
@@ -144,17 +160,12 @@ export class HelpOverlay {
 		const mid = fg("border", `├${bar}┤`);
 		const bot = fg("border", `╰${bar}╯`);
 		const keyCol = 9;
-		const lines: string[] = [
-			top,
-			row(`${fg("accent", "pi-crew dashboard")} ${fg("dim", "— key reference (press ? to close)")}`),
-			mid,
-		];
+		const lines: string[] = [top, row(`${fg("accent", "pi-crew dashboard")} ${fg("dim", "— key reference (press ? to close)")}`), mid];
 		for (const group of buildHelpGroups()) {
 			lines.push(row(fg("accent", group.title)));
 			for (let i = 0; i < group.entries.length; i += 2) {
 				const pair = group.entries.slice(i, i + 2);
-				const cell = (entry: HelpEntry) =>
-					`${this.theme.bold(pad(entry.keys, keyCol))}${fg("dim", truncate(entry.label, 16))}`;
+				const cell = (entry: HelpEntry) => `${this.theme.bold(pad(entry.keys, keyCol))}${fg("dim", truncate(entry.label, 16))}`;
 				lines.push(row(pair.map(cell).join("   ")));
 			}
 		}

@@ -1,18 +1,18 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import {
+	activeRunEntries,
+	activeRunRoots,
 	readActiveRunRegistry,
 	registerActiveRun,
 	unregisterActiveRun,
-	activeRunEntries,
-	activeRunRoots,
 } from "../../src/state/active-run-registry.ts";
 import { createRunManifest, updateRunStatus } from "../../src/state/state-store.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 
 const team: TeamConfig = {
 	name: "test-team",
@@ -73,7 +73,12 @@ describe("registerActiveRun + unregisterActiveRun", () => {
 	it("registers and reads back a run", () => {
 		withIsolatedHome(() => {
 			const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-ar-reg-cwd-"));
-			const { manifest } = createRunManifest({ cwd, team, workflow, goal: "test" });
+			const { manifest } = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "test",
+			});
 			registerActiveRun(manifest);
 			const entries = readActiveRunRegistry();
 			assert.ok(entries.length >= 1);
@@ -85,7 +90,12 @@ describe("registerActiveRun + unregisterActiveRun", () => {
 	it("unregisters a run by id", () => {
 		withIsolatedHome(() => {
 			const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-ar-unreg-cwd-"));
-			const { manifest } = createRunManifest({ cwd, team, workflow, goal: "test" });
+			const { manifest } = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "test",
+			});
 			registerActiveRun(manifest);
 			unregisterActiveRun(manifest.runId);
 			const entries = readActiveRunRegistry();
@@ -105,7 +115,12 @@ describe("registerActiveRun + unregisterActiveRun", () => {
 	it("registering the same runId twice deduplicates", () => {
 		withIsolatedHome(() => {
 			const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-ar-dedup-cwd-"));
-			const { manifest } = createRunManifest({ cwd, team, workflow, goal: "test" });
+			const { manifest } = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "test",
+			});
 			registerActiveRun(manifest);
 			registerActiveRun(manifest);
 			const entries = readActiveRunRegistry();
@@ -126,7 +141,12 @@ describe("activeRunEntries", () => {
 	it("returns entries for active runs", () => {
 		withIsolatedHome(() => {
 			const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-ar-entries-cwd-"));
-			const { manifest } = createRunManifest({ cwd, team, workflow, goal: "test active entries" });
+			const { manifest } = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "test active entries",
+			});
 			registerActiveRun(manifest);
 			const entries = activeRunEntries();
 			assert.ok(entries.some((e) => e.runId === manifest.runId));
@@ -145,7 +165,12 @@ describe("activeRunRoots", () => {
 	it("returns deduplicated state root parents", () => {
 		withIsolatedHome(() => {
 			const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-ar-roots-cwd-"));
-			const { manifest } = createRunManifest({ cwd, team, workflow, goal: "test roots" });
+			const { manifest } = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "test roots",
+			});
 			registerActiveRun(manifest);
 			const roots = activeRunRoots();
 			assert.ok(roots.length >= 1);

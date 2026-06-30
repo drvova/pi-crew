@@ -1,10 +1,10 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildMemoryBlock, isUnsafeMemoryName, resolveMemoryDir, readMemoryIndex } from "../../src/runtime/agent-memory.ts";
+import test from "node:test";
 import { allAgents, discoverAgents } from "../../src/agents/discover-agents.ts";
+import { buildMemoryBlock, isUnsafeMemoryName, readMemoryIndex, resolveMemoryDir } from "../../src/runtime/agent-memory.ts";
 
 test("agent memory rejects unsafe names and reads project memory", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-memory-"));

@@ -1,19 +1,15 @@
-import { spawn, type SpawnOptions } from "node:child_process";
-import { createRequire } from "node:module";
+import { type SpawnOptions, spawn } from "node:child_process";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
-import { logInternalError } from "../utils/internal-error.ts";
 import { appendEvent } from "../state/event-log.ts";
-import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
-import { resolvePeerDepDir, PEER_DEP_DIR_ENV } from "./peer-dep.ts";
-import {
-	registerWorker,
-	unregisterWorker,
-} from "./orphan-worker-registry.ts";
 import type { TeamRunManifest } from "../state/types.ts";
-
+import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
+import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { registerWorker, unregisterWorker } from "./orphan-worker-registry.ts";
+import { PEER_DEP_DIR_ENV, resolvePeerDepDir } from "./peer-dep.ts";
 
 export type FileExists = (filePath: string) => boolean;
 
@@ -23,9 +19,7 @@ const requireFromHere = createRequire(import.meta.url);
 const STRIP_TYPES_MIN_MAJOR = 22;
 const STRIP_TYPES_MIN_MINOR = 6;
 
-export type LoaderSpec =
-	| { kind: "jiti"; path: string }
-	| { kind: "strip-types" };
+export type LoaderSpec = { kind: "jiti"; path: string } | { kind: "strip-types" };
 
 type LoaderInput = LoaderSpec | string | false | undefined;
 
@@ -130,12 +124,21 @@ export function getBackgroundRunnerCommand(
 	// don't want report files can opt out with PI_CREW_BG_REPORT_ON_FATAL=0.
 	const reportOn = !(process.env.PI_CREW_BG_REPORT_ON_FATAL === "0" || process.env.PI_TEAMS_BG_REPORT_ON_FATAL === "0");
 	const reportDir = reportDirectory ?? path.dirname(runnerPath);
-	const reportFlags = reportOn
-		? ["--report-on-fatalerror", "--report-compact", `--report-directory=${reportDir}`]
-		: [];
+	const reportFlags = reportOn ? ["--report-on-fatalerror", "--report-compact", `--report-directory=${reportDir}`] : [];
 	if (loader.kind === "jiti") {
 		return {
-			args: [memoryLimit, ...reportFlags, "--trace-uncaught", "--import", pathToFileURL(loader.path).href, runnerPath, "--cwd", cwd, "--run-id", runId],
+			args: [
+				memoryLimit,
+				...reportFlags,
+				"--trace-uncaught",
+				"--import",
+				pathToFileURL(loader.path).href,
+				runnerPath,
+				"--cwd",
+				cwd,
+				"--run-id",
+				runId,
+			],
 			loader: "jiti",
 		};
 	}
@@ -238,14 +241,16 @@ export async function spawnBackgroundTeamRun(manifest: TeamRunManifest): Promise
 	// `npm root -g` probe. No-op when pi-crew and pi are co-located. See
 	// src/runtime/peer-dep.ts.
 	const peerDepDir = resolvePeerDepDir();
-	const childEnv = peerDepDir
-		? { ...filteredEnv, [PEER_DEP_DIR_ENV]: peerDepDir }
-		: filteredEnv;
+	const childEnv = peerDepDir ? { ...filteredEnv, [PEER_DEP_DIR_ENV]: peerDepDir } : filteredEnv;
 
 	const loader = resolveTypeScriptLoader();
 	if (!loader) {
 		const message = buildLoaderUnavailableMessage(packageRootFromRuntime());
-		appendEvent(manifest.eventsPath, { type: "async.failed", runId: manifest.runId, message });
+		appendEvent(manifest.eventsPath, {
+			type: "async.failed",
+			runId: manifest.runId,
+			message,
+		});
 		throw new Error(message);
 	}
 	// Pass manifest.stateRoot as report-directory so V8 fatal reports land
@@ -345,4 +350,3 @@ export async function spawnBackgroundTeamRun(manifest: TeamRunManifest): Promise
 
 	return { pid: child.pid, logPath };
 }
-

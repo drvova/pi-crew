@@ -1,9 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	buildContinuationPrompt,
-	triggerContinuation,
-} from "../../src/extension/registration/compaction-guard.ts";
+import { describe, it } from "node:test";
+import { buildContinuationPrompt, triggerContinuation } from "../../src/extension/registration/compaction-guard.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 
 function makeRun(overrides: Partial<TeamRunManifest> = {}): TeamRunManifest {
@@ -42,10 +39,7 @@ describe("buildContinuationPrompt", () => {
 	});
 
 	it("lists multiple in-flight runs", () => {
-		const prompt = buildContinuationPrompt([
-			makeRun({ runId: "run-a", goal: "Task A" }),
-			makeRun({ runId: "run-b", goal: "Task B" }),
-		]);
+		const prompt = buildContinuationPrompt([makeRun({ runId: "run-a", goal: "Task A" }), makeRun({ runId: "run-b", goal: "Task B" })]);
 		assert.ok(prompt.includes("run-a"));
 		assert.ok(prompt.includes("run-b"));
 		assert.ok(prompt.includes("Task A"));
@@ -64,11 +58,7 @@ describe("triggerContinuation", () => {
 		};
 		const fakeCtx = { ui: { notify: () => {} } };
 
-		triggerContinuation(
-			fakePi as never,
-			fakeCtx as never,
-			[makeRun()],
-		);
+		triggerContinuation(fakePi as never, fakeCtx as never, [makeRun()]);
 
 		assert.equal(typeof sentContent, "string");
 		const content = sentContent as string;

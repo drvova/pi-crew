@@ -1,6 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionRunStatus, canTransitionTaskStatus, isTerminalRunStatus, isTerminalTaskStatus, isWakeableTeamEventType } from "../../src/state/contracts.ts";
+import test from "node:test";
+import {
+	canTransitionRunStatus,
+	canTransitionTaskStatus,
+	isTerminalRunStatus,
+	isTerminalTaskStatus,
+	isWakeableTeamEventType,
+} from "../../src/state/contracts.ts";
 
 test("state contracts define allowed transitions and terminal states", () => {
 	assert.equal(canTransitionRunStatus("queued", "running"), true);

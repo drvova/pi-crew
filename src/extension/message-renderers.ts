@@ -7,8 +7,9 @@
  * raw JSON in the conversation. These renderers give them a clean,
  * crew-branded look using the active theme.
  */
-import { Text } from "@earendil-works/pi-tui";
+
 import type { ExtensionAPI, MessageRenderOptions, Theme } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 
 interface CrewMessageDetails {
 	runId?: string;
@@ -96,9 +97,7 @@ export function renderResumeDirective(message: MessageLike, _options: MessageRen
 }
 
 /** Register all crew message renderers. Safe to call once at extension load. */
-export function registerCrewMessageRenderers(
-	pi: { registerMessageRenderer?: ExtensionAPI["registerMessageRenderer"] },
-): void {
+export function registerCrewMessageRenderers(pi: { registerMessageRenderer?: ExtensionAPI["registerMessageRenderer"] }): void {
 	// Optional chaining guards against older Pi versions (and test stubs)
 	// without registerMessageRenderer.
 	// The renderers return Text (a Component) — cast through never to match

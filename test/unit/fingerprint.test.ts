@@ -1,16 +1,16 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { describe, it } from "node:test";
 import {
-	computeContentHash,
-	computeStructuralSignature,
 	classifyChange,
+	computeContentHash,
+	computeFingerprintDelta,
+	computeStructuralSignature,
+	type FileFingerprint,
 	fingerprintFile,
 	loadFingerprintBaseline,
 	saveFingerprintBaseline,
-	computeFingerprintDelta,
-	type FileFingerprint,
 } from "../../src/utils/fingerprint.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
@@ -113,10 +113,7 @@ export class MyClass {
 		const c1 = "export function foo() { return 1; }\n";
 		const c2 = "// a comment\nexport function foo() { return 1; }\n\n";
 		// Both have the same structural line, so signature should be identical
-		assert.equal(
-			computeStructuralSignature(c1, "a.ts"),
-			computeStructuralSignature(c2, "b.ts"),
-		);
+		assert.equal(computeStructuralSignature(c1, "a.ts"), computeStructuralSignature(c2, "b.ts"));
 	});
 });
 
@@ -164,7 +161,11 @@ describe("classifyChange", () => {
 			lastModified: 1,
 			changeClass: "NONE",
 		};
-		const cur: FileFingerprint = { ...prev, contentHash: "xyz", structuralSignature: "sig2" };
+		const cur: FileFingerprint = {
+			...prev,
+			contentHash: "xyz",
+			structuralSignature: "sig2",
+		};
 		assert.equal(classifyChange(prev, cur), "STRUCTURAL");
 	});
 });
@@ -229,7 +230,16 @@ describe("computeFingerprintDelta", () => {
 	it("detects added files", () => {
 		const baseline = new Map<string, FileFingerprint>();
 		const current = new Map<string, FileFingerprint>([
-			["new.ts", { path: "new.ts", contentHash: "h", structuralSignature: "s", lastModified: 1, changeClass: "NONE" }],
+			[
+				"new.ts",
+				{
+					path: "new.ts",
+					contentHash: "h",
+					structuralSignature: "s",
+					lastModified: 1,
+					changeClass: "NONE",
+				},
+			],
 		]);
 		const delta = computeFingerprintDelta(baseline, current);
 		assert.deepEqual(delta.added, ["new.ts"]);
@@ -239,7 +249,16 @@ describe("computeFingerprintDelta", () => {
 
 	it("detects removed files", () => {
 		const baseline = new Map<string, FileFingerprint>([
-			["old.ts", { path: "old.ts", contentHash: "h", structuralSignature: "s", lastModified: 1, changeClass: "NONE" }],
+			[
+				"old.ts",
+				{
+					path: "old.ts",
+					contentHash: "h",
+					structuralSignature: "s",
+					lastModified: 1,
+					changeClass: "NONE",
+				},
+			],
 		]);
 		const current = new Map<string, FileFingerprint>();
 		const delta = computeFingerprintDelta(baseline, current);
@@ -249,10 +268,28 @@ describe("computeFingerprintDelta", () => {
 
 	it("detects structural modifications", () => {
 		const baseline = new Map<string, FileFingerprint>([
-			["a.ts", { path: "a.ts", contentHash: "h1", structuralSignature: "s1", lastModified: 1, changeClass: "NONE" }],
+			[
+				"a.ts",
+				{
+					path: "a.ts",
+					contentHash: "h1",
+					structuralSignature: "s1",
+					lastModified: 1,
+					changeClass: "NONE",
+				},
+			],
 		]);
 		const current = new Map<string, FileFingerprint>([
-			["a.ts", { path: "a.ts", contentHash: "h2", structuralSignature: "s2", lastModified: 2, changeClass: "NONE" }],
+			[
+				"a.ts",
+				{
+					path: "a.ts",
+					contentHash: "h2",
+					structuralSignature: "s2",
+					lastModified: 2,
+					changeClass: "NONE",
+				},
+			],
 		]);
 		const delta = computeFingerprintDelta(baseline, current);
 		assert.equal(delta.modified.length, 1);
@@ -262,10 +299,28 @@ describe("computeFingerprintDelta", () => {
 
 	it("counts cosmetic changes as unchanged", () => {
 		const baseline = new Map<string, FileFingerprint>([
-			["a.ts", { path: "a.ts", contentHash: "h1", structuralSignature: "s1", lastModified: 1, changeClass: "NONE" }],
+			[
+				"a.ts",
+				{
+					path: "a.ts",
+					contentHash: "h1",
+					structuralSignature: "s1",
+					lastModified: 1,
+					changeClass: "NONE",
+				},
+			],
 		]);
 		const current = new Map<string, FileFingerprint>([
-			["a.ts", { path: "a.ts", contentHash: "h2", structuralSignature: "s1", lastModified: 2, changeClass: "NONE" }],
+			[
+				"a.ts",
+				{
+					path: "a.ts",
+					contentHash: "h2",
+					structuralSignature: "s1",
+					lastModified: 2,
+					changeClass: "NONE",
+				},
+			],
 		]);
 		const delta = computeFingerprintDelta(baseline, current);
 		assert.equal(delta.unchanged, 1);
@@ -274,10 +329,28 @@ describe("computeFingerprintDelta", () => {
 
 	it("detects completely unchanged files", () => {
 		const baseline = new Map<string, FileFingerprint>([
-			["a.ts", { path: "a.ts", contentHash: "h1", structuralSignature: "s1", lastModified: 1, changeClass: "NONE" }],
+			[
+				"a.ts",
+				{
+					path: "a.ts",
+					contentHash: "h1",
+					structuralSignature: "s1",
+					lastModified: 1,
+					changeClass: "NONE",
+				},
+			],
 		]);
 		const current = new Map<string, FileFingerprint>([
-			["a.ts", { path: "a.ts", contentHash: "h1", structuralSignature: "s1", lastModified: 1, changeClass: "NONE" }],
+			[
+				"a.ts",
+				{
+					path: "a.ts",
+					contentHash: "h1",
+					structuralSignature: "s1",
+					lastModified: 1,
+					changeClass: "NONE",
+				},
+			],
 		]);
 		const delta = computeFingerprintDelta(baseline, current);
 		assert.equal(delta.unchanged, 1);

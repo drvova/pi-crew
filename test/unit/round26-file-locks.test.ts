@@ -12,11 +12,12 @@
  *   passing a path already ending in .lock (config.ts). Fix: removed entirely;
  *   acquireLockWithRetry's staleMs-based steal handles genuine orphans.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import { withFileLockSync } from "../../src/state/locks.ts";
 
 function tmpDir(): string {
@@ -31,10 +32,16 @@ describe("Round 26 BUG 1: acquireLockWithRetry uses a single-snapshot read", () 
 			// Plant a stale lock: write a lock file with an old createdAt + a dead pid.
 			const lockFile = `${target}.lock`;
 			const oldPid = 999999; // almost certainly dead
-			const payload = JSON.stringify({ token: "old-dead", pid: oldPid, createdAt: new Date(Date.now() - 60000).toISOString() });
+			const payload = JSON.stringify({
+				token: "old-dead",
+				pid: oldPid,
+				createdAt: new Date(Date.now() - 60000).toISOString(),
+			});
 			fs.writeFileSync(lockFile, payload, "utf-8");
 			// withFileLockSync should steal it and run the callback.
-			const result = withFileLockSync(target, () => "stolen-ok", { staleMs: 1000 });
+			const result = withFileLockSync(target, () => "stolen-ok", {
+				staleMs: 1000,
+			});
 			assert.equal(result, "stolen-ok");
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
@@ -50,16 +57,25 @@ describe("Round 26 BUG 1: acquireLockWithRetry uses a single-snapshot read", () 
 			// steal. It only proceeds once the lock naturally ages past staleMs.
 			const lockFile = `${target}.lock`;
 			const start = Date.now();
-			const payload = JSON.stringify({ token: "fresh-live", pid: process.pid, createdAt: new Date(start).toISOString() });
+			const payload = JSON.stringify({
+				token: "fresh-live",
+				pid: process.pid,
+				createdAt: new Date(start).toISOString(),
+			});
 			fs.writeFileSync(lockFile, payload, "utf-8");
 			// With staleMs=300, the lock is fresh at t=0 and must block until ~t=300
 			// before the snapshot reports it stale. If the TOCTOU bug were present,
 			// a separate read could split and steal immediately (< 50ms). Verify it
 			// blocks for at least ~staleMs before proceeding.
-			const result = withFileLockSync(target, () => "eventually-ok", { staleMs: 300 });
+			const result = withFileLockSync(target, () => "eventually-ok", {
+				staleMs: 300,
+			});
 			const elapsed = Date.now() - start;
 			assert.equal(result, "eventually-ok");
-			assert.ok(elapsed >= 250, `should block until stale (~300ms), took ${elapsed}ms — may have stolen a fresh live lock (TOCTOU regression?)`);
+			assert.ok(
+				elapsed >= 250,
+				`should block until stale (~300ms), took ${elapsed}ms — may have stolen a fresh live lock (TOCTOU regression?)`,
+			);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
@@ -94,7 +110,9 @@ describe("Round 26 BUG 2: removed racy pre-acquisition target cleanup", () => {
 		const base = path.join(dir, "config.json");
 		const passedPath = `${base}.lock`; // mimics config.ts
 		try {
-			const result = withFileLockSync(passedPath, () => "config-ok", { staleMs: 1000 });
+			const result = withFileLockSync(passedPath, () => "config-ok", {
+				staleMs: 1000,
+			});
 			assert.equal(result, "config-ok");
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });

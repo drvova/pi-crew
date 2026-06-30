@@ -1,8 +1,12 @@
+import { truncate } from "../../utils/visual.ts";
 import type { CrewTheme } from "../theme-adapter.ts";
 import { asCrewTheme } from "../theme-adapter.ts";
-import { truncate } from "../../utils/visual.ts";
 
-export type MarkdownToken = { type: "heading" | "code-block" | "list-item" | "paragraph"; level?: number; text: string };
+export type MarkdownToken = {
+	type: "heading" | "code-block" | "list-item" | "paragraph";
+	level?: number;
+	text: string;
+};
 
 function stripInlineMarkdown(text: string): string {
 	return text
@@ -33,15 +37,26 @@ export function tokenizeMarkdown(body: string): MarkdownToken[] {
 		}
 		const heading = /^(#{1,3})\s+(.+)$/.exec(line);
 		if (heading) {
-			tokens.push({ type: "heading", level: heading[1]!.length, text: stripInlineMarkdown(heading[2]!) });
+			tokens.push({
+				type: "heading",
+				level: heading[1]!.length,
+				text: stripInlineMarkdown(heading[2]!),
+			});
 			continue;
 		}
 		const list = /^\s*(?:[-*]|\d+\.)\s+(.+)$/.exec(line);
 		if (list) {
-			tokens.push({ type: "list-item", text: stripInlineMarkdown(list[1]!) });
+			tokens.push({
+				type: "list-item",
+				text: stripInlineMarkdown(list[1]!),
+			});
 			continue;
 		}
-		if (line.trim()) tokens.push({ type: "paragraph", text: stripInlineMarkdown(line.trim()) });
+		if (line.trim())
+			tokens.push({
+				type: "paragraph",
+				text: stripInlineMarkdown(line.trim()),
+			});
 	}
 	if (inCode && codeLines.length) tokens.push({ type: "code-block", text: codeLines.join("\n") });
 	return tokens;

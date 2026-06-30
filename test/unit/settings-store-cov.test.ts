@@ -1,13 +1,8 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import {
-	loadCrewSettings,
-	saveCrewSettings,
-	applyCrewSettingsToConfig,
-	type CrewSettings,
-} from "../../src/runtime/settings-store.ts";
+import { describe, it } from "node:test";
+import { applyCrewSettingsToConfig, type CrewSettings, loadCrewSettings, saveCrewSettings } from "../../src/runtime/settings-store.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 describe("saveCrewSettings / loadCrewSettings", () => {
@@ -81,7 +76,15 @@ describe("saveCrewSettings / loadCrewSettings", () => {
 	it("preserves scheduledJobs array", () => {
 		const tmp = createTrackedTempDir("pi-crew-settings-");
 		try {
-			const jobs = [{ id: "job-1", scheduleType: "cron", enabled: true, cron: "*/5 * * * *", workflow: "test" }];
+			const jobs = [
+				{
+					id: "job-1",
+					scheduleType: "cron",
+					enabled: true,
+					cron: "*/5 * * * *",
+					workflow: "test",
+				},
+			];
 			saveCrewSettings({ scheduledJobs: jobs } as never, tmp);
 			const loaded = loadCrewSettings(tmp);
 			assert.ok(Array.isArray(loaded.scheduledJobs));
@@ -91,7 +94,9 @@ describe("saveCrewSettings / loadCrewSettings", () => {
 		}
 	});
 
-	it("saveCrewSettings returns false on write error", { skip: process.platform === "win32" }, () => {
+	it("saveCrewSettings returns false on write error", {
+		skip: process.platform === "win32",
+	}, () => {
 		const tmp = createTrackedTempDir("pi-crew-settings-");
 		try {
 			// Make .pi directory read-only
@@ -103,7 +108,11 @@ describe("saveCrewSettings / loadCrewSettings", () => {
 			assert.equal(result, false);
 		} finally {
 			// Restore permissions for cleanup
-			try { fs.chmodSync(path.join(tmp, ".pi"), 0o755); } catch { /* best effort */ }
+			try {
+				fs.chmodSync(path.join(tmp, ".pi"), 0o755);
+			} catch {
+				/* best effort */
+			}
 			removeTrackedTempDir(tmp);
 		}
 	});
@@ -141,7 +150,11 @@ describe("applyCrewSettingsToConfig", () => {
 	});
 
 	it("does nothing when settings fields are null", () => {
-		const config = { limits: { maxConcurrentWorkers: 5 }, runtime: { maxTurns: 20, graceTurns: 3, groupJoin: "async" }, notifierIntervalMs: 5000 };
+		const config = {
+			limits: { maxConcurrentWorkers: 5 },
+			runtime: { maxTurns: 20, graceTurns: 3, groupJoin: "async" },
+			notifierIntervalMs: 5000,
+		};
 		applyCrewSettingsToConfig(config, {});
 		assert.equal(config.limits!.maxConcurrentWorkers, 5);
 		assert.equal(config.runtime!.maxTurns, 20);
@@ -149,7 +162,10 @@ describe("applyCrewSettingsToConfig", () => {
 
 	it("does nothing when config lacks limits/runtime", () => {
 		const config = {};
-		applyCrewSettingsToConfig(config, { maxConcurrent: 4, defaultMaxTurns: 50 });
+		applyCrewSettingsToConfig(config, {
+			maxConcurrent: 4,
+			defaultMaxTurns: 50,
+		});
 		assert.equal((config as Record<string, unknown>).limits, undefined);
 		assert.equal((config as Record<string, unknown>).runtime, undefined);
 	});

@@ -8,18 +8,18 @@ const MAX_PENDING_HANDOFFS = 1000; // Prevent unbounded growth
  * Type guard for HandoffSummary structure validation.
  */
 export function isValidHandoffSummary(value: unknown): value is HandoffSummary {
-	if (!value || typeof value !== 'object') {
+	if (!value || typeof value !== "object") {
 		return false;
 	}
 	const obj = value as Record<string, unknown>;
 
 	// Check required fields
-	if (typeof obj.taskId !== 'string' || !obj.taskId) return false;
-	if (typeof obj.runId !== 'string' || !obj.runId) return false;
-	if (typeof obj.timestamp !== 'number') return false;
-	if (typeof obj.task !== 'string' || !obj.task) return false;
-	if (typeof obj.outcome !== 'string') return false;
-	if (!['success', 'failure', 'partial'].includes(obj.outcome)) return false;
+	if (typeof obj.taskId !== "string" || !obj.taskId) return false;
+	if (typeof obj.runId !== "string" || !obj.runId) return false;
+	if (typeof obj.timestamp !== "number") return false;
+	if (typeof obj.task !== "string" || !obj.task) return false;
+	if (typeof obj.outcome !== "string") return false;
+	if (!["success", "failure", "partial"].includes(obj.outcome)) return false;
 
 	// Check arrays
 	if (!Array.isArray(obj.filesCreated)) return false;
@@ -30,27 +30,27 @@ export function isValidHandoffSummary(value: unknown): value is HandoffSummary {
 	if (!Array.isArray(obj.nextSteps)) return false;
 
 	// Check metrics object
-	if (!obj.metrics || typeof obj.metrics !== 'object') return false;
+	if (!obj.metrics || typeof obj.metrics !== "object") return false;
 	const metrics = obj.metrics as Record<string, unknown>;
-	if (typeof metrics.tokensUsed !== 'number') return false;
-	if (typeof metrics.duration !== 'number') return false;
-	if (typeof metrics.iterations !== 'number') return false;
+	if (typeof metrics.tokensUsed !== "number") return false;
+	if (typeof metrics.duration !== "number") return false;
+	if (typeof metrics.iterations !== "number") return false;
 	if (!Array.isArray(metrics.toolsUsed)) return false;
 
 	// Check contextSnapshot
-	if (typeof obj.contextSnapshot !== 'string') return false;
+	if (typeof obj.contextSnapshot !== "string") return false;
 
 	return true;
 }
 
 /**
  * HandoffManager - Generates structured summaries for agent handoffs.
- * 
+ *
  * Based on pi-boomerang's session_before_tree hook pattern:
  * - Detects task completion via agent_end hook
  * - Generates structured summaries with token metrics, artifacts, decisions
  * - Optionally collapses context to reduce token usage
- * 
+ *
  * @see docs/pi-boomerang-integration-plan.md
  */
 
@@ -172,7 +172,7 @@ export interface SummarizeDecision {
 /**
  * HandoffManager generates structured summaries when agents complete tasks,
  * enabling efficient context passing to subsequent agents.
- * 
+ *
  * H1: Includes memory management to prevent unbounded growth of pendingHandoffs Map.
  */
 export class HandoffManager {
@@ -247,8 +247,7 @@ export class HandoffManager {
 		// Also enforce max handoffs limit
 		if (this.pendingHandoffs.size > MAX_PENDING_HANDOFFS) {
 			// Remove oldest entries
-			const sortedEntries = [...this.handoffTimestamps.entries()]
-				.sort((a, b) => a[1] - b[1]);
+			const sortedEntries = [...this.handoffTimestamps.entries()].sort((a, b) => a[1] - b[1]);
 			const removeCount = sortedEntries.length - MAX_PENDING_HANDOFFS;
 			for (let i = 0; i < removeCount; i++) {
 				const sessionId = sortedEntries[i][0];
@@ -261,7 +260,7 @@ export class HandoffManager {
 	/**
 	 * Hook: agent_end
 	 * Called when agent completes a task.
-	 * 
+	 *
 	 * @param packet - The task packet
 	 * @param result - The task result
 	 */
@@ -294,7 +293,10 @@ export class HandoffManager {
 		}
 
 		// Emit handoff event
-		this.options.eventEmitter?.emit("handoff:generated", { packet, summary });
+		this.options.eventEmitter?.emit("handoff:generated", {
+			packet,
+			summary,
+		});
 
 		// Optionally collapse context
 		if (packet.collapseContext) {
@@ -308,7 +310,7 @@ export class HandoffManager {
 	 * Hook: session_before_tree
 	 * Called before navigating to tree view.
 	 * Injects pending handoff summaries into the tree.
-	 * 
+	 *
 	 * @param sessionId - The session ID
 	 * @param targetId - The target tree node ID
 	 */
@@ -335,19 +337,19 @@ export class HandoffManager {
 	 */
 	shouldSummarize(packet: TaskPacket, result: TaskResult): SummarizeDecision {
 		// H7: Validate packet structure
-		if (!packet || typeof packet.taskId !== 'string' || !packet.taskId) {
+		if (!packet || typeof packet.taskId !== "string" || !packet.taskId) {
 			return {
 				shouldSummarize: false,
-				reason: 'Invalid task packet structure',
+				reason: "Invalid task packet structure",
 				tokenCount: 0,
 			};
 		}
 
 		// H7: Validate result structure
-		if (!result || typeof result.outcome !== 'string') {
+		if (!result || typeof result.outcome !== "string") {
 			return {
 				shouldSummarize: false,
-				reason: 'Invalid task result structure',
+				reason: "Invalid task result structure",
 				tokenCount: 0,
 			};
 		}
@@ -384,8 +386,7 @@ export class HandoffManager {
 		}
 
 		// 4. Task has significant artifacts or decisions
-		const hasArtifacts = (result.filesCreated?.length ?? 0) > 0 ||
-			(result.filesModified?.length ?? 0) > 0;
+		const hasArtifacts = (result.filesCreated?.length ?? 0) > 0 || (result.filesModified?.length ?? 0) > 0;
 		const hasDecisions = (result.decisions?.length ?? 0) > 0;
 
 		if (hasArtifacts || hasDecisions) {
@@ -419,11 +420,7 @@ export class HandoffManager {
 		const artifacts = this.extractArtifacts(result);
 		// Use extractDecisionsFromResult to handle empty array and generate defaults
 		const decisions = this.extractDecisionsFromResult(result);
-		const contextSnapshot = await this.generateContextSnapshot(
-			packet.runId,
-			packet.taskId,
-			result
-		);
+		const contextSnapshot = await this.generateContextSnapshot(packet.runId, packet.taskId, result);
 
 		return {
 			taskId: packet.taskId,
@@ -531,11 +528,13 @@ export class HandoffManager {
 
 		// Generate a default decision for failure outcomes
 		if (result.outcome === "failure") {
-			return [{
-				rationale: "Task failed",
-				outcome: result.error ?? "Unknown error",
-				alternativesConsidered: [],
-			}];
+			return [
+				{
+					rationale: "Task failed",
+					outcome: result.error ?? "Unknown error",
+					alternativesConsidered: [],
+				},
+			];
 		}
 
 		return [];
@@ -544,11 +543,7 @@ export class HandoffManager {
 	/**
 	 * Generate context snapshot for handoff.
 	 */
-	private async generateContextSnapshot(
-		runId: string,
-		taskId: string,
-		result: TaskResult
-	): Promise<string> {
+	private async generateContextSnapshot(runId: string, taskId: string, result: TaskResult): Promise<string> {
 		const parts: string[] = [];
 
 		parts.push(`Task: ${taskId}`);

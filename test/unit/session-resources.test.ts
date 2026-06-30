@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { tryRegisterSessionCleanup } from "../../src/runtime/session-resources.ts";
 
 describe("tryRegisterSessionCleanup", () => {
@@ -10,7 +10,9 @@ describe("tryRegisterSessionCleanup", () => {
 	});
 
 	it("returns undefined when API is not a function", () => {
-		const pi = { registerSessionResourceCleanup: "not-a-function" } as never;
+		const pi = {
+			registerSessionResourceCleanup: "not-a-function",
+		} as never;
 		const result = tryRegisterSessionCleanup(pi, () => {});
 		assert.equal(result, undefined);
 	});
@@ -20,7 +22,9 @@ describe("tryRegisterSessionCleanup", () => {
 		const pi = {
 			registerSessionResourceCleanup: (cleanup: () => void) => {
 				registered = true;
-				return () => { registered = false; };
+				return () => {
+					registered = false;
+				};
 			},
 		} as never;
 		const result = tryRegisterSessionCleanup(pi, () => {});
@@ -31,7 +35,9 @@ describe("tryRegisterSessionCleanup", () => {
 	it("handles API that returns void", () => {
 		let registered = false;
 		const pi = {
-			registerSessionResourceCleanup: () => { registered = true; },
+			registerSessionResourceCleanup: () => {
+				registered = true;
+			},
 		} as never;
 		const result = tryRegisterSessionCleanup(pi, () => {});
 		assert.equal(registered, true);
@@ -40,7 +46,9 @@ describe("tryRegisterSessionCleanup", () => {
 
 	it("handles API that throws", () => {
 		const pi = {
-			registerSessionResourceCleanup: () => { throw new Error("test error"); },
+			registerSessionResourceCleanup: () => {
+				throw new Error("test error");
+			},
 		} as never;
 		const result = tryRegisterSessionCleanup(pi, () => {});
 		assert.equal(result, undefined);

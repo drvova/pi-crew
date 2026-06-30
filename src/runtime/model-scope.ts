@@ -92,7 +92,12 @@ export function checkModelScope(
 	source: ModelScopeSource,
 ): ModelScopeCheck {
 	if (!modelId) {
-		return { inScope: true, source, model: "", reason: "no model specified" };
+		return {
+			inScope: true,
+			source,
+			model: "",
+			reason: "no model specified",
+		};
 	}
 	if (!patterns || patterns.length === 0) {
 		// No allowlist → not enforcing. The toggle is opt-in; the user hasn't
@@ -101,7 +106,12 @@ export function checkModelScope(
 	}
 	for (const pattern of patterns) {
 		if (matchesModelPattern(modelId, pattern)) {
-			return { inScope: true, source, model: modelId, matchedPattern: pattern };
+			return {
+				inScope: true,
+				source,
+				model: modelId,
+				matchedPattern: pattern,
+			};
 		}
 	}
 	return {
@@ -131,7 +141,13 @@ export async function readEnabledModelsPatterns(cwd: string, agentDir?: string):
 		// LAZY: defer dynamic import of @earendil-works/pi-coding-agent to its call site.
 		const mod = await import("@earendil-works/pi-coding-agent" as string).catch(() => null);
 		if (!mod) return [];
-		const SettingsManagerCtor = (mod as { SettingsManager?: { create?: (cwd: string, agentDir?: string) => { getEnabledModels?: () => string[] | undefined } } }).SettingsManager;
+		const SettingsManagerCtor = (
+			mod as {
+				SettingsManager?: {
+					create?: (cwd: string, agentDir?: string) => { getEnabledModels?: () => string[] | undefined };
+				};
+			}
+		).SettingsManager;
 		if (!SettingsManagerCtor?.create) return [];
 		const sm = SettingsManagerCtor.create(cwd, agentDir);
 		const patterns = sm.getEnabledModels?.();

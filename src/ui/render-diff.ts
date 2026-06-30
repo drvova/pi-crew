@@ -4,7 +4,8 @@ import { asCrewTheme } from "./theme-adapter.ts";
 
 interface ParsedDiffLine {
 	prefix: string;
-	lineNum: string;	content: string;
+	lineNum: string;
+	content: string;
 }
 
 interface DiffLineContent {
@@ -108,7 +109,10 @@ export function renderDiff(diffText: string, options: RenderDiffOptions = {}): s
 			while (i < lines.length) {
 				const nextParsed = parseDiffLine(lines[i] ?? "");
 				if (!nextParsed || nextParsed.prefix !== "-") break;
-				removedLines.push({ lineNum: nextParsed.lineNum, content: nextParsed.content });
+				removedLines.push({
+					lineNum: nextParsed.lineNum,
+					content: nextParsed.content,
+				});
 				i++;
 			}
 
@@ -116,7 +120,10 @@ export function renderDiff(diffText: string, options: RenderDiffOptions = {}): s
 			while (i < lines.length) {
 				const nextParsed = parseDiffLine(lines[i] ?? "");
 				if (!nextParsed || nextParsed.prefix !== "+") break;
-				addedLines.push({ lineNum: nextParsed.lineNum, content: nextParsed.content });
+				addedLines.push({
+					lineNum: nextParsed.lineNum,
+					content: nextParsed.content,
+				});
 				i++;
 			}
 

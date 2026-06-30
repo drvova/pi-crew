@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { logInternalError } from "../utils/internal-error.ts";
 import { cleanupAllTrackedTempDirs } from "../runtime/pi-args.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+
 // NOTE: globalProgressTracker import kept for documentation but not directly used
 // since we don't have agent IDs to untrack. Actual progress clearing should be
 // handled by the progress tracker itself on shutdown.

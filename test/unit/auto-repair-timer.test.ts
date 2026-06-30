@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { reconcileStaleRun } from "../../src/runtime/stale-reconciler.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
@@ -43,9 +43,7 @@ describe("auto-repair: reconcileStaleRun handles zombie tasks", () => {
 				spawnedAt: new Date().toISOString(),
 			},
 		};
-		const tenMinutesAgo = new Date(
-			Date.now() - 10 * 60 * 1000,
-		).toISOString();
+		const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 		const task: TeamTaskState = {
 			...runningTask,
 			heartbeat: {
@@ -128,11 +126,7 @@ describe("auto-repair: reconcileStaleRun handles zombie tasks", () => {
 			finishedAt: new Date().toISOString(),
 		};
 
-		const result = reconcileStaleRun(
-			baseManifest,
-			[completedTask],
-			Date.now(),
-		);
+		const result = reconcileStaleRun(baseManifest, [completedTask], Date.now());
 
 		assert.equal(result.verdict, "result_exists");
 		assert.equal(result.repaired, false);

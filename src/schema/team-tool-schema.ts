@@ -83,37 +83,23 @@ export const TeamToolParams = Type.Object({
 		),
 	),
 	resource: Type.Optional(
-		Type.Union(
-			[
-				Type.Literal("agent"),
-				Type.Literal("team"),
-				Type.Literal("workflow"),
-			],
-			{
-				description:
-					"Resource kind for get/create/update/delete/list. Defaults to all for list.",
-			},
-		),
+		Type.Union([Type.Literal("agent"), Type.Literal("team"), Type.Literal("workflow")], {
+			description: "Resource kind for get/create/update/delete/list. Defaults to all for list.",
+		}),
 	),
 	team: Type.Optional(
 		Type.String({
 			description: "Team name, e.g. default or implementation.",
 		}),
 	),
-	workflow: Type.Optional(
-		Type.String({ description: "Workflow name, e.g. default or review." }),
-	),
+	workflow: Type.Optional(Type.String({ description: "Workflow name, e.g. default or review." })),
 	role: Type.Optional(
 		Type.String({
 			description: "Role name to run directly within a team.",
 		}),
 	),
-	agent: Type.Optional(
-		Type.String({ description: "Agent name to inspect or run directly." }),
-	),
-	goal: Type.Optional(
-		Type.String({ description: "High-level objective for a team run." }),
-	),
+	agent: Type.Optional(Type.String({ description: "Agent name to inspect or run directly." })),
+	goal: Type.Optional(Type.String({ description: "High-level objective for a team run." })),
 	chain: Type.Optional(
 		Type.String({
 			description:
@@ -127,7 +113,8 @@ export const TeamToolParams = Type.Object({
 	),
 	singleAgent: Type.Optional(
 		Type.Boolean({
-			description: "When true (with action=plan), compose a single-agent sequential prompt for the workflow instead of a multi-agent plan. Cliff-resilient mode.",
+			description:
+				"When true (with action=plan), compose a single-agent sequential prompt for the workflow instead of a multi-agent plan. Cliff-resilient mode.",
 		}),
 	),
 	runId: Type.Optional(
@@ -136,12 +123,8 @@ export const TeamToolParams = Type.Object({
 			pattern: "^[A-Za-z0-9_-]+$",
 		}),
 	),
-	taskId: Type.Optional(
-		Type.String({ description: "Task ID for respond action." }),
-	),
-	message: Type.Optional(
-		Type.String({ description: "Message for respond action." }),
-	),
+	taskId: Type.Optional(Type.String({ description: "Task ID for respond action." })),
+	message: Type.Optional(Type.String({ description: "Message for respond action." })),
 	async: Type.Optional(
 		Type.Boolean({
 			description: "Run in background when execution support is enabled.",
@@ -156,8 +139,7 @@ export const TeamToolParams = Type.Object({
 	),
 	workspaceMode: Type.Optional(
 		Type.Union([Type.Literal("single"), Type.Literal("worktree")], {
-			description:
-				"Workspace isolation mode. Worktree mode is planned after MVP.",
+			description: "Workspace isolation mode. Worktree mode is planned after MVP.",
 		}),
 	),
 	context: Type.Optional(
@@ -165,22 +147,13 @@ export const TeamToolParams = Type.Object({
 			description: "Child context mode for workers.",
 		}),
 	),
-	cwd: Type.Optional(
-		Type.String({ description: "Working directory override." }),
-	),
-	model: Type.Optional(
-		Type.String({ description: "Model override for direct runs." }),
-	),
+	cwd: Type.Optional(Type.String({ description: "Working directory override." })),
+	model: Type.Optional(Type.String({ description: "Model override for direct runs." })),
 	skill: Type.Optional(SkillOverride),
 	scope: Type.Optional(
-		Type.Union(
-			[
-				Type.Literal("user"),
-				Type.Literal("project"),
-				Type.Literal("both"),
-			],
-			{ description: "Resource scope for discovery or management." },
-		),
+		Type.Union([Type.Literal("user"), Type.Literal("project"), Type.Literal("both")], {
+			description: "Resource scope for discovery or management.",
+		}),
 	),
 	config: Type.Optional(FreeformConfig),
 	dryRun: Type.Optional(
@@ -195,8 +168,7 @@ export const TeamToolParams = Type.Object({
 	),
 	force: Type.Optional(
 		Type.Boolean({
-			description:
-				"Override reference checks for destructive management actions.",
+			description: "Override reference checks for destructive management actions.",
 		}),
 	),
 	keep: Type.Optional(
@@ -207,22 +179,16 @@ export const TeamToolParams = Type.Object({
 	),
 	updateReferences: Type.Optional(
 		Type.Boolean({
-			description:
-				"When renaming agents or workflows, update team references in the same project/user scope.",
+			description: "When renaming agents or workflows, update team references in the same project/user scope.",
 		}),
 	),
 	replyTo: Type.Optional(
 		Type.String({
-			description:
-				"ID of the original mailbox message this is a reply to.",
+			description: "ID of the original mailbox message this is a reply to.",
 		}),
 	),
-	replyFrom: Type.Optional(
-		Type.String({ description: "Task ID sending the reply." }),
-	),
-	replyDeadline: Type.Optional(
-		Type.Integer({ description: "Ms epoch deadline for a reply." }),
-	),
+	replyFrom: Type.Optional(Type.String({ description: "Task ID sending the reply." })),
+	replyDeadline: Type.Optional(Type.Integer({ description: "Ms epoch deadline for a reply." })),
 	planPath: Type.Optional(
 		Type.String({
 			description: "Path to a markdown plan document for orchestration.",
@@ -230,26 +196,22 @@ export const TeamToolParams = Type.Object({
 	),
 	cron: Type.Optional(
 		Type.String({
-			description:
-				"Cron expression for recurring scheduled runs (e.g., '0 9 * * MON').",
+			description: "Cron expression for recurring scheduled runs (e.g., '0 9 * * MON').",
 		}),
 	),
 	interval: Type.Optional(
 		Type.Number({
-			description:
-				"Interval in milliseconds between recurring scheduled runs.",
+			description: "Interval in milliseconds between recurring scheduled runs.",
 		}),
 	),
 	once: Type.Optional(
 		Type.Union([Type.String(), Type.Number()], {
-			description:
-				"ISO timestamp or epoch ms for a one-time scheduled run.",
+			description: "ISO timestamp or epoch ms for a one-time scheduled run.",
 		}),
 	),
 	excludeContextBash: Type.Optional(
 		Type.Boolean({
-			description:
-				"Mark certain bash commands as excludeFromContext to reduce context tokens (default: false).",
+			description: "Mark certain bash commands as excludeFromContext to reduce context tokens (default: false).",
 		}),
 	),
 	// Budget tracking options
@@ -283,17 +245,10 @@ export const TeamToolParams = Type.Object({
 		}),
 	),
 	runKind: Type.Optional(
-		Type.Union(
-			[
-				Type.Literal("team-run"),
-				Type.Literal("goal-loop"),
-				Type.Literal("dynamic-workflow"),
-			],
-			{
-				description:
-					"Background dispatch discriminator. Default \"team-run\" runs the normal executeTeamRun workflow; \"goal-loop\" (P0/P1) and \"dynamic-workflow\" (P2/P3) dispatch to their respective background runners. Absent = \"team-run\" for backward compatibility.",
-			},
-		),
+		Type.Union([Type.Literal("team-run"), Type.Literal("goal-loop"), Type.Literal("dynamic-workflow")], {
+			description:
+				'Background dispatch discriminator. Default "team-run" runs the normal executeTeamRun workflow; "goal-loop" (P0/P1) and "dynamic-workflow" (P2/P3) dispatch to their respective background runners. Absent = "team-run" for backward compatibility.',
+		}),
 	),
 	tokenBudget: Type.Optional(
 		Type.Number({

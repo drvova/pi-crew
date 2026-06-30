@@ -34,7 +34,7 @@ export interface ExecutionPlan {
  * - Each subsequent wave contains tasks whose dependencies are all in earlier waves.
  * - If all tasks have empty `dependsOn`, they all go into wave 0 (backward compatible).
  * - If a cycle is detected, `hasCycle` is true and `cycleNodes` lists the involved IDs.
- * 
+ *
  * @throws Error if a task depends on itself (self-dependency).
  */
 export function buildExecutionPlan(tasks: TaskNode[]): ExecutionPlan {
@@ -50,7 +50,7 @@ export function buildExecutionPlan(tasks: TaskNode[]): ExecutionPlan {
 	}
 
 	const idSet = new Set<string>(tasks.map((t) => t.id));
-	const adjacency = new Map<string, Set<string>>();       // id -> ids that depend on it
+	const adjacency = new Map<string, Set<string>>(); // id -> ids that depend on it
 	const inDegree = new Map<string, number>();
 
 	for (const task of tasks) {
@@ -71,9 +71,7 @@ export function buildExecutionPlan(tasks: TaskNode[]): ExecutionPlan {
 	// Kahn's algorithm with wave grouping
 	const waves: ExecutionWave[] = [];
 	const assigned = new Set<string>();
-	let currentWaveIds = tasks
-		.filter((t) => inDegree.get(t.id) === 0)
-		.map((t) => t.id);
+	let currentWaveIds = tasks.filter((t) => inDegree.get(t.id) === 0).map((t) => t.id);
 
 	let waveIndex = 0;
 	while (currentWaveIds.length > 0) {
@@ -98,9 +96,7 @@ export function buildExecutionPlan(tasks: TaskNode[]): ExecutionPlan {
 
 	// Detect cycle: if not all tasks were assigned, remaining ones form cycles
 	if (assigned.size < tasks.length) {
-		const cycleNodes = tasks
-			.filter((t) => !assigned.has(t.id))
-			.map((t) => t.id);
+		const cycleNodes = tasks.filter((t) => !assigned.has(t.id)).map((t) => t.id);
 		return {
 			waves,
 			hasCycle: true,
@@ -143,9 +139,7 @@ export function getReadyTasks(plan: ExecutionPlan, completedTaskIds: Set<string>
 
 	for (const wave of plan.waves) {
 		// All tasks in prior waves must be completed for this wave to be ready
-		const priorWavesComplete = plan.waves
-			.slice(0, wave.index)
-			.every((w) => w.taskIds.every((id) => completed.has(id)));
+		const priorWavesComplete = plan.waves.slice(0, wave.index).every((w) => w.taskIds.every((id) => completed.has(id)));
 
 		if (!priorWavesComplete) continue;
 

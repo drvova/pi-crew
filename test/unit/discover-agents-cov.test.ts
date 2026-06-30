@@ -1,17 +1,17 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { AgentConfig } from "../../src/agents/agent-config.ts";
 import {
-	registerDynamicAgent,
-	unregisterDynamicAgent,
-	listDynamicAgents,
 	allAgents,
 	clearSecurityEventLog,
+	getCacheVersion,
 	getSecurityEventLog,
 	invalidateAgentDiscoveryCache,
-	getCacheVersion,
+	listDynamicAgents,
+	registerDynamicAgent,
 	sanitizeAgentSystemPrompt,
+	unregisterDynamicAgent,
 } from "../../src/agents/discover-agents.ts";
-import type { AgentConfig } from "../../src/agents/agent-config.ts";
 
 function makeDynamicAgent(name: string): AgentConfig {
 	return {
@@ -38,33 +38,28 @@ describe("registerDynamicAgent", () => {
 
 	it("throws when registering a protected builtin name", () => {
 		clearSecurityEventLog();
-		assert.throws(
-			() => registerDynamicAgent(makeDynamicAgent("executor")),
-			/protected builtin name/i,
-		);
+		assert.throws(() => registerDynamicAgent(makeDynamicAgent("executor")), /protected builtin name/i);
 	});
 
 	it("throws when registering a pattern-matching protected name", () => {
 		clearSecurityEventLog();
-		assert.throws(
-			() => registerDynamicAgent(makeDynamicAgent("executor-v2")),
-			/protected pattern/i,
-		);
+		assert.throws(() => registerDynamicAgent(makeDynamicAgent("executor-v2")), /protected pattern/i);
 	});
 
 	it("throws when registering duplicate agent", () => {
 		clearSecurityEventLog();
 		registerDynamicAgent(makeDynamicAgent("unique-test-agent"));
-		assert.throws(
-			() => registerDynamicAgent(makeDynamicAgent("unique-test-agent")),
-			/already registered/i,
-		);
+		assert.throws(() => registerDynamicAgent(makeDynamicAgent("unique-test-agent")), /already registered/i);
 		unregisterDynamicAgent("unique-test-agent");
 	});
 
 	it("logs security event on blocked registration", () => {
 		clearSecurityEventLog();
-		try { registerDynamicAgent(makeDynamicAgent("planner")); } catch { /* expected */ }
+		try {
+			registerDynamicAgent(makeDynamicAgent("planner"));
+		} catch {
+			/* expected */
+		}
 		const events = getSecurityEventLog();
 		assert.equal(events.length, 1);
 		assert.equal(events[0].type, "AGENT_REGISTRATION_BLOCKED");
@@ -83,10 +78,7 @@ describe("unregisterDynamicAgent", () => {
 	});
 
 	it("throws when agent not found", () => {
-		assert.throws(
-			() => unregisterDynamicAgent("nonexistent-agent"),
-			/not found/i,
-		);
+		assert.throws(() => unregisterDynamicAgent("nonexistent-agent"), /not found/i);
 	});
 
 	it("is case-insensitive for lookup", () => {
@@ -103,7 +95,10 @@ describe("listDynamicAgents", () => {
 		clearSecurityEventLog();
 		registerDynamicAgent(makeDynamicAgent("list-test-a"));
 		unregisterDynamicAgent("list-test-a");
-		assert.deepEqual(listDynamicAgents().filter((a) => a.name === "list-test-a"), []);
+		assert.deepEqual(
+			listDynamicAgents().filter((a) => a.name === "list-test-a"),
+			[],
+		);
 	});
 
 	it("returns all registered agents", () => {
@@ -127,7 +122,11 @@ describe("allAgents", () => {
 	it("merges project, builtin, user agents with user priority", () => {
 		clearSecurityEventLog();
 		const makeAgent = (name: string, source: AgentConfig["source"]): AgentConfig => ({
-			name, description: `${source} ${name}`, source, filePath: `<${source}>`, systemPrompt: "",
+			name,
+			description: `${source} ${name}`,
+			source,
+			filePath: `<${source}>`,
+			systemPrompt: "",
 		});
 		const discovery = {
 			project: [makeAgent("shared", "project")],
@@ -143,7 +142,12 @@ describe("allAgents", () => {
 	it("excludes disabled agents", () => {
 		clearSecurityEventLog();
 		const makeAgent = (name: string, disabled: boolean): AgentConfig => ({
-			name, description: name, source: "builtin", filePath: "", systemPrompt: "", disabled,
+			name,
+			description: name,
+			source: "builtin",
+			filePath: "",
+			systemPrompt: "",
+			disabled,
 		});
 		const discovery = {
 			project: [],

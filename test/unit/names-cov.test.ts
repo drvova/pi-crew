@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeName, requireString, parseConfigObject, hasOwn } from "../../src/utils/names.ts";
+import { describe, it } from "node:test";
+import { hasOwn, parseConfigObject, requireString, sanitizeName } from "../../src/utils/names.ts";
 
 describe("sanitizeName", () => {
 	it("lowercases and replaces spaces with hyphens", () => {

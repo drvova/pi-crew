@@ -1,11 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	shouldMaterializeAgent,
-	taskById,
-	waitingReason,
-	formatTaskGraphLines,
-} from "../../src/runtime/task-display.ts";
+import test from "node:test";
+import { formatTaskGraphLines, shouldMaterializeAgent, taskById, waitingReason } from "../../src/runtime/task-display.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
 /**
@@ -104,8 +99,17 @@ test("waitingReason: lists multiple pending dependencies", () => {
 });
 
 test("waitingReason: resolves stepId dependencies", () => {
-	const dep = makeTask({ id: "dep-1", stepId: "step-dep", status: "running" });
-	const task = makeTask({ id: "task-2", stepId: "step-2", status: "queued", dependsOn: ["step-dep"] });
+	const dep = makeTask({
+		id: "dep-1",
+		stepId: "step-dep",
+		status: "running",
+	});
+	const task = makeTask({
+		id: "task-2",
+		stepId: "step-2",
+		status: "queued",
+		dependsOn: ["step-dep"],
+	});
 	const reason = waitingReason(task, [dep, task]);
 	assert.match(reason ?? "", /dep-1/);
 });
@@ -119,9 +123,24 @@ test("formatTaskGraphLines: returns '(none)' for empty tasks", () => {
 
 test("formatTaskGraphLines: formats tasks with status icons", () => {
 	const tasks = [
-		makeTask({ id: "t1", status: "completed", role: "executor", agent: "exec" }),
-		makeTask({ id: "t2", status: "running", role: "explorer", agent: "exp" }),
-		makeTask({ id: "t3", status: "failed", role: "reviewer", agent: "rev" }),
+		makeTask({
+			id: "t1",
+			status: "completed",
+			role: "executor",
+			agent: "exec",
+		}),
+		makeTask({
+			id: "t2",
+			status: "running",
+			role: "explorer",
+			agent: "exp",
+		}),
+		makeTask({
+			id: "t3",
+			status: "failed",
+			role: "reviewer",
+			agent: "rev",
+		}),
 	];
 	const lines = formatTaskGraphLines(tasks);
 	assert.equal(lines.length, 3);

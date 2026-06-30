@@ -40,10 +40,7 @@ export interface RunGraph {
  * Build a unified run graph from manifest + tasks.
  * Consolidates state into a single graph JSON for dashboard/API use.
  */
-export function buildRunGraph(
-	manifest: TeamRunManifest,
-	tasks: TeamTaskState[],
-): RunGraph {
+export function buildRunGraph(manifest: TeamRunManifest, tasks: TeamTaskState[]): RunGraph {
 	const nodes: RunGraphNode[] = [];
 	const edges: RunGraphEdge[] = [];
 	const nodeIds = new Set<string>();
@@ -106,12 +103,10 @@ export function buildRunGraph(
 		layerMap.get(layerName)!.push(`task:${task.id}`);
 	}
 
-	const layers: RunGraphLayer[] = [...layerMap.entries()].map(
-		([name, nodeIdList]) => ({
-			name,
-			nodeIds: nodeIdList,
-		}),
-	);
+	const layers: RunGraphLayer[] = [...layerMap.entries()].map(([name, nodeIdList]) => ({
+		name,
+		nodeIds: nodeIdList,
+	}));
 
 	return {
 		version: "1.0.0",
@@ -181,11 +176,7 @@ export function listRunGraphs(cwd: string): string[] {
 /**
  * Build and save run graph from manifest + tasks.
  */
-export function buildAndSaveRunGraph(
-	manifest: TeamRunManifest,
-	tasks: TeamTaskState[],
-	cwd: string,
-): string {
+export function buildAndSaveRunGraph(manifest: TeamRunManifest, tasks: TeamTaskState[], cwd: string): string {
 	const graph = buildRunGraph(manifest, tasks);
 	return saveRunGraph(graph, cwd);
 }

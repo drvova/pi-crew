@@ -29,7 +29,7 @@
  * `taskkill /F /T /PID` escalation directly (force-kill the whole tree).
  * See `.crew/knowledge.md` gotchas: BSD/Windows signal handling differs.
  */
-import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import { logInternalError } from "../utils/internal-error.ts";
 
 // ── tunables ──────────────────────────────────────────────────────────────────
@@ -125,7 +125,10 @@ export class OwnedProcess {
 	private deregistered = false;
 	/** Terminal once teardown/reconciliation has confirmed the group is gone. */
 	private terminated = false;
-	private exitPromise: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+	private exitPromise: Promise<{
+		code: number | null;
+		signal: NodeJS.Signals | null;
+	}>;
 	private exitCallbacks = new Set<OwnedExitCallback>();
 	private onAbort: (() => void) | undefined;
 	private readonly abortSignal: AbortSignal | undefined;
@@ -187,7 +190,9 @@ export class OwnedProcess {
 				void this.dispose();
 			} else {
 				this.onAbort = () => void this.dispose();
-				this.abortSignal.addEventListener("abort", this.onAbort, { once: true });
+				this.abortSignal.addEventListener("abort", this.onAbort, {
+					once: true,
+				});
 			}
 		}
 	}
@@ -230,14 +235,14 @@ export class OwnedProcess {
 	 * With no timeout it resolves only when the child exits. Never rejects.
 	 */
 	async awaitExit(opts?: { timeoutMs?: number }): Promise<AwaitExitResult> {
-		const exitResult = this.exitPromise.then((info) => ({ exited: true as const, code: info.code }));
+		const exitResult = this.exitPromise.then((info) => ({
+			exited: true as const,
+			code: info.code,
+		}));
 		if (opts?.timeoutMs === undefined) return exitResult;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const timeout = new Promise<AwaitExitResult>((resolve) => {
-			timer = setTimeout(
-				() => resolve({ exited: false, code: this.child.exitCode }),
-				Math.max(0, opts.timeoutMs!),
-			);
+			timer = setTimeout(() => resolve({ exited: false, code: this.child.exitCode }), Math.max(0, opts.timeoutMs!));
 		});
 		try {
 			return await Promise.race([exitResult, timeout]);
@@ -311,7 +316,9 @@ export class OwnedProcess {
 					if (await pollUntil(() => !groupAlive(this.pgid!), this.gracefulMs)) return;
 					this.signalTree("SIGKILL");
 					if (!(await pollUntil(() => !groupAlive(this.pgid!), SIGKILL_REAP_CAP_MS))) {
-						console.warn(`[pi-crew] owned process group still alive after SIGKILL (name=${this.name ?? "?"}, pgid=${this.pgid})`);
+						console.warn(
+							`[pi-crew] owned process group still alive after SIGKILL (name=${this.name ?? "?"}, pgid=${this.pgid})`,
+						);
 					}
 					return;
 				}
@@ -341,7 +348,10 @@ export class OwnedProcess {
 		const tryTaskkill = (force: boolean): Promise<void> =>
 			new Promise((resolve) => {
 				const args = ["/T", "/PID", String(pid), ...(force ? ["/F"] : [])];
-				const tk = spawn("taskkill", args, { stdio: "ignore", windowsHide: true });
+				const tk = spawn("taskkill", args, {
+					stdio: "ignore",
+					windowsHide: true,
+				});
 				tk.on("error", () => resolve());
 				tk.on("exit", () => resolve());
 			});

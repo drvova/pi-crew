@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
+import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
 import { isSafePathId, resolveRealContainedPath } from "../utils/safe-paths.ts";
 
 export interface ImportedRunIndexEntry {
@@ -30,7 +30,10 @@ function readEntry(root: string, scope: "project" | "user", runId: string): Impo
 	if (!fs.existsSync(bundlePath)) return undefined;
 	try {
 		const raw = JSON.parse(fs.readFileSync(bundlePath, "utf-8")) as Record<string, unknown>;
-		const manifest = raw.manifest && typeof raw.manifest === "object" && !Array.isArray(raw.manifest) ? raw.manifest as Record<string, unknown> : {};
+		const manifest =
+			raw.manifest && typeof raw.manifest === "object" && !Array.isArray(raw.manifest)
+				? (raw.manifest as Record<string, unknown>)
+				: {};
 		return {
 			runId,
 			scope,
@@ -55,7 +58,8 @@ function collect(root: string, scope: "project" | "user"): ImportedRunIndexEntry
 	} catch {
 		return [];
 	}
-	return fs.readdirSync(root)
+	return fs
+		.readdirSync(root)
 		.filter((entry) => isSafePathId(entry))
 		.map((entry) => readEntry(root, scope, entry))
 		.filter((entry): entry is ImportedRunIndexEntry => entry !== undefined);
@@ -64,6 +68,7 @@ function collect(root: string, scope: "project" | "user"): ImportedRunIndexEntry
 export function listImportedRuns(cwd: string): ImportedRunIndexEntry[] {
 	const projectRoot = path.join(projectCrewRoot(cwd), DEFAULT_PATHS.state.importsSubdir);
 	const userRoot = path.join(userCrewRoot(), DEFAULT_PATHS.state.importsSubdir);
-	return [...collect(userRoot, "user"), ...collect(projectRoot, "project")]
-		.sort((a, b) => (b.importedAt ?? "").localeCompare(a.importedAt ?? ""));
+	return [...collect(userRoot, "user"), ...collect(projectRoot, "project")].sort((a, b) =>
+		(b.importedAt ?? "").localeCompare(a.importedAt ?? ""),
+	);
 }

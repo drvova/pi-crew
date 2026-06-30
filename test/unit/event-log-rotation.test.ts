@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { needsRotation, compactEventLog, getEventLogStats } from "../../src/state/event-log-rotation.ts";
+import * as path from "node:path";
+import { describe, it } from "node:test";
+import { compactEventLog, getEventLogStats, needsRotation } from "../../src/state/event-log-rotation.ts";
 
 function tmpDir(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-rotation-"));
@@ -13,7 +13,14 @@ function writeEvents(filePath: string, count: number, baseTime = "2025-01-01T00:
 	const lines: string[] = [];
 	for (let i = 0; i < count; i++) {
 		const ts = new Date(Date.parse(baseTime) + i * 1000).toISOString();
-		lines.push(JSON.stringify({ time: ts, type: "tick", runId: "r1", metadata: { seq: i + 1, provenance: "test" } }));
+		lines.push(
+			JSON.stringify({
+				time: ts,
+				type: "tick",
+				runId: "r1",
+				metadata: { seq: i + 1, provenance: "test" },
+			}),
+		);
 	}
 	fs.appendFileSync(filePath, lines.join("\n") + "\n", "utf-8");
 }
@@ -37,7 +44,13 @@ describe("needsRotation", () => {
 		// Write enough events to exceed a tiny threshold
 		writeEvents(filePath, 500);
 		assert.ok(fs.statSync(filePath).size > 100);
-		assert.equal(needsRotation(filePath, { maxFileSizeBytes: 100, maxEventCount: 100_000 }), true);
+		assert.equal(
+			needsRotation(filePath, {
+				maxFileSizeBytes: 100,
+				maxEventCount: 100_000,
+			}),
+			true,
+		);
 		fs.rmSync(dir, { recursive: true });
 	});
 
@@ -45,7 +58,13 @@ describe("needsRotation", () => {
 		const dir = tmpDir();
 		const filePath = path.join(dir, "events.jsonl");
 		writeEvents(filePath, 200);
-		assert.equal(needsRotation(filePath, { maxFileSizeBytes: 100 * 1024 * 1024, maxEventCount: 100 }), true);
+		assert.equal(
+			needsRotation(filePath, {
+				maxFileSizeBytes: 100 * 1024 * 1024,
+				maxEventCount: 100,
+			}),
+			true,
+		);
 		fs.rmSync(dir, { recursive: true });
 	});
 });
@@ -94,7 +113,11 @@ describe("compactEventLog", () => {
 		const filePath = path.join(dir, "events.jsonl");
 		writeEvents(filePath, 100, "2025-06-01T00:00:00.000Z");
 		compactEventLog(filePath, { compactToCount: 5 });
-		const events = fs.readFileSync(filePath, "utf-8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { time: string });
+		const events = fs
+			.readFileSync(filePath, "utf-8")
+			.split("\n")
+			.filter(Boolean)
+			.map((l) => JSON.parse(l) as { time: string });
 		for (let i = 1; i < events.length; i++) {
 			assert.ok(events[i].time >= events[i - 1].time, `event ${i} not in order: ${events[i].time} < ${events[i - 1].time}`);
 		}

@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { readCrewAgentEventsCursor } from "../../src/runtime/crew-agent-records.ts";
 import { appendEvent, readEventsCursor } from "../../src/state/event-log.ts";
@@ -50,7 +50,14 @@ test("observability API supports event cursors, agent output tail, and dashboard
 		let eventPayload: { events: unknown[]; nextSeq: number };
 		const pollDeadline = Date.now() + 10_000;
 		for (;;) {
-			const events = await handleTeamTool({ action: "api", runId, config: { operation: "read-events", sinceSeq: 1, limit: 2 } }, { cwd });
+			const events = await handleTeamTool(
+				{
+					action: "api",
+					runId,
+					config: { operation: "read-events", sinceSeq: 1, limit: 2 },
+				},
+				{ cwd },
+			);
 			eventPayload = JSON.parse(firstText(events));
 			if (eventPayload.events.length === 2 && eventPayload.nextSeq >= 3) break;
 			if (Date.now() > pollDeadline) break;
@@ -63,15 +70,42 @@ test("observability API supports event cursors, agent output tail, and dashboard
 		const agents = JSON.parse(firstText(agentsResult));
 		const first = agents[0];
 
-		const agentCursor = readCrewAgentEventsCursor(JSON.parse(fs.readFileSync(path.join(cwd, ".crew", "state", "runs", runId, "manifest.json"), "utf-8")), first.taskId, { sinceSeq: 0, limit: 1 });
+		const agentCursor = readCrewAgentEventsCursor(
+			JSON.parse(fs.readFileSync(path.join(cwd, ".crew", "state", "runs", runId, "manifest.json"), "utf-8")),
+			first.taskId,
+			{ sinceSeq: 0, limit: 1 },
+		);
 		assert.equal(agentCursor.events.length, 1);
 
-		const agentEvents = await handleTeamTool({ action: "api", runId, config: { operation: "read-agent-events", agentId: first.taskId, sinceSeq: 0, limit: 1 } }, { cwd });
+		const agentEvents = await handleTeamTool(
+			{
+				action: "api",
+				runId,
+				config: {
+					operation: "read-agent-events",
+					agentId: first.taskId,
+					sinceSeq: 0,
+					limit: 1,
+				},
+			},
+			{ cwd },
+		);
 		const agentEventPayload = JSON.parse(firstText(agentEvents));
 		assert.equal(agentEventPayload.events.length, 1);
 		assert.ok(agentEventPayload.nextSeq >= 1);
 
-		const output = await handleTeamTool({ action: "api", runId, config: { operation: "read-agent-output", agentId: first.taskId, maxBytes: 10_000 } }, { cwd });
+		const output = await handleTeamTool(
+			{
+				action: "api",
+				runId,
+				config: {
+					operation: "read-agent-output",
+					agentId: first.taskId,
+					maxBytes: 10_000,
+				},
+			},
+			{ cwd },
+		);
 		const outputPayload = JSON.parse(firstText(output));
 		assert.equal(outputPayload.truncated, false);
 		assert.match(outputPayload.text, /success|mock/i);
@@ -85,4 +119,3 @@ test("observability API supports event cursors, agent output tail, and dashboard
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });
-

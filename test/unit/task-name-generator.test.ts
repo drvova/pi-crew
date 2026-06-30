@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { generateTaskName, resetTaskNames } from "../../src/utils/task-name-generator.ts";
 
 const NAME_PATTERN = /^[A-Z][a-z]+[A-Z][a-z]+$/;

@@ -1,13 +1,13 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	createWorkflowStateMachine,
 	canTransitionToPhase,
-	transitionPhase,
+	createWorkflowStateMachine,
 	getPhaseInputs,
-	validatePhasePreconditions,
-	type PhaseState,
 	type PhaseGuardContext,
+	type PhaseState,
+	transitionPhase,
+	validatePhasePreconditions,
 	type WorkflowStateMachine,
 } from "../../src/runtime/workflow-state.ts";
 
@@ -34,10 +34,7 @@ function emptyContext(overrides?: Partial<PhaseGuardContext>): PhaseGuardContext
 // ── createWorkflowStateMachine ────────────────────────────────────────────────
 
 test("createWorkflowStateMachine: returns machine with all phases pending", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute" }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute" })]);
 	assert.equal(machine.phases.length, 2);
 	assert.equal(machine.phases[0]!.status, "pending");
 	assert.equal(machine.phases[1]!.status, "pending");
@@ -45,9 +42,7 @@ test("createWorkflowStateMachine: returns machine with all phases pending", () =
 });
 
 test("createWorkflowStateMachine: preserves existing status values", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan", status: "completed" }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan", status: "completed" })]);
 	assert.equal(machine.phases[0]!.status, "completed");
 });
 
@@ -60,9 +55,7 @@ test("createWorkflowStateMachine: empty phases returns empty machine", () => {
 // ── getPhaseInputs ────────────────────────────────────────────────────────────
 
 test("getPhaseInputs: returns declared inputs for valid index", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan", inputs: ["requirements.md"] }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan", inputs: ["requirements.md"] })]);
 	assert.deepEqual(getPhaseInputs(machine, 0), ["requirements.md"]);
 });
 
@@ -98,29 +91,20 @@ test("canTransitionToPhase: negative index is rejected", () => {
 });
 
 test("canTransitionToPhase: previous phase must be completed", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute" }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute" })]);
 	const result = canTransitionToPhase(machine, 1, emptyContext({ previousPhaseStatus: "running" }));
 	assert.equal(result.allowed, false);
 	assert.ok(result.reason!.includes("Previous phase status is 'running'"));
 });
 
 test("canTransitionToPhase: previous phase completed allows transition", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute" }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute" })]);
 	const result = canTransitionToPhase(machine, 1, emptyContext({ previousPhaseStatus: "completed" }));
 	assert.equal(result.allowed, true);
 });
 
 test("canTransitionToPhase: previous phase skipped allows transition", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute" }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute" })]);
 	const result = canTransitionToPhase(machine, 1, emptyContext({ previousPhaseStatus: "skipped" }));
 	assert.equal(result.allowed, true);
 });
@@ -130,32 +114,34 @@ test("canTransitionToPhase: missing inputs block transition", () => {
 		phase({ name: "plan" }),
 		phase({ name: "execute", inputs: ["plan-output.md", "specs.json"] }),
 	]);
-	const result = canTransitionToPhase(machine, 1, emptyContext({
-		previousPhaseStatus: "completed",
-		completedArtifacts: ["plan-output.md"],
-	}));
+	const result = canTransitionToPhase(
+		machine,
+		1,
+		emptyContext({
+			previousPhaseStatus: "completed",
+			completedArtifacts: ["plan-output.md"],
+		}),
+	);
 	assert.equal(result.allowed, false);
 	assert.ok(result.reason!.includes("specs.json"));
 	assert.ok(result.reason!.includes("Missing required artifacts"));
 });
 
 test("canTransitionToPhase: all inputs present allows transition", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute", inputs: ["plan-output.md"] }),
-	]);
-	const result = canTransitionToPhase(machine, 1, emptyContext({
-		previousPhaseStatus: "completed",
-		completedArtifacts: ["plan-output.md"],
-	}));
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute", inputs: ["plan-output.md"] })]);
+	const result = canTransitionToPhase(
+		machine,
+		1,
+		emptyContext({
+			previousPhaseStatus: "completed",
+			completedArtifacts: ["plan-output.md"],
+		}),
+	);
 	assert.equal(result.allowed, true);
 });
 
 test("canTransitionToPhase: phase with no inputs only requires previous completion", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute" }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute" })]);
 	const result = canTransitionToPhase(machine, 1, emptyContext({ previousPhaseStatus: "completed" }));
 	assert.equal(result.allowed, true);
 });
@@ -163,23 +149,25 @@ test("canTransitionToPhase: phase with no inputs only requires previous completi
 // ── validatePhasePreconditions ────────────────────────────────────────────────
 
 test("validatePhasePreconditions: returns ready when all inputs present", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "execute", inputs: ["plan.md", "specs.json"] }),
-	]);
-	const result = validatePhasePreconditions(machine, emptyContext({
-		completedArtifacts: ["plan.md", "specs.json"],
-	}));
+	const machine = createWorkflowStateMachine([phase({ name: "execute", inputs: ["plan.md", "specs.json"] })]);
+	const result = validatePhasePreconditions(
+		machine,
+		emptyContext({
+			completedArtifacts: ["plan.md", "specs.json"],
+		}),
+	);
 	assert.equal(result.ready, true);
 	assert.deepEqual(result.blocking, []);
 });
 
 test("validatePhasePreconditions: returns blocking list when inputs missing", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "execute", inputs: ["plan.md", "specs.json"] }),
-	]);
-	const result = validatePhasePreconditions(machine, emptyContext({
-		completedArtifacts: ["plan.md"],
-	}));
+	const machine = createWorkflowStateMachine([phase({ name: "execute", inputs: ["plan.md", "specs.json"] })]);
+	const result = validatePhasePreconditions(
+		machine,
+		emptyContext({
+			completedArtifacts: ["plan.md"],
+		}),
+	);
 	assert.equal(result.ready, false);
 	assert.deepEqual(result.blocking, ["specs.json"]);
 });
@@ -225,29 +213,20 @@ test("transitionPhase: sets finishedAt on terminal status", () => {
 });
 
 test("transitionPhase: advances currentPhaseIndex to the target index", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute" }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute" })]);
 	const result = transitionPhase(machine, 1, "running");
 	assert.equal(result.machine.currentPhaseIndex, 1);
 });
 
 test("transitionPhase: does not regress currentPhaseIndex", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute" }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute" })]);
 	const advanced = { ...machine, currentPhaseIndex: 1 };
 	const result = transitionPhase(advanced, 0, "completed");
 	assert.equal(result.machine.currentPhaseIndex, 1);
 });
 
 test("transitionPhase: with context that blocks returns machine UNCHANGED with guardResult", () => {
-	const machine = createWorkflowStateMachine([
-		phase({ name: "plan" }),
-		phase({ name: "execute", inputs: ["missing.md"] }),
-	]);
+	const machine = createWorkflowStateMachine([phase({ name: "plan" }), phase({ name: "execute", inputs: ["missing.md"] })]);
 	const ctx = emptyContext({
 		previousPhaseStatus: "completed",
 		completedArtifacts: [],

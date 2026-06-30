@@ -9,8 +9,8 @@
  */
 import { Container, Spacer, Text, visibleWidth } from "@earendil-works/pi-tui";
 import type { CrewAgentRecord } from "../runtime/crew-agent-runtime.ts";
-import { replaceTabs } from "./render-diff.ts";
 import { truncateToWidth } from "../utils/visual.ts";
+import { replaceTabs } from "./render-diff.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 export interface Theme {
@@ -18,12 +18,20 @@ export interface Theme {
 	bold(text: string): string;
 }
 export type ThemeColor = "success" | "error" | "warning" | "dim" | "toolTitle" | "accent" | "muted" | "text";
-export interface ToolRenderContext { expanded: boolean; lastComponent?: Container }
+export interface ToolRenderContext {
+	expanded: boolean;
+	lastComponent?: Container;
+}
 export type Component = Container | Text;
 
 export interface TeamToolResultDetails {
-	action?: string; status?: string; runId?: string; goal?: string;
-	team?: string; workflow?: string; error?: string;
+	action?: string;
+	status?: string;
+	runId?: string;
+	goal?: string;
+	team?: string;
+	workflow?: string;
+	error?: string;
 	agentRecords?: CrewAgentRecord[];
 	// FIX (Round 14): `results` is the legacy key used by some subagent
 	// responses. Add it here so renderers can read either field without
@@ -31,7 +39,12 @@ export interface TeamToolResultDetails {
 	results?: CrewAgentRecord[];
 }
 export interface AgentToolResultDetails {
-	results?: Array<{ agentId?: string; status?: string; output?: string; error?: string }>;
+	results?: Array<{
+		agentId?: string;
+		status?: string;
+		output?: string;
+		error?: string;
+	}>;
 }
 
 /** Combined type for renderAgentToolResult — handles both nested details and flat result shapes */
@@ -55,7 +68,8 @@ export function formatTokens(n: number): string {
 export function formatDuration(ms: number): string {
 	if (ms < 1000) return `${ms}ms`;
 	if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-	const m = Math.floor(ms / 60_000), s = Math.floor((ms % 60_000) / 1000);
+	const m = Math.floor(ms / 60_000),
+		s = Math.floor((ms % 60_000) / 1000);
 	return s > 0 ? `${m}m${s}s` : `${m}m`;
 }
 
@@ -79,17 +93,34 @@ export function truncLine(text: string, maxWidth: number): string {
 
 export function formatToolPreview(name: string, args: Record<string, unknown>): string {
 	switch (name) {
-		case "bash": case "safe_bash": return `$ ${((args.command as string) || "").slice(0, 80)}`;
-		case "read": return `read ${(args.path as string) || ""}`;
-		case "write": return `write ${(args.path as string) || ""}`;
-		case "edit": return `edit ${(args.path as string) || ""}`;
-		case "grep": case "find": return `${name} ${((args.pattern || args.path) as string) || ""}`;
-		case "ls": return `ls ${(args.path as string) || "."}`;
-		case "web_search": case "search": return `search "${((args.query as string) || "").slice(0, 60)}"`;
-		case "web_fetch": case "fetch": return `fetch ${(args.url as string) || ""}`;
-		case "team": return `team action=${(args.action as string) || ""}`;
-		case "agent": return `agent ${(args.agent as string) || ""}`;
-		default: { const s = JSON.stringify(args); return `${name} ${s.slice(0, 60)}`; }
+		case "bash":
+		case "safe_bash":
+			return `$ ${((args.command as string) || "").slice(0, 80)}`;
+		case "read":
+			return `read ${(args.path as string) || ""}`;
+		case "write":
+			return `write ${(args.path as string) || ""}`;
+		case "edit":
+			return `edit ${(args.path as string) || ""}`;
+		case "grep":
+		case "find":
+			return `${name} ${((args.pattern || args.path) as string) || ""}`;
+		case "ls":
+			return `ls ${(args.path as string) || "."}`;
+		case "web_search":
+		case "search":
+			return `search "${((args.query as string) || "").slice(0, 60)}"`;
+		case "web_fetch":
+		case "fetch":
+			return `fetch ${(args.url as string) || ""}`;
+		case "team":
+			return `team action=${(args.action as string) || ""}`;
+		case "agent":
+			return `agent ${(args.agent as string) || ""}`;
+		default: {
+			const s = JSON.stringify(args);
+			return `${name} ${s.slice(0, 60)}`;
+		}
 	}
 }
 
@@ -98,42 +129,54 @@ export function formatToolPreview(name: string, args: Record<string, unknown>): 
 /** team tool call: collapsed "team action='run' impl..." / expanded: header + goal */
 export function renderTeamToolCall(
 	args: { action?: string; goal?: string; team?: string; workflow?: string },
-	theme: Theme, context: ToolRenderContext,
+	theme: Theme,
+	context: ToolRenderContext,
 ): Component {
-	const action = args.action || "", goal = args.goal || "";
+	const action = args.action || "",
+		goal = args.goal || "";
 	const team = args.team ? ` ${theme.fg("dim", `(${args.team})`)}` : "";
 
 	if (!context.expanded) {
 		const preview = goal.length > 60 ? goal.slice(0, 60) + "…" : goal;
 		return new Text(
 			`${theme.fg("toolTitle", theme.bold("team"))}  action=${theme.fg("accent", `'${action}'`)}${team}${theme.fg("dim", preview ? `  "${preview.replace(/\n/g, " ")}"` : "")}`,
-			0, 0,
+			0,
+			0,
 		);
 	}
 	const c = context.lastComponent instanceof Container ? (context.lastComponent.clear(), context.lastComponent) : new Container();
 	c.addChild(new Text(`${theme.fg("toolTitle", theme.bold("team"))}  action=${theme.fg("accent", `'${action}'`)}${team}`, 0, 0));
-	if (goal) { c.addChild(new Spacer(1)); c.addChild(new Text(theme.fg("text", goal), 0, 0)); }
+	if (goal) {
+		c.addChild(new Spacer(1));
+		c.addChild(new Text(theme.fg("text", goal), 0, 0));
+	}
 	return c;
 }
 
 /** agent tool call: collapsed "Agent explorer..." / expanded: header + prompt */
 export function renderAgentToolCall(
 	args: { agent?: string; prompt?: string; task?: string; cwd?: string },
-	theme: Theme, context: ToolRenderContext,
+	theme: Theme,
+	context: ToolRenderContext,
 ): Component {
-	const agentName = args.agent || "", prompt = args.prompt || args.task || "";
+	const agentName = args.agent || "",
+		prompt = args.prompt || args.task || "";
 
 	if (!context.expanded) {
 		const preview = prompt.length > 60 ? prompt.slice(0, 60) + "…" : prompt;
 		return new Text(
 			`${theme.fg("toolTitle", theme.bold("agent"))}  ${theme.fg("accent", agentName)}${theme.fg("dim", preview ? `  "${preview.replace(/\n/g, " ")}"` : "")}`,
-			0, 0,
+			0,
+			0,
 		);
 	}
 	const c = context.lastComponent instanceof Container ? (context.lastComponent.clear(), context.lastComponent) : new Container();
 	const cwdLabel = args.cwd ? theme.fg("dim", `  (cwd:  ${args.cwd})`) : "";
 	c.addChild(new Text(`${theme.fg("toolTitle", theme.bold("agent"))}  ${theme.fg("accent", agentName)}${cwdLabel}`, 0, 0));
-	if (prompt) { c.addChild(new Spacer(1)); c.addChild(new Text(theme.fg("text", prompt), 0, 0)); }
+	if (prompt) {
+		c.addChild(new Spacer(1));
+		c.addChild(new Text(theme.fg("text", prompt), 0, 0));
+	}
 	return c;
 }
 
@@ -146,23 +189,23 @@ export function renderAgentToolCall(
  * Tool log: "▸ bash: $ npm test" / "  read: src/index.ts"
  * Usage: "↑12k ↓3k R45k W0 $0.023"
  */
-export function renderAgentProgress(
-	record: CrewAgentRecord, theme: Theme, expanded: boolean, w: number,
-): Container {
+export function renderAgentProgress(record: CrewAgentRecord, theme: Theme, expanded: boolean, w: number): Container {
 	const c = new Container();
 	const prog = record.progress;
 	const isRunning = record.status === "running";
 	const isPending = record.status === "queued" || record.status === "waiting";
 	const innerW = Math.max(20, w);
 
-	const addLine = (content: string) =>
-		c.addChild(new Text(expanded ? content : truncLine(content, innerW), 0, 0));
+	const addLine = (content: string) => c.addChild(new Text(expanded ? content : truncLine(content, innerW), 0, 0));
 
 	// Status icon
-	const icon = isRunning ? theme.fg("warning", "⟳")
-		: isPending ? theme.fg("dim", "○")
-		: record.status === "completed" ? theme.fg("success", "✓")
-		: theme.fg("error", "✗");
+	const icon = isRunning
+		? theme.fg("warning", "⟳")
+		: isPending
+			? theme.fg("dim", "○")
+			: record.status === "completed"
+				? theme.fg("success", "✓")
+				: theme.fg("error", "✗");
 
 	// Duration
 	const durationMs = prog?.durationMs ?? computeDurationMs(record.startedAt, record.completedAt);
@@ -181,9 +224,7 @@ export function renderAgentProgress(
 	if (prog?.recentTools?.length) {
 		for (const tool of prog.recentTools) {
 			const detail = tool.args ? `:  ${tool.args}` : "";
-			const line = tool.endedAt
-				? theme.fg("muted", `  ${tool.tool}${detail}`)
-				: theme.fg("warning", `▸  ${tool.tool}${detail}`);
+			const line = tool.endedAt ? theme.fg("muted", `  ${tool.tool}${detail}`) : theme.fg("warning", `▸  ${tool.tool}${detail}`);
 			addLine(line);
 		}
 	}
@@ -216,7 +257,10 @@ export function renderAgentProgress(
 	if (usage?.cost) parts.push(theme.fg("dim", `$${usage.cost.toFixed(3)}`));
 	const tokens = prog?.tokens ?? 0;
 	if (tokens > 0) parts.push(theme.fg("dim", `${formatTokens(tokens)} ctx`));
-	if (parts.length) { c.addChild(new Spacer(1)); addLine(parts.join(" ")); }
+	if (parts.length) {
+		c.addChild(new Spacer(1));
+		addLine(parts.join(" "));
+	}
 
 	return c;
 }
@@ -243,7 +287,9 @@ interface TeamToolFlattenedDetails {
 /** team tool result: 'run' shows agent progress rows, else compact summary */
 export function renderTeamToolResult(
 	result: { details?: TeamToolResultDetails; content?: unknown[] } & Record<string, unknown>,
-	_options: unknown, theme: Theme, _context: unknown,
+	_options: unknown,
+	theme: Theme,
+	_context: unknown,
 ): Component {
 	// Handle both nested details (result.details) and flattened result shape (details at root level)
 	const d = (result as { details?: TeamToolResultDetails }).details;
@@ -264,7 +310,12 @@ export function renderTeamToolResult(
 			// For 'run' action without records: show goal prominently with status badge
 			if (flat.action === "run") {
 				const goalText = flat.goal || "";
-				const statusBadge = flat.status ? theme.fg(flat.status === "completed" ? "success" : flat.status === "failed" ? "error" : "warning", `[${flat.status}]`) + " " : "";
+				const statusBadge = flat.status
+					? theme.fg(
+							flat.status === "completed" ? "success" : flat.status === "failed" ? "error" : "warning",
+							`[${flat.status}]`,
+						) + " "
+					: "";
 				return new Text(statusBadge + theme.fg("text", truncLine(goalText, 116)), 0, 0);
 			}
 			// For other actions: compact info line
@@ -301,7 +352,9 @@ export function renderTeamToolResult(
 /** agent tool result: shows agent output rows with status icons */
 export function renderAgentToolResult(
 	result: { details?: AgentToolResultDetails; content?: unknown[] } & Record<string, unknown>,
-	_options: unknown, theme: Theme, _context: unknown,
+	_options: unknown,
+	theme: Theme,
+	_context: unknown,
 ): Component {
 	// Handle both nested details and flattened result shape
 	const d = (result.details ?? result) as AgentResultData;
@@ -312,10 +365,14 @@ export function renderAgentToolResult(
 	const results = d?.results;
 	if (results?.length) {
 		for (const item of results) {
-			const icon = item.status === "completed" ? theme.fg("success", "✓")
-				: item.status === "failed" ? theme.fg("error", "✗")
-				: item.status === "running" ? theme.fg("warning", "⟳")
-				: theme.fg("dim", "○");
+			const icon =
+				item.status === "completed"
+					? theme.fg("success", "✓")
+					: item.status === "failed"
+						? theme.fg("error", "✗")
+						: item.status === "running"
+							? theme.fg("warning", "⟳")
+							: theme.fg("dim", "○");
 			const label = item.agentId || "agent";
 			c.addChild(new Text(`${icon}  ${theme.fg("toolTitle", theme.bold(label))}`, 0, 0));
 			if (item.error) {
@@ -335,10 +392,14 @@ export function renderAgentToolResult(
 
 	// Handle single agent result shape: { agentId, runId, status, output }
 	if (d?.agentId) {
-		const icon = d.status === "completed" ? theme.fg("success", "✓")
-			: d.status === "failed" ? theme.fg("error", "✗")
-			: d.status === "running" ? theme.fg("warning", "⟳")
-			: theme.fg("dim", "○");
+		const icon =
+			d.status === "completed"
+				? theme.fg("success", "✓")
+				: d.status === "failed"
+					? theme.fg("error", "✗")
+					: d.status === "running"
+						? theme.fg("warning", "⟳")
+						: theme.fg("dim", "○");
 		const label = d.agentId;
 		c.addChild(new Text(`${icon}  ${theme.fg("toolTitle", theme.bold(label))}`, 0, 0));
 		if (d.error) {
@@ -347,8 +408,7 @@ export function renderAgentToolResult(
 			const clean = truncLine(replaceTabs(String(d.error)), w - 2);
 			c.addChild(new Text(theme.fg("error", `  Error:  ${clean}`), 0, 0));
 		} else if (d.output) {
-			for (const line of d.output.split("\n").slice(0, 5))
-				c.addChild(new Text(theme.fg("dim", `  ${truncLine(line, w - 2)}`), 0, 0));
+			for (const line of d.output.split("\n").slice(0, 5)) c.addChild(new Text(theme.fg("dim", `  ${truncLine(line, w - 2)}`), 0, 0));
 		}
 		return c;
 	}
@@ -361,21 +421,33 @@ export function renderAgentToolResult(
 function extractText(content: unknown[] | undefined): string {
 	if (!content) return "(no output)";
 	if (!Array.isArray(content)) return String(content);
-	return content.filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text").map((c) => String((c as Record<string, unknown>).text ?? "")).join("\n") || "(no output)";
+	return (
+		content
+			.filter(
+				(c): c is Record<string, unknown> => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text",
+			)
+			.map((c) => String((c as Record<string, unknown>).text ?? ""))
+			.join("\n") || "(no output)"
+	);
 }
 
 function parseArgs(argsStr: string | undefined): Record<string, unknown> {
 	if (!argsStr) return {};
 	try {
 		const p = JSON.parse(argsStr);
-		return typeof p === "object" && p !== null ? p as Record<string, unknown> : {};
-	} catch { return {}; }
+		return typeof p === "object" && p !== null ? (p as Record<string, unknown>) : {};
+	} catch {
+		return {};
+	}
 }
 
 function computeDurationMs(startedAt: string, completedAt?: string): number {
 	if (!startedAt) return 0;
 	const start = new Date(startedAt).getTime();
 	if (isNaN(start)) return 0;
-	if (completedAt) { const end = new Date(completedAt).getTime(); return isNaN(end) ? 0 : Math.max(0, end - start); }
+	if (completedAt) {
+		const end = new Date(completedAt).getTime();
+		return isNaN(end) ? 0 : Math.max(0, end - start);
+	}
 	return Math.max(0, Date.now() - start);
 }

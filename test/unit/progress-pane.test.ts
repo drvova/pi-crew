@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { renderProgressPane } from "../../src/ui/dashboard-panes/progress-pane.ts";
 import type { RunUiSnapshot } from "../../src/ui/snapshot-types.ts";
 
@@ -9,7 +9,23 @@ function snapshot(reason?: string): RunUiSnapshot {
 		cwd: process.cwd(),
 		fetchedAt: 0,
 		signature: "s",
-		manifest: { schemaVersion: 1, runId: "run", cwd: process.cwd(), team: "t", workflow: "w", goal: "g", status: reason ? "cancelled" : "running", createdAt: "", updatedAt: "", stateRoot: "", artifactsRoot: "", tasksPath: "", eventsPath: "", artifacts: [], workspaceMode: "single" },
+		manifest: {
+			schemaVersion: 1,
+			runId: "run",
+			cwd: process.cwd(),
+			team: "t",
+			workflow: "w",
+			goal: "g",
+			status: reason ? "cancelled" : "running",
+			createdAt: "",
+			updatedAt: "",
+			stateRoot: "",
+			artifactsRoot: "",
+			tasksPath: "",
+			eventsPath: "",
+			artifacts: [],
+			workspaceMode: "single",
+		},
 		tasks: [],
 		agents: [],
 		progress: { total: 0, completed: 0, running: 0, failed: 0, queued: 0 },

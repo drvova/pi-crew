@@ -1,14 +1,13 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { describe, it } from "node:test";
+import type { LiveAgentControlRequest } from "../../src/runtime/live-agent-control.ts";
 import {
-	publishLiveControlRealtime,
-	subscribeLiveControlRealtime,
+	clearLiveControlRealtimeForTest,
 	liveControlRealtimeMessage,
 	parseLiveControlRealtimeMessage,
-	clearLiveControlRealtimeForTest,
+	publishLiveControlRealtime,
+	subscribeLiveControlRealtime,
 } from "../../src/runtime/live-control-realtime.ts";
-import type { LiveAgentControlRequest } from "../../src/runtime/live-agent-control.ts";
 
 function makeRequest(overrides: Partial<LiveAgentControlRequest> = {}): LiveAgentControlRequest {
 	return {
@@ -27,8 +26,12 @@ test.afterEach(() => clearLiveControlRealtimeForTest());
 describe("publishLiveControlRealtime / subscribeLiveControlRealtime", () => {
 	it("delivers messages to all subscribers", () => {
 		const received: LiveAgentControlRequest[][] = [[], []];
-		const unsub1 = subscribeLiveControlRealtime((r) => { received[0]!.push(r); });
-		const unsub2 = subscribeLiveControlRealtime((r) => { received[1]!.push(r); });
+		const unsub1 = subscribeLiveControlRealtime((r) => {
+			received[0]!.push(r);
+		});
+		const unsub2 = subscribeLiveControlRealtime((r) => {
+			received[1]!.push(r);
+		});
 		try {
 			const req = makeRequest();
 			publishLiveControlRealtime(req);
@@ -43,7 +46,9 @@ describe("publishLiveControlRealtime / subscribeLiveControlRealtime", () => {
 
 	it("unsubscribe stops delivery", () => {
 		const received: LiveAgentControlRequest[] = [];
-		const unsub = subscribeLiveControlRealtime((r) => { received.push(r); });
+		const unsub = subscribeLiveControlRealtime((r) => {
+			received.push(r);
+		});
 		unsub();
 		publishLiveControlRealtime(makeRequest());
 		assert.equal(received.length, 0);
@@ -52,8 +57,12 @@ describe("publishLiveControlRealtime / subscribeLiveControlRealtime", () => {
 	it("supports multiple subscribers independently", () => {
 		const r1: LiveAgentControlRequest[] = [];
 		const r2: LiveAgentControlRequest[] = [];
-		const u1 = subscribeLiveControlRealtime((r) => { r1.push(r); });
-		const u2 = subscribeLiveControlRealtime((r) => { r2.push(r); });
+		const u1 = subscribeLiveControlRealtime((r) => {
+			r1.push(r);
+		});
+		const u2 = subscribeLiveControlRealtime((r) => {
+			r2.push(r);
+		});
 		try {
 			publishLiveControlRealtime(makeRequest({ operation: "steer" }));
 			publishLiveControlRealtime(makeRequest({ operation: "stop" }));
@@ -79,7 +88,10 @@ describe("liveControlRealtimeMessage", () => {
 	});
 
 	it("preserves all request fields", () => {
-		const req = makeRequest({ operation: "follow-up", message: "check this" });
+		const req = makeRequest({
+			operation: "follow-up",
+			message: "check this",
+		});
 		const msg = liveControlRealtimeMessage(req);
 		assert.equal(msg.request.operation, "follow-up");
 		assert.equal(msg.request.message, "check this");
@@ -129,7 +141,11 @@ describe("parseLiveControlRealtimeMessage", () => {
 	});
 
 	it("rejects wrong version", () => {
-		const msg = { type: "live-control", version: 99, request: makeRequest() };
+		const msg = {
+			type: "live-control",
+			version: 99,
+			request: makeRequest(),
+		};
 		assert.equal(parseLiveControlRealtimeMessage(msg), undefined);
 	});
 
@@ -139,9 +155,15 @@ describe("parseLiveControlRealtimeMessage", () => {
 	});
 
 	it("rejects invalid operation", () => {
-		const req = makeRequest({ operation: "invalid" as LiveAgentControlRequest["operation"] });
+		const req = makeRequest({
+			operation: "invalid" as LiveAgentControlRequest["operation"],
+		});
 		// Manually craft invalid message
-		const msg = { type: "live-control", version: 1, request: { ...req, operation: "invalid" } };
+		const msg = {
+			type: "live-control",
+			version: 1,
+			request: { ...req, operation: "invalid" },
+		};
 		assert.equal(parseLiveControlRealtimeMessage(msg), undefined);
 	});
 });

@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import type { TeamTaskState, TeamRunManifest } from "../state/types.ts";
+import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 
 // ============================================================================
 // Phase 1.2: Completion Mutation Guard — detects tasks that claim success but
@@ -21,13 +21,27 @@ export interface CompletionMutationGuardResult {
 }
 
 const MUTATING_ROLES = new Set(["executor", "test-engineer"]);
-const MUTATING_TOOLS = new Set(["edit", "write", "multi_edit", "apply_patch", "replace_in_file", "insert", "delete_files", "create_file", "overwrite", "patch"]);
-const READ_ONLY_COMMANDS = /^(pwd|ls|dir|cat|type|sed|grep|rg|find|git\s+(status|diff|log|show|branch|remote|rev-parse|ls-files)|npm\s+(test|run\s+(typecheck|check|lint|test|ci))|node\s+--test)\b/i;
-const MUTATING_COMMANDS = /\b(rm\s+-|del\s+|erase\s+|mv\s+|move\s+|cp\s+|copy\s+|mkdir\b|touch\b|git\s+(add|commit|push|reset|clean|checkout|switch|merge|rebase|stash)|npm\s+(install|i|uninstall|publish|version)|pnpm\s+(add|install|remove)|yarn\s+(add|install|remove)|python\b.*>|node\b.*>|echo\b.*>|Set-Content|Out-File|sed\s+-i|tee\b|dd\b.*of=|wget\b.*-O|curl\b.*-o)\b/i;
-const READ_ONLY_HINTS = /\b(read-only|no edits?|do not edit|không sửa|khong sua|chỉ đọc|chi doc|plan only|chỉ lập plan|review only|audit only)\b/i;
+const MUTATING_TOOLS = new Set([
+	"edit",
+	"write",
+	"multi_edit",
+	"apply_patch",
+	"replace_in_file",
+	"insert",
+	"delete_files",
+	"create_file",
+	"overwrite",
+	"patch",
+]);
+const READ_ONLY_COMMANDS =
+	/^(pwd|ls|dir|cat|type|sed|grep|rg|find|git\s+(status|diff|log|show|branch|remote|rev-parse|ls-files)|npm\s+(test|run\s+(typecheck|check|lint|test|ci))|node\s+--test)\b/i;
+const MUTATING_COMMANDS =
+	/\b(rm\s+-|del\s+|erase\s+|mv\s+|move\s+|cp\s+|copy\s+|mkdir\b|touch\b|git\s+(add|commit|push|reset|clean|checkout|switch|merge|rebase|stash)|npm\s+(install|i|uninstall|publish|version)|pnpm\s+(add|install|remove)|yarn\s+(add|install|remove)|python\b.*>|node\b.*>|echo\b.*>|Set-Content|Out-File|sed\s+-i|tee\b|dd\b.*of=|wget\b.*-O|curl\b.*-o)\b/i;
+const READ_ONLY_HINTS =
+	/\b(read-only|no edits?|do not edit|không sửa|khong sua|chỉ đọc|chi doc|plan only|chỉ lập plan|review only|audit only)\b/i;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function commandText(value: unknown): string {
@@ -60,7 +74,10 @@ export function collectToolCallsFromEvent(event: unknown): Array<{ tool: string;
 	if (!record) return [];
 	const calls: Array<{ tool: string; args?: unknown }> = [];
 	const directTool = record.toolName ?? record.name ?? record.tool;
-	if (typeof directTool === "string" && (record.type === "tool_execution_start" || record.type === "toolCall" || record.type === "tool_call")) {
+	if (
+		typeof directTool === "string" &&
+		(record.type === "tool_execution_start" || record.type === "toolCall" || record.type === "tool_call")
+	) {
 		calls.push({ tool: directTool, args: record.args ?? record.input });
 	}
 	const content = Array.isArray(record.content) ? record.content : asRecord(record.message)?.content;
@@ -69,7 +86,8 @@ export function collectToolCallsFromEvent(event: unknown): Array<{ tool: string;
 			const item = asRecord(part);
 			if (!item) continue;
 			const tool = item.name ?? item.toolName ?? item.tool;
-			if (typeof tool === "string" && (item.type === "toolCall" || item.type === "tool_call" || item.type === "tool_execution_start")) calls.push({ tool, args: item.input ?? item.args });
+			if (typeof tool === "string" && (item.type === "toolCall" || item.type === "tool_call" || item.type === "tool_execution_start"))
+				calls.push({ tool, args: item.input ?? item.args });
 		}
 	}
 	return calls;
@@ -94,7 +112,11 @@ export function evaluateCompletionMutationGuard(input: CompletionMutationGuardIn
 		const trimmed = line.trim();
 		if (!trimmed) continue;
 		let event: unknown;
-		try { event = JSON.parse(trimmed); } catch { continue; }
+		try {
+			event = JSON.parse(trimmed);
+		} catch {
+			continue;
+		}
 		for (const call of collectToolCallsFromEvent(event)) {
 			observedTools.push(call.tool);
 			if (isMutatingTool(call.tool, call.args)) observedMutation = true;
@@ -133,10 +155,7 @@ function isTrivialError(error: string | undefined): boolean {
 	return error.trim().length === 0;
 }
 
-export function verifyTaskCompletion(
-	task: TeamTaskState,
-	manifest: TeamRunManifest,
-): CompletionVerifyResult {
+export function verifyTaskCompletion(task: TeamTaskState, manifest: TeamRunManifest): CompletionVerifyResult {
 	const warnings: string[] = [];
 	let greenLevel = 0;
 
@@ -156,9 +175,7 @@ export function verifyTaskCompletion(
 	}
 
 	// Check 4: For implementation tasks, verify artifacts were actually produced
-	const runArtifacts = manifest.artifacts.filter(
-		(a) => a.producer === task.id || a.producer === task.agent,
-	);
+	const runArtifacts = manifest.artifacts.filter((a) => a.producer === task.id || a.producer === task.agent);
 	if (runArtifacts.length > 0) {
 		greenLevel += 1;
 	} else if (greenLevel < 3) {

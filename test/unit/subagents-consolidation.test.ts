@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { runChildPi } from "../../src/subagents/spawn.ts";
-import { SubagentManager } from "../../src/subagents/manager.ts";
+import test from "node:test";
 import { getBackgroundRunnerCommand } from "../../src/subagents/async-entry.ts";
+import { SubagentManager } from "../../src/subagents/manager.ts";
+import { runChildPi } from "../../src/subagents/spawn.ts";
 
 test("subagents consolidation entrypoints re-export existing runtime APIs", () => {
 	assert.equal(typeof runChildPi, "function");

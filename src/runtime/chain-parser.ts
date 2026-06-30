@@ -48,19 +48,39 @@ function tokenize(input: string): Token[] {
 
 	while (i < input.length) {
 		// Skip whitespace
-		if (/\s/.test(input[i]!)) { i++; continue; }
+		if (/\s/.test(input[i]!)) {
+			i++;
+			continue;
+		}
 
 		// Arrow ->
 		if (input[i] === "-" && input[i + 1] === ">") {
 			tokens.push({ type: "ARROW", value: "->" });
-			i += 2; continue;
+			i += 2;
+			continue;
 		}
 
 		// Punctuation
-		if (input[i] === "(") { tokens.push({ type: "LPAREN", value: "(" }); i++; continue; }
-		if (input[i] === ")") { tokens.push({ type: "RPAREN", value: ")" }); i++; continue; }
-		if (input[i] === ",") { tokens.push({ type: "COMMA", value: "," }); i++; continue; }
-		if (input[i] === ":") { tokens.push({ type: "COLON", value: ":" }); i++; continue; }
+		if (input[i] === "(") {
+			tokens.push({ type: "LPAREN", value: "(" });
+			i++;
+			continue;
+		}
+		if (input[i] === ")") {
+			tokens.push({ type: "RPAREN", value: ")" });
+			i++;
+			continue;
+		}
+		if (input[i] === ",") {
+			tokens.push({ type: "COMMA", value: "," });
+			i++;
+			continue;
+		}
+		if (input[i] === ":") {
+			tokens.push({ type: "COLON", value: ":" });
+			i++;
+			continue;
+		}
 
 		// Quoted argument
 		if (input[i] === '"' || input[i] === "'") {
@@ -68,8 +88,12 @@ function tokenize(input: string): Token[] {
 			let str = "";
 			i++; // skip opening quote
 			while (i < input.length && input[i] !== quote) {
-				if (input[i] === "\\" && i + 1 < input.length) { i++; str += input[i]; }
-				else { str += input[i]!; }
+				if (input[i] === "\\" && i + 1 < input.length) {
+					i++;
+					str += input[i];
+				} else {
+					str += input[i]!;
+				}
 				i++;
 			}
 			if (i >= input.length) throw new Error("Unclosed quoted string in chain DSL");
@@ -82,7 +106,10 @@ function tokenize(input: string): Token[] {
 		if (input[i] === "-" && input[i + 1] === "-") {
 			let flag = "";
 			i += 2;
-			while (i < input.length && /[a-zA-Z0-9_-]/.test(input[i]!)) { flag += input[i]; i++; }
+			while (i < input.length && /[a-zA-Z0-9_-]/.test(input[i]!)) {
+				flag += input[i];
+				i++;
+			}
 			tokens.push({ type: "FLAG", value: flag });
 			continue;
 		}
@@ -90,7 +117,10 @@ function tokenize(input: string): Token[] {
 		// Number
 		if (/[0-9]/.test(input[i]!)) {
 			let num = "";
-			while (i < input.length && /[0-9]/.test(input[i]!)) { num += input[i]; i++; }
+			while (i < input.length && /[0-9]/.test(input[i]!)) {
+				num += input[i];
+				i++;
+			}
 			tokens.push({ type: "NUMBER", value: num });
 			continue;
 		}
@@ -98,7 +128,10 @@ function tokenize(input: string): Token[] {
 		// Name
 		if (/[a-zA-Z_]/.test(input[i]!)) {
 			let name = "";
-			while (i < input.length && /[a-zA-Z0-9_.-]/.test(input[i]!)) { name += input[i]; i++; }
+			while (i < input.length && /[a-zA-Z0-9_.-]/.test(input[i]!)) {
+				name += input[i];
+				i++;
+			}
 			tokens.push({ type: "NAME", value: name });
 			continue;
 		}

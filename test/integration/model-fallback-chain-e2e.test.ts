@@ -1,8 +1,8 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { loadRunManifestById } from "../../src/state/state-store.ts";
 
@@ -40,7 +40,11 @@ test("model-fallback chain routes retryable failure to next candidate and succee
 	// Clean up any stale counter file from a previous interrupted run so
 	// the assertion below is deterministic.
 	const counterFile = path.join(os.tmpdir(), `pi-crew-mock-counter-${process.pid}-retryable-failure-then-success`);
-	try { fs.unlinkSync(counterFile); } catch { /* fine if missing */ }
+	try {
+		fs.unlinkSync(counterFile);
+	} catch {
+		/* fine if missing */
+	}
 	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
 	process.env.PI_CREW_ALLOW_MOCK = "1";
 	process.env.PI_TEAMS_MOCK_CHILD_PI = "retryable-failure-then-success";
@@ -65,20 +69,32 @@ test("model-fallback chain routes retryable failure to next candidate and succee
 			},
 			{ cwd, modelRegistry } as never,
 		);
-		assert.equal(run.isError, false, `run returned error: ${typeof run.content?.[0] === "object" && run.content?.[0] && "text" in run.content[0] ? (run.content[0] as { text?: string }).text ?? "<no text>" : "<no text>"}`);
+		assert.equal(
+			run.isError,
+			false,
+			`run returned error: ${typeof run.content?.[0] === "object" && run.content?.[0] && "text" in run.content[0] ? ((run.content[0] as { text?: string }).text ?? "<no text>") : "<no text>"}`,
+		);
 		const runId = run.details.runId;
 		assert.ok(runId, "run must have a runId");
 		const loaded = loadRunManifestById(cwd, runId!);
 		assert.ok(loaded, "manifest must be loadable after run");
 		// The single task should be completed (not failed/blocked) — the
 		// fallback chain succeeded on attempt #2.
-		assert.equal(loaded?.manifest.status, "completed", `manifest status: ${loaded?.manifest.status} summary=${loaded?.manifest.summary}`);
+		assert.equal(
+			loaded?.manifest.status,
+			"completed",
+			`manifest status: ${loaded?.manifest.status} summary=${loaded?.manifest.summary}`,
+		);
 		assert.equal(loaded?.tasks.length, 1);
 		const task = loaded!.tasks[0]!;
 		assert.equal(task.status, "completed", `task status: ${task.status} error=${task.error}`);
 		// Core invariant: exactly 2 attempts recorded (fail then succeed).
 		assert.ok(task.modelAttempts, "task must have modelAttempts");
-		assert.equal(task.modelAttempts!.length, 2, `expected 2 attempts, got ${task.modelAttempts!.length}: ${JSON.stringify(task.modelAttempts)}`);
+		assert.equal(
+			task.modelAttempts!.length,
+			2,
+			`expected 2 attempts, got ${task.modelAttempts!.length}: ${JSON.stringify(task.modelAttempts)}`,
+		);
 		const [first, second] = task.modelAttempts!;
 		assert.equal(first.success, false, "first attempt must be a failure");
 		assert.match(first.error ?? "", /provider[_ ]?error/i, `first attempt error must match retryable pattern: ${first.error}`);
@@ -88,7 +104,11 @@ test("model-fallback chain routes retryable failure to next candidate and succee
 		// actually rotated, not retried the same model).
 		assert.notEqual(first.model, second.model, `fallback chain should rotate models, got same: ${first.model}`);
 	} finally {
-		try { fs.unlinkSync(counterFile); } catch { /* fine if already gone */ }
+		try {
+			fs.unlinkSync(counterFile);
+		} catch {
+			/* fine if already gone */
+		}
 		if (previousExecute === undefined) delete process.env.PI_TEAMS_EXECUTE_WORKERS;
 		else process.env.PI_TEAMS_EXECUTE_WORKERS = previousExecute;
 		if (previousMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;

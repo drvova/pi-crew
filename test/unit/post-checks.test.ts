@@ -1,10 +1,10 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { runPostCheck } from "../../src/runtime/post-checks.ts";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import type { PostCheckConfig } from "../../src/runtime/post-checks.ts";
+import { runPostCheck } from "../../src/runtime/post-checks.ts";
 
 describe("runPostCheck", () => {
 	it("passes and skips when no script path is configured", async () => {
@@ -22,7 +22,10 @@ describe("runPostCheck", () => {
 		// Windows, `runPostCheck` invokes the runtime's resolveShellForScript
 		// which routes `.sh` through bash — not portable when Git Bash is
 		// absent. Skip on win32 (path coverage parity with previous fix).
-		if (process.platform === "win32") { t.skip("POSIX .sh fixture; Windows uses .ps1/.bat routed by resolveShellForScript"); return; }
+		if (process.platform === "win32") {
+			t.skip("POSIX .sh fixture; Windows uses .ps1/.bat routed by resolveShellForScript");
+			return;
+		}
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-test-"));
 		try {
 			const scriptPath = path.join(dir, "check.sh");
@@ -42,7 +45,10 @@ describe("runPostCheck", () => {
 	});
 
 	it("fails for a script that exits non-zero", async (t) => {
-		if (process.platform === "win32") { t.skip("POSIX .sh fixture; Windows uses .ps1/.bat routed by resolveShellForScript"); return; }
+		if (process.platform === "win32") {
+			t.skip("POSIX .sh fixture; Windows uses .ps1/.bat routed by resolveShellForScript");
+			return;
+		}
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-test-"));
 		try {
 			const scriptPath = path.join(dir, "fail.sh");
@@ -61,7 +67,10 @@ describe("runPostCheck", () => {
 	});
 
 	it("reports timeout when script runs too long", async (t) => {
-		if (process.platform === "win32") { t.skip("POSIX .sh fixture with sleep builtin; Windows uses .ps1/.bat"); return; }
+		if (process.platform === "win32") {
+			t.skip("POSIX .sh fixture with sleep builtin; Windows uses .ps1/.bat");
+			return;
+		}
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-test-"));
 		try {
 			const scriptPath = path.join(dir, "slow.sh");
@@ -79,7 +88,10 @@ describe("runPostCheck", () => {
 	});
 
 	it("uses env var PI_CREW_POST_CHECK_SCRIPT as fallback", async (t) => {
-		if (process.platform === "win32") { t.skip("POSIX .sh fixture; Windows uses .ps1/.bat routed by resolveShellForScript"); return; }
+		if (process.platform === "win32") {
+			t.skip("POSIX .sh fixture; Windows uses .ps1/.bat routed by resolveShellForScript");
+			return;
+		}
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-test-"));
 		const originalEnv = process.env.PI_CREW_POST_CHECK_SCRIPT;
 		try {
@@ -90,7 +102,10 @@ describe("runPostCheck", () => {
 			process.env.PI_CREW_POST_CHECK_SCRIPT = scriptPath;
 
 			// Empty scriptPath in config → should fall back to env var
-			const config: PostCheckConfig = { scriptPath: "", timeoutMs: 10000 };
+			const config: PostCheckConfig = {
+				scriptPath: "",
+				timeoutMs: 10000,
+			};
 			const result = await runPostCheck(config, dir);
 
 			assert.equal(result.passed, true);

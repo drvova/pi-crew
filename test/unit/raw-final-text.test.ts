@@ -12,8 +12,9 @@
  * @see src/runtime/pi-json-output.ts extractText
  * @see research-findings/output-handling-deep-dive.md §A
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { ChildPiLineObserver, type ChildPiRunInput } from "../../src/runtime/child-pi.ts";
 import { extractText } from "../../src/runtime/pi-json-output.ts";
 
@@ -26,17 +27,29 @@ function makeObserver(): ChildPiLineObserver {
 
 /** Serialize a Pi `message` event carrying assistant text. */
 function assistantMessage(text: string): string {
-	return JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text }] } });
+	return JSON.stringify({
+		type: "message",
+		message: { role: "assistant", content: [{ type: "text", text }] },
+	});
 }
 
 test("extractText is exported and returns assistant-text fragments", () => {
-	const event = { type: "message", message: { role: "assistant", content: [{ type: "text", text: "hello" }] } };
+	const event = {
+		type: "message",
+		message: {
+			role: "assistant",
+			content: [{ type: "text", text: "hello" }],
+		},
+	};
 	const texts = extractText(event);
 	assert.deepEqual(texts, ["hello"]);
 });
 
 test("extractText skips non-assistant messages", () => {
-	const event = { type: "message", message: { role: "user", content: [{ type: "text", text: "ignored" }] } };
+	const event = {
+		type: "message",
+		message: { role: "user", content: [{ type: "text", text: "ignored" }] },
+	};
 	assert.deepEqual(extractText(event), []);
 });
 
@@ -63,8 +76,14 @@ test("observer getRawFinalText returns the LAST non-empty assistant utterance", 
 
 test("observer does not capture non-assistant or tool events", () => {
 	const observer = makeObserver();
-	const userEvent = JSON.stringify({ type: "message", message: { role: "user", content: [{ type: "text", text: "prompt" }] } });
-	const toolEvent = JSON.stringify({ type: "tool_result_end", message: { role: "tool", content: [{ type: "text", text: "output" }] } });
+	const userEvent = JSON.stringify({
+		type: "message",
+		message: { role: "user", content: [{ type: "text", text: "prompt" }] },
+	});
+	const toolEvent = JSON.stringify({
+		type: "tool_result_end",
+		message: { role: "tool", content: [{ type: "text", text: "output" }] },
+	});
 	observer.observe(`${userEvent}\n${toolEvent}\n`);
 	observer.flush();
 	assert.equal(observer.getRawFinalText(), undefined, "non-assistant events must not contribute to raw final text");
@@ -97,7 +116,13 @@ test("observer handles assistant text spanning multiple content parts (mirrors p
 	const observer = makeObserver();
 	const event = JSON.stringify({
 		type: "message",
-		message: { role: "assistant", content: [{ type: "text", text: "part-1" }, { type: "text", text: "part-2" }] },
+		message: {
+			role: "assistant",
+			content: [
+				{ type: "text", text: "part-1" },
+				{ type: "text", text: "part-2" },
+			],
+		},
 	});
 	observer.observe(`${event}\n`);
 	observer.flush();

@@ -7,10 +7,11 @@
  * .gitignore. The fix centralizes these vars in WINDOWS_ESSENTIAL_ENV_VARS and
  * requires every allowlist site to use it (no inline hardcoding).
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { WINDOWS_ESSENTIAL_ENV_VARS } from "../../src/utils/env-allowlist.ts";
 
@@ -27,9 +28,7 @@ function listTsFiles(dir: string, acc: string[] = []): string[] {
 }
 
 test("WINDOWS_ESSENTIAL_ENV_VARS contains exactly the 7 Windows essentials", () => {
-	assert.deepEqual([...WINDOWS_ESSENTIAL_ENV_VARS], [
-		"APPDATA", "LOCALAPPDATA", "USERPROFILE", "SystemRoot", "ComSpec", "TEMP", "TMP",
-	]);
+	assert.deepEqual([...WINDOWS_ESSENTIAL_ENV_VARS], ["APPDATA", "LOCALAPPDATA", "USERPROFILE", "SystemRoot", "ComSpec", "TEMP", "TMP"]);
 });
 
 test("no src/ file hardcodes the Windows essentials inline (must spread WINDOWS_ESSENTIAL_ENV_VARS)", () => {
@@ -48,6 +47,9 @@ test("no src/ file hardcodes the Windows essentials inline (must spread WINDOWS_
 			}
 		}
 	}
-	assert.deepEqual(offenders, [],
-		"These files hardcode Windows env vars inline — use ...WINDOWS_ESSENTIAL_ENV_VARS instead:\n" + offenders.join("\n"));
+	assert.deepEqual(
+		offenders,
+		[],
+		"These files hardcode Windows env vars inline — use ...WINDOWS_ESSENTIAL_ENV_VARS instead:\n" + offenders.join("\n"),
+	);
 });

@@ -9,16 +9,17 @@
  * Uses __test_setRegistryPath to redirect to a temp file so tests
  * don't touch the real user registry.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import {
+	__test_setRegistryPath,
 	cleanupOrphanWorkers,
 	registerWorker,
 	unregisterWorker,
-	__test_setRegistryPath,
 } from "../../src/runtime/orphan-worker-registry.ts";
 
 function mkdtemp(prefix: string): string {
@@ -37,7 +38,11 @@ function rmrf(p: string): void {
 const spawnedPids: number[] = [];
 test.after(() => {
 	for (const pid of spawnedPids) {
-		try { process.kill(pid, 9); } catch { /* already dead */ }
+		try {
+			process.kill(pid, 9);
+		} catch {
+			/* already dead */
+		}
 	}
 });
 
@@ -171,7 +176,12 @@ test("cleanupOrphanWorkers keeps current session's workers (concurrent session s
 		// Cleanup: kill the sleep process
 		child.kill("SIGKILL");
 		// Wait for process to actually exit
-		try { child.unref(); process.kill(livePid, 0); } catch { /* already dead */ }
+		try {
+			child.unref();
+			process.kill(livePid, 0);
+		} catch {
+			/* already dead */
+		}
 	} finally {
 		rmrf(tmp);
 	}
@@ -212,7 +222,7 @@ setInterval(() => {}, 1000);`,
 
 		const result = cleanupOrphanWorkers("session-NEW");
 		assert.equal(result.scanned, 1);
-		assert.equal(result.killed, 1, "stale worker killed (SIGKILL)");;
+		assert.equal(result.killed, 1, "stale worker killed (SIGKILL)");
 
 		// Give the OS a moment to deliver the signal.
 		await new Promise((r) => setTimeout(r, 100));
@@ -235,11 +245,7 @@ test("cleanupOrphanWorkers keeps workers with alive parentPid (concurrent sessio
 	const tmp = mkdtemp("pi-crew-concurrent-");
 	try {
 		const { spawn } = await import("node:child_process");
-		const child = spawn(
-			process.execPath,
-			["-e", "setInterval(() => {}, 1000)"],
-			{ stdio: "ignore" },
-		);
+		const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
 		const livePid = child.pid!;
 		spawnedPids.push(livePid);
 		// Register: sessionId=OTHER, parentPid=process.pid (still alive)
@@ -278,10 +284,25 @@ test("cleanupOrphanWorkers tolerates corrupt registry file", () => {
 test("cleanupOrphanWorkers prunes registry entries that no longer match the schema", () => {
 	// Mix of valid and invalid entries
 	const mixed = [
-		{ pid: 999_999_999, sessionId: "s", runId: "r", registeredAt: 1, parentPidStartTime: 0, startTime: 0 }, // missing parentPid → pruned as schema-invalid
+		{
+			pid: 999_999_999,
+			sessionId: "s",
+			runId: "r",
+			registeredAt: 1,
+			parentPidStartTime: 0,
+			startTime: 0,
+		}, // missing parentPid → pruned as schema-invalid
 		null,
 		"string",
-		{ pid: 100, sessionId: "s", runId: "r", parentPid: 50, registeredAt: Date.now(), parentPidStartTime: 0, startTime: 0 }, // valid + live (we'll kill it)
+		{
+			pid: 100,
+			sessionId: "s",
+			runId: "r",
+			parentPid: 50,
+			registeredAt: Date.now(),
+			parentPidStartTime: 0,
+			startTime: 0,
+		}, // valid + live (we'll kill it)
 	];
 	fs.writeFileSync(REGISTRY_FILE, JSON.stringify(mixed));
 

@@ -56,9 +56,25 @@ const CODE_REVIEW_TEMPLATE: SkillTemplate = {
 	description: "Systematic code review skill with configurable language and focus areas.",
 	category: "quality",
 	variables: [
-		{ name: "language", description: "Primary programming language of the codebase", required: true, options: ["TypeScript", "JavaScript", "Python", "Rust", "Go", "Java", "C#", "Other"] },
-		{ name: "focusAreas", description: "Comma-separated list of review focus areas", required: false, defaultValue: "correctness, readability, performance" },
-		{ name: "severityThreshold", description: "Minimum severity level to report", required: false, defaultValue: "warning", options: ["info", "warning", "error", "critical"] },
+		{
+			name: "language",
+			description: "Primary programming language of the codebase",
+			required: true,
+			options: ["TypeScript", "JavaScript", "Python", "Rust", "Go", "Java", "C#", "Other"],
+		},
+		{
+			name: "focusAreas",
+			description: "Comma-separated list of review focus areas",
+			required: false,
+			defaultValue: "correctness, readability, performance",
+		},
+		{
+			name: "severityThreshold",
+			description: "Minimum severity level to report",
+			required: false,
+			defaultValue: "warning",
+			options: ["info", "warning", "error", "critical"],
+		},
 	],
 	body: [
 		"---",
@@ -99,9 +115,25 @@ const TESTING_TEMPLATE: SkillTemplate = {
 	description: "Test writing skill with configurable framework and coverage targets.",
 	category: "testing",
 	variables: [
-		{ name: "framework", description: "Testing framework to use", required: true, options: ["vitest", "jest", "mocha", "pytest", "go-test", "cargo-test", "Other"] },
-		{ name: "coverageTarget", description: "Target coverage percentage", required: false, defaultValue: "80" },
-		{ name: "testType", description: "Primary type of tests to write", required: false, defaultValue: "unit", options: ["unit", "integration", "e2e", "all"] },
+		{
+			name: "framework",
+			description: "Testing framework to use",
+			required: true,
+			options: ["vitest", "jest", "mocha", "pytest", "go-test", "cargo-test", "Other"],
+		},
+		{
+			name: "coverageTarget",
+			description: "Target coverage percentage",
+			required: false,
+			defaultValue: "80",
+		},
+		{
+			name: "testType",
+			description: "Primary type of tests to write",
+			required: false,
+			defaultValue: "unit",
+			options: ["unit", "integration", "e2e", "all"],
+		},
 	],
 	body: [
 		"---",
@@ -137,9 +169,25 @@ const SECURITY_AUDIT_TEMPLATE: SkillTemplate = {
 	description: "Security review skill with configurable scope and severity thresholds.",
 	category: "security",
 	variables: [
-		{ name: "scope", description: "Audit scope: what parts of the codebase to examine", required: true, options: ["full-codebase", "dependencies", "api-surface", "auth-flows", "input-handling"] },
-		{ name: "severityThreshold", description: "Minimum severity to report", required: false, defaultValue: "medium", options: ["low", "medium", "high", "critical"] },
-		{ name: "complianceFramework", description: "Compliance framework to check against (if applicable)", required: false, defaultValue: "OWASP Top 10" },
+		{
+			name: "scope",
+			description: "Audit scope: what parts of the codebase to examine",
+			required: true,
+			options: ["full-codebase", "dependencies", "api-surface", "auth-flows", "input-handling"],
+		},
+		{
+			name: "severityThreshold",
+			description: "Minimum severity to report",
+			required: false,
+			defaultValue: "medium",
+			options: ["low", "medium", "high", "critical"],
+		},
+		{
+			name: "complianceFramework",
+			description: "Compliance framework to check against (if applicable)",
+			required: false,
+			defaultValue: "OWASP Top 10",
+		},
 	],
 	body: [
 		"---",
@@ -179,9 +227,30 @@ const REFACTOR_TEMPLATE: SkillTemplate = {
 	description: "Refactoring skill with configurable scope and constraints.",
 	category: "maintenance",
 	variables: [
-		{ name: "scope", description: "What to refactor: file, module, or architectural pattern", required: true },
-		{ name: "constraints", description: "Constraints to respect during refactoring", required: false, defaultValue: "preserve public API, maintain backward compatibility" },
-		{ name: "goal", description: "Primary refactoring goal", required: false, defaultValue: "improve readability and reduce complexity", options: ["improve readability and reduce complexity", "improve performance", "reduce coupling", "enable extensibility", "simplify testability"] },
+		{
+			name: "scope",
+			description: "What to refactor: file, module, or architectural pattern",
+			required: true,
+		},
+		{
+			name: "constraints",
+			description: "Constraints to respect during refactoring",
+			required: false,
+			defaultValue: "preserve public API, maintain backward compatibility",
+		},
+		{
+			name: "goal",
+			description: "Primary refactoring goal",
+			required: false,
+			defaultValue: "improve readability and reduce complexity",
+			options: [
+				"improve readability and reduce complexity",
+				"improve performance",
+				"reduce coupling",
+				"enable extensibility",
+				"simplify testability",
+			],
+		},
 	],
 	body: [
 		"---",
@@ -223,9 +292,26 @@ const DOCUMENTATION_TEMPLATE: SkillTemplate = {
 	description: "Documentation writing skill with configurable format and audience.",
 	category: "documentation",
 	variables: [
-		{ name: "format", description: "Documentation format to produce", required: true, options: ["markdown", "jsdoc", "rustdoc", "godoc", "pydoc", "openapi"] },
-		{ name: "audience", description: "Target audience for the documentation", required: false, defaultValue: "developers", options: ["developers", "operators", "end-users", "contributors", "architects"] },
-		{ name: "detailLevel", description: "Level of detail", required: false, defaultValue: "standard", options: ["brief", "standard", "comprehensive"] },
+		{
+			name: "format",
+			description: "Documentation format to produce",
+			required: true,
+			options: ["markdown", "jsdoc", "rustdoc", "godoc", "pydoc", "openapi"],
+		},
+		{
+			name: "audience",
+			description: "Target audience for the documentation",
+			required: false,
+			defaultValue: "developers",
+			options: ["developers", "operators", "end-users", "contributors", "architects"],
+		},
+		{
+			name: "detailLevel",
+			description: "Level of detail",
+			required: false,
+			defaultValue: "standard",
+			options: ["brief", "standard", "comprehensive"],
+		},
 	],
 	body: [
 		"---",
@@ -280,9 +366,7 @@ export function getBuiltinTemplates(): SkillTemplate[] {
  */
 export function findTemplate(idOrName: string): SkillTemplate | undefined {
 	const lower = idOrName.toLowerCase();
-	return BUILTIN_TEMPLATES.find(
-		(t) => t.id.toLowerCase() === lower || t.name.toLowerCase() === lower,
-	);
+	return BUILTIN_TEMPLATES.find((t) => t.id.toLowerCase() === lower || t.name.toLowerCase() === lower);
 }
 
 /**
@@ -296,10 +380,7 @@ export function findTemplate(idOrName: string): SkillTemplate | undefined {
  * @param variables User-supplied variable values.
  * @returns An object with the suggested filename and rendered content.
  */
-export function instantiateTemplate(
-	template: SkillTemplate,
-	variables: Record<string, string>,
-): InstantiatedSkill {
+export function instantiateTemplate(template: SkillTemplate, variables: Record<string, string>): InstantiatedSkill {
 	// Validate and resolve all variable values
 	const resolved: Record<string, string> = {};
 
@@ -308,9 +389,7 @@ export function instantiateTemplate(
 
 		if (value === undefined || value === "") {
 			if (variable.required) {
-				throw new Error(
-					`Missing required variable "${variable.name}" for template "${template.id}" (${variable.description}).`,
-				);
+				throw new Error(`Missing required variable "${variable.name}" for template "${template.id}" (${variable.description}).`);
 			}
 			resolved[variable.name] = variable.defaultValue ?? "";
 			continue;
@@ -320,7 +399,7 @@ export function instantiateTemplate(
 		if (variable.options !== undefined && !variable.options.includes(value)) {
 			throw new Error(
 				`Invalid value "${value}" for variable "${variable.name}" in template "${template.id}". ` +
-				`Allowed values: ${variable.options.join(", ")}.`,
+					`Allowed values: ${variable.options.join(", ")}.`,
 			);
 		}
 
@@ -357,7 +436,10 @@ export function listTemplates(): Array<{
 		name: t.name,
 		description: t.description,
 		category: t.category,
-		variables: t.variables.map((v) => ({ name: v.name, required: v.required })),
+		variables: t.variables.map((v) => ({
+			name: v.name,
+			required: v.required,
+		})),
 	}));
 }
 

@@ -6,13 +6,14 @@
  * ctx.setResult())" even when the dwf called ctx.setResult(path). This test
  * reproduces the issue at the unit level so the bug is caught by CI.
  */
-import { fileURLToPath } from "node:url";
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createRequire } from "node:module";
 import test from "node:test";
-import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(import.meta.url);
@@ -102,7 +103,9 @@ interface Round13DetFixture {
 	require: NodeRequire;
 	thisFile: string;
 	jitiMod: { default?: unknown };
-	createJiti: (...args: unknown[]) => { import(path: string): Promise<unknown> };
+	createJiti: (...args: unknown[]) => {
+		import(path: string): Promise<unknown>;
+	};
 	tmpCwd: string;
 	dwfPath: string;
 	artifactPath: string;
@@ -186,10 +189,16 @@ function makeRound13DetFixture(name: string): Round13DetFixture {
 
 async function runDwf(fx: Round13DetFixture): Promise<{ status: string; summary: string }> {
 	const jiti = fx.createJiti(fx.thisFile);
-	const dwfMod = (await jiti.import(
-		path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string,
-	)) as { default?: { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> } };
-	const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> });
+	const dwfMod = (await jiti.import(path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string)) as {
+		default?: {
+			runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+		};
+	};
+	const { runDynamicWorkflow } =
+		dwfMod.default ??
+		(dwfMod as unknown as {
+			runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+		});
 	const result = (await runDynamicWorkflow({
 		manifest: fx.manifest,
 		workflow: fx.workflow,
@@ -214,17 +223,24 @@ test("round-13 integration: dwf calling Date.now() is rejected with clear error"
 		);
 		fs.writeFileSync(fx.artifactPath, "ok");
 		const jiti = fx.createJiti(fx.thisFile);
-		const dwfMod = (await jiti.import(
-			path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string,
-		)) as { default?: { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> } };
-		const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> });
+		const dwfMod = (await jiti.import(path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string)) as {
+			default?: {
+				runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+			};
+		};
+		const { runDynamicWorkflow } =
+			dwfMod.default ??
+			(dwfMod as unknown as {
+				runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+			});
 		await assert.rejects(
-			async () => runDynamicWorkflow({
-				manifest: fx.manifest,
-				workflow: fx.workflow,
-				team: fx.team,
-				signal: AbortSignal.timeout(5000),
-			}),
+			async () =>
+				runDynamicWorkflow({
+					manifest: fx.manifest,
+					workflow: fx.workflow,
+					team: fx.team,
+					signal: AbortSignal.timeout(5000),
+				}),
 			/Date\.now\(\)\/Math\.random\(\)\/new Date\(\) are unavailable/,
 		);
 	} finally {
@@ -248,17 +264,24 @@ test("round-13 integration: dwf calling Math.random() is rejected with clear err
 		);
 		fs.writeFileSync(fx.artifactPath, "ok");
 		const jiti = fx.createJiti(fx.thisFile);
-		const dwfMod = (await jiti.import(
-			path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string,
-		)) as { default?: { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> } };
-		const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> });
+		const dwfMod = (await jiti.import(path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string)) as {
+			default?: {
+				runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+			};
+		};
+		const { runDynamicWorkflow } =
+			dwfMod.default ??
+			(dwfMod as unknown as {
+				runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+			});
 		await assert.rejects(
-			async () => runDynamicWorkflow({
-				manifest: fx.manifest,
-				workflow: fx.workflow,
-				team: fx.team,
-				signal: AbortSignal.timeout(5000),
-			}),
+			async () =>
+				runDynamicWorkflow({
+					manifest: fx.manifest,
+					workflow: fx.workflow,
+					team: fx.team,
+					signal: AbortSignal.timeout(5000),
+				}),
 			/Date\.now\(\)\/Math\.random\(\)\/new Date\(\) are unavailable/,
 		);
 	} finally {
@@ -282,17 +305,24 @@ test("round-13 integration: dwf with new Date() is rejected with clear error", a
 		);
 		fs.writeFileSync(fx.artifactPath, "ok");
 		const jiti = fx.createJiti(fx.thisFile);
-		const dwfMod = (await jiti.import(
-			path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string,
-		)) as { default?: { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> } };
-		const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> });
+		const dwfMod = (await jiti.import(path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string)) as {
+			default?: {
+				runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+			};
+		};
+		const { runDynamicWorkflow } =
+			dwfMod.default ??
+			(dwfMod as unknown as {
+				runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+			});
 		await assert.rejects(
-			async () => runDynamicWorkflow({
-				manifest: fx.manifest,
-				workflow: fx.workflow,
-				team: fx.team,
-				signal: AbortSignal.timeout(5000),
-			}),
+			async () =>
+				runDynamicWorkflow({
+					manifest: fx.manifest,
+					workflow: fx.workflow,
+					team: fx.team,
+					signal: AbortSignal.timeout(5000),
+				}),
 			/Date\.now\(\)\/Math\.random\(\)\/new Date\(\) are unavailable/,
 		);
 	} finally {
@@ -352,7 +382,9 @@ interface Round12Args {
 	require: NodeRequire;
 	thisFile: string;
 	jitiMod: { default?: unknown };
-	createJiti: (...args: unknown[]) => { import(path: string): Promise<unknown> };
+	createJiti: (...args: unknown[]) => {
+		import(path: string): Promise<unknown>;
+	};
 	tmpCwd: string;
 	dwfPath: string;
 	artifactPath: string;
@@ -449,10 +481,16 @@ test("round-12 integration: dwf calling ctx.phase() emits correct events; runner
 		fs.writeFileSync(fx.artifactPath, "scan + audit done\n");
 
 		const jiti = fx.createJiti(fx.thisFile);
-		const dwfMod = (await jiti.import(
-			path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string,
-		)) as { default?: { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> } };
-		const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...args: unknown[]) => Promise<unknown> });
+		const dwfMod = (await jiti.import(path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string)) as {
+			default?: {
+				runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+			};
+		};
+		const { runDynamicWorkflow } =
+			dwfMod.default ??
+			(dwfMod as unknown as {
+				runDynamicWorkflow: (...args: unknown[]) => Promise<unknown>;
+			});
 
 		const result = (await runDynamicWorkflow({
 			manifest: fx.manifest,
@@ -468,7 +506,13 @@ test("round-12 integration: dwf calling ctx.phase() emits correct events; runner
 			.readFileSync(fx.eventsPath, "utf-8")
 			.split("\n")
 			.filter((line) => line.trim().length > 0)
-			.map((line) => JSON.parse(line) as { type: string; data?: { phase?: string } });
+			.map(
+				(line) =>
+					JSON.parse(line) as {
+						type: string;
+						data?: { phase?: string };
+					},
+			);
 		const phaseTypes = eventLines
 			.filter((e) => e.type.startsWith("dwf."))
 			.map((e) => `${e.type}${e.data?.phase ? `:${e.data.phase}` : ""}`);
@@ -484,7 +528,6 @@ test("round-12 integration: dwf calling ctx.phase() emits correct events; runner
 		fs.rmSync(fx.tmpCwd, { recursive: true, force: true });
 	}
 });
-
 
 // ---------------------------------------------------------------------------
 // round-14 integration tests: ctx.log + ctx.args (P1-3 / P1-5)
@@ -588,10 +631,16 @@ test("round-14 integration: dwf calling ctx.log() produces dwf.log events", asyn
 		fs.writeFileSync(fx.artifactPath, "logged\n");
 
 		const jiti = fx.createJiti(fx.thisFile);
-		const dwfMod = (await jiti.import(
-			path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts"),
-		)) as { default?: { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> } };
-		const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> });
+		const dwfMod = (await jiti.import(path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts"))) as {
+			default?: {
+				runDynamicWorkflow: (...a: unknown[]) => Promise<unknown>;
+			};
+		};
+		const { runDynamicWorkflow } =
+			dwfMod.default ??
+			(dwfMod as unknown as {
+				runDynamicWorkflow: (...a: unknown[]) => Promise<unknown>;
+			});
 		const result = (await runDynamicWorkflow({
 			manifest: fx.manifest,
 			workflow: fx.workflow,
@@ -600,7 +649,17 @@ test("round-14 integration: dwf calling ctx.log() produces dwf.log events", asyn
 		})) as { manifest: { status: string } };
 
 		assert.equal(result.manifest.status, "completed");
-		const eventLines = fs.readFileSync(fx.eventsPath, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { type: string; data?: { message?: string } });
+		const eventLines = fs
+			.readFileSync(fx.eventsPath, "utf-8")
+			.split("\n")
+			.filter((l) => l.trim())
+			.map(
+				(l) =>
+					JSON.parse(l) as {
+						type: string;
+						data?: { message?: string };
+					},
+			);
 		const logEvents = eventLines.filter((e) => e.type === "dwf.log");
 		assert.equal(logEvents.length, 2, "two dwf.log events emitted");
 		assert.equal(logEvents[0]?.data?.message, "scan complete");
@@ -626,10 +685,16 @@ test("round-14 integration: dwf calling ctx.args<T>() reads typed args from mani
 		fs.writeFileSync(fx.artifactPath, "args-test\n");
 
 		const jiti = fx.createJiti(fx.thisFile);
-		const dwfMod = (await jiti.import(
-			path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts"),
-		)) as { default?: { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> } };
-		const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> });
+		const dwfMod = (await jiti.import(path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts"))) as {
+			default?: {
+				runDynamicWorkflow: (...a: unknown[]) => Promise<unknown>;
+			};
+		};
+		const { runDynamicWorkflow } =
+			dwfMod.default ??
+			(dwfMod as unknown as {
+				runDynamicWorkflow: (...a: unknown[]) => Promise<unknown>;
+			});
 		const result = (await runDynamicWorkflow({
 			manifest: fx.manifest,
 			workflow: fx.workflow,
@@ -638,7 +703,17 @@ test("round-14 integration: dwf calling ctx.args<T>() reads typed args from mani
 		})) as { manifest: { status: string } };
 
 		assert.equal(result.manifest.status, "completed");
-		const eventLines = fs.readFileSync(fx.eventsPath, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { type: string; data?: { message?: string } });
+		const eventLines = fs
+			.readFileSync(fx.eventsPath, "utf-8")
+			.split("\n")
+			.filter((l) => l.trim())
+			.map(
+				(l) =>
+					JSON.parse(l) as {
+						type: string;
+						data?: { message?: string };
+					},
+			);
 		const logEvents = eventLines.filter((e) => e.type === "dwf.log");
 		assert.equal(logEvents[0]?.data?.message, "target=src/lib.ts retries=2", "ctx.args() read the manifest args end-to-end");
 	} finally {
@@ -720,25 +795,53 @@ function makeRound18Fixture(name: string): Round18Fx {
 	};
 
 	return {
-		repoRoot, thisFile, createJiti: createJiti as Round18Fx["createJiti"], tmpCwd, dwfPath, artifactPath,
-		runId, stateRoot, checkpointPath, eventsPath, manifest, workflow, team,
+		repoRoot,
+		thisFile,
+		createJiti: createJiti as Round18Fx["createJiti"],
+		tmpCwd,
+		dwfPath,
+		artifactPath,
+		runId,
+		stateRoot,
+		checkpointPath,
+		eventsPath,
+		manifest,
+		workflow,
+		team,
 	};
 }
 
 async function runRound18(fx: Round18Fx): Promise<{ status: string; summary: string }> {
 	const jiti = fx.createJiti(fx.thisFile);
-	const dwfMod = (await jiti.import(
-		path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts"),
-	)) as { default?: { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> } };
-	const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> });
+	const dwfMod = (await jiti.import(path.join(fx.repoRoot, "src/runtime/dynamic-workflow-runner.ts"))) as {
+		default?: { runDynamicWorkflow: (...a: unknown[]) => Promise<unknown> };
+	};
+	const { runDynamicWorkflow } =
+		dwfMod.default ??
+		(dwfMod as unknown as {
+			runDynamicWorkflow: (...a: unknown[]) => Promise<unknown>;
+		});
 	const result = (await runDynamicWorkflow({
-		manifest: fx.manifest, workflow: fx.workflow, team: fx.team, signal: AbortSignal.timeout(8000),
+		manifest: fx.manifest,
+		workflow: fx.workflow,
+		team: fx.team,
+		signal: AbortSignal.timeout(8000),
 	})) as { manifest: { status: string; summary: string } };
 	return result.manifest;
 }
 
 function readRound18Events(eventsPath: string): Array<{ type: string; data?: Record<string, unknown> }> {
-	return fs.readFileSync(eventsPath, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { type: string; data?: Record<string, unknown> });
+	return fs
+		.readFileSync(eventsPath, "utf-8")
+		.split("\n")
+		.filter((l) => l.trim())
+		.map(
+			(l) =>
+				JSON.parse(l) as {
+					type: string;
+					data?: Record<string, unknown>;
+				},
+		);
 }
 
 test("round-18 fresh run: no checkpoint loaded (no dwf.resumed event)", async () => {

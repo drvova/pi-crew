@@ -206,11 +206,7 @@ export function parseGitUrl(source: string): GitSource | null {
 	const normalizedSource = hasGitPrefix ? trimmed.slice(4).trim() : trimmed.replace(/^git\+/i, "");
 	const url = normalizedSource;
 
-	if (
-		!hasGitPrefix &&
-		!/^(https?|ssh|git):\/\//i.test(url) &&
-		!/^git@[^:]+:/.test(url)
-	) {
+	if (!hasGitPrefix && !/^(https?|ssh|git):\/\//i.test(url) && !/^git@[^:]+:/.test(url)) {
 		return null;
 	}
 
@@ -227,9 +223,14 @@ export function parseGitUrl(source: string): GitSource | null {
 		}
 		return {
 			type: "git",
-			repo: split.repo.startsWith("http://") || split.repo.startsWith("https://") || split.repo.startsWith("ssh://") || split.repo.startsWith("git://") || split.repo.startsWith("git@")
-				? split.repo
-				: `https://${split.repo}`,
+			repo:
+				split.repo.startsWith("http://") ||
+				split.repo.startsWith("https://") ||
+				split.repo.startsWith("ssh://") ||
+				split.repo.startsWith("git://") ||
+				split.repo.startsWith("git@")
+					? split.repo
+					: `https://${split.repo}`,
 			host: info.domain ?? "",
 			path: `${info.user ?? ""}/${info.project ?? ""}`.replace(/\.git$/, ""),
 			ref: info.committish || split.ref || undefined,
@@ -237,9 +238,7 @@ export function parseGitUrl(source: string): GitSource | null {
 		};
 	};
 
-	const hostedCandidates = [split.ref ? `${split.repo}#${split.ref}` : undefined, url].filter((value): value is string =>
-		Boolean(value),
-	);
+	const hostedCandidates = [split.ref ? `${split.repo}#${split.ref}` : undefined, url].filter((value): value is string => Boolean(value));
 	for (const candidate of hostedCandidates) {
 		const info = parseCandidate(candidate);
 		if (info) {
@@ -247,10 +246,9 @@ export function parseGitUrl(source: string): GitSource | null {
 		}
 	}
 
-	const httpsCandidates = [
-		split.ref ? `https://${split.repo}#${split.ref}` : undefined,
-		`https://${url}`,
-	].filter((value): value is string => Boolean(value));
+	const httpsCandidates = [split.ref ? `https://${split.repo}#${split.ref}` : undefined, `https://${url}`].filter(
+		(value): value is string => Boolean(value),
+	);
 	for (const candidate of httpsCandidates) {
 		const info = parseCandidate(candidate);
 		if (info) {

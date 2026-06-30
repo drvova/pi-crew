@@ -1,13 +1,13 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { describe, it } from "node:test";
 import {
+	cleanupIntermediates,
 	ensureIntermediateDir,
-	writeIntermediate,
+	hasPhaseCompleted,
 	readIntermediate,
 	readLatestIntermediate,
-	cleanupIntermediates,
-	hasPhaseCompleted,
+	writeIntermediate,
 } from "../../src/workflows/intermediate-store.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
@@ -15,7 +15,9 @@ describe("ensureIntermediateDir", () => {
 	it("creates the intermediate directory", () => {
 		const tmp = createTrackedTempDir("pi-crew-inter-");
 		try {
-			const dir = ensureIntermediateDir({ intermediateDir: `${tmp}/inter` });
+			const dir = ensureIntermediateDir({
+				intermediateDir: `${tmp}/inter`,
+			});
 			assert.ok(dir);
 			assert.ok(existsSync(dir));
 		} finally {
@@ -34,7 +36,9 @@ describe("writeIntermediate + readIntermediate", () => {
 		const tmp = createTrackedTempDir("pi-crew-inter-");
 		try {
 			const config = { intermediateDir: `${tmp}/inter` };
-			const written = writeIntermediate(config, "explore", "step1", { found: ["a.ts"] });
+			const written = writeIntermediate(config, "explore", "step1", {
+				found: ["a.ts"],
+			});
 			assert.ok(written.includes("explore-step1.json"));
 
 			const read = readIntermediate(config, "explore", "step1");
@@ -119,7 +123,10 @@ describe("cleanupIntermediates", () => {
 	it("removes all files when no preserve patterns", () => {
 		const tmp = createTrackedTempDir("pi-crew-inter-");
 		try {
-			const config = { intermediateDir: `${tmp}/inter`, preservePatterns: [] };
+			const config = {
+				intermediateDir: `${tmp}/inter`,
+				preservePatterns: [],
+			};
 			writeIntermediate(config, "explore", "s1", {});
 			writeIntermediate(config, "analyze", "s2", {});
 
@@ -133,7 +140,10 @@ describe("cleanupIntermediates", () => {
 	it("preserves files matching preserve patterns", () => {
 		const tmp = createTrackedTempDir("pi-crew-inter-");
 		try {
-			const config = { intermediateDir: `${tmp}/inter`, preservePatterns: ["explore-s1"] };
+			const config = {
+				intermediateDir: `${tmp}/inter`,
+				preservePatterns: ["explore-s1"],
+			};
 			writeIntermediate(config, "explore", "s1", { keep: true });
 			writeIntermediate(config, "analyze", "s2", { remove: true });
 
@@ -151,7 +161,10 @@ describe("cleanupIntermediates", () => {
 	it("returns 0 when directory does not exist", () => {
 		const tmp = createTrackedTempDir("pi-crew-inter-");
 		try {
-			const config = { intermediateDir: `${tmp}/no-dir`, preservePatterns: [] };
+			const config = {
+				intermediateDir: `${tmp}/no-dir`,
+				preservePatterns: [],
+			};
 			const removed = cleanupIntermediates(config);
 			assert.equal(removed, 0);
 		} finally {

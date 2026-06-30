@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { fuzzyResolveModelId, type SimpleModelEntry } from "../../src/runtime/model-resolver.ts";
 
 const sampleModels: SimpleModelEntry[] = [
@@ -40,7 +40,6 @@ test("fuzzy match by split words across id/name/provider", () => {
 test("returns undefined when no match meets threshold", () => {
 	assert.equal(fuzzyResolveModelId("xyz", sampleModels), undefined);
 	assert.equal(fuzzyResolveModelId("nonexistent-model", sampleModels), undefined);
-
 });
 
 test("returns best score when multiple partial matches", () => {

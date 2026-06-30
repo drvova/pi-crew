@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { CrewFooter } from "../../src/ui/crew-footer.ts";
 import type { CrewTheme } from "../../src/ui/theme-adapter.ts";
 
@@ -10,7 +10,23 @@ const theme: CrewTheme = {
 };
 
 test("CrewFooter renders run usage tokens and cost", () => {
-	const footer = new CrewFooter({ pwd: "/repo", branch: "main", runId: "run-1", status: "running", usage: { input: 1200, output: 34, cacheRead: 500, cacheWrite: 6, cost: 0.0123 }, badges: ["one"] }, theme);
+	const footer = new CrewFooter(
+		{
+			pwd: "/repo",
+			branch: "main",
+			runId: "run-1",
+			status: "running",
+			usage: {
+				input: 1200,
+				output: 34,
+				cacheRead: 500,
+				cacheWrite: 6,
+				cost: 0.0123,
+			},
+			badges: ["one"],
+		},
+		theme,
+	);
 	const lines = footer.render(120);
 	assert.equal(lines.length, 3);
 	assert.match(lines.join("\n"), /↑1.2k/);
@@ -28,7 +44,10 @@ test("CrewFooter colors context percentage thresholds", () => {
 test("CrewFooter truncates with ellipsis at narrow width", () => {
 	const lines = new CrewFooter({ pwd: "/very/long/project/path", runId: "run-long" }, theme).render(12);
 	// V-2 fix: footer now uses the default U+2026 ellipsis (no literal "...").
-	assert.ok(lines.some((line) => line.includes("…")), "expected U+2026 ellipsis after V-2 fix");
+	assert.ok(
+		lines.some((line) => line.includes("…")),
+		"expected U+2026 ellipsis after V-2 fix",
+	);
 });
 
 test("CrewFooter renders missing context as unknown over window", () => {

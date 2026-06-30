@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { childCorrelation, correlatedEvent, getCurrentContext, newSpanId, withCorrelation } from "../../src/observability/correlation.ts";
 
 test("correlation context propagates through async boundaries", async () => {
@@ -23,5 +23,8 @@ test("childCorrelation links to parent span", () => {
 });
 
 test("correlatedEvent is a no-op without active context", () => {
-	assert.deepEqual(correlatedEvent({ runId: "r", data: { x: 1 } }), { runId: "r", data: { x: 1 } });
+	assert.deepEqual(correlatedEvent({ runId: "r", data: { x: 1 } }), {
+		runId: "r",
+		data: { x: 1 },
+	});
 });

@@ -78,11 +78,17 @@ export class Counter extends Metric {
 	inc(labels: MetricLabels = {}, delta = 1): void {
 		if (!Number.isFinite(delta) || delta < 0) return;
 		const key = labelKey(labels);
-		const current = this.values.get(key) ?? { labels: normalizeLabels(labels), value: 0 };
+		const current = this.values.get(key) ?? {
+			labels: normalizeLabels(labels),
+			value: 0,
+		};
 		// Delete before set to move key to end of insertion order (MRU).
 		// Without this, enforceLabelCap could evict an actively-used entry.
 		this.values.delete(key);
-		this.values.set(key, { labels: current.labels, value: current.value + delta });
+		this.values.set(key, {
+			labels: current.labels,
+			value: current.value + delta,
+		});
 		enforceLabelCap(this.values, this.name);
 	}
 
@@ -91,7 +97,15 @@ export class Counter extends Metric {
 	}
 
 	snapshot(): MetricSnapshot {
-		return { type: "counter", name: this.name, description: this.description, values: [...this.values.values()].map((entry) => ({ labels: cloneLabels(entry.labels), value: entry.value })) };
+		return {
+			type: "counter",
+			name: this.name,
+			description: this.description,
+			values: [...this.values.values()].map((entry) => ({
+				labels: cloneLabels(entry.labels),
+				value: entry.value,
+			})),
+		};
 	}
 }
 
@@ -117,7 +131,15 @@ export class Gauge extends Metric {
 	}
 
 	snapshot(): MetricSnapshot {
-		return { type: "gauge", name: this.name, description: this.description, values: [...this.values.values()].map((entry) => ({ labels: cloneLabels(entry.labels), value: entry.value })) };
+		return {
+			type: "gauge",
+			name: this.name,
+			description: this.description,
+			values: [...this.values.values()].map((entry) => ({
+				labels: cloneLabels(entry.labels),
+				value: entry.value,
+			})),
+		};
 	}
 }
 
@@ -135,9 +157,15 @@ export class Histogram extends Metric {
 		if (!Number.isFinite(value)) return;
 		const key = labelKey(labels);
 		const existing = this.observations.get(key);
-		const current = existing ?? { labels: normalizeLabels(labels), counts: new Array(this.buckets.length + 1).fill(0) as number[], sum: 0, count: 0 };
+		const current = existing ?? {
+			labels: normalizeLabels(labels),
+			counts: new Array(this.buckets.length + 1).fill(0) as number[],
+			sum: 0,
+			count: 0,
+		};
 		const bucketIndex = this.buckets.findIndex((bucket) => value <= bucket);
-		current.counts[bucketIndex === -1 ? this.buckets.length : bucketIndex] = (current.counts[bucketIndex === -1 ? this.buckets.length : bucketIndex] ?? 0) + 1;
+		current.counts[bucketIndex === -1 ? this.buckets.length : bucketIndex] =
+			(current.counts[bucketIndex === -1 ? this.buckets.length : bucketIndex] ?? 0) + 1;
 		current.sum += value;
 		current.count += 1;
 		if (!existing) this.observations.set(key, current);
@@ -155,8 +183,9 @@ export class Histogram extends Metric {
 			cumulative += count;
 			if (cumulative >= target) {
 				const previous = cumulative - count;
-				const lower = index === 0 ? 0 : this.buckets[index - 1] ?? this.buckets.at(-1) ?? 0;
-				const upper = index < this.buckets.length ? this.buckets[index] ?? lower : Math.max(lower, obs.sum / Math.max(1, obs.count));
+				const lower = index === 0 ? 0 : (this.buckets[index - 1] ?? this.buckets.at(-1) ?? 0);
+				const upper =
+					index < this.buckets.length ? (this.buckets[index] ?? lower) : Math.max(lower, obs.sum / Math.max(1, obs.count));
 				const fraction = count === 0 ? 0 : (target - previous) / Math.max(1, count);
 				return lower + fraction * (upper - lower);
 			}
@@ -179,7 +208,11 @@ export class Histogram extends Metric {
 				counts: [...entry.counts],
 				sum: entry.sum,
 				count: entry.count,
-				quantiles: { p50: this.quantile(entry.labels, 0.5), p95: this.quantile(entry.labels, 0.95), p99: this.quantile(entry.labels, 0.99) },
+				quantiles: {
+					p50: this.quantile(entry.labels, 0.5),
+					p95: this.quantile(entry.labels, 0.95),
+					p99: this.quantile(entry.labels, 0.99),
+				},
 			})),
 		};
 	}

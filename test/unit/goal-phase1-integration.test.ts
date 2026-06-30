@@ -9,14 +9,21 @@
  * handler) is exercised indirectly by goal-loop-smoke integration + runtime tests; the logic
  * that is unit-testable in isolation lives here.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 // dynamic import to get at non-exported helpers via the exported wrappers
 import { detectOscillation } from "../../src/runtime/goal-loop-runner.ts";
 import type { GoalLoopState, GoalVerdict } from "../../src/state/types.ts";
 
 function verdict(turn: number, reason: string, achieved = false): GoalVerdict {
-	return { turn, achieved, reason, evaluatorModel: "stub", evaluatedAt: "2026-01-01T00:00:00.000Z" };
+	return {
+		turn,
+		achieved,
+		reason,
+		evaluatorModel: "stub",
+		evaluatedAt: "2026-01-01T00:00:00.000Z",
+	};
 }
 
 test("detectOscillation: returns false with fewer than 3 verdicts", () => {
@@ -42,11 +49,7 @@ test("detectOscillation: returns false when verdicts are diverging", () => {
 
 test("detectOscillation: returns false when only the LAST 2 match (not 3)", () => {
 	const r = "not-achieved the add function still subtracts";
-	const v = [
-		verdict(1, "not-achieved a different problem entirely about imports"),
-		verdict(2, r),
-		verdict(3, r),
-	];
+	const v = [verdict(1, "not-achieved a different problem entirely about imports"), verdict(2, r), verdict(3, r)];
 	assert.equal(detectOscillation(v), false);
 });
 
@@ -87,8 +90,14 @@ test("RFC §P1e contract: nonce format (12 lowercase hex chars, generated per tu
 
 test("RFC §P1d contract: budgetUnlimited OR budgetTotal>=1000 must be set", () => {
 	// Sanity: a well-formed goal state has one or the other.
-	const withBudget: Partial<GoalLoopState> = { budgetTotal: 5000, budgetUnlimited: undefined };
-	const unlimited: Partial<GoalLoopState> = { budgetTotal: undefined, budgetUnlimited: true };
+	const withBudget: Partial<GoalLoopState> = {
+		budgetTotal: 5000,
+		budgetUnlimited: undefined,
+	};
+	const unlimited: Partial<GoalLoopState> = {
+		budgetTotal: undefined,
+		budgetUnlimited: true,
+	};
 	assert.ok(withBudget.budgetTotal! >= 1000, "explicit budget must meet the 1000 floor");
 	assert.ok(unlimited.budgetUnlimited === true, "unlimited opt-out is the alternative");
 });

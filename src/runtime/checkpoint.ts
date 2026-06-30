@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { logInternalError } from "../utils/internal-error.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
 import { assertSafePathId } from "../utils/safe-paths.ts";
-import { logInternalError } from "../utils/internal-error.ts";
 
 export interface Checkpoint {
 	runId: string;
@@ -118,9 +118,7 @@ export class FileCheckpointStore implements CheckpointStore {
 		const p = this.checkpointPath(taskId);
 		if (fs.existsSync(p)) {
 			try {
-				const data = JSON.parse(
-					fs.readFileSync(p, "utf-8"),
-				) as Checkpoint;
+				const data = JSON.parse(fs.readFileSync(p, "utf-8")) as Checkpoint;
 				if (data.runId === runId) {
 					fs.unlinkSync(p);
 				}
@@ -144,9 +142,7 @@ export class FileCheckpointStore implements CheckpointStore {
 			.filter((f) => f.endsWith(".json"))
 			.map((f) => {
 				try {
-					return JSON.parse(
-						fs.readFileSync(path.join(dir, f), "utf-8"),
-					) as Checkpoint;
+					return JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8")) as Checkpoint;
 				} catch {
 					return null;
 				}
@@ -217,12 +213,7 @@ export function saveCheckpoint(
 
 	// State root is parent of checkpoints dir. Use projectCrewRoot() so the
 	// path lands in .pi/teams/state/runs/ for .pi-based projects (issue #29).
-	const stateRoot = path.join(
-		projectCrewRoot(cwd ?? process.cwd()),
-		"state",
-		"runs",
-		runId,
-	);
+	const stateRoot = path.join(projectCrewRoot(cwd ?? process.cwd()), "state", "runs", runId);
 	const store = getCheckpointStore(stateRoot);
 	store.save(checkpoint);
 }
@@ -230,19 +221,10 @@ export function saveCheckpoint(
 /**
  * Load a checkpoint for resuming.
  */
-export function loadCheckpoint(
-	runId: string,
-	taskId: string,
-	cwd?: string,
-): Checkpoint | null {
+export function loadCheckpoint(runId: string, taskId: string, cwd?: string): Checkpoint | null {
 	assertSafePathId("runId", runId);
 	assertSafePathId("taskId", taskId);
-	const stateRoot = path.join(
-		projectCrewRoot(cwd ?? process.cwd()),
-		"state",
-		"runs",
-		runId,
-	);
+	const stateRoot = path.join(projectCrewRoot(cwd ?? process.cwd()), "state", "runs", runId);
 	const store = getCheckpointStore(stateRoot);
 	return store.load(runId, taskId);
 }
@@ -250,19 +232,10 @@ export function loadCheckpoint(
 /**
  * Delete a checkpoint after successful completion.
  */
-export function clearCheckpoint(
-	runId: string,
-	taskId: string,
-	cwd?: string,
-): void {
+export function clearCheckpoint(runId: string, taskId: string, cwd?: string): void {
 	assertSafePathId("runId", runId);
 	assertSafePathId("taskId", taskId);
-	const stateRoot = path.join(
-		projectCrewRoot(cwd ?? process.cwd()),
-		"state",
-		"runs",
-		runId,
-	);
+	const stateRoot = path.join(projectCrewRoot(cwd ?? process.cwd()), "state", "runs", runId);
 	const store = getCheckpointStore(stateRoot);
 	store.delete(runId, taskId);
 }
@@ -270,19 +243,10 @@ export function clearCheckpoint(
 /**
  * Check if a checkpoint exists for a task.
  */
-export function hasCheckpoint(
-	runId: string,
-	taskId: string,
-	cwd?: string,
-): boolean {
+export function hasCheckpoint(runId: string, taskId: string, cwd?: string): boolean {
 	assertSafePathId("runId", runId);
 	assertSafePathId("taskId", taskId);
-	const stateRoot = path.join(
-		projectCrewRoot(cwd ?? process.cwd()),
-		"state",
-		"runs",
-		runId,
-	);
+	const stateRoot = path.join(projectCrewRoot(cwd ?? process.cwd()), "state", "runs", runId);
 	const store = getCheckpointStore(stateRoot);
 	return store.hasCheckpoint(runId, taskId);
 }
@@ -292,12 +256,7 @@ export function hasCheckpoint(
  */
 export function listCheckpoints(runId: string, cwd?: string): Checkpoint[] {
 	assertSafePathId("runId", runId);
-	const stateRoot = path.join(
-		projectCrewRoot(cwd ?? process.cwd()),
-		"state",
-		"runs",
-		runId,
-	);
+	const stateRoot = path.join(projectCrewRoot(cwd ?? process.cwd()), "state", "runs", runId);
 	const store = getCheckpointStore(stateRoot);
 	return store.list(runId);
 }
@@ -335,10 +294,7 @@ export function formatAllCheckpoints(runId: string, cwd?: string): string {
 	return [
 		`# Checkpoints: ${runId}`,
 		"",
-		...checkpoints.map(
-			(cp, i) =>
-				`${i + 1}. **${cp.taskId}** — ${cp.progress} (${new Date(cp.savedAt).toLocaleString()})`,
-		),
+		...checkpoints.map((cp, i) => `${i + 1}. **${cp.taskId}** — ${cp.progress} (${new Date(cp.savedAt).toLocaleString()})`),
 		"",
 		`Use \`team action='resume' runId=${runId} taskId=<taskId>\` to resume.`,
 	].join("\n");

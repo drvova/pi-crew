@@ -1,10 +1,10 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	createTaskClaim,
-	isTaskClaimExpired,
 	canUseTaskClaim,
 	claimTask,
+	createTaskClaim,
+	isTaskClaimExpired,
 	releaseTaskClaim,
 	transitionClaimedTaskStatus,
 } from "../../src/state/task-claims.ts";
@@ -127,10 +127,7 @@ test("claimTask: overwrites expired claim", () => {
 test("claimTask: throws if task has active claim", () => {
 	const activeClaim = createTaskClaim("worker-1", 300_000, NOW);
 	const task = makeTask({ claim: activeClaim });
-	assert.throws(
-		() => claimTask(task, "worker-2", 300_000, NOW),
-		/already claimed/,
-	);
+	assert.throws(() => claimTask(task, "worker-2", 300_000, NOW), /already claimed/);
 });
 
 test("claimTask: does not mutate original task", () => {
@@ -152,10 +149,7 @@ test("releaseTaskClaim: removes claim from task", () => {
 test("releaseTaskClaim: throws for wrong owner", () => {
 	const claim = createTaskClaim("worker-1", 300_000, NOW);
 	const task = makeTask({ claim });
-	assert.throws(
-		() => releaseTaskClaim(task, "worker-2", claim.token, NOW),
-		/not held/,
-	);
+	assert.throws(() => releaseTaskClaim(task, "worker-2", claim.token, NOW), /not held/);
 });
 
 test("releaseTaskClaim: does not mutate original task", () => {
@@ -176,10 +170,7 @@ test("transitionClaimedTaskStatus: changes status on valid claim", () => {
 
 test("transitionClaimedTaskStatus: throws for invalid claim", () => {
 	const task = makeTask();
-	assert.throws(
-		() => transitionClaimedTaskStatus(task, "worker-1", "bad", "running", NOW),
-		/not held/,
-	);
+	assert.throws(() => transitionClaimedTaskStatus(task, "worker-1", "bad", "running", NOW), /not held/);
 });
 
 test("transitionClaimedTaskStatus: does not mutate original task", () => {

@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { readKnowledge, knowledgePath } from "../../src/extension/knowledge-injection.ts";
+import test from "node:test";
+import { knowledgePath, readKnowledge } from "../../src/extension/knowledge-injection.ts";
 
 /**
  * Option B (preservation) tee-recovery for knowledge.md head-only truncation.

@@ -7,12 +7,12 @@
  * Full integration testing requires file-system setup of teams/workflows.
  */
 
-import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { handleParallel } from "../../src/extension/team-tool/parallel-dispatch.ts";
-import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
+import { after, before, describe, it } from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import { handleParallel } from "../../src/extension/team-tool/parallel-dispatch.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
+import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeCtx(cwd: string): TeamContext {
@@ -36,7 +36,9 @@ describe("handleParallel", () => {
 	// test process and self-terminate within 500ms of it exiting. Restored in
 	// `after` so later test files in the same process are unaffected.
 	const savedParentPid = process.env.PI_CREW_PARENT_PID;
-	before(() => { process.env.PI_CREW_PARENT_PID = String(process.pid); });
+	before(() => {
+		process.env.PI_CREW_PARENT_PID = String(process.pid);
+	});
 	after(() => {
 		if (savedParentPid === undefined) delete process.env.PI_CREW_PARENT_PID;
 		else process.env.PI_CREW_PARENT_PID = savedParentPid;
@@ -58,10 +60,7 @@ describe("handleParallel", () => {
 	it("returns error when config.tasks is empty array", async () => {
 		const tmp = createTrackedTempDir("parallel-test-");
 		try {
-			const res = await handleParallel(
-				makeParams({ config: { tasks: [] } }),
-				makeCtx(tmp),
-			);
+			const res = await handleParallel(makeParams({ config: { tasks: [] } }), makeCtx(tmp));
 
 			assert.strictEqual(res.isError, true);
 			const text = textFromToolResult(res);
@@ -74,10 +73,7 @@ describe("handleParallel", () => {
 	it("returns error when config.tasks is not an array", async () => {
 		const tmp = createTrackedTempDir("parallel-test-");
 		try {
-			const res = await handleParallel(
-				makeParams({ config: { tasks: "not-array" } }),
-				makeCtx(tmp),
-			);
+			const res = await handleParallel(makeParams({ config: { tasks: "not-array" } }), makeCtx(tmp));
 
 			assert.strictEqual(res.isError, true);
 			const text = textFromToolResult(res);
@@ -118,7 +114,14 @@ describe("handleParallel", () => {
 			// process leak the previous version of this test caused).
 			const res = await handleParallel(
 				makeParams({
-					config: { tasks: [{ goal: "test goal", agent: "nonexistent-agent-xyz" }] },
+					config: {
+						tasks: [
+							{
+								goal: "test goal",
+								agent: "nonexistent-agent-xyz",
+							},
+						],
+					},
 				}),
 				makeCtx(tmp),
 			);

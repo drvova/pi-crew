@@ -8,5 +8,10 @@ export function firstText(result: { content?: Array<{ type: string; text?: strin
 }
 
 export function textFromToolResult(result: { content?: Array<{ type: string; text?: string }> }): string {
-	return result.content?.filter(isTextContent).map((item) => item.text).join("\n") ?? "";
+	return (
+		result.content
+			?.filter(isTextContent)
+			.map((item) => item.text)
+			.join("\n") ?? ""
+	);
 }

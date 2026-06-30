@@ -1,12 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
-import { firstText } from "../fixtures/tool-result-helpers.ts";
 import { unregisterActiveRun } from "../../src/state/active-run-registry.ts";
-
+import { firstText } from "../fixtures/tool-result-helpers.ts";
 
 test("child-process runs maintain per-agent status, events, and output files", async () => {
 	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
@@ -19,7 +18,14 @@ test("child-process runs maintain per-agent status, events, and output files", a
 	let runId: string | undefined;
 	try {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-		const run = await handleTeamTool({ action: "run", team: "fast-fix", goal: "exercise per-agent files" }, { cwd });
+		const run = await handleTeamTool(
+			{
+				action: "run",
+				team: "fast-fix",
+				goal: "exercise per-agent files",
+			},
+			{ cwd },
+		);
 		assert.equal(run.isError, false);
 		runId = run.details.runId!;
 		const status = await handleTeamTool({ action: "status", runId }, { cwd });
@@ -39,11 +45,41 @@ test("child-process runs maintain per-agent status, events, and output files", a
 		assert.equal(fs.existsSync(first.eventsPath), true);
 		assert.equal(fs.existsSync(first.outputPath), true);
 
-		const statusApi = await handleTeamTool({ action: "api", runId, config: { operation: "read-agent-status", agentId: first.taskId } }, { cwd });
+		const statusApi = await handleTeamTool(
+			{
+				action: "api",
+				runId,
+				config: {
+					operation: "read-agent-status",
+					agentId: first.taskId,
+				},
+			},
+			{ cwd },
+		);
 		assert.equal(JSON.parse(firstText(statusApi)).taskId, first.taskId);
-		const eventsApi = await handleTeamTool({ action: "api", runId, config: { operation: "read-agent-events", agentId: first.taskId } }, { cwd });
+		const eventsApi = await handleTeamTool(
+			{
+				action: "api",
+				runId,
+				config: {
+					operation: "read-agent-events",
+					agentId: first.taskId,
+				},
+			},
+			{ cwd },
+		);
 		assert.match(firstText(eventsApi), /message_end/);
-		const transcriptApi = await handleTeamTool({ action: "api", runId, config: { operation: "read-agent-transcript", agentId: first.taskId } }, { cwd });
+		const transcriptApi = await handleTeamTool(
+			{
+				action: "api",
+				runId,
+				config: {
+					operation: "read-agent-transcript",
+					agentId: first.taskId,
+				},
+			},
+			{ cwd },
+		);
 		// Mock output may be "[MOCK] JSON success for explorer" - match both forms
 		assert.match(firstText(transcriptApi), /MOCK.*JSON success/);
 		assert.equal(path.basename(path.dirname(first.statusPath)), first.taskId);

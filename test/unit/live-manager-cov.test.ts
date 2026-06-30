@@ -1,26 +1,25 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { describe, it } from "node:test";
 import {
 	clearLiveAgentsForTest,
-	registerLiveAgent,
+	evictStaleLiveAgentHandles,
+	followUpLiveAgent,
+	getLiveAgent,
+	getLiveAgentContextPercent,
+	listActiveLiveAgents,
 	listLiveAgents,
 	listLiveAgentsByWorkspace,
-	getLiveAgent,
+	markLiveAgentCompleted,
+	registerLiveAgent,
 	steerLiveAgent,
-	followUpLiveAgent,
 	stopLiveAgent,
-	updateLiveAgentStatus,
 	terminateLiveAgent,
 	terminateLiveAgentsForRun,
-	evictStaleLiveAgentHandles,
-	trackLiveAgentToolStart,
-	trackLiveAgentToolEnd,
-	trackLiveAgentTurnEnd,
 	trackLiveAgentResponseText,
-	markLiveAgentCompleted,
-	listActiveLiveAgents,
-	getLiveAgentContextPercent,
+	trackLiveAgentToolEnd,
+	trackLiveAgentToolStart,
+	trackLiveAgentTurnEnd,
+	updateLiveAgentStatus,
 } from "../../src/runtime/live-agent-manager.ts";
 
 function makeSession() {
@@ -72,7 +71,12 @@ describe("registerLiveAgent", () => {
 			taskId: "task-2",
 			runId: "run-2",
 			workspaceId: "ws-1",
-			session: { ...s, steer: async (msg: string) => { steered.push(msg); } },
+			session: {
+				...s,
+				steer: async (msg: string) => {
+					steered.push(msg);
+				},
+			},
 			status: "running",
 		});
 		assert.deepEqual(steered, ["hello"]);
@@ -95,14 +99,42 @@ describe("registerLiveAgent", () => {
 
 describe("listLiveAgents / listLiveAgentsByWorkspace", () => {
 	it("lists all registered agents", () => {
-		registerLiveAgent({ agentId: "a1", taskId: "t1", runId: "r1", workspaceId: "ws-1", session: makeSession(), status: "running" });
-		registerLiveAgent({ agentId: "a2", taskId: "t2", runId: "r1", workspaceId: "ws-1", session: makeSession(), status: "completed" });
+		registerLiveAgent({
+			agentId: "a1",
+			taskId: "t1",
+			runId: "r1",
+			workspaceId: "ws-1",
+			session: makeSession(),
+			status: "running",
+		});
+		registerLiveAgent({
+			agentId: "a2",
+			taskId: "t2",
+			runId: "r1",
+			workspaceId: "ws-1",
+			session: makeSession(),
+			status: "completed",
+		});
 		assert.equal(listLiveAgents().length, 2);
 	});
 
 	it("filters by workspace", () => {
-		registerLiveAgent({ agentId: "a3", taskId: "t3", runId: "r2", workspaceId: "ws-a", session: makeSession(), status: "running" });
-		registerLiveAgent({ agentId: "a4", taskId: "t4", runId: "r2", workspaceId: "ws-b", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "a3",
+			taskId: "t3",
+			runId: "r2",
+			workspaceId: "ws-a",
+			session: makeSession(),
+			status: "running",
+		});
+		registerLiveAgent({
+			agentId: "a4",
+			taskId: "t4",
+			runId: "r2",
+			workspaceId: "ws-b",
+			session: makeSession(),
+			status: "running",
+		});
 		assert.equal(listLiveAgentsByWorkspace("ws-a").length, 1);
 		assert.equal(listLiveAgentsByWorkspace("ws-b").length, 1);
 		assert.equal(listLiveAgentsByWorkspace("ws-c").length, 0);
@@ -111,14 +143,28 @@ describe("listLiveAgents / listLiveAgentsByWorkspace", () => {
 
 describe("getLiveAgent", () => {
 	it("finds agent by agentId", () => {
-		registerLiveAgent({ agentId: "find-me", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "find-me",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		const found = getLiveAgent("find-me");
 		assert.ok(found);
 		assert.equal(found!.agentId, "find-me");
 	});
 
 	it("finds agent by taskId", () => {
-		registerLiveAgent({ agentId: "by-task", taskId: "special-task", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "by-task",
+			taskId: "special-task",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		const found = getLiveAgent("special-task");
 		assert.ok(found);
 		assert.equal(found!.taskId, "special-task");
@@ -131,7 +177,14 @@ describe("getLiveAgent", () => {
 
 describe("updateLiveAgentStatus", () => {
 	it("updates status and updatedAt", () => {
-		registerLiveAgent({ agentId: "status-agent", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "status-agent",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		const before = getLiveAgent("status-agent")!.updatedAt;
 		updateLiveAgentStatus("status-agent", "completed");
 		const after = getLiveAgent("status-agent")!;
@@ -153,7 +206,12 @@ describe("steerLiveAgent", () => {
 			taskId: "t",
 			runId: "r",
 			workspaceId: "ws",
-			session: { ...makeSession(), steer: async (msg: string) => { steered.push(msg); } },
+			session: {
+				...makeSession(),
+				steer: async (msg: string) => {
+					steered.push(msg);
+				},
+			},
 			status: "running",
 		});
 		await steerLiveAgent("steer-agent", "go faster");
@@ -173,7 +231,12 @@ describe("followUpLiveAgent", () => {
 			taskId: "t",
 			runId: "r",
 			workspaceId: "ws",
-			session: { ...makeSession(), prompt: async (msg: string) => { prompted.push(msg); } },
+			session: {
+				...makeSession(),
+				prompt: async (msg: string) => {
+					prompted.push(msg);
+				},
+			},
 			status: "running",
 		});
 		await followUpLiveAgent("follow-agent", "check this");
@@ -203,7 +266,12 @@ describe("stopLiveAgent", () => {
 			taskId: "t",
 			runId: "r",
 			workspaceId: "ws",
-			session: { ...makeSession(), abort: async () => { aborted = true; } },
+			session: {
+				...makeSession(),
+				abort: async () => {
+					aborted = true;
+				},
+			},
 			status: "running",
 		});
 		const result = await stopLiveAgent("stop-agent");
@@ -218,9 +286,30 @@ describe("stopLiveAgent", () => {
 
 describe("terminateLiveAgentsForRun", () => {
 	it("terminates all agents for a given run", async () => {
-		registerLiveAgent({ agentId: "r1a", taskId: "t1", runId: "run-x", workspaceId: "ws", session: makeSession(), status: "running" });
-		registerLiveAgent({ agentId: "r1b", taskId: "t2", runId: "run-x", workspaceId: "ws", session: makeSession(), status: "running" });
-		registerLiveAgent({ agentId: "r2a", taskId: "t3", runId: "run-y", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "r1a",
+			taskId: "t1",
+			runId: "run-x",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
+		registerLiveAgent({
+			agentId: "r1b",
+			taskId: "t2",
+			runId: "run-x",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
+		registerLiveAgent({
+			agentId: "r2a",
+			taskId: "t3",
+			runId: "run-y",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		const count = await terminateLiveAgentsForRun("run-x", "failed");
 		assert.equal(count, 2);
 	});
@@ -228,7 +317,14 @@ describe("terminateLiveAgentsForRun", () => {
 
 describe("trackLiveAgentToolStart/End", () => {
 	it("tracks tool usage", () => {
-		registerLiveAgent({ agentId: "tool-agent", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "tool-agent",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		trackLiveAgentToolStart("tool-agent", "bash");
 		trackLiveAgentToolStart("tool-agent", "read");
 		const handle = getLiveAgent("tool-agent")!;
@@ -249,14 +345,28 @@ describe("trackLiveAgentToolStart/End", () => {
 
 describe("trackLiveAgentTurnEnd", () => {
 	it("increments turn count", () => {
-		registerLiveAgent({ agentId: "turn-agent", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "turn-agent",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		trackLiveAgentTurnEnd("turn-agent");
 		trackLiveAgentTurnEnd("turn-agent");
 		assert.equal(getLiveAgent("turn-agent")!.activity.turnCount, 2);
 	});
 
 	it("tracks compaction when flag is true", () => {
-		registerLiveAgent({ agentId: "compact-agent", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "compact-agent",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		trackLiveAgentTurnEnd("compact-agent", true);
 		assert.equal(getLiveAgent("compact-agent")!.activity.compactionCount, 1);
 	});
@@ -264,7 +374,14 @@ describe("trackLiveAgentTurnEnd", () => {
 
 describe("trackLiveAgentResponseText", () => {
 	it("stores last 200 chars of response text", () => {
-		registerLiveAgent({ agentId: "resp-agent", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "resp-agent",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		const longText = "x".repeat(300);
 		trackLiveAgentResponseText("resp-agent", longText);
 		const handle = getLiveAgent("resp-agent")!;
@@ -274,7 +391,14 @@ describe("trackLiveAgentResponseText", () => {
 
 describe("markLiveAgentCompleted", () => {
 	it("sets completedAtMs and clears active tools", () => {
-		registerLiveAgent({ agentId: "done-agent", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
+		registerLiveAgent({
+			agentId: "done-agent",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
 		trackLiveAgentToolStart("done-agent", "tool");
 		markLiveAgentCompleted("done-agent");
 		const handle = getLiveAgent("done-agent")!;
@@ -285,7 +409,14 @@ describe("markLiveAgentCompleted", () => {
 
 describe("evictStaleLiveAgentHandles", () => {
 	it("evicts completed agents older than 10 minutes", () => {
-		registerLiveAgent({ agentId: "old-agent", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "completed" });
+		registerLiveAgent({
+			agentId: "old-agent",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "completed",
+		});
 		const handle = getLiveAgent("old-agent")!;
 		// Set updatedAt to 11 minutes ago
 		const elevenMinutesAgo = new Date(Date.now() - 11 * 60 * 1000).toISOString();
@@ -296,7 +427,14 @@ describe("evictStaleLiveAgentHandles", () => {
 	});
 
 	it("keeps recently completed agents", () => {
-		registerLiveAgent({ agentId: "fresh-agent", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "completed" });
+		registerLiveAgent({
+			agentId: "fresh-agent",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "completed",
+		});
 		const evicted = evictStaleLiveAgentHandles();
 		assert.equal(evicted, 0);
 		assert.ok(getLiveAgent("fresh-agent"));
@@ -305,9 +443,30 @@ describe("evictStaleLiveAgentHandles", () => {
 
 describe("listActiveLiveAgents", () => {
 	it("returns only running/queued/waiting agents", () => {
-		registerLiveAgent({ agentId: "running", taskId: "t1", runId: "r", workspaceId: "ws", session: makeSession(), status: "running" });
-		registerLiveAgent({ agentId: "completed", taskId: "t2", runId: "r", workspaceId: "ws", session: makeSession(), status: "completed" });
-		registerLiveAgent({ agentId: "queued", taskId: "t3", runId: "r", workspaceId: "ws", session: makeSession(), status: "queued" });
+		registerLiveAgent({
+			agentId: "running",
+			taskId: "t1",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "running",
+		});
+		registerLiveAgent({
+			agentId: "completed",
+			taskId: "t2",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "completed",
+		});
+		registerLiveAgent({
+			agentId: "queued",
+			taskId: "t3",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "queued",
+		});
 		const active = listActiveLiveAgents();
 		assert.equal(active.length, 2);
 		assert.ok(active.every((a) => a.status === "running" || a.status === "queued"));
@@ -333,7 +492,14 @@ describe("getLiveAgentContextPercent", () => {
 	});
 
 	it("returns null for non-running agent", () => {
-		registerLiveAgent({ agentId: "done-ctx", taskId: "t", runId: "r", workspaceId: "ws", session: makeSession(), status: "completed" });
+		registerLiveAgent({
+			agentId: "done-ctx",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: makeSession(),
+			status: "completed",
+		});
 		assert.equal(getLiveAgentContextPercent("done-ctx"), null);
 	});
 });

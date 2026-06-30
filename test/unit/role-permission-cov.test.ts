@@ -1,10 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	permissionForRole,
-	currentCrewRole,
-	checkSubagentSpawnPermission,
-} from "../../src/runtime/role-permission.ts";
+import { describe, it } from "node:test";
+import { checkSubagentSpawnPermission, currentCrewRole, permissionForRole } from "../../src/runtime/role-permission.ts";
 
 // ── permissionForRole ───────────────────────────────────────────────────
 
@@ -85,7 +81,10 @@ describe("currentCrewRole", () => {
 
 	it("PI_CREW_ROLE takes precedence over PI_TEAMS_ROLE", () => {
 		assert.strictEqual(
-			currentCrewRole({ PI_CREW_ROLE: "explorer", PI_TEAMS_ROLE: "executor" }),
+			currentCrewRole({
+				PI_CREW_ROLE: "explorer",
+				PI_TEAMS_ROLE: "executor",
+			}),
 			"explorer",
 		);
 	});

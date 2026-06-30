@@ -2,14 +2,14 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
 import { loadConfig } from "../config/config.ts";
-import { projectCrewRoot } from "../utils/paths.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
+import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
+import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { projectCrewRoot } from "../utils/paths.ts";
 
 export interface PreparedTaskWorkspace {
 	cwd: string;
@@ -29,15 +29,56 @@ export interface WorktreeDiffStat {
 
 function git(cwd: string, args: string[]): string {
 	// SECURITY: PI_* and PI_CREW_* wildcards removed — they could match secret vars like PI_PASSWORD.
-// Git operations do not need PI_CREW_* execution-control vars.
-return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: { ...sanitizeEnvSecrets(process.env, { allowList: ["PATH", "HOME", "USER", ...WINDOWS_ESSENTIAL_ENV_VARS, "SHELL", "TERM", "LANG", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MESSAGES", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "NVM_BIN", "NVM_DIR", "NODE_PATH", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"] }), LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" }, windowsHide: true }).trim();
+	// Git operations do not need PI_CREW_* execution-control vars.
+	return execFileSync("git", args, {
+		cwd,
+		encoding: "utf-8",
+		stdio: ["ignore", "pipe", "pipe"],
+		env: {
+			...sanitizeEnvSecrets(process.env, {
+				allowList: [
+					"PATH",
+					"HOME",
+					"USER",
+					...WINDOWS_ESSENTIAL_ENV_VARS,
+					"SHELL",
+					"TERM",
+					"LANG",
+					"LC_ALL",
+					"LC_COLLATE",
+					"LC_CTYPE",
+					"LC_MESSAGES",
+					"XDG_CONFIG_HOME",
+					"XDG_DATA_HOME",
+					"XDG_CACHE_HOME",
+					"NVM_BIN",
+					"NVM_DIR",
+					"NODE_PATH",
+					"GIT_CONFIG_GLOBAL",
+					"GIT_CONFIG_SYSTEM",
+					"GIT_AUTHOR_NAME",
+					"GIT_AUTHOR_EMAIL",
+					"GIT_COMMITTER_NAME",
+					"GIT_COMMITTER_EMAIL",
+				],
+			}),
+			LANG: "en_US.UTF-8",
+			LC_ALL: "en_US.UTF-8",
+		},
+		windowsHide: true,
+	}).trim();
 }
 
 // Dots are removed from branch names since they are used in path construction,
 // and dots could cause ambiguity with relative path handling on some platforms.
 // Branch names themselves support dots in git, but we strip them for safe path use.
 function sanitizeBranchPart(value: string): string {
-	return value.toLowerCase().replace(/[^a-z0-9_/-]+/g, "-").replace(/^-+|-+$/g, "") || "task";
+	return (
+		value
+			.toLowerCase()
+			.replace(/[^a-z0-9_/-]+/g, "-")
+			.replace(/^-+|-+$/g, "") || "task"
+	);
 }
 
 export function findGitRoot(cwd: string): string {
@@ -55,16 +96,24 @@ function linkNodeModulesIfPresent(repoRoot: string, worktreePath: string): boole
 	const source = path.join(repoRoot, "node_modules");
 	const target = path.join(worktreePath, "node_modules");
 	let sourceStat: fs.Stats;
-	try { sourceStat = fs.statSync(source); } catch { return false; }
+	try {
+		sourceStat = fs.statSync(source);
+	} catch {
+		return false;
+	}
 	if (!sourceStat.isDirectory()) return false;
 	if (fs.existsSync(target)) return false;
-		// M5 fix: log symlink failure reason, especially on Windows non-admin.
+	// M5 fix: log symlink failure reason, especially on Windows non-admin.
 	try {
 		fs.symlinkSync(source, target, process.platform === "win32" ? "junction" : "dir");
 		return true;
 	} catch (error) {
 		const isWindows = process.platform === "win32";
-		logInternalError("worktree.symlink-fail", error, isWindows ? "Windows non-admin: SeCreateSymbolicLinkPrivilege needed for node_modules symlink" : String(error));
+		logInternalError(
+			"worktree.symlink-fail",
+			error,
+			isWindows ? "Windows non-admin: SeCreateSymbolicLinkPrivilege needed for node_modules symlink" : String(error),
+		);
 		return false;
 	}
 }
@@ -133,13 +182,21 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 	// (isAllowedSetupHook, isHookPathContainedInRepoRoot) prevents hook scripts from writing outside
 	// the worktree, but cannot prevent a trusted hook from performing harmful operations within it.
 	if (path.isAbsolute(rawHookPath)) {
-		logInternalError("worktree.setupHook.homeHook", new Error("Home directory hook used — ensure ~/.pi/hooks/ is trusted"), `hookPath=${rawHookPath}`);
+		logInternalError(
+			"worktree.setupHook.homeHook",
+			new Error("Home directory hook used — ensure ~/.pi/hooks/ is trusted"),
+			`hookPath=${rawHookPath}`,
+		);
 	}
 	const hookPath = path.isAbsolute(rawHookPath) ? rawHookPath : path.resolve(repoRoot, rawHookPath);
 	// SECURITY: Verify the resolved hook path is contained within the real repoRoot.
 	// This prevents symlink-based escape where repoRoot is a symlink.
 	if (!path.isAbsolute(rawHookPath) && !isHookPathContainedInRepoRoot(repoRoot, hookPath)) {
-		logInternalError("worktree.setupHook.contained", new Error("hook path escapes repoRoot after realpath resolution: " + hookPath), `repoRoot=${repoRoot}`);
+		logInternalError(
+			"worktree.setupHook.contained",
+			new Error("hook path escapes repoRoot after realpath resolution: " + hookPath),
+			`repoRoot=${repoRoot}`,
+		);
 		return [];
 	}
 	try {
@@ -160,7 +217,11 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 	// running through a shell that could interpret malicious filenames.
 	const useShell = false;
 	if (process.platform === "win32" && !nodeHook && !isBatchFile) {
-		logInternalError("worktree.setupHook.windowsNoShell", new Error("Non-node, non-batch hook skipped on Windows (shell:true disabled for security)"), `hook=${hookPath}`);
+		logInternalError(
+			"worktree.setupHook.windowsNoShell",
+			new Error("Non-node, non-batch hook skipped on Windows (shell:true disabled for security)"),
+			`hook=${hookPath}`,
+		);
 	}
 	// SECURITY: Resolve the hook to its real path before execution to close the TOCTOU window.
 	// This prevents a symlink swap between the containment check and actual execution.
@@ -179,45 +240,76 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 	}
 	const result = isBatchFile
 		? spawnSync("cmd.exe", ["/c", realHookPath], {
-			cwd: worktreePath,
-			encoding: "utf-8",
-			input: JSON.stringify({ version: 1, repoRoot, worktreePath, agentCwd: worktreePath, branch, runId: manifest.runId, taskId: task.id, agent: task.agent }),
-			timeout: cfg.setupHookTimeoutMs ?? 30_000,
-			shell: false,  // cmd.exe /c handles batch files safely
-			env: sanitizeEnvSecrets(process.env, {
-				allowList: ["PATH", "HOME", ...WINDOWS_ESSENTIAL_ENV_VARS, "TMPDIR", "LANG", "LC_ALL"],
-			}),
-			windowsHide: true,
-		})
+				cwd: worktreePath,
+				encoding: "utf-8",
+				input: JSON.stringify({
+					version: 1,
+					repoRoot,
+					worktreePath,
+					agentCwd: worktreePath,
+					branch,
+					runId: manifest.runId,
+					taskId: task.id,
+					agent: task.agent,
+				}),
+				timeout: cfg.setupHookTimeoutMs ?? 30_000,
+				shell: false, // cmd.exe /c handles batch files safely
+				env: sanitizeEnvSecrets(process.env, {
+					allowList: ["PATH", "HOME", ...WINDOWS_ESSENTIAL_ENV_VARS, "TMPDIR", "LANG", "LC_ALL"],
+				}),
+				windowsHide: true,
+			})
 		: spawnSync(nodeHook ? process.execPath : realHookPath, nodeHook ? [realHookPath] : [], {
-			cwd: worktreePath,
-			encoding: "utf-8",
-			input: JSON.stringify({ version: 1, repoRoot, worktreePath, agentCwd: worktreePath, branch, runId: manifest.runId, taskId: task.id, agent: task.agent }),
-			timeout: cfg.setupHookTimeoutMs ?? 30_000,
-			shell: false,
-			env: sanitizeEnvSecrets(process.env, {
-				allowList: ["PATH", "HOME", ...WINDOWS_ESSENTIAL_ENV_VARS, "TMPDIR", "LANG", "LC_ALL"],
-			}),
-			windowsHide: true,
-		});
+				cwd: worktreePath,
+				encoding: "utf-8",
+				input: JSON.stringify({
+					version: 1,
+					repoRoot,
+					worktreePath,
+					agentCwd: worktreePath,
+					branch,
+					runId: manifest.runId,
+					taskId: task.id,
+					agent: task.agent,
+				}),
+				timeout: cfg.setupHookTimeoutMs ?? 30_000,
+				shell: false,
+				env: sanitizeEnvSecrets(process.env, {
+					allowList: ["PATH", "HOME", ...WINDOWS_ESSENTIAL_ENV_VARS, "TMPDIR", "LANG", "LC_ALL"],
+				}),
+				windowsHide: true,
+			});
 	if (result.error) throw new Error(`worktree setup hook failed: ${result.error.message}`);
-	if (result.status !== 0) throw new Error(`worktree setup hook failed with exit code ${result.status}: ${result.stderr || result.stdout || "no output"}`);
+	if (result.status !== 0)
+		throw new Error(`worktree setup hook failed with exit code ${result.status}: ${result.stderr || result.stdout || "no output"}`);
 	const trimmed = result.stdout.trim();
 	if (!trimmed) return [];
 	try {
 		// Extract JSON — hooks may output debug logging before JSON.
-	// M4 fix: try full trimmed (multi-line JSON object) before falling back to last line.
-	const lines = trimmed.split(/\r?\n/);
-	let parsed: { syntheticPaths?: unknown } | null = null;
-	try {
-		parsed = JSON.parse(trimmed) as { syntheticPaths?: unknown };
-	} catch { /* fall through — try last line */ }
-	if (!parsed && lines.length > 0) {
-		const lastLine = lines[lines.length - 1];
-		try { parsed = JSON.parse(lastLine) as { syntheticPaths?: unknown }; } catch { /* give up */ }
-	}
-	if (!parsed || !Array.isArray(parsed.syntheticPaths)) return [];
-	return [...new Set(parsed.syntheticPaths.filter((entry): entry is string => typeof entry === "string").map((entry) => normalizeSyntheticPath(worktreePath, entry)))];
+		// M4 fix: try full trimmed (multi-line JSON object) before falling back to last line.
+		const lines = trimmed.split(/\r?\n/);
+		let parsed: { syntheticPaths?: unknown } | null = null;
+		try {
+			parsed = JSON.parse(trimmed) as { syntheticPaths?: unknown };
+		} catch {
+			/* fall through — try last line */
+		}
+		if (!parsed && lines.length > 0) {
+			const lastLine = lines[lines.length - 1];
+			try {
+				parsed = JSON.parse(lastLine) as { syntheticPaths?: unknown };
+			} catch {
+				/* give up */
+			}
+		}
+		if (!parsed || !Array.isArray(parsed.syntheticPaths)) return [];
+		return [
+			...new Set(
+				parsed.syntheticPaths
+					.filter((entry): entry is string => typeof entry === "string")
+					.map((entry) => normalizeSyntheticPath(worktreePath, entry)),
+			),
+		];
 	} catch (error) {
 		logInternalError("worktree.setupHook.parse", error, `lastLine=${(trimmed.split(/\r?\n/).pop() ?? "").slice(0, 200)}`);
 		return [];
@@ -226,19 +318,34 @@ function runSetupHook(manifest: TeamRunManifest, task: TeamTaskState, repoRoot: 
 
 function branchExists(repoRoot: string, branch: string): { local: boolean; remoteOnly: boolean } {
 	let local = false;
-	try { git(repoRoot, ["rev-parse", "--verify", `refs/heads/${branch}`]); local = true; } catch {}
+	try {
+		git(repoRoot, ["rev-parse", "--verify", `refs/heads/${branch}`]);
+		local = true;
+	} catch {}
 	if (local) return { local: true, remoteOnly: false };
 	// Check remote-tracking branch
 	try {
-		const out = execFileSync("git", ["for-each-ref", "--format=%(refname)", `refs/remotes/*/${branch}`],
-			{ cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], windowsHide: true }).trim();
+		const out = execFileSync("git", ["for-each-ref", "--format=%(refname)", `refs/remotes/*/${branch}`], {
+			cwd: repoRoot,
+			encoding: "utf-8",
+			stdio: ["ignore", "pipe", "pipe"],
+			windowsHide: true,
+		}).trim();
 		return { local: false, remoteOnly: out.length > 0 };
-	} catch { return { local: false, remoteOnly: false }; }
+	} catch {
+		return { local: false, remoteOnly: false };
+	}
 }
 
 function pruneStaleWorktrees(repoRoot: string): void {
-	try { execFileSync("git", ["worktree", "prune"], { cwd: repoRoot, stdio: "ignore" }); }
-	catch { /* best-effort */ }
+	try {
+		execFileSync("git", ["worktree", "prune"], {
+			cwd: repoRoot,
+			stdio: "ignore",
+		});
+	} catch {
+		/* best-effort */
+	}
 }
 
 /**
@@ -344,7 +451,11 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		const r = fs.realpathSync.native(worktreeRoot);
 		resolvedWorktreeRoot = r.startsWith("\\\\?\\") ? r.slice(4) : r;
 	} catch {
-		try { resolvedWorktreeRoot = fs.realpathSync(worktreeRoot); } catch { /* keep as-is */ }
+		try {
+			resolvedWorktreeRoot = fs.realpathSync(worktreeRoot);
+		} catch {
+			/* keep as-is */
+		}
 	}
 	const sanitizedTaskId = sanitizeBranchPart(task.id);
 	const worktreePath = path.join(resolvedWorktreeRoot, sanitizedTaskId);
@@ -360,7 +471,19 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		// worktreePath uses short-name backslash form. Resolve both through
 		// realpathSync.native (which always returns long-name on Windows)
 		// for consistent comparison.
-		const normalizedWtPath = process.platform === "win32" ? (() => { try { const r = fs.realpathSync.native(worktreePath); return r.startsWith("\\\\?\\") ? r.slice(4) : r; } catch { return worktreePath; } })().replace(/\\/g, "/").toLowerCase() : worktreePath;
+		const normalizedWtPath =
+			process.platform === "win32"
+				? (() => {
+						try {
+							const r = fs.realpathSync.native(worktreePath);
+							return r.startsWith("\\\\?\\") ? r.slice(4) : r;
+						} catch {
+							return worktreePath;
+						}
+					})()
+						.replace(/\\/g, "/")
+						.toLowerCase()
+				: worktreePath;
 		worktreeExists = worktreeList.split("\n").some((line) => {
 			const trimmed = line.trim();
 			const matchPath = trimmed.startsWith("worktree ") ? trimmed.slice(9) : trimmed;
@@ -369,13 +492,17 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 			}
 			return matchPath === worktreePath;
 		});
-	} catch { worktreeExists = false; }
+	} catch {
+		worktreeExists = false;
+	}
 	if (worktreeExists) {
 		let currentBranch: string;
 		try {
 			currentBranch = git(worktreePath, ["rev-parse", "--abbrev-ref", "HEAD"]);
 		} catch (gitError) {
-			throw new Error(`Existing worktree at ${worktreePath} is not a valid git repository; cannot verify branch: ${gitError instanceof Error ? gitError.message : String(gitError)}`);
+			throw new Error(
+				`Existing worktree at ${worktreePath} is not a valid git repository; cannot verify branch: ${gitError instanceof Error ? gitError.message : String(gitError)}`,
+			);
 		}
 		if (currentBranch !== branch) {
 			throw new Error(`Existing worktree branch mismatch at ${worktreePath}: expected '${branch}', got '${currentBranch}'.`);
@@ -384,7 +511,11 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		const dirtyStatus = git(worktreePath, ["status", "--porcelain"]);
 		if (dirtyStatus.trim()) {
 			// Discard uncommitted changes to ensure clean slate for new task
-			logInternalError("worktree.reused.dirty", new Error(`Discarding uncommitted changes in reused worktree at ${worktreePath}`), `runId=${manifest.runId}, taskId=${task.id}, dirtyStatus=${dirtyStatus.trim()}`);
+			logInternalError(
+				"worktree.reused.dirty",
+				new Error(`Discarding uncommitted changes in reused worktree at ${worktreePath}`),
+				`runId=${manifest.runId}, taskId=${task.id}, dirtyStatus=${dirtyStatus.trim()}`,
+			);
 			git(worktreePath, ["checkout", "--", "."]);
 			git(worktreePath, ["clean", "-fd"]);
 		}
@@ -406,7 +537,11 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 			git(repoRoot, ["worktree", "add", worktreePath, branch]);
 		} else {
 			if (exists.remoteOnly) {
-				logInternalError("worktree.branchRemoteOnly", new Error(`Branch '${branch}' exists only on remote; creating local from HEAD instead of tracking remote.`), `branch=${branch}`);
+				logInternalError(
+					"worktree.branchRemoteOnly",
+					new Error(`Branch '${branch}' exists only on remote; creating local from HEAD instead of tracking remote.`),
+					`branch=${branch}`,
+				);
 			}
 			git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
 		}
@@ -416,23 +551,35 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		if (fs.existsSync(worktreePath)) {
 			try {
 				fs.rmSync(worktreePath, { recursive: true, force: true });
-			} catch { /* best-effort cleanup */ }
+			} catch {
+				/* best-effort cleanup */
+			}
 		}
 		const msg = error instanceof Error ? error.message : String(error);
 		if (/already checked out|is already used by worktree/i.test(msg)) {
-			throw new Error(`Branch '${branch}' is checked out at another worktree. Run \`team cleanup runId=${manifest.runId} force=true\` or manually remove the conflicting worktree.`);
+			throw new Error(
+				`Branch '${branch}' is checked out at another worktree. Run \`team cleanup runId=${manifest.runId} force=true\` or manually remove the conflicting worktree.`,
+			);
 		}
 		throw error;
 	}
 	const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
-	const nodeModulesLinked = loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
+	const nodeModulesLinked =
+		loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
 	// Overlay seed paths from config + step-level seedPaths
 	const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
 	const merged = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
 	if (merged.length > 0) {
 		overlaySeedPaths(repoRoot, worktreePath, merged);
 	}
-	return { cwd: worktreePath, worktreePath, branch, reused: false, nodeModulesLinked, syntheticPaths };
+	return {
+		cwd: worktreePath,
+		worktreePath,
+		branch,
+		reused: false,
+		nodeModulesLinked,
+		syntheticPaths,
+	};
 }
 
 export function captureWorktreeDiffStat(worktreePath: string): WorktreeDiffStat {
@@ -475,10 +622,7 @@ export function captureWorktreeDiff(worktreePath: string): string {
  * Returns `undefined` when worktree creation is unavailable (no git repo, dirty
  * leader, git error) so the caller (`ctx.agent`) can fall back gracefully.
  */
-export function prepareAgentWorktree(
-	manifest: TeamRunManifest,
-	agentId: string,
-): PreparedTaskWorkspace | undefined {
+export function prepareAgentWorktree(manifest: TeamRunManifest, agentId: string): PreparedTaskWorkspace | undefined {
 	try {
 		const repoRoot = findGitRoot(manifest.cwd);
 		const loadedConfig = loadConfig(manifest.cwd);
@@ -491,9 +635,8 @@ export function prepareAgentWorktree(
 		const branch = `pi-crew/${sanitizedRunId}/${sanitizedAgentId}`;
 		pruneStaleWorktrees(repoRoot);
 		git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
-		const nodeModulesLinked = loadedConfig.config.worktree?.linkNodeModules === true
-			? linkNodeModulesIfPresent(repoRoot, worktreePath)
-			: false;
+		const nodeModulesLinked =
+			loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
 		return { cwd: worktreePath, worktreePath, branch, nodeModulesLinked };
 	} catch {
 		// Graceful fallback: no git repo, dirty leader, or git error → run normally.

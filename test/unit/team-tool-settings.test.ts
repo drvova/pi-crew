@@ -3,10 +3,10 @@
  * @see src/extension/team-tool/handle-settings.ts
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { handleSettings } from "../../src/extension/team-tool/handle-settings.ts";
+import { describe, it } from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import { handleSettings } from "../../src/extension/team-tool/handle-settings.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
@@ -202,10 +202,7 @@ describe("handleSettings set", () => {
 			const res = handleSettings(makeConfig("set telemetry.enabled true"), makeCtx(tmp));
 			const text = textFromToolResult(res);
 
-			assert.ok(
-				text.includes("Set telemetry.enabled") || text.includes("Error"),
-				`Expected set result, got: ${text.slice(0, 200)}`,
-			);
+			assert.ok(text.includes("Set telemetry.enabled") || text.includes("Error"), `Expected set result, got: ${text.slice(0, 200)}`);
 		} finally {
 			removeTrackedTempDir(tmp);
 		}
@@ -217,9 +214,7 @@ describe("handleSettings set", () => {
 			const res = handleSettings(makeConfig("set limits.maxConcurrentWorkers 4"), makeCtx(tmp));
 			const text = textFromToolResult(res);
 
-			assert.ok(
-				text.includes("Set limits.maxConcurrentWorkers") || text.includes("Error"),
-			);
+			assert.ok(text.includes("Set limits.maxConcurrentWorkers") || text.includes("Error"));
 		} finally {
 			removeTrackedTempDir(tmp);
 		}

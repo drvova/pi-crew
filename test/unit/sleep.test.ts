@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { sleep } from "../../src/utils/sleep.ts";
 
 test("sleep resolves after delay", async () => {

@@ -8,18 +8,18 @@
  */
 import { discoverAgents } from "../../agents/discover-agents.ts";
 import { loadConfig } from "../../config/config.ts";
-import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
-import { createRunManifest } from "../../state/state-store.ts";
-import { appendEvent } from "../../state/event-log.ts";
-import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
 import { resolveCrewRuntime } from "../../runtime/runtime-resolver.ts";
-import { resolveCwdOverride } from "../registration/team-tool.ts";
-import { result, type TeamContext } from "./context.ts";
-import type { PiTeamsToolResult } from "../tool-result.ts";
+import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
+import { appendEvent } from "../../state/event-log.ts";
+import { createRunManifest } from "../../state/state-store.ts";
+import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
 import { discoverTeams } from "../../teams/discover-teams.ts";
-import { discoverWorkflows } from "../../workflows/discover-workflows.ts";
 import type { TeamConfig } from "../../teams/team-config.ts";
+import { discoverWorkflows } from "../../workflows/discover-workflows.ts";
 import type { WorkflowConfig } from "../../workflows/workflow-config.ts";
+import { resolveCwdOverride } from "../registration/team-tool.ts";
+import type { PiTeamsToolResult } from "../tool-result.ts";
+import { result, type TeamContext } from "./context.ts";
 
 const MAX_CONCURRENCY = 8;
 const DEFAULT_CONCURRENCY = 4;
@@ -32,10 +32,7 @@ export async function handleParallel(params: TeamToolParamsValue, ctx: TeamConte
 		return result("parallel action requires config.tasks: [{goal, agent?}]", { action: "parallel", status: "error" }, true);
 	}
 
-	const concurrency = Math.min(
-		Math.max(1, Math.floor((params.config?.concurrency as number) ?? DEFAULT_CONCURRENCY)),
-		MAX_CONCURRENCY,
-	);
+	const concurrency = Math.min(Math.max(1, Math.floor((params.config?.concurrency as number) ?? DEFAULT_CONCURRENCY)), MAX_CONCURRENCY);
 
 	const config = loadConfig(ctx.cwd);
 	const agentsResult = discoverAgents(ctx.cwd);
@@ -44,16 +41,16 @@ export async function handleParallel(params: TeamToolParamsValue, ctx: TeamConte
 	const workflows = discoverWorkflows(ctx.cwd);
 
 	const teamName = (params.config?.team as string) ?? DEFAULT_TEAM;
-	const team = teams.builtin.find((t) => t.name === teamName)
-		?? teams.user.find((t) => t.name === teamName)
-		?? teams.project.find((t) => t.name === teamName);
+	const team =
+		teams.builtin.find((t) => t.name === teamName) ??
+		teams.user.find((t) => t.name === teamName) ??
+		teams.project.find((t) => t.name === teamName);
 	if (!team) {
 		return result(`Team '${teamName}' not found`, { action: "parallel", status: "error" }, true);
 	}
 
 	// H2: Use team's defaultWorkflow, fall back to "fast-fix"
-	const workflow = workflows.builtin.find((w) => w.name === team.defaultWorkflow)
-		?? workflows.builtin.find((w) => w.name === "fast-fix");
+	const workflow = workflows.builtin.find((w) => w.name === team.defaultWorkflow) ?? workflows.builtin.find((w) => w.name === "fast-fix");
 	if (!workflow) {
 		return result("No suitable workflow found for parallel dispatch", { action: "parallel", status: "error" }, true);
 	}
@@ -75,15 +72,15 @@ export async function handleParallel(params: TeamToolParamsValue, ctx: TeamConte
 				errors.push(res.value.error);
 			} else {
 				const reason = (res as PromiseRejectedResult).reason;
-				errors.push({ goal: "(unknown)", error: reason instanceof Error ? reason.message : String(reason) });
+				errors.push({
+					goal: "(unknown)",
+					error: reason instanceof Error ? reason.message : String(reason),
+				});
 			}
 		}
 	}
 
-	const lines: string[] = [
-		`Parallel dispatch: ${launched.length}/${tasksParam.length} tasks launched (concurrency: ${concurrency})`,
-		"",
-	];
+	const lines: string[] = [`Parallel dispatch: ${launched.length}/${tasksParam.length} tasks launched (concurrency: ${concurrency})`, ""];
 	for (const l of launched) {
 		lines.push(`  ✅ ${l.runId} — ${l.agent}: ${l.goal.slice(0, 80)}`);
 	}
@@ -91,13 +88,20 @@ export async function handleParallel(params: TeamToolParamsValue, ctx: TeamConte
 		lines.push(`  ❌ ${e.goal.slice(0, 80)}: ${e.error}`);
 	}
 
-	return result(lines.join("\n"), {
-		action: "parallel",
-		status: errors.length === tasksParam.length ? "error" : "ok",
-	}, errors.length === tasksParam.length);
+	return result(
+		lines.join("\n"),
+		{
+			action: "parallel",
+			status: errors.length === tasksParam.length ? "error" : "ok",
+		},
+		errors.length === tasksParam.length,
+	);
 }
 
-type SpawnOk = { ok: true; value: { runId: string; goal: string; agent: string } };
+type SpawnOk = {
+	ok: true;
+	value: { runId: string; goal: string; agent: string };
+};
 type SpawnErr = { ok: false; error: { goal: string; error: string } };
 type SpawnResult = SpawnOk | SpawnErr;
 
@@ -116,12 +120,21 @@ async function spawnSingleTask(
 		const rawCwd = (taskRec.cwd as string) ?? undefined;
 
 		if (!goal) {
-			return { ok: false, error: { goal: "(missing)", error: "Each task must have a 'goal' field" } };
+			return {
+				ok: false,
+				error: {
+					goal: "(missing)",
+					error: "Each task must have a 'goal' field",
+				},
+			};
 		}
 
 		const agent = allAgentsList.find((a) => a.name === agentName);
 		if (!agent) {
-			return { ok: false, error: { goal, error: `Agent '${agentName}' not found` } };
+			return {
+				ok: false,
+				error: { goal, error: `Agent '${agentName}' not found` },
+			};
 		}
 
 		// H1: Validate taskCwd containment against project root
@@ -148,9 +161,18 @@ async function spawnSingleTask(
 			await spawnBackgroundTeamRun(created.manifest);
 		}
 
-		return { ok: true, value: { runId: created.manifest.runId, goal, agent: agentName } };
+		return {
+			ok: true,
+			value: { runId: created.manifest.runId, goal, agent: agentName },
+		};
 	} catch (error) {
 		const goal = ((task as Record<string, unknown>).goal as string) ?? "(unknown)";
-		return { ok: false, error: { goal, error: error instanceof Error ? error.message : String(error) } };
+		return {
+			ok: false,
+			error: {
+				goal,
+				error: error instanceof Error ? error.message : String(error),
+			},
+		};
 	}
 }

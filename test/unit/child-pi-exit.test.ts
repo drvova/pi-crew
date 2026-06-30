@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { type ChildPiLifecycleEvent } from "../../src/runtime/child-pi.ts";
 
 // --- Test a: ChildPiLifecycleEvent type has stderrExcerpt field (structural check) ---
@@ -35,7 +35,11 @@ test("ChildPiLifecycleEvent type includes error field for spawn_error events", (
 // --- Test: verify that the PendingOperation interface pattern works ---
 test("pending operation tracker: start/complete lifecycle", () => {
 	// Test the pattern directly to ensure correctness
-	type PendingOp = { id: string; type: "prompt" | "steer" | "json_event"; startedAt: number };
+	type PendingOp = {
+		id: string;
+		type: "prompt" | "steer" | "json_event";
+		startedAt: number;
+	};
 	const pendingOperations = new Map<string, PendingOp>();
 	let operationIdCounter = 0;
 
@@ -70,7 +74,11 @@ test("pending operation tracker: start/complete lifecycle", () => {
 
 // --- Test: verify rejectPendingOperations clears all pending ops and logs each ---
 test("pending operation tracker: reject clears all operations", () => {
-	type PendingOp = { id: string; type: "prompt" | "steer" | "json_event"; startedAt: number };
+	type PendingOp = {
+		id: string;
+		type: "prompt" | "steer" | "json_event";
+		startedAt: number;
+	};
 	const pendingOperations = new Map<string, PendingOp>();
 	let operationIdCounter = 0;
 	const rejectedOps: Array<{ id: string; type: string; elapsed: number }> = [];
@@ -83,7 +91,11 @@ test("pending operation tracker: reject clears all operations", () => {
 
 	const rejectPendingOperations = (error: Error): void => {
 		pendingOperations.forEach((op) => {
-			rejectedOps.push({ id: op.id, type: op.type, elapsed: Date.now() - op.startedAt });
+			rejectedOps.push({
+				id: op.id,
+				type: op.type,
+				elapsed: Date.now() - op.startedAt,
+			});
 		});
 		pendingOperations.clear();
 	};
@@ -96,13 +108,14 @@ test("pending operation tracker: reject clears all operations", () => {
 	assert.equal(pendingOperations.size, 4);
 
 	// Reject all with an error
-	const testError = new Error(
-		"Child Pi process exited unexpectedly (code=1 signal=SIGKILL). Stderr: OOM killed",
-	);
+	const testError = new Error("Child Pi process exited unexpectedly (code=1 signal=SIGKILL). Stderr: OOM killed");
 	rejectPendingOperations(testError);
 	assert.equal(pendingOperations.size, 0, "map should be empty after rejection");
 	assert.equal(rejectedOps.length, 4, "all 4 ops should be rejected");
-	assert.ok(rejectedOps.every((op) => op.elapsed >= 0), "elapsed should be non-negative");
+	assert.ok(
+		rejectedOps.every((op) => op.elapsed >= 0),
+		"elapsed should be non-negative",
+	);
 	// Verify types are preserved
 	assert.equal(rejectedOps.filter((op) => op.type === "json_event").length, 2);
 	assert.equal(rejectedOps.filter((op) => op.type === "prompt").length, 1);
@@ -111,7 +124,11 @@ test("pending operation tracker: reject clears all operations", () => {
 
 // --- Test d: No error logged for pending ops on graceful exit ---
 test("pending operation tracker: no rejection on graceful path", () => {
-	type PendingOp = { id: string; type: "prompt" | "steer" | "json_event"; startedAt: number };
+	type PendingOp = {
+		id: string;
+		type: "prompt" | "steer" | "json_event";
+		startedAt: number;
+	};
 	const pendingOperations = new Map<string, PendingOp>();
 	let operationIdCounter = 0;
 	let rejectionCalled = false;
@@ -155,9 +172,7 @@ test("error handler builds process error with stderr excerpt", () => {
 	const stderr = "line1\nline2\nError: spawn EACCES permission denied\nline4\nline5";
 	const error = new Error("spawn EACCES");
 
-	const processError = new Error(
-		`Child Pi process error: ${error.message}. Stderr: ${stderr.slice(-500) || "(none)"}`,
-	);
+	const processError = new Error(`Child Pi process error: ${error.message}. Stderr: ${stderr.slice(-500) || "(none)"}`);
 
 	assert.ok(processError.message.includes("spawn EACCES"), "should include original error");
 	assert.ok(processError.message.includes("permission denied"), "should include stderr content");
@@ -171,8 +186,8 @@ test("exit error includes exit code, signal, and stderr context", () => {
 	const signal = "SIGKILL";
 
 	const exitError = new Error(
-		`Child Pi process exited unexpectedly (code=${code ?? "null"} signal=${signal ?? "null"}). `
-		+ `Stderr: ${stderr.slice(-1000) || "(none)"}`,
+		`Child Pi process exited unexpectedly (code=${code ?? "null"} signal=${signal ?? "null"}). ` +
+			`Stderr: ${stderr.slice(-1000) || "(none)"}`,
 	);
 
 	assert.ok(exitError.message.includes("code=137"), "should include exit code");

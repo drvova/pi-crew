@@ -1,11 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
 	buildSyntheticTerminalEvidence,
 	CrewCancellationError,
-	cancellationReasonFromUnknown,
-	cancellationReasonFromSignal,
 	cancellationErrorFromSignal,
+	cancellationReasonFromSignal,
+	cancellationReasonFromUnknown,
 	throwIfCancelled,
 } from "../../src/runtime/cancellation.ts";
 
@@ -13,7 +13,10 @@ describe("cancellation", () => {
 	// buildSyntheticTerminalEvidence
 	describe("buildSyntheticTerminalEvidence", () => {
 		it("creates evidence with cancelled status", () => {
-			const reason = { code: "caller_cancelled" as const, message: "test" };
+			const reason = {
+				code: "caller_cancelled" as const,
+				message: "test",
+			};
 			const evidence = buildSyntheticTerminalEvidence("worker", reason);
 			assert.equal(evidence.operation, "worker");
 			assert.equal(evidence.status, "cancelled");
@@ -22,16 +25,15 @@ describe("cancellation", () => {
 		});
 
 		it("preserves startedAt when provided", () => {
-			const evidence = buildSyntheticTerminalEvidence(
-				"tool",
-				{ code: "tool_timeout", message: "timed out" },
-				"2025-01-01T00:00:00Z",
-			);
+			const evidence = buildSyntheticTerminalEvidence("tool", { code: "tool_timeout", message: "timed out" }, "2025-01-01T00:00:00Z");
 			assert.equal(evidence.startedAt, "2025-01-01T00:00:00Z");
 		});
 
 		it("includes reason when provided", () => {
-			const reason = { code: "shutdown" as const, message: "System shutting down" };
+			const reason = {
+				code: "shutdown" as const,
+				message: "System shutting down",
+			};
 			const evidence = buildSyntheticTerminalEvidence("model", reason);
 			assert.equal(evidence.reason, reason);
 		});
@@ -40,19 +42,28 @@ describe("cancellation", () => {
 	// CrewCancellationError
 	describe("CrewCancellationError", () => {
 		it("is an instance of Error", () => {
-			const err = new CrewCancellationError({ code: "caller_cancelled", message: "test" });
+			const err = new CrewCancellationError({
+				code: "caller_cancelled",
+				message: "test",
+			});
 			assert.ok(err instanceof Error);
 			assert.equal(err.name, "CrewCancellationError");
 		});
 
 		it("stores reason", () => {
-			const reason = { code: "provider_timeout" as const, message: "Provider timed out" };
+			const reason = {
+				code: "provider_timeout" as const,
+				message: "Provider timed out",
+			};
 			const err = new CrewCancellationError(reason);
 			assert.deepEqual(err.reason, reason);
 		});
 
 		it("message matches reason.message", () => {
-			const err = new CrewCancellationError({ code: "unknown", message: "Something happened" });
+			const err = new CrewCancellationError({
+				code: "unknown",
+				message: "Something happened",
+			});
 			assert.equal(err.message, "Something happened");
 		});
 	});
@@ -60,7 +71,10 @@ describe("cancellation", () => {
 	// cancellationReasonFromUnknown
 	describe("cancellationReasonFromUnknown", () => {
 		it("handles CrewCancellationError input", () => {
-			const reason = { code: "leader_interrupted" as const, message: "Leader stopped" };
+			const reason = {
+				code: "leader_interrupted" as const,
+				message: "Leader stopped",
+			};
 			const err = new CrewCancellationError(reason);
 			const result = cancellationReasonFromUnknown(err);
 			assert.equal(result.code, "leader_interrupted");
@@ -87,13 +101,19 @@ describe("cancellation", () => {
 		});
 
 		it("handles object with code and message", () => {
-			const result = cancellationReasonFromUnknown({ code: "shutdown", message: "Shutting down" });
+			const result = cancellationReasonFromUnknown({
+				code: "shutdown",
+				message: "Shutting down",
+			});
 			assert.equal(result.code, "shutdown");
 			assert.equal(result.message, "Shutting down");
 		});
 
 		it("handles object with unknown code", () => {
-			const result = cancellationReasonFromUnknown({ code: "custom_code", message: "msg" });
+			const result = cancellationReasonFromUnknown({
+				code: "custom_code",
+				message: "msg",
+			});
 			assert.equal(result.code, "caller_cancelled");
 		});
 
@@ -122,7 +142,12 @@ describe("cancellation", () => {
 
 		it("extracts reason from aborted signal", () => {
 			const controller = new AbortController();
-			controller.abort(new CrewCancellationError({ code: "tool_timeout", message: "Tool took too long" }));
+			controller.abort(
+				new CrewCancellationError({
+					code: "tool_timeout",
+					message: "Tool took too long",
+				}),
+			);
 			const result = cancellationReasonFromSignal(controller.signal);
 			assert.equal(result.code, "tool_timeout");
 		});

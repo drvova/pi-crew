@@ -41,12 +41,14 @@ const translations: Record<string, Partial<Record<Key, string>>> = {
 		"agent.noOutput": "Sin salida.",
 		"result.requiresAgentId": "get_subagent_result requiere agent_id.",
 		"result.notFound": "Agente no encontrado: {id}",
-		"result.unrecoverable": "El subagente fue interrumpido antes de registrar su ID de ejecución duradero; no se puede recuperar tras reiniciar.",
+		"result.unrecoverable":
+			"El subagente fue interrumpido antes de registrar su ID de ejecución duradero; no se puede recuperar tras reiniciar.",
 		"result.waitAborted": "Se canceló la espera del resultado del subagente.",
 		"result.waitTimeout": "Se agotó el tiempo de espera del resultado del subagente.",
 		"result.stillRunning": "El agente sigue ejecutándose. Usa wait=true o vuelve a comprobar más tarde.",
 		"steer.noted": "Solicitud de dirección registrada para {id}.",
-		"steer.unavailable": "El backend predeterminado actual de pi-crew es child-process, así que session.steer a mitad de turno aún no está disponible.",
+		"steer.unavailable":
+			"El backend predeterminado actual de pi-crew es child-process, así que session.steer a mitad de turno aún no está disponible.",
 		"steer.cancelHint": "Usa team cancel runId={runId} si hay que interrumpir el agente.",
 	},
 	fr: {
@@ -60,12 +62,14 @@ const translations: Record<string, Partial<Record<Key, string>>> = {
 		"agent.noOutput": "Aucune sortie.",
 		"result.requiresAgentId": "get_subagent_result nécessite agent_id.",
 		"result.notFound": "Agent introuvable : {id}",
-		"result.unrecoverable": "Le sous-agent a été interrompu avant l'enregistrement de son ID d'exécution durable ; il ne peut pas être récupéré après redémarrage.",
+		"result.unrecoverable":
+			"Le sous-agent a été interrompu avant l'enregistrement de son ID d'exécution durable ; il ne peut pas être récupéré après redémarrage.",
 		"result.waitAborted": "L'attente du résultat du sous-agent a été annulée.",
 		"result.waitTimeout": "Délai d'attente du résultat du sous-agent dépassé.",
 		"result.stillRunning": "L'agent est toujours en cours d'exécution. Utilisez wait=true ou réessayez plus tard.",
 		"steer.noted": "Demande de pilotage enregistrée pour {id}.",
-		"steer.unavailable": "Le backend pi-crew par défaut actuel est child-process, donc session.steer en milieu de tour n'est pas encore disponible.",
+		"steer.unavailable":
+			"Le backend pi-crew par défaut actuel est child-process, donc session.steer en milieu de tour n'est pas encore disponible.",
 		"steer.cancelHint": "Utilisez team cancel runId={runId} si l'agent doit être interrompu.",
 	},
 	"pt-BR": {
@@ -79,12 +83,14 @@ const translations: Record<string, Partial<Record<Key, string>>> = {
 		"agent.noOutput": "Sem saída.",
 		"result.requiresAgentId": "get_subagent_result requer agent_id.",
 		"result.notFound": "Agente não encontrado: {id}",
-		"result.unrecoverable": "O subagente foi interrompido antes que seu ID de execução durável fosse registrado; ele não pode ser recuperado após reiniciar.",
+		"result.unrecoverable":
+			"O subagente foi interrompido antes que seu ID de execução durável fosse registrado; ele não pode ser recuperado após reiniciar.",
 		"result.waitAborted": "A espera pelo resultado do subagente foi abortada.",
 		"result.waitTimeout": "Tempo limite de espera pelo resultado do subagente esgotado.",
 		"result.stillRunning": "O agente ainda está em execução. Use wait=true ou verifique novamente mais tarde.",
 		"steer.noted": "Solicitação de orientação registrada para {id}.",
-		"steer.unavailable": "O backend padrão atual do pi-crew é child-process, então session.steer no meio do turno ainda não está disponível.",
+		"steer.unavailable":
+			"O backend padrão atual do pi-crew é child-process, então session.steer no meio do turno ainda não está disponível.",
 		"steer.cancelHint": "Use team cancel runId={runId} se o agente precisar ser interrompido.",
 	},
 };
@@ -163,7 +169,12 @@ export function listLocales(): string[] {
 
 export function initI18n(pi: ExtensionAPI): () => void {
 	try {
-		pi.events?.emit?.("pi-core/i18n/registerBundle", { namespace, defaultLocale: "en", fallback, translations });
+		pi.events?.emit?.("pi-core/i18n/registerBundle", {
+			namespace,
+			defaultLocale: "en",
+			fallback,
+			translations,
+		});
 	} catch {
 		// Non-critical.
 	}
@@ -173,10 +184,13 @@ export function initI18n(pi: ExtensionAPI): () => void {
 		currentLocale = raw && translations[raw] ? raw : undefined;
 	});
 	try {
-		pi.events?.emit?.("pi-core/i18n/requestApi", { namespace, onApi(api: { getLocale?: () => string | undefined }) {
-			const raw = api.getLocale?.()?.trim();
-			if (raw && translations[raw]) currentLocale = raw;
-		} });
+		pi.events?.emit?.("pi-core/i18n/requestApi", {
+			namespace,
+			onApi(api: { getLocale?: () => string | undefined }) {
+				const raw = api.getLocale?.()?.trim();
+				if (raw && translations[raw]) currentLocale = raw;
+			},
+		});
 	} catch {
 		// Non-critical.
 	}

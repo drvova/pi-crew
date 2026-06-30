@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { buildTaskExplainContext, formatTaskExplain, type TaskExplainContext } from "../../src/extension/team-tool/explain.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
@@ -54,10 +54,7 @@ describe("buildTaskExplainContext", () => {
 	});
 
 	it("includes dependency information in why", () => {
-		const tasks = [
-			makeTask("t1"),
-			makeTask("t2", { dependsOn: ["t1"] }),
-		];
+		const tasks = [makeTask("t1"), makeTask("t2", { dependsOn: ["t1"] })];
 		const manifest = makeManifest();
 		const ctx = buildTaskExplainContext(manifest, tasks, "t2");
 		assert.ok(ctx.why.includes("t1"));
@@ -65,10 +62,7 @@ describe("buildTaskExplainContext", () => {
 	});
 
 	it("includes dependents in connected tasks", () => {
-		const tasks = [
-			makeTask("t1", { dependsOn: [] }),
-			makeTask("t2", { dependsOn: ["t1"] }),
-		];
+		const tasks = [makeTask("t1", { dependsOn: [] }), makeTask("t2", { dependsOn: ["t1"] })];
 		const manifest = makeManifest();
 		const ctx = buildTaskExplainContext(manifest, tasks, "t1");
 		assert.ok(ctx.connectedTasks.some((c) => c.taskId === "t2" && c.relation === "depended on by"));
@@ -90,10 +84,12 @@ describe("buildTaskExplainContext", () => {
 	});
 
 	it("computes duration from startedAt/finishedAt", () => {
-		const tasks = [makeTask("t1", {
-			startedAt: "2026-01-01T00:00:00.000Z",
-			finishedAt: "2026-01-01T00:10:00.000Z",
-		})];
+		const tasks = [
+			makeTask("t1", {
+				startedAt: "2026-01-01T00:00:00.000Z",
+				finishedAt: "2026-01-01T00:10:00.000Z",
+			}),
+		];
 		const manifest = makeManifest();
 		const ctx = buildTaskExplainContext(manifest, tasks, "t1");
 		assert.equal(ctx.duration, 600);
@@ -138,9 +134,15 @@ describe("buildTaskExplainContext", () => {
 describe("formatTaskExplain", () => {
 	it("includes task ID and role in header", () => {
 		const ctx: TaskExplainContext = {
-			taskId: "t1", role: "agent", status: "completed",
-			why: "Part of team.", what: "Ran agent.",
-			filesTouched: [], connectedTasks: [], layer: "unknown", complexity: "simple",
+			taskId: "t1",
+			role: "agent",
+			status: "completed",
+			why: "Part of team.",
+			what: "Ran agent.",
+			filesTouched: [],
+			connectedTasks: [],
+			layer: "unknown",
+			complexity: "simple",
 		};
 		const md = formatTaskExplain(ctx);
 		assert.ok(md.includes("t1"));
@@ -150,10 +152,15 @@ describe("formatTaskExplain", () => {
 
 	it("includes files section when files exist", () => {
 		const ctx: TaskExplainContext = {
-			taskId: "t1", role: "agent", status: "completed",
-			why: "Part of team.", what: "Ran agent.",
+			taskId: "t1",
+			role: "agent",
+			status: "completed",
+			why: "Part of team.",
+			what: "Ran agent.",
 			filesTouched: ["file1.ts", "file2.ts"],
-			connectedTasks: [], layer: "unknown", complexity: "simple",
+			connectedTasks: [],
+			layer: "unknown",
+			complexity: "simple",
 		};
 		const md = formatTaskExplain(ctx);
 		assert.ok(md.includes("Files produced"));
@@ -162,10 +169,15 @@ describe("formatTaskExplain", () => {
 
 	it("omits files section when no files", () => {
 		const ctx: TaskExplainContext = {
-			taskId: "t1", role: "agent", status: "completed",
-			why: "Part of team.", what: "Ran agent.",
+			taskId: "t1",
+			role: "agent",
+			status: "completed",
+			why: "Part of team.",
+			what: "Ran agent.",
 			filesTouched: [],
-			connectedTasks: [], layer: "unknown", complexity: "simple",
+			connectedTasks: [],
+			layer: "unknown",
+			complexity: "simple",
 		};
 		const md = formatTaskExplain(ctx);
 		assert.ok(!md.includes("Files produced"));
@@ -173,11 +185,15 @@ describe("formatTaskExplain", () => {
 
 	it("includes connected tasks section", () => {
 		const ctx: TaskExplainContext = {
-			taskId: "t1", role: "agent", status: "completed",
-			why: "Part of team.", what: "Ran agent.",
+			taskId: "t1",
+			role: "agent",
+			status: "completed",
+			why: "Part of team.",
+			what: "Ran agent.",
 			filesTouched: [],
 			connectedTasks: [{ taskId: "t2", status: "completed", relation: "depends on" }],
-			layer: "unknown", complexity: "simple",
+			layer: "unknown",
+			complexity: "simple",
 		};
 		const md = formatTaskExplain(ctx);
 		assert.ok(md.includes("Connected tasks"));
@@ -186,9 +202,15 @@ describe("formatTaskExplain", () => {
 
 	it("includes usage row when usage is present", () => {
 		const ctx: TaskExplainContext = {
-			taskId: "t1", role: "agent", status: "completed",
-			why: "Part of team.", what: "Ran agent.",
-			filesTouched: [], connectedTasks: [], layer: "unknown", complexity: "simple",
+			taskId: "t1",
+			role: "agent",
+			status: "completed",
+			why: "Part of team.",
+			what: "Ran agent.",
+			filesTouched: [],
+			connectedTasks: [],
+			layer: "unknown",
+			complexity: "simple",
 			usage: { inputTokens: 50, outputTokens: 100 },
 		};
 		const md = formatTaskExplain(ctx);
@@ -199,9 +221,15 @@ describe("formatTaskExplain", () => {
 
 	it("includes duration row when duration is present", () => {
 		const ctx: TaskExplainContext = {
-			taskId: "t1", role: "agent", status: "completed",
-			why: "Part of team.", what: "Ran agent.",
-			filesTouched: [], connectedTasks: [], layer: "unknown", complexity: "simple",
+			taskId: "t1",
+			role: "agent",
+			status: "completed",
+			why: "Part of team.",
+			what: "Ran agent.",
+			filesTouched: [],
+			connectedTasks: [],
+			layer: "unknown",
+			complexity: "simple",
 			duration: 300,
 		};
 		const md = formatTaskExplain(ctx);

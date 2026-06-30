@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { execFileSync } from "node:child_process";
+import test from "node:test";
 import { checkBranchFreshness, shouldBlockForBranchFreshness } from "../../src/worktree/branch-freshness.ts";
 
 function run(cwd: string, args: string[]): void {

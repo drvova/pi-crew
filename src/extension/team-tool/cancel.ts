@@ -1,20 +1,20 @@
+import { appendHookEvent, executeHook } from "../../hooks/registry.ts";
+import { buildSyntheticTerminalEvidence, type CancellationReason, cancellationReasonFromUnknown } from "../../runtime/cancellation.ts";
+import { killProcessPid } from "../../runtime/child-pi.ts";
+import { recordFromTask, saveCrewAgents } from "../../runtime/crew-agent-records.ts";
+import { writeForegroundInterruptRequest } from "../../runtime/foreground-control.ts";
+import { terminateLiveAgentsForRun } from "../../runtime/live-agent-manager.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
+import { appendEvent } from "../../state/event-log.ts";
 import { withRunLockSync } from "../../state/locks.ts";
 import { loadRunManifestById, saveRunTasks, updateRunStatus } from "../../state/state-store.ts";
-import { saveCrewAgents, recordFromTask } from "../../runtime/crew-agent-records.ts";
-import { writeForegroundInterruptRequest } from "../../runtime/foreground-control.ts";
-import { cancellationReasonFromUnknown, buildSyntheticTerminalEvidence, type CancellationReason } from "../../runtime/cancellation.ts";
-import { terminateLiveAgentsForRun } from "../../runtime/live-agent-manager.ts";
-import { appendEvent } from "../../state/event-log.ts";
-import { killProcessPid } from "../../runtime/child-pi.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
-import { executeHook, appendHookEvent } from "../../hooks/registry.ts";
-import type { PiTeamsToolResult } from "../tool-result.ts";
 import { locateRunCwd } from "../team-tool.ts";
+import type { PiTeamsToolResult } from "../tool-result.ts";
+import { type CacheControlDeps, invalidateSnapshot } from "./cache-control.ts";
 import { result, type TeamContext } from "./context.ts";
-import { RUN_NOT_FOUND_HINT } from "./run-not-found.ts";
 import { enforceDestructiveIntent, intentFromConfig } from "./intent-policy.ts";
-import { invalidateSnapshot, type CacheControlDeps } from "./cache-control.ts";
+import { RUN_NOT_FOUND_HINT } from "./run-not-found.ts";
 
 export interface AbortOwnedResult {
 	abortedIds: string[];
@@ -34,18 +34,17 @@ export interface AbortOwnedResult {
  * the ownerSessionId comes from the context. Foreign detection compares
  * the requesting session against the run's creating session.
  */
-export function abortOwned(
-	runId: string,
-	taskIds: string[] | undefined,
-	ctx: TeamContext,
-	force?: boolean,
-): AbortOwnedResult {
+export function abortOwned(runId: string, taskIds: string[] | undefined, ctx: TeamContext, force?: boolean): AbortOwnedResult {
 	const runCwd = locateRunCwd(runId, ctx.cwd);
 	if (!runCwd) return { abortedIds: [], missingIds: taskIds ?? [], foreignIds: [] };
 	const loaded = loadRunManifestById(runCwd, runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 	if (!loaded) return { abortedIds: [], missingIds: taskIds ?? [], foreignIds: [] };
 
-	const result: AbortOwnedResult = { abortedIds: [], missingIds: [], foreignIds: [] };
+	const result: AbortOwnedResult = {
+		abortedIds: [],
+		missingIds: [],
+		foreignIds: [],
+	};
 	const taskMap = new Map(loaded.tasks.map((t) => [t.id, t] as const));
 	const targetIds = taskIds ?? loaded.tasks.map((t) => t.id);
 	const foreignRun = typeof loaded.manifest.ownerSessionId === "string" && loaded.manifest.ownerSessionId !== ctx.sessionId;
@@ -74,7 +73,13 @@ function configFromParams(params: TeamToolParamsValue): Record<string, unknown> 
 function cancelReasonFromParams(params: TeamToolParamsValue): CancellationReason {
 	const config = configFromParams(params);
 	const rawReason = config?.reason ?? config?.cancelReason;
-	const reason = rawReason === undefined ? { code: "caller_cancelled" as const, message: "Run cancelled by user request." } : cancellationReasonFromUnknown(rawReason);
+	const reason =
+		rawReason === undefined
+			? {
+					code: "caller_cancelled" as const,
+					message: "Run cancelled by user request.",
+				}
+			: cancellationReasonFromUnknown(rawReason);
 	return { code: reason.code, message: reason.message };
 }
 
@@ -88,14 +93,25 @@ export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext,
 	// Pre-lock ownership check: reject foreign-owned runs unless force is set
 	const foreignRun = typeof loaded.manifest.ownerSessionId === "string" && loaded.manifest.ownerSessionId !== ctx.sessionId;
 	if (foreignRun && !params.force) {
-		return result(`Run ${loaded.manifest.runId} belongs to another session. Use force: true to override.`, { action: "retry", status: "error", runId: loaded.manifest.runId }, true);
+		return result(
+			`Run ${loaded.manifest.runId} belongs to another session. Use force: true to override.`,
+			{ action: "retry", status: "error", runId: loaded.manifest.runId },
+			true,
+		);
 	}
 
 	// Execute before_retry hook after ownership confirmed, before mutation lock
-	const hookReport = await executeHook("before_retry", { runId: loaded.manifest.runId, cwd: ctx.cwd });
+	const hookReport = await executeHook("before_retry", {
+		runId: loaded.manifest.runId,
+		cwd: ctx.cwd,
+	});
 	appendHookEvent(loaded.manifest, hookReport);
 	if (hookReport.outcome === "block") {
-		return result(`Retry blocked by hook: ${hookReport.reason ?? "before_retry hook blocked the operation."}`, { action: "retry", status: "error", runId: loaded.manifest.runId }, true);
+		return result(
+			`Retry blocked by hook: ${hookReport.reason ?? "before_retry hook blocked the operation."}`,
+			{ action: "retry", status: "error", runId: loaded.manifest.runId },
+			true,
+		);
 	}
 
 	const targetTaskId = typeof params.taskId === "string" ? params.taskId : undefined;
@@ -109,7 +125,15 @@ export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext,
 		});
 
 		if (matchingTasks.length === 0) {
-			return result(targetTaskId ? `Task '${targetTaskId}' is not failed/cancelled; nothing to retry.` : "No failed/cancelled tasks to retry.", { action: "retry", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				targetTaskId ? `Task '${targetTaskId}' is not failed/cancelled; nothing to retry.` : "No failed/cancelled tasks to retry.",
+				{
+					action: "retry",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 
 		const retriedIds = new Set(matchingTasks.map((t) => t.id));
@@ -120,14 +144,22 @@ export async function handleRetry(params: TeamToolParamsValue, ctx: TeamContext,
 		});
 		saveRunTasks(loaded.manifest, tasks);
 		try {
-			saveCrewAgents(loaded.manifest, tasks.map((task) => recordFromTask(loaded.manifest, task, "child-process")));
+			saveCrewAgents(
+				loaded.manifest,
+				tasks.map((task) => recordFromTask(loaded.manifest, task, "child-process")),
+			);
 		} catch (error) {
 			logInternalError("team-tool.handleRetry.crewAgents", error, `runId=${loaded.manifest.runId}`);
 		}
 
 		const retriedTaskIds = [...retriedIds];
 		for (const taskId of retriedTaskIds) {
-			appendEvent(loaded.manifest.eventsPath, { type: "task.retried", runId: loaded.manifest.runId, taskId, message: `Task ${taskId} queued for retry.` });
+			appendEvent(loaded.manifest.eventsPath, {
+				type: "task.retried",
+				runId: loaded.manifest.runId,
+				taskId,
+				message: `Task ${taskId} queued for retry.`,
+			});
 		}
 
 		if (deps) invalidateSnapshot(loaded.manifest.runId, runCwd, deps);
@@ -153,14 +185,30 @@ export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext
 	// Pre-lock ownership check: reject foreign-owned runs unless force is set
 	const preCheck = abortOwned(loaded.manifest.runId, undefined, ctx, params.force);
 	if (preCheck.abortedIds.length === 0 && preCheck.foreignIds.length > 0 && !params.force) {
-		return result(`Run ${loaded.manifest.runId} belongs to another session. Use force: true to override.`, { action: "cancel", status: "error", runId: loaded.manifest.runId, foreignIds: preCheck.foreignIds }, true);
+		return result(
+			`Run ${loaded.manifest.runId} belongs to another session. Use force: true to override.`,
+			{
+				action: "cancel",
+				status: "error",
+				runId: loaded.manifest.runId,
+				foreignIds: preCheck.foreignIds,
+			},
+			true,
+		);
 	}
 
 	// Execute before_cancel hook after ownership confirmed, before mutation lock
-	const hookReport = await executeHook("before_cancel", { runId: loaded.manifest.runId, cwd: ctx.cwd });
+	const hookReport = await executeHook("before_cancel", {
+		runId: loaded.manifest.runId,
+		cwd: ctx.cwd,
+	});
 	appendHookEvent(loaded.manifest, hookReport);
 	if (hookReport.outcome === "block") {
-		return result(`Cancel blocked by hook: ${hookReport.reason ?? "before_cancel hook blocked the operation."}`, { action: "cancel", status: "error", runId: loaded.manifest.runId }, true);
+		return result(
+			`Cancel blocked by hook: ${hookReport.reason ?? "before_cancel hook blocked the operation."}`,
+			{ action: "cancel", status: "error", runId: loaded.manifest.runId },
+			true,
+		);
 	}
 	await terminateLiveAgentsForRun(loaded.manifest.runId, "cancelled", appendEvent, loaded.manifest.eventsPath);
 
@@ -170,19 +218,42 @@ export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext
 	if (asyncPid !== undefined && asyncPid > 0) {
 		try {
 			killProcessPid(asyncPid);
-			appendEvent(loaded.manifest.eventsPath, { type: "async.kill_requested", runId: loaded.manifest.runId, message: "Sent SIGTERM to background runner process.", data: { pid: asyncPid } });
+			appendEvent(loaded.manifest.eventsPath, {
+				type: "async.kill_requested",
+				runId: loaded.manifest.runId,
+				message: "Sent SIGTERM to background runner process.",
+				data: { pid: asyncPid },
+			});
 		} catch (error) {
 			logInternalError("team-tool.handleCancel.killAsync", error, `runId=${loaded.manifest.runId},pid=${asyncPid}`);
 		}
 	}
 
 	return withRunLockSync(loaded.manifest, () => {
-		if ((loaded.manifest.status === "completed" || loaded.manifest.status === "cancelled") && !params.force) return result(`Run ${loaded.manifest.runId} is already ${loaded.manifest.status}; nothing to cancel. Use force: true to mark it cancelled anyway.`, { action: "cancel", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		if ((loaded.manifest.status === "completed" || loaded.manifest.status === "cancelled") && !params.force)
+			return result(
+				`Run ${loaded.manifest.runId} is already ${loaded.manifest.status}; nothing to cancel. Use force: true to mark it cancelled anyway.`,
+				{
+					action: "cancel",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				},
+			);
 
 		// Classify tasks for foreign-aware cancellation
 		const abortResult = abortOwned(loaded.manifest.runId, undefined, ctx, params.force);
 		if (abortResult.abortedIds.length === 0 && abortResult.foreignIds.length > 0 && !params.force) {
-			return result(`Run ${loaded.manifest.runId} belongs to another session. Use force: true to override.`, { action: "cancel", status: "error", runId: loaded.manifest.runId, foreignIds: abortResult.foreignIds }, true);
+			return result(
+				`Run ${loaded.manifest.runId} belongs to another session. Use force: true to override.`,
+				{
+					action: "cancel",
+					status: "error",
+					runId: loaded.manifest.runId,
+					foreignIds: abortResult.foreignIds,
+				},
+				true,
+			);
 		}
 		const cancellableIds = new Set(abortResult.abortedIds);
 		const cancelReason = cancelReasonFromParams(params);
@@ -192,9 +263,20 @@ export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext
 
 		const tasks = loaded.tasks.map((task) => {
 			if (cancellableIds.has(task.id) && (task.status === "queued" || task.status === "running" || task.status === "waiting")) {
-				const base = { ...task, status: "cancelled" as const, finishedAt: new Date().toISOString(), error: cancelMessage };
+				const base = {
+					...task,
+					status: "cancelled" as const,
+					finishedAt: new Date().toISOString(),
+					error: cancelMessage,
+				};
 				if (task.status === "running") {
-					return { ...base, terminalEvidence: [...(task.terminalEvidence ?? []), buildSyntheticTerminalEvidence("worker", cancelReason, task.startedAt)] };
+					return {
+						...base,
+						terminalEvidence: [
+							...(task.terminalEvidence ?? []),
+							buildSyntheticTerminalEvidence("worker", cancelReason, task.startedAt),
+						],
+					};
 				}
 				return base;
 			}
@@ -202,7 +284,10 @@ export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext
 		});
 		saveRunTasks(loaded.manifest, tasks);
 		try {
-			saveCrewAgents(loaded.manifest, tasks.map((task) => recordFromTask(loaded.manifest, task, loaded.manifest.runtimeResolution?.kind ?? "child-process")));
+			saveCrewAgents(
+				loaded.manifest,
+				tasks.map((task) => recordFromTask(loaded.manifest, task, loaded.manifest.runtimeResolution?.kind ?? "child-process")),
+			);
 		} catch (error) {
 			logInternalError("team-tool.handleCancel.crewAgents", error, `runId=${loaded.manifest.runId}`);
 		}
@@ -213,14 +298,29 @@ export async function handleCancel(params: TeamToolParamsValue, ctx: TeamContext
 		}
 		ctx.abortForegroundRun?.(loaded.manifest.runId);
 		for (const taskId of abortResult.abortedIds) {
-			appendEvent(loaded.manifest.eventsPath, { type: "task.cancelled", runId: loaded.manifest.runId, taskId, message: cancelMessage, data: cancelData });
+			appendEvent(loaded.manifest.eventsPath, {
+				type: "task.cancelled",
+				runId: loaded.manifest.runId,
+				taskId,
+				message: cancelMessage,
+				data: cancelData,
+			});
 		}
-		const updated = updateRunStatus(loaded.manifest, "cancelled", `${cancelMessage} Already-finished worker processes are not retroactively changed.`, { data: cancelData });
+		const updated = updateRunStatus(
+			loaded.manifest,
+			"cancelled",
+			`${cancelMessage} Already-finished worker processes are not retroactively changed.`,
+			{ data: cancelData },
+		);
 
 		// Build descriptive message including foreign/missing info
 		const parts = [`Cancelled run ${updated.runId}.`];
-		if (abortResult.foreignIds.length > 0) parts.push(` ${abortResult.foreignIds.length} task(s) belong to another session and were not cancelled: ${abortResult.foreignIds.join(", ")}.`);
-		if (abortResult.missingIds.length > 0) parts.push(` ${abortResult.missingIds.length} task ID(s) not found: ${abortResult.missingIds.join(", ")}.`);
+		if (abortResult.foreignIds.length > 0)
+			parts.push(
+				` ${abortResult.foreignIds.length} task(s) belong to another session and were not cancelled: ${abortResult.foreignIds.join(", ")}.`,
+			);
+		if (abortResult.missingIds.length > 0)
+			parts.push(` ${abortResult.missingIds.length} task ID(s) not found: ${abortResult.missingIds.join(", ")}.`);
 
 		if (deps) invalidateSnapshot(updated.runId, runCwd, deps);
 		return result(parts.join(""), {

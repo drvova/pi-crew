@@ -4,16 +4,17 @@
  * Creates a temp project, scaffolds 1 run with 10 tasks, 200 events, then
  * measures cold/warm refresh latency.
  */
-import { performance } from "node:perf_hooks";
+
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createRunSnapshotCache } from "../../src/ui/run-snapshot-cache.ts";
-import { createRunManifest, saveRunTasks } from "../../src/state/state-store.ts";
+import { performance } from "node:perf_hooks";
 import { appendEvent } from "../../src/state/event-log.ts";
-import type { TeamConfig } from "../../src/teams/team-config.ts";
-import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
+import { createRunManifest, saveRunTasks } from "../../src/state/state-store.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
+import type { TeamConfig } from "../../src/teams/team-config.ts";
+import { createRunSnapshotCache } from "../../src/ui/run-snapshot-cache.ts";
+import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
 const ITERS = Number(process.env.BENCH_ITERS ?? 50);
 
@@ -37,14 +38,32 @@ try {
 		description: "bench workflow",
 		source: "builtin",
 		filePath: "<bench>",
-		steps: Array.from({ length: 10 }, (_v, i) => ({ id: `step-${i}`, role: "executor", task: `task ${i}`, dependsOn: i === 0 ? [] : [`step-${i - 1}`] })),
+		steps: Array.from({ length: 10 }, (_v, i) => ({
+			id: `step-${i}`,
+			role: "executor",
+			task: `task ${i}`,
+			dependsOn: i === 0 ? [] : [`step-${i - 1}`],
+		})),
 	};
 
-	const { manifest, tasks } = createRunManifest({ cwd: tmpRoot, team, workflow, goal: "bench" });
-	const updatedTasks: TeamTaskState[] = tasks.map((t, idx) => ({ ...t, status: idx < 4 ? "completed" : idx < 6 ? "running" : "queued" }));
+	const { manifest, tasks } = createRunManifest({
+		cwd: tmpRoot,
+		team,
+		workflow,
+		goal: "bench",
+	});
+	const updatedTasks: TeamTaskState[] = tasks.map((t, idx) => ({
+		...t,
+		status: idx < 4 ? "completed" : idx < 6 ? "running" : "queued",
+	}));
 	saveRunTasks(manifest, updatedTasks);
 	for (let j = 0; j < 200; j++) {
-		appendEvent(manifest.eventsPath, { type: "task.progress", runId: manifest.runId, taskId: updatedTasks[j % updatedTasks.length].id, data: { i: j } });
+		appendEvent(manifest.eventsPath, {
+			type: "task.progress",
+			runId: manifest.runId,
+			taskId: updatedTasks[j % updatedTasks.length].id,
+			data: { i: j },
+		});
 	}
 
 	const cache = createRunSnapshotCache(tmpRoot, { ttlMs: 0 });
@@ -95,4 +114,6 @@ function percentile(sorted: number[], q: number): number {
 	const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q));
 	return sorted[idx];
 }
-function round(n: number): number { return Math.round(n * 100) / 100; }
+function round(n: number): number {
+	return Math.round(n * 100) / 100;
+}

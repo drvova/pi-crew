@@ -7,8 +7,8 @@
 import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
 import type { LiveAgentHandle } from "../../runtime/live-agent-manager.ts";
 import { getTaskUsage } from "../../runtime/usage-tracker.ts";
-import { computeLiveDurationMs } from "../live-duration.ts";
 import { visibleWidth } from "../../utils/visual.ts";
+import { computeLiveDurationMs } from "../live-duration.ts";
 
 // ── Token formatting ──────────────────────────────────────────────────
 
@@ -16,9 +16,9 @@ import { visibleWidth } from "../../utils/visual.ts";
 // jitter every tick as values change width (e.g. 9.9s→10.0s, 950→1.0k).
 // alignMetric right-aligns to the width; values wider than the width overflow
 // verbatim (no truncation/crash) — these are rare one-off states, not jitter.
-const TOOLS_METRIC_WIDTH = 8;   // "127 tools"
+const TOOLS_METRIC_WIDTH = 8; // "127 tools"
 const TOKENS_METRIC_WIDTH = 10; // "1.2k tok", "12.3M tok"
-const CTX_METRIC_WIDTH = 7;     // "100% ctx"
+const CTX_METRIC_WIDTH = 7; // "100% ctx"
 const DURATION_METRIC_WIDTH = 6; // "120.0s"
 
 function alignMetric(value: string, width: number): string {
@@ -87,7 +87,11 @@ export function describeLiveActivity(handle: LiveAgentHandle): string {
 		return parts.join(", ") + "…";
 	}
 	if (act.responseText?.trim()) {
-		const line = act.responseText.split("\n").find((l) => l.trim())?.trim() ?? "";
+		const line =
+			act.responseText
+				.split("\n")
+				.find((l) => l.trim())
+				?.trim() ?? "";
 		return line.length > 60 ? line.slice(0, 60) + "…" : line;
 	}
 	return "thinking…";
@@ -96,7 +100,8 @@ export function describeLiveActivity(handle: LiveAgentHandle): string {
 export function agentActivity(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): string {
 	if (liveHandle && liveHandle.status === "running") {
 		const live = describeLiveActivity(liveHandle);
-		if (live === "thinking…" && agent.progress?.currentTool) return `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`;
+		if (live === "thinking…" && agent.progress?.currentTool)
+			return `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`;
 		return live;
 	}
 	if (agent.progress?.currentTool) return `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`;
@@ -130,7 +135,9 @@ export function agentStats(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle)
 			const stats = liveHandle.session.getSessionStats?.();
 			const ctxPct = stats?.contextUsage?.percent;
 			if (ctxPct != null) parts.push(alignMetric(`${Math.round(ctxPct)}% ctx`, CTX_METRIC_WIDTH));
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 		const ms = computeLiveDurationMs(act);
 		parts.push(alignMetric(`${(ms / 1000).toFixed(1)}s`, DURATION_METRIC_WIDTH));
 	} else {

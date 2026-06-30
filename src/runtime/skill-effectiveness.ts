@@ -113,10 +113,7 @@ export interface WeightedSkill {
  * for `.pi`-based projects (see issue #29).
  */
 function getSkillMetricsPath(cwd: string, runId: string): string {
-	return join(
-		projectCrewRoot(cwd),
-		`state/runs/${runId}/skill-metrics.jsonl`,
-	);
+	return join(projectCrewRoot(cwd), `state/runs/${runId}/skill-metrics.jsonl`);
 }
 
 /**
@@ -125,10 +122,7 @@ function getSkillMetricsPath(cwd: string, runId: string): string {
  * for `.pi`-based projects (see issue #29).
  */
 function getSkillActivationsPath(cwd: string, runId: string): string {
-	return join(
-		projectCrewRoot(cwd),
-		`state/runs/${runId}/skill-activations.jsonl`,
-	);
+	return join(projectCrewRoot(cwd), `state/runs/${runId}/skill-activations.jsonl`);
 }
 
 /**
@@ -156,9 +150,7 @@ export function computeInitialConfidence(observationCount: number): number {
  * Per ECC instinct system: +0.05 for success, -0.1 for failure.
  */
 export function adjustConfidence(current: number, passed: boolean): number {
-	const delta = passed
-		? CONFIDENCE_ADJUSTMENTS.CONFIRMING
-		: CONFIDENCE_ADJUSTMENTS.CONTRADICTING;
+	const delta = passed ? CONFIDENCE_ADJUSTMENTS.CONFIRMING : CONFIDENCE_ADJUSTMENTS.CONTRADICTING;
 	return Math.max(0.1, Math.min(0.95, current + delta)); // Clamp to [0.1, 0.95]
 }
 
@@ -179,11 +171,7 @@ export function adjustConfidence(current: number, passed: boolean): number {
  * preserves the existing `adjustConfidence` clamp range [0.1, 0.95] and the
  * existing tests (which assert on the stored numeric values).
  */
-export function computeNextActivationConfidence(
-	skillId: string,
-	activations: SkillActivation[],
-	passed: boolean,
-): number {
+export function computeNextActivationConfidence(skillId: string, activations: SkillActivation[], passed: boolean): number {
 	const prior = activations.filter((a) => a.skillId === skillId);
 	if (prior.length === 0) {
 		// First activation of this skill in the run: seed by observation count.
@@ -191,8 +179,7 @@ export function computeNextActivationConfidence(
 		return computeInitialConfidence(1);
 	}
 	// Rolling confidence = last recorded confidence for this skill, adjusted.
-	const lastConfidence = prior[prior.length - 1]?.confidence
-		?? computeInitialConfidence(prior.length);
+	const lastConfidence = prior[prior.length - 1]?.confidence ?? computeInitialConfidence(prior.length);
 	return adjustConfidence(lastConfidence, passed);
 }
 
@@ -202,9 +189,7 @@ export function computeNextActivationConfidence(
 export function applyDecay(current: number, lastActivation?: string): number {
 	if (!lastActivation) return current;
 
-	const daysSince =
-		(Date.now() - new Date(lastActivation).getTime()) /
-		(1000 * 60 * 60 * 24);
+	const daysSince = (Date.now() - new Date(lastActivation).getTime()) / (1000 * 60 * 60 * 24);
 	const decayWeeks = Math.floor(daysSince / 7);
 	const decay = decayWeeks * CONFIDENCE_ADJUSTMENTS.DECAY_PER_WEEK;
 
@@ -214,11 +199,8 @@ export function applyDecay(current: number, lastActivation?: string): number {
 /**
  * Determine behavior based on confidence threshold.
  */
-export function confidenceToBehavior(
-	confidence: number,
-): WeightedSkill["behavior"] {
-	if (confidence >= CONFIDENCE_THRESHOLDS.NEAR_CERTAIN)
-		return "act_autonomous";
+export function confidenceToBehavior(confidence: number): WeightedSkill["behavior"] {
+	if (confidence >= CONFIDENCE_THRESHOLDS.NEAR_CERTAIN) return "act_autonomous";
 	if (confidence >= CONFIDENCE_THRESHOLDS.STRONG) return "apply_auto";
 	if (confidence >= CONFIDENCE_THRESHOLDS.MODERATE) return "apply_if_asked";
 	return "suggest";
@@ -227,9 +209,7 @@ export function confidenceToBehavior(
 /**
  * Determine threshold name from confidence.
  */
-export function confidenceToThreshold(
-	confidence: number,
-): keyof typeof CONFIDENCE_THRESHOLDS {
+export function confidenceToThreshold(confidence: number): keyof typeof CONFIDENCE_THRESHOLDS {
 	if (confidence >= CONFIDENCE_THRESHOLDS.NEAR_CERTAIN) return "NEAR_CERTAIN";
 	if (confidence >= CONFIDENCE_THRESHOLDS.STRONG) return "STRONG";
 	if (confidence >= CONFIDENCE_THRESHOLDS.TENTATIVE) return "MODERATE";
@@ -240,10 +220,7 @@ export function confidenceToThreshold(
  * Record a skill activation.
  * Appends to the run's skill-activations.jsonl for learning.
  */
-export function recordSkillActivation(
-	cwd: string,
-	activation: SkillActivation,
-): SkillActivation {
+export function recordSkillActivation(cwd: string, activation: SkillActivation): SkillActivation {
 	ensureSkillMetricsDir(cwd, activation.runId);
 
 	const path = getSkillActivationsPath(cwd, activation.runId);
@@ -256,10 +233,7 @@ export function recordSkillActivation(
 /**
  * Get all skill activations for a run.
  */
-export function getSkillActivations(
-	cwd: string,
-	runId: string,
-): SkillActivation[] {
+export function getSkillActivations(cwd: string, runId: string): SkillActivation[] {
 	const path = getSkillActivationsPath(cwd, runId);
 
 	if (!existsSync(path)) {
@@ -280,10 +254,7 @@ export function getSkillActivations(
 /**
  * Compute metrics for a skill across all activations.
  */
-export function computeSkillMetrics(
-	skillId: string,
-	activations: SkillActivation[],
-): SkillMetrics {
+export function computeSkillMetrics(skillId: string, activations: SkillActivation[]): SkillMetrics {
 	const skillActivations = activations.filter((a) => a.skillId === skillId);
 
 	if (skillActivations.length === 0) {
@@ -302,22 +273,14 @@ export function computeSkillMetrics(
 
 	const passed = skillActivations.filter((a) => a.passed).length;
 	const failed = skillActivations.filter((a) => !a.passed).length;
-	const avgConfidence =
-		skillActivations.reduce((sum, a) => sum + a.confidence, 0) /
-		skillActivations.length;
-	const currentConfidence =
-		skillActivations[skillActivations.length - 1]?.confidence ??
-		avgConfidence;
+	const avgConfidence = skillActivations.reduce((sum, a) => sum + a.confidence, 0) / skillActivations.length;
+	const currentConfidence = skillActivations[skillActivations.length - 1]?.confidence ?? avgConfidence;
 
 	// Compute trend from last 5 activations
 	const recent = skillActivations.slice(-5);
-	const recentPassRate =
-		recent.filter((a) => a.passed).length / recent.length;
+	const recentPassRate = recent.filter((a) => a.passed).length / recent.length;
 	const earlier = skillActivations.slice(0, -5);
-	const earlierPassRate =
-		earlier.length > 0
-			? earlier.filter((a) => a.passed).length / earlier.length
-			: recentPassRate;
+	const earlierPassRate = earlier.length > 0 ? earlier.filter((a) => a.passed).length / earlier.length : recentPassRate;
 
 	let trend: SkillMetrics["trend"] = "stable";
 	if (recentPassRate > earlierPassRate + 0.1) {
@@ -329,13 +292,11 @@ export function computeSkillMetrics(
 	// Role breakdown
 	const roleBreakdown: Record<string, number> = {};
 	for (const activation of skillActivations) {
-		roleBreakdown[activation.role] =
-			(roleBreakdown[activation.role] ?? 0) + 1;
+		roleBreakdown[activation.role] = (roleBreakdown[activation.role] ?? 0) + 1;
 	}
 
 	// Apply decay if not observed recently
-	const lastActivation =
-		skillActivations[skillActivations.length - 1]?.timestamp;
+	const lastActivation = skillActivations[skillActivations.length - 1]?.timestamp;
 	const decayedConfidence = applyDecay(currentConfidence, lastActivation);
 
 	return {
@@ -368,13 +329,10 @@ export function evaluatePromotionGate(metrics: SkillMetrics): {
 	reason: string;
 } {
 	const criteria = {
-		correctness:
-			metrics.passRate >= PROMOTION_GATE_CRITERIA.MIN_CORRECTNESS,
-		evidence:
-			metrics.totalActivations >= PROMOTION_GATE_CRITERIA.MIN_ACTIVATIONS,
+		correctness: metrics.passRate >= PROMOTION_GATE_CRITERIA.MIN_CORRECTNESS,
+		evidence: metrics.totalActivations >= PROMOTION_GATE_CRITERIA.MIN_ACTIVATIONS,
 		rollback: metrics.trend !== "declining",
-		encoding:
-			metrics.avgConfidence >= PROMOTION_GATE_CRITERIA.MIN_AVG_CONFIDENCE,
+		encoding: metrics.avgConfidence >= PROMOTION_GATE_CRITERIA.MIN_AVG_CONFIDENCE,
 	};
 
 	const allPassed = Object.values(criteria).every(Boolean);
@@ -439,13 +397,7 @@ function filterSkillsByConfidence(
 	threshold: keyof typeof CONFIDENCE_THRESHOLDS = "MODERATE",
 ): WeightedSkill[] {
 	const minConfidence = CONFIDENCE_THRESHOLDS[threshold];
-	return getWeightedSkillsForRole(
-		cwd,
-		"global",
-		skillIds,
-		runId,
-		minConfidence,
-	);
+	return getWeightedSkillsForRole(cwd, "global", skillIds, runId, minConfidence);
 }
 
 /**
@@ -481,11 +433,7 @@ export function registerSkillEffectivenessHooks(): void {
 
 		// Record each skill activation with its rolling confidence
 		for (const skillId of skillNames) {
-			const confidence = computeNextActivationConfidence(
-				skillId,
-				existingActivations,
-				success,
-			);
+			const confidence = computeNextActivationConfidence(skillId, existingActivations, success);
 			const activation: SkillActivation = {
 				id: `act-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 				skillId,
@@ -517,11 +465,7 @@ export function registerSkillEffectivenessHooks(): void {
 		const existingActivations = getSkillActivations(eventCwd, runId);
 
 		for (const skillId of skillNames) {
-			const confidence = computeNextActivationConfidence(
-				skillId,
-				existingActivations,
-				false,
-			);
+			const confidence = computeNextActivationConfidence(skillId, existingActivations, false);
 			const activation: SkillActivation = {
 				id: `act-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 				skillId,
@@ -541,11 +485,7 @@ export function registerSkillEffectivenessHooks(): void {
  * Generate a skill effectiveness report for a run.
  */
 /** @internal */
-function generateSkillEffectivenessReport(
-	cwd: string,
-	runId: string,
-	skillIds: string[],
-): string {
+function generateSkillEffectivenessReport(cwd: string, runId: string, skillIds: string[]): string {
 	const activations = getSkillActivations(cwd, runId);
 	const lines: string[] = [
 		`# Skill Effectiveness Report: ${runId}`,
@@ -568,21 +508,13 @@ function generateSkillEffectivenessReport(
 		const gate = evaluatePromotionGate(metrics);
 
 		lines.push(`### ${skillId}`);
-		lines.push(
-			`- **Confidence**: ${metrics.currentConfidence.toFixed(2)} (${metrics.trend})`,
-		);
-		lines.push(
-			`- **Pass Rate**: ${(metrics.passRate * 100).toFixed(1)}% (${metrics.passedActivations}/${metrics.totalActivations})`,
-		);
+		lines.push(`- **Confidence**: ${metrics.currentConfidence.toFixed(2)} (${metrics.trend})`);
+		lines.push(`- **Pass Rate**: ${(metrics.passRate * 100).toFixed(1)}% (${metrics.passedActivations}/${metrics.totalActivations})`);
 		lines.push(`- **Avg Confidence**: ${metrics.avgConfidence.toFixed(2)}`);
-		lines.push(
-			`- **Promotion Gate**: ${gate.passed ? "PASSED ✅" : "NOT MET"}`,
-		);
+		lines.push(`- **Promotion Gate**: ${gate.passed ? "PASSED ✅" : "NOT MET"}`);
 
 		if (Object.keys(metrics.roleBreakdown).length > 0) {
-			lines.push(
-				`- **By Role**: ${JSON.stringify(metrics.roleBreakdown)}`,
-			);
+			lines.push(`- **By Role**: ${JSON.stringify(metrics.roleBreakdown)}`);
 		}
 
 		lines.push("");

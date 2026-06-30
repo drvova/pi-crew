@@ -34,15 +34,13 @@ export class CrewScheduler {
 	private finalizer?: (jobId: string, agentId: string) => void;
 	private runCancelFn?: (runId: string) => void;
 
-	start(
-		options: {
-			emit: (event: ScheduleChangeEvent) => void;
-			executor: (job: ScheduledJob) => string;
-			finalizer: (jobId: string, agentId: string) => void;
-			/** Optional callback to cancel a spawned run by runId. */
-			runCancelFn?: (runId: string) => void;
-		},
-	): void {
+	start(options: {
+		emit: (event: ScheduleChangeEvent) => void;
+		executor: (job: ScheduledJob) => string;
+		finalizer: (jobId: string, agentId: string) => void;
+		/** Optional callback to cancel a spawned run by runId. */
+		runCancelFn?: (runId: string) => void;
+	}): void {
 		this.emit = options.emit;
 		this.executor = options.executor;
 		this.finalizer = options.finalizer;
@@ -74,7 +72,11 @@ export class CrewScheduler {
 		// Cancel all spawned runs that are still active
 		if (spawnedRunIds && this.runCancelFn) {
 			for (const runId of spawnedRunIds) {
-				try { this.runCancelFn(runId); } catch { /* best-effort */ }
+				try {
+					this.runCancelFn(runId);
+				} catch {
+					/* best-effort */
+				}
 			}
 		}
 		const ok = this.jobs.delete(id);
@@ -121,7 +123,11 @@ export class CrewScheduler {
 				this.timers.set(job.id, t);
 			} else {
 				this.update(job.id, { enabled: false, lastStatus: "error" });
-				this.emit?.({ type: "error", jobId: job.id, error: `Scheduled time ${job.schedule} is in the past` });
+				this.emit?.({
+					type: "error",
+					jobId: job.id,
+					error: `Scheduled time ${job.schedule} is in the past`,
+				});
 			}
 		}
 	}
@@ -149,7 +155,10 @@ export class CrewScheduler {
 			agentId = this.executor(job);
 		} catch (err) {
 			const error = err instanceof Error ? err.message : String(err);
-			this.update(id, { lastRun: new Date().toISOString(), lastStatus: "error" });
+			this.update(id, {
+				lastRun: new Date().toISOString(),
+				lastStatus: "error",
+			});
 			this.emit?.({ type: "error", jobId: id, error });
 			return;
 		}
@@ -157,13 +166,20 @@ export class CrewScheduler {
 		this.finalizer?.(id, agentId);
 	}
 
-	static detectSchedule(s: string): { type: ScheduleType; intervalMs?: number; normalized: string } {
+	static detectSchedule(s: string): {
+		type: ScheduleType;
+		intervalMs?: number;
+		normalized: string;
+	} {
 		const trimmed = s.trim();
 		// Relative: +10m
 		const rel = trimmed.match(/^\+(\d+)(s|m|h|d)$/);
 		if (rel) {
 			const ms = parseInt(rel[1], 10) * { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[rel[2] as "s" | "m" | "h" | "d"];
-			return { type: "once", normalized: new Date(Date.now() + ms).toISOString() };
+			return {
+				type: "once",
+				normalized: new Date(Date.now() + ms).toISOString(),
+			};
 		}
 		// Interval: 5m
 		const ivl = trimmed.match(/^(\d+)(s|m|h|d)$/);
@@ -196,7 +212,12 @@ export interface ScheduleSpec {
 function parseIntervalMs(s: string): number | undefined {
 	let ms = 0;
 	let remaining = s;
-	const unitMs: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+	const unitMs: Record<string, number> = {
+		s: 1000,
+		m: 60_000,
+		h: 3_600_000,
+		d: 86_400_000,
+	};
 	while (remaining.length > 0) {
 		const m = remaining.match(/^(\d+)(s|m|h|d)/);
 		if (!m) return undefined;
@@ -272,7 +293,9 @@ export function parseSchedule(spec: string): ScheduleSpec | { error: string } {
 	if (fields.length >= 5) {
 		return { kind: "cron", spec: trimmed };
 	}
-	return { error: `Invalid schedule "${spec}". Use "5m", "+10m", ISO timestamp, or cron expression.` };
+	return {
+		error: `Invalid schedule "${spec}". Use "5m", "+10m", ISO timestamp, or cron expression.`,
+	};
 }
 
 export function nextRunTime(spec: ScheduleSpec, from: Date = new Date()): Date | { error: string } {
@@ -298,11 +321,17 @@ export function nextRunTime(spec: ScheduleSpec, from: Date = new Date()): Date |
 	if (spec.kind === "cron") {
 		const next = nextCronDate(spec.spec, from);
 		if (!next || !(next instanceof Date)) {
-			return (next as { error: string } | null) ?? { error: "Invalid cron expression" };
+			return (
+				(next as { error: string } | null) ?? {
+					error: "Invalid cron expression",
+				}
+			);
 		}
 		return next;
 	}
-	return { error: `Unknown schedule kind: ${(spec as unknown as Record<string, unknown>).kind}` };
+	return {
+		error: `Unknown schedule kind: ${(spec as unknown as Record<string, unknown>).kind}`,
+	};
 }
 
 export function humanizeSchedule(spec: ScheduleSpec): string {

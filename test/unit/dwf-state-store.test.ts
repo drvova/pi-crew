@@ -5,13 +5,14 @@
  * delete removes the file, and corrupt-file resilience. Mirrors the
  * goal-state-store.test.ts harness conventions.
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { DwfStore } from "../../src/runtime/dwf-state-store.ts";
 import type { DwfCheckpointState } from "../../src/runtime/dwf-state-store.ts";
+import { DwfStore } from "../../src/runtime/dwf-state-store.ts";
 
 function makeTmpStateRoot(): string {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-dwf-store-"));
@@ -63,7 +64,11 @@ test("DwfStore.save() stamps updatedAt (caller's value is overwritten)", () => {
 		const before = store.load()!;
 		// Wait a moment so the ISO timestamp differs.
 		const later = "1999-01-01T00:00:00.000Z";
-		const next: DwfCheckpointState = { ...sampleState("team_dwf_rt_stamp"), updatedAt: later, agentCount: 5 };
+		const next: DwfCheckpointState = {
+			...sampleState("team_dwf_rt_stamp"),
+			updatedAt: later,
+			agentCount: 5,
+		};
 		store.save(next);
 		const loaded = store.load()!;
 		assert.notEqual(loaded.updatedAt, later, "save() must stamp its own updatedAt");

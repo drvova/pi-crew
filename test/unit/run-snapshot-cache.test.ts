@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { saveCrewAgents } from "../../src/runtime/crew-agent-records.ts";
 import { appendEvent } from "../../src/state/event-log.ts";
 import { appendMailboxMessage } from "../../src/state/mailbox.ts";
@@ -19,18 +19,60 @@ function tempCwd(prefix: string): string {
 		const r = fs.realpathSync.native(cwd);
 		cwd = r.startsWith("\\\\?\\") ? r.slice(4) : r;
 	} catch {
-		try { cwd = fs.realpathSync(cwd); } catch { /* keep as-is */ }
+		try {
+			cwd = fs.realpathSync(cwd);
+		} catch {
+			/* keep as-is */
+		}
 	}
 	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 	return cwd;
 }
 
-function fixtures(cwd: string): { manifest: TeamRunManifest; tasks: TeamTaskState[] } {
-	const team = { name: "fast-fix", description: "", roles: [{ name: "explorer", agent: "explorer" }], source: "test", filePath: "builtin" } as never;
-	const workflow = { name: "fast-fix", description: "", steps: [{ id: "explore", role: "explorer" }], source: "test", filePath: "builtin" } as never;
-	const created = createRunManifest({ cwd, team, workflow, goal: "snapshot" });
+function fixtures(cwd: string): {
+	manifest: TeamRunManifest;
+	tasks: TeamTaskState[];
+} {
+	const team = {
+		name: "fast-fix",
+		description: "",
+		roles: [{ name: "explorer", agent: "explorer" }],
+		source: "test",
+		filePath: "builtin",
+	} as never;
+	const workflow = {
+		name: "fast-fix",
+		description: "",
+		steps: [{ id: "explore", role: "explorer" }],
+		source: "test",
+		filePath: "builtin",
+	} as never;
+	const created = createRunManifest({
+		cwd,
+		team,
+		workflow,
+		goal: "snapshot",
+	});
 	saveRunManifest({ ...created.manifest, status: "running" });
-	saveCrewAgents(created.manifest, [{ id: `${created.manifest.runId}:01`, runId: created.manifest.runId, taskId: created.tasks[0]?.id ?? "explore", agent: "explorer", role: "explorer", runtime: "child-process", status: "running", startedAt: created.manifest.createdAt, progress: { recentTools: [], recentOutput: ["first"], toolCount: 1, currentTool: "read", tokens: 10 } }]);
+	saveCrewAgents(created.manifest, [
+		{
+			id: `${created.manifest.runId}:01`,
+			runId: created.manifest.runId,
+			taskId: created.tasks[0]?.id ?? "explore",
+			agent: "explorer",
+			role: "explorer",
+			runtime: "child-process",
+			status: "running",
+			startedAt: created.manifest.createdAt,
+			progress: {
+				recentTools: [],
+				recentOutput: ["first"],
+				toolCount: 1,
+				currentTool: "read",
+				tokens: 10,
+			},
+		},
+	]);
 	return { manifest: created.manifest, tasks: created.tasks };
 }
 
@@ -42,7 +84,14 @@ test("RunSnapshotCache reuses fresh entries and updates signature after file cha
 		const first = cache.refreshIfStale(manifest.runId);
 		const second = cache.refreshIfStale(manifest.runId);
 		assert.equal(first, second);
-		saveRunTasks(manifest, tasks.map((task) => ({ ...task, status: "completed", usage: { input: 10, output: 20 } })));
+		saveRunTasks(
+			manifest,
+			tasks.map((task) => ({
+				...task,
+				status: "completed",
+				usage: { input: 10, output: 20 },
+			})),
+		);
 		const changed = cache.refreshIfStale(manifest.runId);
 		assert.notEqual(changed.signature, first.signature);
 		assert.equal(changed.progress.completed, 1);
@@ -71,7 +120,12 @@ test("RunSnapshotCache exposes structured cancellation reason", () => {
 	const cwd = tempCwd("pi-crew-snapshot-cancel-reason-");
 	try {
 		const { manifest } = fixtures(cwd);
-		appendEvent(manifest.eventsPath, { type: "run.cancelled", runId: manifest.runId, message: "leader stopped", data: { reason: "leader_interrupted" } });
+		appendEvent(manifest.eventsPath, {
+			type: "run.cancelled",
+			runId: manifest.runId,
+			message: "leader stopped",
+			data: { reason: "leader_interrupted" },
+		});
 		const cache = createRunSnapshotCache(cwd, { ttlMs: 0 });
 		const snapshot = cache.refresh(manifest.runId);
 		assert.equal(snapshot.cancellationReason, "leader_interrupted");
@@ -106,11 +160,23 @@ test("RunSnapshotCache keeps entries populated across event-bus signals", async 
 		// (`worker:lifecycle` / `run:state`) — that's what the fix's
 		// subscriptions actually listen on.
 		const burst = [
-			{ type: "run_started" as const, channel: "worker:lifecycle" as const },
-			{ type: "task_started" as const, channel: "worker:lifecycle" as const },
+			{
+				type: "run_started" as const,
+				channel: "worker:lifecycle" as const,
+			},
+			{
+				type: "task_started" as const,
+				channel: "worker:lifecycle" as const,
+			},
 			{ type: "mailbox_updated" as const, channel: "run:state" as const },
-			{ type: "task_completed" as const, channel: "worker:lifecycle" as const },
-			{ type: "run_completed" as const, channel: "worker:lifecycle" as const },
+			{
+				type: "task_completed" as const,
+				channel: "worker:lifecycle" as const,
+			},
+			{
+				type: "run_completed" as const,
+				channel: "worker:lifecycle" as const,
+			},
 		];
 		let survivalCount = 0;
 		for (const e of burst) {
@@ -133,7 +199,13 @@ test("RunSnapshotCache marks mailbox counts approximate when tail-truncated", ()
 	const cwd = tempCwd("pi-crew-snapshot-mailbox-large-");
 	try {
 		const { manifest } = fixtures(cwd);
-		for (let i = 0; i < 260; i += 1) appendMailboxMessage(manifest, { direction: "inbox", from: "leader", to: "worker", body: `please check ${i} ${"x".repeat(220)}` });
+		for (let i = 0; i < 260; i += 1)
+			appendMailboxMessage(manifest, {
+				direction: "inbox",
+				from: "leader",
+				to: "worker",
+				body: `please check ${i} ${"x".repeat(220)}`,
+			});
 		const cache = createRunSnapshotCache(cwd, { ttlMs: 0 });
 		const snapshot = cache.refresh(manifest.runId);
 		assert.equal(snapshot.mailbox.approximate, true);
@@ -149,8 +221,18 @@ test("RunSnapshotCache captures mailbox badges and LRU-evicts old entries", () =
 		const first = fixtures(cwd).manifest;
 		const second = fixtures(cwd).manifest;
 		const third = fixtures(cwd).manifest;
-		appendMailboxMessage(first, { direction: "inbox", from: "leader", to: "worker", body: "please check" });
-		appendMailboxMessage(first, { direction: "outbox", from: "worker", to: "leader", body: "pending" });
+		appendMailboxMessage(first, {
+			direction: "inbox",
+			from: "leader",
+			to: "worker",
+			body: "please check",
+		});
+		appendMailboxMessage(first, {
+			direction: "outbox",
+			from: "worker",
+			to: "leader",
+			body: "pending",
+		});
 		const cache = createRunSnapshotCache(cwd, { ttlMs: 0, maxEntries: 2 });
 		const firstSnapshot = cache.refresh(first.runId);
 		assert.equal(firstSnapshot.mailbox.inboxUnread, 1);

@@ -15,13 +15,14 @@
  *   - missing/nonexistent log → graceful live-only fallback
  *   - unsubscribe detaches the live listener
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { runEventBus } from "../../src/ui/run-event-bus.ts";
+import test from "node:test";
 import { appendEvent, type TeamEvent } from "../../src/state/event-log.ts";
+import { runEventBus } from "../../src/ui/run-event-bus.ts";
 
 const tempDirs: string[] = [];
 
@@ -33,13 +34,22 @@ function freshEventsPath(): string {
 
 function cleanup(): void {
 	while (tempDirs.length > 0) {
-		try { fs.rmSync(tempDirs.pop()!, { recursive: true, force: true }); } catch { /* ignore */ }
+		try {
+			fs.rmSync(tempDirs.pop()!, { recursive: true, force: true });
+		} catch {
+			/* ignore */
+		}
 	}
 }
 
 /** Append a task.started event and return the persisted TeamEvent (with seq). */
 function appendStarted(eventsPath: string, runId: string, taskId: string): TeamEvent {
-	return appendEvent(eventsPath, { type: "task.started", runId, taskId, data: {} });
+	return appendEvent(eventsPath, {
+		type: "task.started",
+		runId,
+		taskId,
+		data: {},
+	});
 }
 
 test("onWithReplay replays missed events in order before live listener attaches", () => {
@@ -57,7 +67,9 @@ test("onWithReplay replays missed events in order before live listener attaches"
 		// All 3 replayed, in seq order.
 		assert.deepEqual(received, ["t1", "t2", "t3"]);
 		unsub();
-	} finally { cleanup(); }
+	} finally {
+		cleanup();
+	}
 });
 
 test("onWithReplay dedups: a live event already replayed is suppressed", () => {
@@ -76,14 +88,26 @@ test("onWithReplay dedups: a live event already replayed is suppressed", () => {
 
 		// Now a LIVE event arrives for the SAME seq (e.g. a delayed emit of the
 		// same logged event). It must be suppressed (already replayed).
-		runEventBus.emit({ type: "task_started", runId, taskId: "t1", seq: seq1 });
+		runEventBus.emit({
+			type: "task_started",
+			runId,
+			taskId: "t1",
+			seq: seq1,
+		});
 		assert.deepEqual(received, ["t1"], "live event with replayed seq must be suppressed");
 
 		// A NEW live event (higher seq) must deliver.
-		runEventBus.emit({ type: "task_started", runId, taskId: "t2", seq: seq1 + 1 });
+		runEventBus.emit({
+			type: "task_started",
+			runId,
+			taskId: "t2",
+			seq: seq1 + 1,
+		});
 		assert.deepEqual(received, ["t1", "t2"]);
 		unsub();
-	} finally { cleanup(); }
+	} finally {
+		cleanup();
+	}
 });
 
 test("onWithReplay delivers transient live-only events (no seq)", () => {
@@ -100,7 +124,9 @@ test("onWithReplay delivers transient live-only events (no seq)", () => {
 		assert.equal(received.length, 1);
 		assert.equal(received[0], "no-task");
 		unsub();
-	} finally { cleanup(); }
+	} finally {
+		cleanup();
+	}
 });
 
 test("onWithReplay honors cursor limit (no OOM on large logs)", () => {
@@ -119,7 +145,9 @@ test("onWithReplay honors cursor limit (no OOM on large logs)", () => {
 		assert.equal(received[0], "t0");
 		assert.equal(received[N - 1], `t${N - 1}`);
 		unsub();
-	} finally { cleanup(); }
+	} finally {
+		cleanup();
+	}
 });
 
 test("onWithReplay only replays events with seq > lastSeenSeq", () => {
@@ -136,7 +164,9 @@ test("onWithReplay only replays events with seq > lastSeenSeq", () => {
 		// 'old' (seq <= lastSeen) must NOT replay; only new1, new2.
 		assert.deepEqual(received, ["new1", "new2"]);
 		unsub();
-	} finally { cleanup(); }
+	} finally {
+		cleanup();
+	}
 });
 
 test("onWithReplay falls back to live-only when the log does not exist", () => {
@@ -150,7 +180,9 @@ test("onWithReplay falls back to live-only when the log does not exist", () => {
 		runEventBus.emit({ type: "task_started", runId, taskId: "after" });
 		assert.deepEqual(received, ["after"]);
 		unsub();
-	} finally { cleanup(); }
+	} finally {
+		cleanup();
+	}
 });
 
 test("onWithReplay unsubscribe detaches the live listener", () => {
@@ -161,7 +193,14 @@ test("onWithReplay unsubscribe detaches the live listener", () => {
 		const unsub = runEventBus.onWithReplay(runId, eventsPath, 0, (e) => received.push(e.taskId ?? ""));
 		unsub();
 		// After unsubscribe, live events must not deliver.
-		runEventBus.emit({ type: "task_started", runId, taskId: "post", seq: 999 });
+		runEventBus.emit({
+			type: "task_started",
+			runId,
+			taskId: "post",
+			seq: 999,
+		});
 		assert.deepEqual(received, []);
-	} finally { cleanup(); }
+	} finally {
+		cleanup();
+	}
 });

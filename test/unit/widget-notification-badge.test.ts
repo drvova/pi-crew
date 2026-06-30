@@ -1,6 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { notificationBadge, widgetHeader, NOTIFICATION_BADGE_CAP } from "../../src/ui/widget/index.ts";
+import test from "node:test";
+import { NOTIFICATION_BADGE_CAP, notificationBadge, widgetHeader } from "../../src/ui/widget/index.ts";
 
 test("notificationBadge hides zero and renders alerts label (not a bell)", () => {
 	assert.equal(notificationBadge(0), "");
@@ -21,7 +21,12 @@ test("Bug 021: notificationBadge caps the display at 99+ (no alarming 227)", () 
 	assert.doesNotMatch(badge, /227/); // the raw alarming number is NOT shown
 	// exactly-at-cap shows the bare number, not "99+"
 	assert.match(notificationBadge(NOTIFICATION_BADGE_CAP, { TERM: "xterm-256color" }), /99 alerts/);
-	assert.match(notificationBadge(NOTIFICATION_BADGE_CAP + 1, { TERM: "xterm-256color" }), /99\+ alerts/);
+	assert.match(
+		notificationBadge(NOTIFICATION_BADGE_CAP + 1, {
+			TERM: "xterm-256color",
+		}),
+		/99\+ alerts/,
+	);
 });
 
 test("widgetHeader includes the alerts segment (not a bell)", () => {

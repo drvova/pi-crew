@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { parseGitUrl } from "../../src/utils/git.ts";
 
 test("parses git+https team source", () => {

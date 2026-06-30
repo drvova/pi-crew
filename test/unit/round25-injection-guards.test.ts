@@ -8,12 +8,15 @@
  * VULN-4: bare $VARNAME references (e.g. `echo $ANTHROPIC_API_KEY`) were not
  * blocked, allowing secret exfiltration into captured gate output. Now blocked.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
-import { __test__validateGateCommand, NPM_TYPESCRIPT_GATES, CARGO_RUST_GATES } from "../../src/runtime/verification-gates.ts";
+import test from "node:test";
+import { __test__validateGateCommand, CARGO_RUST_GATES, NPM_TYPESCRIPT_GATES } from "../../src/runtime/verification-gates.ts";
 
 const reject = (cmd: string) => assert.throws(() => __test__validateGateCommand(cmd), /Security/i, `expected rejection: ${cmd}`);
-const accept = (cmd: string) => { __test__validateGateCommand(cmd); /* no throw */ };
+const accept = (cmd: string) => {
+	__test__validateGateCommand(cmd); /* no throw */
+};
 
 test("VULN-3: raw newline in command is rejected (no command separator injection)", () => {
 	reject("npm test\nrm -rf /important-dir");

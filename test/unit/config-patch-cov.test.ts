@@ -1,6 +1,12 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeObject, autonomousPatchFromConfig, configPatchFromConfig, effectiveRunConfig, formatAutonomyStatus } from "../../src/extension/team-tool/config-patch.ts";
+import { describe, it } from "node:test";
+import {
+	autonomousPatchFromConfig,
+	configPatchFromConfig,
+	effectiveRunConfig,
+	formatAutonomyStatus,
+	sanitizeObject,
+} from "../../src/extension/team-tool/config-patch.ts";
 
 describe("sanitizeObject", () => {
 	it("strips __proto__ keys from null-prototype objects", () => {
@@ -70,7 +76,9 @@ describe("sanitizeObject", () => {
 
 describe("autonomousPatchFromConfig", () => {
 	it("returns autonomous config from root-level config with valid profile", () => {
-		const result = autonomousPatchFromConfig({ autonomous: { profile: "assisted", enabled: true } });
+		const result = autonomousPatchFromConfig({
+			autonomous: { profile: "assisted", enabled: true },
+		});
 		assert.equal(result.profile, "assisted");
 		assert.equal(result.enabled, true);
 	});
@@ -93,7 +101,9 @@ describe("autonomousPatchFromConfig", () => {
 
 describe("configPatchFromConfig", () => {
 	it("returns parsed config with valid limits", () => {
-		const result = configPatchFromConfig({ limits: { maxConcurrentWorkers: 5 } });
+		const result = configPatchFromConfig({
+			limits: { maxConcurrentWorkers: 5 },
+		});
 		assert.ok(result);
 		assert.equal(result.limits?.maxConcurrentWorkers, 5);
 	});
@@ -112,25 +122,35 @@ describe("configPatchFromConfig", () => {
 
 describe("effectiveRunConfig", () => {
 	it("merges limits from override", () => {
-		const base = configPatchFromConfig({ limits: { maxConcurrentWorkers: 1 } });
-		const result = effectiveRunConfig(base, { limits: { maxConcurrentWorkers: 5 } });
+		const base = configPatchFromConfig({
+			limits: { maxConcurrentWorkers: 1 },
+		});
+		const result = effectiveRunConfig(base, {
+			limits: { maxConcurrentWorkers: 5 },
+		});
 		assert.equal(result.limits?.maxConcurrentWorkers, 5);
 	});
 
 	it("preserves base limits when override only touches runtime", () => {
-		const base = configPatchFromConfig({ limits: { maxConcurrentWorkers: 3 } });
+		const base = configPatchFromConfig({
+			limits: { maxConcurrentWorkers: 3 },
+		});
 		const result = effectiveRunConfig(base, { runtime: { mode: "sync" } });
 		assert.equal(result.limits?.maxConcurrentWorkers, 3);
 	});
 
 	it("preserves base when override is empty", () => {
-		const base = configPatchFromConfig({ limits: { maxConcurrentWorkers: 3 } });
+		const base = configPatchFromConfig({
+			limits: { maxConcurrentWorkers: 3 },
+		});
 		const result = effectiveRunConfig(base, {});
 		assert.equal(result.limits?.maxConcurrentWorkers, 3);
 	});
 
 	it("handles undefined override by keeping base", () => {
-		const base = configPatchFromConfig({ limits: { maxConcurrentWorkers: 3 } });
+		const base = configPatchFromConfig({
+			limits: { maxConcurrentWorkers: 3 },
+		});
 		const result = effectiveRunConfig(base, undefined);
 		assert.equal(result.limits?.maxConcurrentWorkers, 3);
 	});
@@ -147,14 +167,34 @@ describe("effectiveRunConfig", () => {
 
 describe("formatAutonomyStatus", () => {
 	it("formats updated status message with path", () => {
-		const msg = formatAutonomyStatus({ profile: "assisted", enabled: true, injectPolicy: true, preferAsyncForLongTasks: false, allowWorktreeSuggestion: false }, "/path/to/config", true);
+		const msg = formatAutonomyStatus(
+			{
+				profile: "assisted",
+				enabled: true,
+				injectPolicy: true,
+				preferAsyncForLongTasks: false,
+				allowWorktreeSuggestion: false,
+			},
+			"/path/to/config",
+			true,
+		);
 		assert.ok(msg.includes("Updated"));
 		assert.ok(msg.includes("/path/to/config"));
 		assert.ok(msg.includes("assisted"));
 	});
 
 	it("formats read-only status message", () => {
-		const msg = formatAutonomyStatus({ profile: "manual", enabled: false, injectPolicy: false, preferAsyncForLongTasks: false, allowWorktreeSuggestion: false }, "/other", false);
+		const msg = formatAutonomyStatus(
+			{
+				profile: "manual",
+				enabled: false,
+				injectPolicy: false,
+				preferAsyncForLongTasks: false,
+				allowWorktreeSuggestion: false,
+			},
+			"/other",
+			false,
+		);
 		assert.ok(msg.includes("autonomous mode:"));
 		assert.ok(msg.includes("/other"));
 	});

@@ -6,7 +6,6 @@
 
 import { logInternalError } from "../utils/internal-error.ts";
 
-
 // Backward-compatible pattern array (kept for getPatterns API)
 // IMPORTANT: Line 8 (rm pattern with nested quantifiers) has been replaced
 // with linear-time checking in isDangerous() to prevent ReDoS attacks.
@@ -112,7 +111,7 @@ function matchesDangerousRm(command: string): boolean {
 				// Block dangerous system paths
 				const rest = command.slice(p);
 				if (/^\/etc[\/\s;]/.test(rest) || rest === "/etc") return true;
-				if ((/^\/var\/(?!tmp)/.test(rest)) || rest === "/var") return true;
+				if (/^\/var\/(?!tmp)/.test(rest) || rest === "/var") return true;
 				if (/^\/usr[\/\s;]/.test(rest) || rest === "/usr") return true;
 				if (/^\/boot[\/\s;]/.test(rest) || rest === "/boot") return true;
 				if (/^\/sys[\/\s;]/.test(rest) || rest === "/sys") return true;
@@ -231,8 +230,8 @@ export function isDangerous(command: string, options: SafeBashOptions = {}): str
 
 	// Normalize: strip ANSI escapes and control chars, remove line continuations, collapse whitespace
 	const normalized = command
-		.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')  // strip ANSI escapes
-		.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')  // strip control chars
+		.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "") // strip ANSI escapes
+		.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "") // strip control chars
 		.replace(/\\\n/g, " ")
 		.replace(/\s+/g, " ")
 		.trim();
@@ -335,7 +334,11 @@ export function createSafeBash(options: SafeBashOptions = {}) {
 		/**
 		 * Get all active patterns (for debugging/config display)
 		 */
-		getPatterns(): { dangerous: RegExp[]; additional: RegExp[]; allow: RegExp[] } {
+		getPatterns(): {
+			dangerous: RegExp[];
+			additional: RegExp[];
+			allow: RegExp[];
+		} {
 			return {
 				dangerous: [...DANGEROUS_PATTERNS],
 				additional: options.additionalPatterns || [],
@@ -391,11 +394,7 @@ export const SAFE_BASH_PRESETS = {
 	permissive: {
 		enabled: true,
 		additionalPatterns: [],
-		allowPatterns: [
-			COMMON_SAFE_PATTERNS.safeRm,
-			COMMON_SAFE_PATTERNS.safeGit,
-			COMMON_SAFE_PATTERNS.safePackage,
-		],
+		allowPatterns: [COMMON_SAFE_PATTERNS.safeRm, COMMON_SAFE_PATTERNS.safeGit, COMMON_SAFE_PATTERNS.safePackage],
 	},
 	/** No safety checks */
 	disabled: {

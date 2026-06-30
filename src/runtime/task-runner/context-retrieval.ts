@@ -20,7 +20,7 @@ export interface RetrievalQuery {
 
 export interface RelevanceEvaluation {
 	path: string;
-	relevance: number;     // 0.0–1.0
+	relevance: number; // 0.0–1.0
 	reason: string;
 	missingContext: string[];
 }
@@ -45,11 +45,7 @@ export interface RetrievalResult {
  * @param keywords - Task-relevant keywords
  * @returns Relevance score 0.0–1.0
  */
-export function scoreRelevance(
-	filePath: string,
-	fileContent: string,
-	keywords: string[],
-): number {
+export function scoreRelevance(filePath: string, fileContent: string, keywords: string[]): number {
 	if (keywords.length === 0) return 0;
 
 	const pathLower = filePath.toLowerCase();
@@ -96,9 +92,7 @@ export function hasConverged(evaluations: RelevanceEvaluation[]): boolean {
 	if (highRelevance.length < CONVERGENCE_MIN_HIGH_RELEVANCE) return false;
 
 	// Check for critical gaps — any evaluation with empty missingContext
-	const criticalGaps = evaluations.some(
-		(e) => e.relevance < 0.3 && e.missingContext.length > 0,
-	);
+	const criticalGaps = evaluations.some((e) => e.relevance < 0.3 && e.missingContext.length > 0);
 
 	return !criticalGaps;
 }
@@ -115,10 +109,7 @@ export function hasConverged(evaluations: RelevanceEvaluation[]): boolean {
  * @param evaluations - Results from the current cycle
  * @returns Refined query for the next cycle
  */
-export function refineQuery(
-	query: RetrievalQuery,
-	evaluations: RelevanceEvaluation[],
-): RetrievalQuery {
+export function refineQuery(query: RetrievalQuery, evaluations: RelevanceEvaluation[]): RetrievalQuery {
 	const newKeywords = new Set(query.keywords);
 	const newExcludes = new Set(query.excludes);
 	const newFocusAreas = new Set(query.focusAreas ?? []);

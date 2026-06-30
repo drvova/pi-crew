@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
  * Skill Verification Script
- * 
+ *
  * Verifies that a skill has proper gate enforcement (RED/GREEN gates or pi-crew format).
  * Supports both:
  *   - Classic RED/GREEN gate format: ## RED Gate, ## GREEN Gate
  *   - pi-crew format: ## Refuse Gate, ## Enforcement, checkbox lists
- * 
+ *
  * Usage:
  *   node scripts/verify-skill.ts skills/systematic-debugging/SKILL.md   # single skill
  *   node scripts/verify-skill.ts skills/                                   # batch mode
@@ -117,7 +117,7 @@ function hasAntiPatternSection(content: string): boolean {
  */
 function extractClassicGates(content: string): Gate[] {
 	const gates: Gate[] = [];
-	
+
 	for (const pattern of CLASSIC_GATE_PATTERNS) {
 		const re = new RegExp(pattern.source, "gi");
 		let m: RegExpExecArray | null;
@@ -134,7 +134,7 @@ function extractClassicGates(content: string): Gate[] {
 			}
 		}
 	}
-	
+
 	return gates;
 }
 
@@ -143,7 +143,7 @@ function extractClassicGates(content: string): Gate[] {
  */
 function extractPiCrewGates(content: string): Gate[] {
 	const gates: Gate[] = [];
-	
+
 	// Check for Refuse Gate (RED gate equivalent)
 	for (const pattern of PI_CREW_REFUSE_GATE_PATTERNS) {
 		if (pattern.test(content)) {
@@ -156,7 +156,7 @@ function extractPiCrewGates(content: string): Gate[] {
 			break;
 		}
 	}
-	
+
 	// Check for Enforcement sections (could be RED or GREEN)
 	for (const pattern of PI_CREW_ENFORCEMENT_PATTERNS) {
 		const match = content.match(pattern);
@@ -173,7 +173,7 @@ function extractPiCrewGates(content: string): Gate[] {
 			break;
 		}
 	}
-	
+
 	// Check for Proceed/Go gates (GREEN gate equivalent)
 	for (const pattern of PI_CREW_PROCEED_PATTERNS) {
 		if (pattern.test(content)) {
@@ -186,7 +186,7 @@ function extractPiCrewGates(content: string): Gate[] {
 			break;
 		}
 	}
-	
+
 	return gates;
 }
 
@@ -196,18 +196,14 @@ function extractPiCrewGates(content: string): Gate[] {
  */
 function extractCheckboxGates(content: string): Gate[] {
 	const gates: Gate[] = [];
-	
+
 	// Find all checkbox items
 	const checkboxMatches = content.match(/(?:^|\n)(\s*)-\s*\[([ xX])\]/g);
-	
+
 	if (checkboxMatches && checkboxMatches.length >= 2) {
 		// Check if checkboxes are in a gate-like section
-		const gateSections = [
-			...PI_CREW_REFUSE_GATE_PATTERNS,
-			...PI_CREW_ENFORCEMENT_PATTERNS,
-			...PI_CREW_PROCEED_PATTERNS,
-		];
-		
+		const gateSections = [...PI_CREW_REFUSE_GATE_PATTERNS, ...PI_CREW_ENFORCEMENT_PATTERNS, ...PI_CREW_PROCEED_PATTERNS];
+
 		for (const sectionPattern of gateSections) {
 			if (sectionPattern.test(content)) {
 				// Found checkbox items in a gate section
@@ -220,7 +216,7 @@ function extractCheckboxGates(content: string): Gate[] {
 				return gates;
 			}
 		}
-		
+
 		// Checkboxes found but not in a named gate section - still count if substantial
 		if (checkboxMatches.length >= 3) {
 			gates.push({
@@ -231,7 +227,7 @@ function extractCheckboxGates(content: string): Gate[] {
 			});
 		}
 	}
-	
+
 	return gates;
 }
 
@@ -240,7 +236,7 @@ function extractCheckboxGates(content: string): Gate[] {
  */
 function extractPassFailGates(content: string): Gate[] {
 	const gates: Gate[] = [];
-	
+
 	for (const pattern of PASS_FAIL_PATTERNS) {
 		const re = new RegExp(pattern.source, "gi");
 		let m: RegExpExecArray | null;
@@ -254,7 +250,7 @@ function extractPassFailGates(content: string): Gate[] {
 			});
 		}
 	}
-	
+
 	return gates;
 }
 
@@ -263,13 +259,13 @@ function extractPassFailGates(content: string): Gate[] {
  */
 function extractGates(content: string): Gate[] {
 	const gates: Gate[] = [];
-	
+
 	// Try all extraction methods
 	gates.push(...extractClassicGates(content));
 	gates.push(...extractPiCrewGates(content));
 	gates.push(...extractCheckboxGates(content));
 	gates.push(...extractPassFailGates(content));
-	
+
 	// Deduplicate by condition
 	const seen = new Set<string>();
 	return gates.filter((gate) => {
@@ -293,16 +289,14 @@ function isDescriptiveOnly(content: string): boolean {
 		/descriptive\s+only/i,
 		/\[\s*TODO.*enforce/i,
 	];
-	
-	const hasDescriptiveOnly = descriptiveIndicators.some((pattern) =>
-		pattern.test(content)
-	);
-	
+
+	const hasDescriptiveOnly = descriptiveIndicators.some((pattern) => pattern.test(content));
+
 	// Check for "should" vs "must" ratio
 	const shouldCount = (content.match(/\bshould\b/gi) || []).length;
 	const mustCount = (content.match(/\bmust\b/gi) || []).length;
 	const shallCount = (content.match(/\bshall\b/gi) || []).length;
-	
+
 	return hasDescriptiveOnly || (shouldCount > 10 && mustCount === 0 && shallCount === 0);
 }
 
@@ -324,10 +318,10 @@ function verifySkill(skillPath: string): VerificationResult {
 		warnings: [],
 		passed: false,
 	};
-	
+
 	try {
 		const content = fs.readFileSync(skillPath, "utf-8");
-		
+
 		// Check YAML frontmatter for required fields
 		const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
 		if (frontmatterMatch) {
@@ -350,37 +344,36 @@ function verifySkill(skillPath: string): VerificationResult {
 		if (!result.hasTriggerSection) {
 			result.warnings.push("No trigger section found (When to Activate, Trigger, etc.)");
 		}
-		
+
 		// Check for anti-patterns
 		result.hasAntiPatterns = hasAntiPatternSection(content);
 		if (!result.hasAntiPatterns) {
 			result.warnings.push("No anti-patterns section found");
 		}
-		
+
 		// Extract gates
 		result.gates = extractGates(content);
 		result.hasGates = result.gates.length > 0;
-		
+
 		if (!result.hasGates) {
 			result.errors.push("No gate found (RED/GREEN/Refuse/Enforcement)");
 		}
-		
+
 		// Check if purely descriptive
 		result.isDescriptiveOnly = isDescriptiveOnly(content);
 		if (result.isDescriptiveOnly) {
 			result.warnings.push("Skill appears to be purely descriptive without enforcement");
 		}
-		
+
 		// Determine if has enforceable gates
 		result.hasEnforceableGates = result.hasGates && !result.isDescriptiveOnly;
-		
+
 		// Determine pass/fail
 		result.passed = result.hasTriggerSection && result.hasEnforceableGates;
-		
 	} catch (err) {
 		result.errors.push(`Failed to read skill: ${err}`);
 	}
-	
+
 	return result;
 }
 
@@ -390,15 +383,15 @@ function verifySkill(skillPath: string): VerificationResult {
 
 function formatResult(result: VerificationResult): string {
 	const lines: string[] = [];
-	
+
 	lines.push(`=== Skill: ${result.skillName} ===`);
-	
+
 	if (result.hasTriggerSection) {
 		lines.push("✅ Has trigger section");
 	} else {
 		lines.push("⚠️  No trigger section found");
 	}
-	
+
 	if (result.hasGates) {
 		for (const gate of result.gates.slice(0, 3)) {
 			const label = gate.type.toUpperCase();
@@ -411,31 +404,31 @@ function formatResult(result: VerificationResult): string {
 	} else {
 		lines.push("⚠️  No gate found - only descriptive text");
 	}
-	
+
 	if (result.hasAntiPatterns) {
 		lines.push("✅ Has anti-patterns");
 	} else {
 		lines.push("⚠️  No anti-patterns section");
 	}
-	
+
 	if (result.warnings.length > 0) {
 		for (const warning of result.warnings) {
 			lines.push(`⚠️  ${warning}`);
 		}
 	}
-	
+
 	if (result.errors.length > 0) {
 		for (const error of result.errors) {
 			lines.push(`❌ ${error}`);
 		}
 	}
-	
+
 	if (result.passed) {
 		lines.push("✅ PASS - Skill has enforceable gates");
 	} else {
 		lines.push("❌ FAIL - Skill lacks enforceable gates");
 	}
-	
+
 	return lines.join("\n");
 }
 
@@ -445,13 +438,13 @@ function formatResult(result: VerificationResult): string {
 
 function getAllSkillFiles(dirPath: string): string[] {
 	const skills: string[] = [];
-	
+
 	if (!fs.existsSync(dirPath)) {
 		return skills;
 	}
-	
+
 	const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-	
+
 	for (const entry of entries) {
 		const fullPath = path.join(dirPath, entry.name);
 		if (entry.isDirectory()) {
@@ -463,7 +456,7 @@ function getAllSkillFiles(dirPath: string): string[] {
 			}
 		}
 	}
-	
+
 	return skills;
 }
 
@@ -473,20 +466,20 @@ function getAllSkillFiles(dirPath: string): string[] {
 
 async function main() {
 	const args = process.argv.slice(2);
-	
+
 	if (args.length === 0) {
 		console.error("Usage: node scripts/verify-skill.ts <skill-path> [skill-path2 ...]");
 		console.error("       node scripts/verify-skill.ts skills/   # batch mode");
 		process.exit(1);
 	}
-	
+
 	const results: VerificationResult[] = [];
-	
+
 	// Handle batch mode
 	if (args.length === 1 && fs.statSync(args[0]).isDirectory()) {
 		const skillFiles = getAllSkillFiles(args[0]);
 		console.log(`Checking ${skillFiles.length} skills in batch mode...\n`);
-		
+
 		for (const skillFile of skillFiles) {
 			const result = verifySkill(skillFile);
 			results.push(result);
@@ -500,7 +493,7 @@ async function main() {
 				console.error(`Error: File not found: ${arg}`);
 				continue;
 			}
-			
+
 			if (fs.statSync(arg).isDirectory()) {
 				const skillFiles = getAllSkillFiles(arg);
 				for (const skillFile of skillFiles) {
@@ -517,20 +510,18 @@ async function main() {
 			}
 		}
 	}
-	
+
 	// Summary
 	const passed = results.filter((r) => r.passed).length;
 	const failed = results.filter((r) => !r.passed && r.errors.length > 0).length;
-	const warningsOnly = results.filter(
-		(r) => r.passed || (r.warnings.length > 0 && r.errors.length === 0)
-	).length;
-	
+	const warningsOnly = results.filter((r) => r.passed || (r.warnings.length > 0 && r.errors.length === 0)).length;
+
 	console.log("=== Summary ===");
 	console.log(`Total: ${results.length}`);
 	console.log(`Passed: ${passed}`);
 	console.log(`Failed: ${failed}`);
 	console.log(`Warnings only: ${warningsOnly}`);
-	
+
 	// List failing skills
 	if (failed > 0) {
 		console.log("\nFailing skills:");
@@ -541,7 +532,7 @@ async function main() {
 			}
 		}
 	}
-	
+
 	// Determine exit code
 	let exitCode = 0;
 	if (failed > 0) {
@@ -549,7 +540,7 @@ async function main() {
 	} else if (warningsOnly > 0 && passed > 0) {
 		exitCode = 2;
 	}
-	
+
 	process.exit(exitCode);
 }
 

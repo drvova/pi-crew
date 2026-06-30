@@ -44,10 +44,7 @@ import { resolveNpmGlobalRoot } from "./pi-spawn.ts";
  * The pi-coding-agent peer dependency package name(s) we can be loaded by.
  * @earendil-works is the canonical scope; @mariozechner is the historical fork.
  */
-export const PEER_DEP_NAMES = [
-	"@earendil-works/pi-coding-agent",
-	"@mariozechner/pi-coding-agent",
-] as const;
+export const PEER_DEP_NAMES = ["@earendil-works/pi-coding-agent", "@mariozechner/pi-coding-agent"] as const;
 
 /**
  * Env var a parent pi-crew process sets on spawned children so they can resolve
@@ -155,10 +152,7 @@ function extractEsmMain(pkg: unknown): string | undefined {
  * container case) AND `<dir>/<pkg>` (handles a base that IS a node_modules
  * dir, e.g. the output of `npm root -g`), then walk up to root.
  */
-function findPackageDir(
-	start: string,
-	names: readonly string[],
-): { dir: string; name: string } | undefined {
+function findPackageDir(start: string, names: readonly string[]): { dir: string; name: string } | undefined {
 	let dir = path.resolve(start);
 	try {
 		if (fs.statSync(dir).isFile()) dir = path.dirname(dir);
@@ -168,10 +162,7 @@ function findPackageDir(
 	while (true) {
 		for (const name of names) {
 			const segs = name.split("/");
-			const candidates = [
-				path.join(dir, "node_modules", ...segs, "package.json"),
-				path.join(dir, ...segs, "package.json"),
-			];
+			const candidates = [path.join(dir, "node_modules", ...segs, "package.json"), path.join(dir, ...segs, "package.json")];
 			for (const pkgJson of candidates) {
 				try {
 					const pkg = JSON.parse(fs.readFileSync(pkgJson, "utf-8"));
@@ -194,14 +185,16 @@ function tryResolveFrom(base: string): ResolvedPeerDep | undefined {
 	const found = findPackageDir(base, PEER_DEP_NAMES);
 	if (!found) return undefined;
 	try {
-		const pkg = JSON.parse(
-			fs.readFileSync(path.join(found.dir, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(fs.readFileSync(path.join(found.dir, "package.json"), "utf-8"));
 		const mainRel = extractEsmMain(pkg);
 		if (!mainRel) return undefined;
 		const mainAbs = path.resolve(found.dir, mainRel);
 		if (!fs.existsSync(mainAbs)) return undefined;
-		return { dir: found.dir, name: found.name, mainUrl: pathToFileURL(mainAbs).href };
+		return {
+			dir: found.dir,
+			name: found.name,
+			mainUrl: pathToFileURL(mainAbs).href,
+		};
 	} catch {
 		return undefined;
 	}
@@ -261,7 +254,9 @@ function buildMissingMessage(): string {
 		`This usually means pi-crew and pi are installed in separate node_modules trees\n` +
 		`(e.g. pi-crew under ~/.pi/agent/npm/ but pi under an nvm/Volta/fnm global scope).\n` +
 		`Resolution bases tried:\n` +
-		peerDepResolutionBases().map((b) => `  - ${b}`).join("\n") +
+		peerDepResolutionBases()
+			.map((b) => `  - ${b}`)
+			.join("\n") +
 		`\nFix: install pi-crew in the SAME scope as pi, e.g.\n` +
 		`  npm install -g @earendil-works/pi-crew\n` +
 		`or set the env var ${PEER_DEP_DIR_ENV}=<path to the pi-coding-agent package dir>.`

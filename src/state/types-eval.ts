@@ -1,12 +1,12 @@
 /**
  * Types for the Tiered Evaluation System
- * 
+ *
  * Inspired by agent-eval's judge tiers for hierarchical evaluation.
  */
 
 /**
  * Evaluation tiers with increasing computational cost.
- * 
+ *
  * - Tier 1: Deterministic, fast checks (file existence, parse errors)
  * - Tier 2: Pattern matching, structural checks (grep, regex)
  * - Tier 3: LLM-based evaluation for natural language checks

@@ -87,9 +87,7 @@ function parsePositiveInt(value: string): number | undefined {
 function parseListOptions(url: URL, scheme: "issue" | "pr", repo: string): ParsedListOptions {
 	const allowedStates = scheme === "pr" ? ["open", "closed", "merged", "all"] : ["open", "closed", "all"];
 	const stateRaw = url.searchParams.get("state");
-	const state = (
-		stateRaw && (allowedStates as string[]).includes(stateRaw) ? stateRaw : "open"
-	) as ParsedListOptions["state"];
+	const state = (stateRaw && (allowedStates as string[]).includes(stateRaw) ? stateRaw : "open") as ParsedListOptions["state"];
 
 	let limit = LIST_LIMIT_DEFAULT;
 	const limitRaw = url.searchParams.get("limit");
@@ -138,7 +136,12 @@ export function parseGitHubUrl(raw: string, scheme: "issue" | "pr"): Parsed {
 
 	// Empty → list default repo
 	if (!host && pathParts.length === 0) {
-		return { kind: "list", repo: "", state: "open", limit: LIST_LIMIT_DEFAULT };
+		return {
+			kind: "list",
+			repo: "",
+			state: "open",
+			limit: LIST_LIMIT_DEFAULT,
+		};
 	}
 
 	// If host looks like a number, treat as single-item shorthand
@@ -147,24 +150,45 @@ export function parseGitHubUrl(raw: string, scheme: "issue" | "pr"): Parsed {
 		// pathParts[0] === "diff" → scheme://N/diff[/sub] (PR diff, default repo)
 		if (pathParts.length === 0) {
 			const commentsParam = url.searchParams.get("comments");
-			const comments = !(commentsParam === "0" || (commentsParam?.toLowerCase() === "false"));
-			return { kind: "single", repo: undefined, number: parsePositiveInt(host)!, comments };
+			const comments = !(commentsParam === "0" || commentsParam?.toLowerCase() === "false");
+			return {
+				kind: "single",
+				repo: undefined,
+				number: parsePositiveInt(host)!,
+				comments,
+			};
 		}
 		if (pathParts[0] === "diff") {
 			if (scheme !== "pr") throw new Error(`Invalid ${scheme}:// URL. Diff is only available for pr:// URLs.`);
 			const number = parsePositiveInt(host)!;
 			const diffParts = pathParts;
 			if (diffParts.length === 1) {
-				return { kind: "pr-diff", repo: undefined, number, mode: "list" };
+				return {
+					kind: "pr-diff",
+					repo: undefined,
+					number,
+					mode: "list",
+				};
 			}
 			if (diffParts[1] === "all") {
-				return { kind: "pr-diff", repo: undefined, number, mode: "all" };
+				return {
+					kind: "pr-diff",
+					repo: undefined,
+					number,
+					mode: "all",
+				};
 			}
 			const idx = parsePositiveInt(diffParts[1]);
 			if (idx === undefined) {
 				throw new Error(`Invalid pr:// diff sub-path '${diffParts[1]}'. Use 'all' or a 1-indexed file number.`);
 			}
-			return { kind: "pr-diff", repo: undefined, number, mode: "slice", index: idx };
+			return {
+				kind: "pr-diff",
+				repo: undefined,
+				number,
+				mode: "slice",
+				index: idx,
+			};
 		}
 		// Numeric host with non-diff path — invalid number
 		throw new Error(`Invalid ${scheme}:// number: ${host}`);
@@ -177,9 +201,7 @@ export function parseGitHubUrl(raw: string, scheme: "issue" | "pr"): Parsed {
 		if (!host.includes(".")) {
 			throw new Error(`Invalid ${scheme}:// number: ${host}`);
 		}
-		throw new Error(
-			`Invalid ${scheme}:// URL. Expected ${scheme}://<owner>/<repo> or ${scheme}://<owner>/<repo>/<number>.`,
-		);
+		throw new Error(`Invalid ${scheme}:// URL. Expected ${scheme}://<owner>/<repo> or ${scheme}://<owner>/<repo>/<number>.`);
 	}
 
 	// scheme://owner/repo → list
@@ -207,9 +229,7 @@ export function parseGitHubUrl(raw: string, scheme: "issue" | "pr"): Parsed {
 				);
 			}
 			if (diffParts[0] !== "diff" || diffParts.length > 2) {
-				throw new Error(
-					`Invalid pr:// URL. Expected pr://<n>/diff, pr://<n>/diff/all, or pr://<n>/diff/<i>.`,
-				);
+				throw new Error(`Invalid pr:// URL. Expected pr://<n>/diff, pr://<n>/diff/all, or pr://<n>/diff/<i>.`);
 			}
 			if (diffParts.length === 1) {
 				return { kind: "pr-diff", repo, number: num, mode: "list" };
@@ -222,19 +242,30 @@ export function parseGitHubUrl(raw: string, scheme: "issue" | "pr"): Parsed {
 			if (idx === undefined) {
 				throw new Error(`Invalid pr:// diff sub-path '${sub}'. Use 'all' or a 1-indexed file number.`);
 			}
-			return { kind: "pr-diff", repo, number: num, mode: "slice", index: idx };
+			return {
+				kind: "pr-diff",
+				repo,
+				number: num,
+				mode: "slice",
+				index: idx,
+			};
 		}
 
 		const commentsParam2 = url.searchParams.get("comments");
-		const comments = !(commentsParam2 === "0" || (commentsParam2?.toLowerCase() === "false"));
+		const comments = !(commentsParam2 === "0" || commentsParam2?.toLowerCase() === "false");
 		return { kind: "single", repo, number: num, comments };
 	}
 
 	// scheme://N (numeric in path) — single, default repo
 	if (pathParts.length === 1 && parsePositiveInt(pathParts[0]) !== undefined) {
 		const commentsParam3 = url.searchParams.get("comments");
-		const comments = !(commentsParam3 === "0" || (commentsParam3?.toLowerCase() === "false"));
-		return { kind: "single", repo: undefined, number: parsePositiveInt(pathParts[0])!, comments };
+		const comments = !(commentsParam3 === "0" || commentsParam3?.toLowerCase() === "false");
+		return {
+			kind: "single",
+			repo: undefined,
+			number: parsePositiveInt(pathParts[0])!,
+			comments,
+		};
 	}
 
 	// Fallback: unrecognized shape
@@ -266,7 +297,7 @@ function formatListItem(scheme: "issue" | "pr", repo: string, item: GitHubListIt
 	const updated = item.updatedAt ?? item.createdAt ?? "";
 	const draftSuffix = scheme === "pr" && item.isDraft ? " [draft]" : "";
 	const labels = (item.labels ?? [])
-		.map(l => l.name)
+		.map((l) => l.name)
 		.filter(Boolean)
 		.join(", ");
 	const labelSuffix = labels ? `  labels: ${labels}` : "";
@@ -290,7 +321,10 @@ function runGh(cwd: string, args: string[]): string {
 
 function ghJson<T>(cwd: string, args: string[]): T {
 	const jsonOut = execFileSync("gh", args, {
-		cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"],
+		cwd,
+		encoding: "utf-8",
+		timeout: 30_000,
+		stdio: ["pipe", "pipe", "pipe"],
 	});
 	try {
 		return JSON.parse(jsonOut) as T;
@@ -316,17 +350,24 @@ export function resolveGitHubUrl(parsed: Parsed, scheme: "issue" | "pr", cwd: st
 	// Resolve repo for list operations
 	if (parsed.kind === "list") {
 		const repo = parsed.repo || resolveDefaultRepo(cwd);
-		const fields = scheme === "issue"
-			? ["number", "title", "state", "stateReason", "author", "labels", "createdAt", "updatedAt", "url"]
-			: ["number", "title", "state", "isDraft", "author", "baseRefName", "headRefName", "labels", "createdAt", "updatedAt", "url"];
+		const fields =
+			scheme === "issue"
+				? ["number", "title", "state", "stateReason", "author", "labels", "createdAt", "updatedAt", "url"]
+				: [
+						"number",
+						"title",
+						"state",
+						"isDraft",
+						"author",
+						"baseRefName",
+						"headRefName",
+						"labels",
+						"createdAt",
+						"updatedAt",
+						"url",
+					];
 
-		const args = [
-			scheme, "list",
-			"--repo", repo,
-			"--state", parsed.state,
-			"--limit", String(parsed.limit),
-			"--json", fields.join(","),
-		];
+		const args = [scheme, "list", "--repo", repo, "--state", parsed.state, "--limit", String(parsed.limit), "--json", fields.join(",")];
 		if (parsed.author) args.push("--author", parsed.author);
 		if (parsed.label) args.push("--label", parsed.label);
 
@@ -339,9 +380,7 @@ export function resolveGitHubUrl(parsed: Parsed, scheme: "issue" | "pr", cwd: st
 		}
 
 		const header = `# ${scheme === "issue" ? "Issues" : "Pull Requests"} in ${repo} (${parsed.state}, up to ${parsed.limit})`;
-		const body = items.length === 0
-			? "_No matches._"
-			: items.map(item => formatListItem(scheme, repo, item)).join("\n\n");
+		const body = items.length === 0 ? "_No matches._" : items.map((item) => formatListItem(scheme, repo, item)).join("\n\n");
 		const footer = `\n\n---\nRead a specific item: \`${scheme}://${repo}/<N>\` (or \`${scheme}://<N>\` for the current repo).`;
 		return {
 			content: `${header}\n\n${body}${footer}`,
@@ -386,14 +425,31 @@ export function resolveGitHubUrl(parsed: Parsed, scheme: "issue" | "pr", cwd: st
 		if (parsed.mode === "list") {
 			try {
 				const raw = execFileSync(
-					"gh", ["pr", "view", String(parsed.number), "--repo", repo, "--json", "files", "--jq", ".files[] | \"(.filename) +(.additions) -(.deletions) [(.status)]\""],
-					{ cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] },
+					"gh",
+					[
+						"pr",
+						"view",
+						String(parsed.number),
+						"--repo",
+						repo,
+						"--json",
+						"files",
+						"--jq",
+						'.files[] | "(.filename) +(.additions) -(.deletions) [(.status)]"',
+					],
+					{
+						cwd,
+						encoding: "utf-8",
+						timeout: 30_000,
+						stdio: ["pipe", "pipe", "pipe"],
+					},
 				);
 				const fileLines = raw.split("\n").filter(Boolean);
 				const header = `# Pull Request Diff: ${repo}#${parsed.number} (${fileLines.length} file${fileLines.length === 1 ? "" : "s"})`;
-				const body = fileLines.length === 0
-					? "_No file changes._"
-					: fileLines.map((line, i) => `${i + 1}. ${line}\n   pr://${repo}/${parsed.number}/diff/${i + 1}`).join("\n\n");
+				const body =
+					fileLines.length === 0
+						? "_No file changes._"
+						: fileLines.map((line, i) => `${i + 1}. ${line}\n   pr://${repo}/${parsed.number}/diff/${i + 1}`).join("\n\n");
 				const footer = `\n\n---\nRead all: \`pr://${repo}/${parsed.number}/diff/all\`. Each file is also available as \`pr://${repo}/${parsed.number}/diff/<i>\`.`;
 				return {
 					content: `${header}\n\n${body}${footer}`,
@@ -408,8 +464,24 @@ export function resolveGitHubUrl(parsed: Parsed, scheme: "issue" | "pr", cwd: st
 		if (parsed.mode === "slice" && parsed.index !== undefined) {
 			try {
 				const raw = execFileSync(
-					"gh", ["pr", "view", String(parsed.number), "--repo", repo, "--json", "files", "--jq", ".files[] | \"(.filename) +(.additions) -(.deletions) [(.status)]\""],
-					{ cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] },
+					"gh",
+					[
+						"pr",
+						"view",
+						String(parsed.number),
+						"--repo",
+						repo,
+						"--json",
+						"files",
+						"--jq",
+						'.files[] | "(.filename) +(.additions) -(.deletions) [(.status)]"',
+					],
+					{
+						cwd,
+						encoding: "utf-8",
+						timeout: 30_000,
+						stdio: ["pipe", "pipe", "pipe"],
+					},
 				);
 				const fileLines = raw.split("\n").filter(Boolean);
 				const targetIdx = parsed.index - 1;
@@ -417,7 +489,10 @@ export function resolveGitHubUrl(parsed: Parsed, scheme: "issue" | "pr", cwd: st
 					throw new Error(`File index ${parsed.index} out of range (1..${fileLines.length}).`);
 				}
 				const fullDiff = execFileSync("gh", ["pr", "diff", String(parsed.number), "--repo", repo], {
-					cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"],
+					cwd,
+					encoding: "utf-8",
+					timeout: 30_000,
+					stdio: ["pipe", "pipe", "pipe"],
 				});
 				// Extract the diff for the target file by splitting on "diff --git" headers
 				const diffBlocks = fullDiff.split(/(?=diff --git )/);

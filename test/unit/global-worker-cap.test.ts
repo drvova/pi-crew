@@ -3,14 +3,15 @@
  *
  * RFC: research-findings/goal-workflow/13-VISION-RFC.md v0.5 §P1g + MAJ#3.
  */
-import { describe, it, beforeEach } from "node:test";
+
 import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
 import {
+	__test_resetCap,
 	acquireWorkerSlot,
+	getWorkerCapCapacity,
 	releaseWorkerSlot,
 	withWorkerSlot,
-	getWorkerCapCapacity,
-	__test_resetCap,
 } from "../../src/runtime/global-worker-cap.ts";
 
 describe("global-worker-cap capacity resolution", () => {
@@ -109,10 +110,7 @@ describe("withWorkerSlot", () => {
 		const probe = acquireWorkerSlot().then(() => {
 			resolved = true;
 		});
-		const raced = await Promise.race([
-			probe.then(() => "acquired"),
-			new Promise<string>((r) => setTimeout(() => r("timeout"), 500)),
-		]);
+		const raced = await Promise.race([probe.then(() => "acquired"), new Promise<string>((r) => setTimeout(() => r("timeout"), 500))]);
 		assert.equal(raced, "acquired", "slot must be released after withWorkerSlot throws");
 		assert.equal(resolved, true);
 		releaseWorkerSlot();

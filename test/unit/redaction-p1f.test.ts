@@ -7,8 +7,8 @@
  * (linear time, no hang).
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { redactSecretString } from "../../src/utils/redaction.ts";
 
 // Realistic-shaped (non-sensitive) sample tokens for each pattern class.

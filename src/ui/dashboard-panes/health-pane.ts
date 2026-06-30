@@ -25,6 +25,7 @@ export function renderHealthPane(snapshot: RunUiSnapshot | undefined, opts: Heal
 	if ((summary.dead > 0 || summary.stale > 0) && foreground) hints.push("K kill stale");
 	hints.push("D diagnostic export");
 	lines.push(`Actions: ${hints.join(" · ")}`);
-	if (!foreground && (summary.dead > 0 || summary.missing > 0 || summary.stale > 0)) lines.push("Async run: R/K disabled — inspect process manually or use /team-api.");
+	if (!foreground && (summary.dead > 0 || summary.missing > 0 || summary.stale > 0))
+		lines.push("Async run: R/K disabled — inspect process manually or use /team-api.");
 	return lines;
 }

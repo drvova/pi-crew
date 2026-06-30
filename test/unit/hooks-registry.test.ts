@@ -1,12 +1,7 @@
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import {
-	registerHook,
-	clearHooks,
-	getHooks,
-	executeHook,
-} from "../../src/hooks/registry.ts";
-import type { HookDefinition, HookContext } from "../../src/hooks/types.ts";
+import { beforeEach, describe, it } from "node:test";
+import { clearHooks, executeHook, getHooks, registerHook } from "../../src/hooks/registry.ts";
+import type { HookContext, HookDefinition } from "../../src/hooks/types.ts";
 
 function makeCtx(overrides?: Partial<HookContext>): HookContext {
 	return {
@@ -189,7 +184,10 @@ describe("executeHook", () => {
 		registerHook({
 			name: "before_run_start",
 			mode: "non_blocking",
-			handler: (c) => { capturedKeys = Object.keys(c); return { outcome: "allow" }; },
+			handler: (c) => {
+				capturedKeys = Object.keys(c);
+				return { outcome: "allow" };
+			},
 		});
 		await executeHook("before_run_start", ctx);
 		assert.ok(!capturedKeys.includes(maliciousKey), "NFKC-confusable __proto__ key must be stripped from ctx");

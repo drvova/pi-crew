@@ -1,22 +1,34 @@
 import * as fs from "node:fs";
-import { listRecentRuns } from "../extension/run-index.ts";
 import type { CrewUiConfig } from "../config/config.ts";
+import { listRecentRuns } from "../extension/run-index.ts";
 import { readCrewAgents } from "../runtime/crew-agent-records.ts";
-import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
-import type { TeamTaskState, TeamRunManifest } from "../state/types.ts";
-import { aggregateUsage } from "../state/usage.ts";
-import { isDisplayActiveRun } from "../runtime/process-status.ts";
 import { listLiveAgents } from "../runtime/live-agent-manager.ts";
-import { logInternalError } from "../utils/internal-error.ts";
 import type { ManifestCache } from "../runtime/manifest-cache.ts";
-import type { RunSnapshotCache, RunUiSnapshot } from "./snapshot-types.ts";
-import { notificationBadge } from "./widget/widget-formatters.ts";
-import { RenderCoalescer } from "./render-coalescer.ts";
+import { isDisplayActiveRun } from "../runtime/process-status.ts";
+import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
+import { aggregateUsage } from "../state/usage.ts";
+import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
+import { logInternalError } from "../utils/internal-error.ts";
 import { allWorkflows, discoverWorkflows } from "../workflows/discover-workflows.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
+import { RenderCoalescer } from "./render-coalescer.ts";
+import type { RunSnapshotCache, RunUiSnapshot } from "./snapshot-types.ts";
+import { notificationBadge } from "./widget/widget-formatters.ts";
 
-type EventBus = { emit?: (event: string, data: unknown) => void; listenerCount?: (event: string) => number } | undefined;
-type StatusContext = { hasUI?: boolean; ui?: { setStatus?: (key: string, text: string | undefined) => void } } | undefined;
+type EventBus =
+	| {
+			emit?: (event: string, data: unknown) => void;
+			listenerCount?: (event: string) => number;
+	  }
+	| undefined;
+type StatusContext =
+	| {
+			hasUI?: boolean;
+			ui?: {
+				setStatus?: (key: string, text: string | undefined) => void;
+			};
+	  }
+	| undefined;
 
 const TASK_READ_TTL_MS = 200;
 
@@ -63,33 +75,59 @@ export function compactTokens(total: number): string {
 
 export function registerPiCrewPowerbarSegments(events: EventBus, config?: CrewUiConfig): void {
 	if (config?.powerbar === false) return;
-	safeEmit(events, "powerbar:register-segment", { id: "pi-crew-active", label: "pi-crew active agents" });
-	safeEmit(events, "powerbar:register-segment", { id: "pi-crew-progress", label: "pi-crew run progress" });
-	safeEmit(events, "powerbar:register-segment", { id: "pi-crew-steps", label: "pi-crew workflow steps" });
+	safeEmit(events, "powerbar:register-segment", {
+		id: "pi-crew-active",
+		label: "pi-crew active agents",
+	});
+	safeEmit(events, "powerbar:register-segment", {
+		id: "pi-crew-progress",
+		label: "pi-crew run progress",
+	});
+	safeEmit(events, "powerbar:register-segment", {
+		id: "pi-crew-steps",
+		label: "pi-crew workflow steps",
+	});
 }
 
-export function updatePiCrewPowerbar(events: EventBus, cwd: string, config?: CrewUiConfig, manifestCache?: ManifestCache, snapshotCache?: RunSnapshotCache, ctx?: StatusContext, notificationCount = 0, preloadedManifests?: TeamRunManifest[]): void {
+export function updatePiCrewPowerbar(
+	events: EventBus,
+	cwd: string,
+	config?: CrewUiConfig,
+	manifestCache?: ManifestCache,
+	snapshotCache?: RunSnapshotCache,
+	ctx?: StatusContext,
+	notificationCount = 0,
+	preloadedManifests?: TeamRunManifest[],
+): void {
 	if (config?.powerbar === false) return;
 	const useStatusFallback = !hasPowerbarConsumer(events);
 	const runs = preloadedManifests ?? (manifestCache ? manifestCache.list(20) : listRecentRuns(cwd, 20));
-	const active = runs.map((run) => {
-		let snapshot: RunUiSnapshot | undefined;
-		try {
-			// 1.2: render path is read-only. Use cache.get() only; the background
-			// preload loop in register.ts populates entries on its own cadence.
-			snapshot = snapshotCache?.get(run.runId);
-		} catch (error) {
-			logInternalError("powerbar.snapshot", error, run.runId);
-		}
-		if (snapshot) return { run: snapshot.manifest, agents: snapshot.agents, tasks: snapshot.tasks, snapshot };
-		let agents: ReturnType<typeof readCrewAgents> = [];
-		try {
-			agents = readCrewAgents(run);
-		} catch (error) {
-			logInternalError("powerbar.readCrewAgents", error, run.runId);
-		}
-		return { run, agents, tasks: readTasks(run.tasksPath), snapshot };
-	}).filter((item) => isDisplayActiveRun(item.run, item.agents));
+	const active = runs
+		.map((run) => {
+			let snapshot: RunUiSnapshot | undefined;
+			try {
+				// 1.2: render path is read-only. Use cache.get() only; the background
+				// preload loop in register.ts populates entries on its own cadence.
+				snapshot = snapshotCache?.get(run.runId);
+			} catch (error) {
+				logInternalError("powerbar.snapshot", error, run.runId);
+			}
+			if (snapshot)
+				return {
+					run: snapshot.manifest,
+					agents: snapshot.agents,
+					tasks: snapshot.tasks,
+					snapshot,
+				};
+			let agents: ReturnType<typeof readCrewAgents> = [];
+			try {
+				agents = readCrewAgents(run);
+			} catch (error) {
+				logInternalError("powerbar.readCrewAgents", error, run.runId);
+			}
+			return { run, agents, tasks: readTasks(run.tasksPath), snapshot };
+		})
+		.filter((item) => isDisplayActiveRun(item.run, item.agents));
 	if (!active.length) {
 		lastActiveKey = undefined;
 		lastProgressKey = undefined;
@@ -102,25 +140,56 @@ export function updatePiCrewPowerbar(events: EventBus, cwd: string, config?: Cre
 	const agents = active.flatMap((item) => item.agents);
 	const tasks = active.flatMap((item) => item.tasks);
 	const running = agents.filter((agent) => agent.status === "running").length;
-	const waiting = active.reduce((sum, item) => sum + (item.snapshot ? item.snapshot.progress.queued + (item.snapshot.progress.waiting ?? 0) : item.tasks.reduce((s, t) => s + (t.status === "queued" || t.status === "waiting" ? 1 : 0), 0)), 0);
-	const completed = active.reduce((sum, item) => sum + (item.snapshot?.progress.completed ?? item.tasks.reduce((s, t) => s + (t.status === "completed" ? 1 : 0), 0)), 0);
+	const waiting = active.reduce(
+		(sum, item) =>
+			sum +
+			(item.snapshot
+				? item.snapshot.progress.queued + (item.snapshot.progress.waiting ?? 0)
+				: item.tasks.reduce((s, t) => s + (t.status === "queued" || t.status === "waiting" ? 1 : 0), 0)),
+		0,
+	);
+	const completed = active.reduce(
+		(sum, item) => sum + (item.snapshot?.progress.completed ?? item.tasks.reduce((s, t) => s + (t.status === "completed" ? 1 : 0), 0)),
+		0,
+	);
 	const total = Math.max(1, active.reduce((sum, item) => sum + (item.snapshot?.progress.total ?? item.tasks.length), 0) || agents.length);
 	const usage = aggregateUsage(tasks);
-	const snapshotTokens = active.reduce((sum, item) => sum + (item.snapshot ? item.snapshot.usage.tokensIn + item.snapshot.usage.tokensOut : 0), 0);
-	const hasUsage = usage && ((usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0)) > 0;
-	const tokenTotal = hasUsage ? (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0) : snapshotTokens;
-	const model = config?.showModel === false ? undefined : agents.find((agent) => agent.model)?.model?.split("/").at(-1);
+	const snapshotTokens = active.reduce(
+		(sum, item) => sum + (item.snapshot ? item.snapshot.usage.tokensIn + item.snapshot.usage.tokensOut : 0),
+		0,
+	);
+	const hasUsage = usage && (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0) > 0;
+	const tokenTotal = hasUsage
+		? (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0)
+		: snapshotTokens;
+	const model =
+		config?.showModel === false
+			? undefined
+			: agents
+					.find((agent) => agent.model)
+					?.model?.split("/")
+					.at(-1);
 	const tokenText = config?.showTokens === false || !tokenTotal ? undefined : compactTokens(tokenTotal);
 	const liveRunning = listLiveAgents().filter((a) => a.status === "running").length;
 	// Always show consistent status: running count + queued count from live tasks only
 	// Avoid snapshot cache for counts to prevent UI jumping
 	const runningCount = agents.filter((a) => a.status === "running").length;
 	// Count queued/waiting tasks directly from tasks array (not snapshot) for consistency
-	const queuedCount = active.reduce((sum, item) => sum + item.tasks.reduce((s, t) => s + (t.status === "queued" || t.status === "waiting" ? 1 : 0), 0), 0);
+	const queuedCount = active.reduce(
+		(sum, item) => sum + item.tasks.reduce((s, t) => s + (t.status === "queued" || t.status === "waiting" ? 1 : 0), 0),
+		0,
+	);
 	// Format: "1 running", "2 running · 1 queued", "3 queued", "idle"
 	const runningLabel = runningCount === 1 ? "1 running" : `${runningCount} running`;
 	const queuedLabel = queuedCount === 1 ? "1 queued" : `${queuedCount} queued`;
-	const crewStatus = runningCount > 0 && queuedCount > 0 ? `${runningLabel} · ${queuedLabel}` : runningCount > 0 ? runningLabel : queuedCount > 0 ? queuedLabel : "idle";
+	const crewStatus =
+		runningCount > 0 && queuedCount > 0
+			? `${runningLabel} · ${queuedLabel}`
+			: runningCount > 0
+				? runningLabel
+				: queuedCount > 0
+					? queuedLabel
+					: "idle";
 	const liveSuffix = liveRunning > 0 ? ` (${liveRunning} live)` : "";
 	const notificationText = notificationBadge(notificationCount);
 	// Always show model + tokens as suffix when available (for activePayload consistency)
@@ -288,7 +357,16 @@ export function requestPowerbarUpdate(
 	preloadedManifests?: TeamRunManifest[],
 ): void {
 	if (config?.powerbar === false) return;
-	latestArgs = { events, cwd, config, manifestCache, snapshotCache, ctx, notificationCount, preloadedManifests };
+	latestArgs = {
+		events,
+		cwd,
+		config,
+		manifestCache,
+		snapshotCache,
+		ctx,
+		notificationCount,
+		preloadedManifests,
+	};
 	powerbarCoalescer.request();
 }
 

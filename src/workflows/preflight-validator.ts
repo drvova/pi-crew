@@ -11,10 +11,7 @@
 // result they receive. This keeps the validator side-effect free and
 // trivially testable.
 
-import {
-	analyzeWorkflowTopology,
-	type WorkflowTopology,
-} from "./topology-analyzer.ts";
+import { analyzeWorkflowTopology, type WorkflowTopology } from "./topology-analyzer.ts";
 import type { WorkflowConfig } from "./workflow-config.ts";
 
 export interface PreflightOptions {
@@ -43,12 +40,7 @@ export interface PreflightResult {
 	recommendation: string;
 }
 
-function info(
-	topology: WorkflowTopology,
-	stepCount: number,
-	recommendation: string,
-	message: string,
-): PreflightResult {
+function info(topology: WorkflowTopology, stepCount: number, recommendation: string, message: string): PreflightResult {
 	return {
 		level: "info",
 		message,
@@ -59,12 +51,7 @@ function info(
 	};
 }
 
-function note(
-	topology: WorkflowTopology,
-	stepCount: number,
-	recommendation: string,
-	message: string,
-): PreflightResult {
+function note(topology: WorkflowTopology, stepCount: number, recommendation: string, message: string): PreflightResult {
 	return {
 		level: "note",
 		message,
@@ -75,13 +62,7 @@ function note(
 	};
 }
 
-function warn(
-	topology: WorkflowTopology,
-	stepCount: number,
-	recommendation: string,
-	message: string,
-	suggestion: string,
-): PreflightResult {
+function warn(topology: WorkflowTopology, stepCount: number, recommendation: string, message: string, suggestion: string): PreflightResult {
 	return {
 		level: "warn",
 		message,
@@ -108,21 +89,13 @@ function warn(
  * No `block` level exists — there is no scenario where pi-crew hard-rejects a call.
  * The agent always gets to decide.
  */
-export function validateWorkflowUsage(
-	workflow: WorkflowConfig,
-	options: PreflightOptions = {},
-): PreflightResult {
+export function validateWorkflowUsage(workflow: WorkflowConfig, options: PreflightOptions = {}): PreflightResult {
 	const analysis = analyzeWorkflowTopology(workflow);
 	const { topology, stepCount, recommendation } = analysis;
 
 	// Rule 0: dynamic workflows are runtime-decided.
 	if (topology === "dynamic") {
-		return info(
-			topology,
-			stepCount,
-			recommendation,
-			"Dynamic workflow — runtime decides topology.",
-		);
+		return info(topology, stepCount, recommendation, "Dynamic workflow — runtime decides topology.");
 	}
 
 	// Rule 0b: explicit force-bypass acknowledged (still log it).

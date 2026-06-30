@@ -1,11 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 import {
-	resolveJitiRegisterPath,
-	nodeSupportsStripTypes,
-	resolveTypeScriptLoader,
 	getBackgroundRunnerCommand,
+	nodeSupportsStripTypes,
+	resolveJitiRegisterPath,
+	resolveTypeScriptLoader,
 } from "../../src/runtime/async-runner.ts";
 
 describe("resolveJitiRegisterPath", () => {
@@ -17,14 +17,18 @@ describe("resolveJitiRegisterPath", () => {
 
 	it("returns path when jiti-register.mjs exists", () => {
 		const fakePath = "/fake/node_modules/jiti/lib/jiti-register.mjs";
-		const result = resolveJitiRegisterPath("/fake", (p) => p.replace(/\\/g, "/").endsWith("fake/node_modules/jiti/lib/jiti-register.mjs"));
+		const result = resolveJitiRegisterPath("/fake", (p) =>
+			p.replace(/\\/g, "/").endsWith("fake/node_modules/jiti/lib/jiti-register.mjs"),
+		);
 		assert.ok(result);
 		assert.ok(result!.replace(/\\/g, "/").endsWith("fake/node_modules/jiti/lib/jiti-register.mjs"));
 	});
 
 	it("walks upward to find jiti", () => {
 		const deepPath = "/a/b/node_modules/jiti/lib/jiti-register.mjs";
-		const result = resolveJitiRegisterPath("/a/b/c/d", (p) => p.replace(/\\/g, "/").endsWith("a/b/node_modules/jiti/lib/jiti-register.mjs"));
+		const result = resolveJitiRegisterPath("/a/b/c/d", (p) =>
+			p.replace(/\\/g, "/").endsWith("a/b/node_modules/jiti/lib/jiti-register.mjs"),
+		);
 		assert.ok(result);
 		assert.ok(result!.replace(/\\/g, "/").endsWith("a/b/node_modules/jiti/lib/jiti-register.mjs"));
 	});
@@ -89,12 +93,7 @@ describe("resolveTypeScriptLoader", () => {
 
 describe("getBackgroundRunnerCommand", () => {
 	it("returns jiti-based command when jiti loader is provided", () => {
-		const result = getBackgroundRunnerCommand(
-			"/runner.ts",
-			"/project",
-			"run1",
-			{ kind: "jiti", path: "/path/to/jiti-register.mjs" },
-		);
+		const result = getBackgroundRunnerCommand("/runner.ts", "/project", "run1", { kind: "jiti", path: "/path/to/jiti-register.mjs" });
 		assert.equal(result.loader, "jiti");
 		assert.ok(result.args.some((a) => a.includes("jiti-register.mjs")));
 		assert.ok(result.args.some((a) => a === "--import"));
@@ -106,24 +105,14 @@ describe("getBackgroundRunnerCommand", () => {
 	});
 
 	it("returns strip-types command when strip-types loader is provided", () => {
-		const result = getBackgroundRunnerCommand(
-			"/runner.ts",
-			"/project",
-			"run2",
-			{ kind: "strip-types" },
-		);
+		const result = getBackgroundRunnerCommand("/runner.ts", "/project", "run2", { kind: "strip-types" });
 		assert.equal(result.loader, "strip-types");
 		assert.ok(result.args.includes("--experimental-strip-types"));
 		assert.ok(result.args.includes("/runner.ts"));
 	});
 
 	it("includes memory limit flag", () => {
-		const result = getBackgroundRunnerCommand(
-			"/runner.ts",
-			"/project",
-			"run3",
-			{ kind: "jiti", path: "/jiti.mjs" },
-		);
+		const result = getBackgroundRunnerCommand("/runner.ts", "/project", "run3", { kind: "jiti", path: "/jiti.mjs" });
 		assert.ok(result.args.some((a) => a === "--max-old-space-size=512"));
 	});
 
@@ -134,9 +123,6 @@ describe("getBackgroundRunnerCommand", () => {
 	});
 
 	it("throws when loader is explicitly false", () => {
-		assert.throws(
-			() => getBackgroundRunnerCommand("/runner.ts", "/project", "run5", false),
-			/jiti loader not found/,
-		);
+		assert.throws(() => getBackgroundRunnerCommand("/runner.ts", "/project", "run5", false), /jiti loader not found/);
 	});
 });

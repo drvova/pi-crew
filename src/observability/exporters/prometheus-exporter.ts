@@ -5,7 +5,7 @@ function prometheusName(name: string): string {
 }
 
 function escapeLabel(value: string): string {
-	return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/"/g, "\\\"");
+	return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/"/g, '\\"');
 }
 
 function labelsText(labels: MetricLabels): string {

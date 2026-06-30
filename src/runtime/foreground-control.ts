@@ -2,10 +2,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { appendEvent } from "../state/event-log.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
-import { checkProcessLiveness, isActiveRunStatus } from "./process-status.ts";
-import { readCrewAgents } from "./crew-agent-records.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { sleepSync } from "../utils/sleep.ts";
+import { readCrewAgents } from "./crew-agent-records.ts";
+import { checkProcessLiveness, isActiveRunStatus } from "./process-status.ts";
 
 export type ForegroundControlRequestType = "interrupt" | "status";
 
@@ -36,7 +36,9 @@ export function foregroundControlPath(manifest: TeamRunManifest): string {
 function readLastRequest(controlPath: string): ForegroundControlRequest | undefined {
 	if (!fs.existsSync(controlPath)) return undefined;
 	try {
-		const parsed = JSON.parse(fs.readFileSync(controlPath, "utf-8")) as { requests?: ForegroundControlRequest[] };
+		const parsed = JSON.parse(fs.readFileSync(controlPath, "utf-8")) as {
+			requests?: ForegroundControlRequest[];
+		};
 		return parsed.requests?.at(-1);
 	} catch {
 		return undefined;
@@ -53,13 +55,18 @@ export function readForegroundControlStatus(manifest: TeamRunManifest, tasks: Te
 		asyncPid: manifest.async?.pid,
 		asyncAlive,
 		runningTasks: tasks.filter((task) => task.status === "running").map((task) => task.id),
-		runningAgents: readCrewAgents(manifest).filter((agent) => agent.status === "running").map((agent) => agent.id),
+		runningAgents: readCrewAgents(manifest)
+			.filter((agent) => agent.status === "running")
+			.map((agent) => agent.id),
 		controlPath,
 		lastRequest: readLastRequest(controlPath),
 	};
 }
 
-export function writeForegroundInterruptRequest(manifest: TeamRunManifest, reason = "User requested foreground interrupt."): ForegroundControlRequest {
+export function writeForegroundInterruptRequest(
+	manifest: TeamRunManifest,
+	reason = "User requested foreground interrupt.",
+): ForegroundControlRequest {
 	const controlPath = foregroundControlPath(manifest);
 	const lockDir = `${controlPath}.lock`;
 	const pidFile = path.join(lockDir, "pid");
@@ -74,7 +81,11 @@ export function writeForegroundInterruptRequest(manifest: TeamRunManifest, reaso
 		while (true) {
 			try {
 				fs.mkdirSync(lockDir, { recursive: true });
-				try { fs.writeFileSync(pidFile, String(process.pid), "utf-8"); } catch { /* best-effort */ }
+				try {
+					fs.writeFileSync(pidFile, String(process.pid), "utf-8");
+				} catch {
+					/* best-effort */
+				}
 				break;
 			} catch {
 				if (Date.now() - start > timeout) {
@@ -84,10 +95,18 @@ export function writeForegroundInterruptRequest(manifest: TeamRunManifest, reaso
 						const ownerPid = Number.parseInt(raw, 10);
 						if (!Number.isNaN(ownerPid) && ownerPid !== process.pid) {
 							let alive = false;
-							try { process.kill(ownerPid, 0); alive = true; } catch { /* dead */ }
+							try {
+								process.kill(ownerPid, 0);
+								alive = true;
+							} catch {
+								/* dead */
+							}
 							if (!alive) {
 								// Lock is stale — clear it and retry
-								fs.rmSync(lockDir, { recursive: true, force: true });
+								fs.rmSync(lockDir, {
+									recursive: true,
+									force: true,
+								});
 								continue;
 							}
 							// Lock held by live process — throw
@@ -95,7 +114,9 @@ export function writeForegroundInterruptRequest(manifest: TeamRunManifest, reaso
 							logInternalError("foreground-control.lock-timeout", err, `controlPath=${controlPath}`);
 							throw err;
 						}
-					} catch { /* no pid file — continue to throw */ }
+					} catch {
+						/* no pid file — continue to throw */
+					}
 					const err = new Error(`Foreground control lock timeout for ${controlPath}`);
 					logInternalError("foreground-control.lock-timeout", err, `controlPath=${controlPath}`);
 					throw err;
@@ -106,23 +127,37 @@ export function writeForegroundInterruptRequest(manifest: TeamRunManifest, reaso
 					const ownerPid = Number.parseInt(raw, 10);
 					if (!Number.isNaN(ownerPid) && ownerPid !== process.pid) {
 						let alive = false;
-						try { process.kill(ownerPid, 0); alive = true; } catch { /* dead */ }
+						try {
+							process.kill(ownerPid, 0);
+							alive = true;
+						} catch {
+							/* dead */
+						}
 						if (!alive) {
 							const stat = fs.statSync(lockDir);
 							if (Date.now() - stat.mtimeMs > staleMs) {
-								fs.rmSync(lockDir, { recursive: true, force: true });
+								fs.rmSync(lockDir, {
+									recursive: true,
+									force: true,
+								});
 								continue;
 							}
 						}
 					}
-				} catch { /* no pid file — fall through to sleep */ }
+				} catch {
+					/* no pid file — fall through to sleep */
+				}
 				// Brief sleep to avoid CPU spinning
 				sleepSync(10);
 			}
 		}
 	};
 	const releaseLock = (): void => {
-		try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+		try {
+			fs.rmSync(lockDir, { recursive: true, force: true });
+		} catch {
+			/* best-effort */
+		}
 	};
 
 	acquireLock();
@@ -144,7 +179,12 @@ export function writeForegroundInterruptRequest(manifest: TeamRunManifest, reaso
 		};
 		fs.mkdirSync(path.dirname(controlPath), { recursive: true });
 		fs.writeFileSync(controlPath, `${JSON.stringify({ requests: [...requests, request] }, null, 2)}\n`, "utf-8");
-		appendEvent(manifest.eventsPath, { type: "foreground.interrupt_requested", runId: manifest.runId, message: reason, data: { requestId: request.id, controlPath } });
+		appendEvent(manifest.eventsPath, {
+			type: "foreground.interrupt_requested",
+			runId: manifest.runId,
+			message: reason,
+			data: { requestId: request.id, controlPath },
+		});
 		return request;
 	} finally {
 		releaseLock();

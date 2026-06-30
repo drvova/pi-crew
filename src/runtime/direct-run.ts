@@ -7,7 +7,11 @@ export function isDirectRun(manifest: Pick<TeamRunManifest, "team" | "workflow">
 	return manifest.workflow === "direct-agent";
 }
 
-export function directTeamAndWorkflowFromRun(manifest: TeamRunManifest, tasks: TeamTaskState[], agents: AgentConfig[]): { team: TeamConfig; workflow: WorkflowConfig } | undefined {
+export function directTeamAndWorkflowFromRun(
+	manifest: TeamRunManifest,
+	tasks: TeamTaskState[],
+	agents: AgentConfig[],
+): { team: TeamConfig; workflow: WorkflowConfig } | undefined {
 	if (!isDirectRun(manifest)) return undefined;
 	const firstTask = tasks[0];
 	const agentName = firstTask?.agent ?? (manifest.team.replace(/^direct-/, "") || "executor");
@@ -20,7 +24,13 @@ export function directTeamAndWorkflowFromRun(manifest: TeamRunManifest, tasks: T
 			description: `Direct subagent run for ${agentName}`,
 			source: "builtin",
 			filePath: "<generated>",
-			roles: [{ name: role, agent: agentName, description: agent?.description }],
+			roles: [
+				{
+					name: role,
+					agent: agentName,
+					description: agent?.description,
+				},
+			],
 			defaultWorkflow: "direct-agent",
 			workspaceMode: manifest.workspaceMode,
 		},

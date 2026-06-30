@@ -19,27 +19,29 @@
  * (the function is module-local and intentionally not exported), and assert
  * it never throws — which is the property that prevents the EPIPE crash.
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 
 /**
  * Mirror of the fixed `origWrite` in src/runtime/background-runner.ts.
  * If this drift-detector asserts, update both copies in lockstep.
  */
 function makeOrigWrite(getLogFd: () => number | undefined) {
-	return (_prefix: string) => (data: unknown, ...args: unknown[]) => {
-		const logFd = getLogFd();
-		if (logFd === undefined) return;
-		const msg = [data, ...args].map(String).join(" ") + "\n";
-		try {
-			fs.writeSync(logFd, msg);
-		} catch {
-			/* never crash the scheduler over a log write */
-		}
-	};
+	return (_prefix: string) =>
+		(data: unknown, ...args: unknown[]) => {
+			const logFd = getLogFd();
+			if (logFd === undefined) return;
+			const msg = [data, ...args].map(String).join(" ") + "\n";
+			try {
+				fs.writeSync(logFd, msg);
+			} catch {
+				/* never crash the scheduler over a log write */
+			}
+		};
 }
 
 test("origWrite with undefined logFd is a no-op (never throws)", () => {

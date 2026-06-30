@@ -21,7 +21,11 @@ export class TimeWindowedCounter {
 		if (!Number.isFinite(delta)) return;
 		// Cap the event array to prevent unbounded memory growth.
 		if (this.events.length >= TimeWindowedCounter.MAX_EVENTS) this.prune();
-		this.events.push({ timestamp: this.now(), labels: { ...labels }, delta });
+		this.events.push({
+			timestamp: this.now(),
+			labels: { ...labels },
+			delta,
+		});
 		this.prune();
 	}
 
@@ -30,7 +34,9 @@ export class TimeWindowedCounter {
 		this.pruneAt(now);
 		const key = labelKey(labels);
 		const cutoff = now - durationMs;
-		return this.events.filter((event) => event.timestamp >= cutoff && labelKey(event.labels) === key).reduce((sum, event) => sum + event.delta, 0);
+		return this.events
+			.filter((event) => event.timestamp >= cutoff && labelKey(event.labels) === key)
+			.reduce((sum, event) => sum + event.delta, 0);
 	}
 
 	rate(labels: MetricLabels = {}, durationMs = this.windowMs): number {

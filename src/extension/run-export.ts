@@ -1,10 +1,10 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import * as crypto from "node:crypto";
-import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { writeArtifact } from "../state/artifact-store.ts";
 import { readEvents, type TeamEvent } from "../state/event-log.ts";
+import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { redactSecrets } from "../utils/redaction.ts";
 
 /** Replace absolute paths containing home directory with ~/ */
@@ -72,13 +72,22 @@ export function exportRunBundle(manifest: TeamRunManifest, tasks: TeamTaskState[
 			`Goal: ${safeManifest.goal}`,
 			"",
 			"## Tasks",
-			...safeTasks.map((task) => `- ${task.id}: ${task.status} (${task.role} -> ${task.agent})${task.error ? ` - ${task.error}` : ""}`),
+			...safeTasks.map(
+				(task) => `- ${task.id}: ${task.status} (${task.role} -> ${task.agent})${task.error ? ` - ${task.error}` : ""}`,
+			),
 			"",
 			"## Artifacts",
-			...(safeManifest.artifacts.length ? safeManifest.artifacts.map((artifact) => `- ${artifact.kind}: ${artifact.path}`) : ["- (none)"]),
+			...(safeManifest.artifacts.length
+				? safeManifest.artifacts.map((artifact) => `- ${artifact.kind}: ${artifact.path}`)
+				: ["- (none)"]),
 			"",
 			"## Recent Events",
-			...(safeEvents.slice(-20).map((event) => `- ${event.time} ${event.type}${event.taskId ? ` ${event.taskId}` : ""}${event.message ? `: ${event.message}` : ""}`)),
+			...safeEvents
+				.slice(-20)
+				.map(
+					(event) =>
+						`- ${event.time} ${event.type}${event.taskId ? ` ${event.taskId}` : ""}${event.message ? `: ${event.message}` : ""}`,
+				),
 			"",
 		].join("\n"),
 	});

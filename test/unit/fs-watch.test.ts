@@ -1,7 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { closeWatcher, watchWithErrorHandler } from "../../src/utils/fs-watch.ts";
-
 
 test("closeWatcher handles null input", () => {
 	closeWatcher(null);
@@ -10,9 +9,13 @@ test("closeWatcher handles null input", () => {
 test("watchWithErrorHandler invokes fallback when fs.watch throws", () => {
 	let onErrorCalled = false;
 	const nonExistent = `/tmp/pi-crew-watch-missing-${Date.now()}`;
-	const watcher = watchWithErrorHandler(nonExistent, () => {}, () => {
-		onErrorCalled = true;
-	});
+	const watcher = watchWithErrorHandler(
+		nonExistent,
+		() => {},
+		() => {
+			onErrorCalled = true;
+		},
+	);
 	assert.equal(watcher, null, "expected null watcher for a missing dir");
 	assert.equal(onErrorCalled, true, "expected onError to be called");
 });

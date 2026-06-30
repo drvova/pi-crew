@@ -22,25 +22,25 @@
  * `setResult()` reaches the main context.
  */
 
-import { runChildPi } from "./child-pi.ts";
-import { parsePiJsonOutput } from "./pi-json-output.ts";
-import { extractStructuredResult } from "./result-extractor.ts";
-import { mapConcurrent } from "./parallel-utils.ts";
-import { Semaphore } from "./semaphore.ts";
-import { executeWithRetry } from "./retry-executor.ts";
+import { randomBytes } from "node:crypto";
+import type { TSchema } from "@sinclair/typebox";
+import type { AgentConfig } from "../agents/agent-config.ts";
 import { allAgents, discoverAgents } from "../agents/discover-agents.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
 import { appendEvent } from "../state/event-log.ts";
 import { appendMailboxMessage, readMailbox } from "../state/mailbox.ts";
-import { renderPlanTemplate } from "./plan-templates.ts";
-import { prepareAgentWorktree, cleanupAgentWorktree } from "../worktree/worktree-manager.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import { randomBytes } from "node:crypto";
-import type { TSchema } from "@sinclair/typebox";
-import type { AgentConfig } from "../agents/agent-config.ts";
-import type { TeamConfig } from "../teams/team-config.ts";
 import type { TeamRunManifest } from "../state/types.ts";
+import type { TeamConfig } from "../teams/team-config.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { cleanupAgentWorktree, prepareAgentWorktree } from "../worktree/worktree-manager.ts";
+import { runChildPi } from "./child-pi.ts";
 import type { DwfCheckpointState } from "./dwf-state-store.ts";
+import { mapConcurrent } from "./parallel-utils.ts";
+import { parsePiJsonOutput } from "./pi-json-output.ts";
+import { renderPlanTemplate } from "./plan-templates.ts";
+import { extractStructuredResult } from "./result-extractor.ts";
+import { executeWithRetry } from "./retry-executor.ts";
+import { Semaphore } from "./semaphore.ts";
 
 export interface AgentCallOpts {
 	prompt: string;
@@ -120,11 +120,31 @@ export interface WorkflowCtx {
 		...stages: Array<(previous: TResult, original: TItem, index: number) => Promise<TResult> | TResult>
 	): Promise<(TResult | null)[]>;
 	/** Run a reviewer agent over an artifact; parse {outcome, feedback}. §3.2. */
-	review(taskId: string, reviewerRole?: string, opts?: { content?: string; artifactPath?: string; disableTools?: boolean }): Promise<{ outcome: "accept" | "reject" | "changes_requested"; feedback: string }>;
+	review(
+		taskId: string,
+		reviewerRole?: string,
+		opts?: {
+			content?: string;
+			artifactPath?: string;
+			disableTools?: boolean;
+		},
+	): Promise<{
+		outcome: "accept" | "reject" | "changes_requested";
+		feedback: string;
+	}>;
 	/** Re-run a task with feedback (wraps executeWithRetry). */
 	retry(taskId: string, opts?: { feedback?: string }): Promise<AgentResult>;
 	/** Send a mailbox message to another agent/leader. */
-	mail(to: string, body: string, opts?: { kind?: string; taskId?: string; replyTo?: string; replyDeadline?: number }): string;
+	mail(
+		to: string,
+		body: string,
+		opts?: {
+			kind?: string;
+			taskId?: string;
+			replyTo?: string;
+			replyDeadline?: number;
+		},
+	): string;
 	/** Block until N mailbox replies arrive or deadline. ~10 LOC net-new (report 05 §G.4). */
 	gatherReplies(messageIds: string[], deadlineMs: number): Promise<unknown[]>;
 	/** Render a built-in plan template (full-implementation / standard-review). */
@@ -235,7 +255,10 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 	// The events log is the durable source of truth for phase boundaries.
 	// round-18 P2-3: hydrate phaseState from a resumed checkpoint (backward compatible when unset).
 	let phaseState: { currentPhase: string | undefined; phases: string[] } = opts.resumedState
-		? { currentPhase: opts.resumedState.currentPhase, phases: [...opts.resumedState.phases] }
+		? {
+				currentPhase: opts.resumedState.currentPhase,
+				phases: [...opts.resumedState.phases],
+			}
 		: { currentPhase: undefined, phases: [] };
 	let phaseCapWarned = false;
 	// round-14 P1-2/P1-3/P1-5: closure-scoped runtime state shared by budget/log/args.
@@ -271,7 +294,12 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				// round-14 P1-2: budget check BEFORE spawning. When the per-workflow token
 				// budget is exhausted, reject the call without consuming a child worker.
 				if (budget.total !== null && budget.remaining() <= 0) {
-					return { ok: false, text: "", error: "workflow token budget exhausted", durationMs: 0 };
+					return {
+						ok: false,
+						text: "",
+						error: "workflow token budget exhausted",
+						durationMs: 0,
+					};
 				}
 				const agentConfig = resolveAgentForRole(call.role, {
 					explicitAgent: call.agent,
@@ -301,7 +329,10 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 						systemPrompt: composeSchemaSystemPrompt(base, call.schema),
 					};
 				} else if (call.systemPrompt !== undefined) {
-					effectiveAgent = { ...effectiveAgent, systemPrompt: call.systemPrompt };
+					effectiveAgent = {
+						...effectiveAgent,
+						systemPrompt: call.systemPrompt,
+					};
 				}
 				const task = composeAgentTask(call);
 
@@ -311,10 +342,7 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				// when worktree creation is unavailable (no git repo, dirty leader).
 				let agentCwd = manifest.cwd;
 				if (call.worktree === true) {
-					const wt = prepareAgentWorktree(
-						manifest,
-						`dwf-agent-${Date.now()}-${randomBytes(4).toString("hex")}`,
-					);
+					const wt = prepareAgentWorktree(manifest, `dwf-agent-${Date.now()}-${randomBytes(4).toString("hex")}`);
 					if (wt?.worktreePath) {
 						agentCwd = wt.cwd;
 						worktreePath = wt.worktreePath;
@@ -339,7 +367,12 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 					role: call.role ?? call.agent,
 				});
 				if (childResult.exitCode !== 0 || childResult.error) {
-					return { ok: false, text: "", error: childResult.error ?? `exit ${childResult.exitCode}`, durationMs: Date.now() - started };
+					return {
+						ok: false,
+						text: "",
+						error: childResult.error ?? `exit ${childResult.exitCode}`,
+						durationMs: Date.now() - started,
+					};
 				}
 				const parsed = parsePiJsonOutput(childResult.stdout);
 				// round-14 P1-2: accumulate this run's token usage into the workflow budget.
@@ -386,7 +419,12 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				};
 			} catch (error) {
 				logInternalError("dynamic-workflow-context.agent", error, `runId=${manifest.runId}`);
-				return { ok: false, text: "", error: error instanceof Error ? error.message : String(error), durationMs: Date.now() - started };
+				return {
+					ok: false,
+					text: "",
+					error: error instanceof Error ? error.message : String(error),
+					durationMs: Date.now() - started,
+				};
 			} finally {
 				// round-17 P2-4: clean up the worktree after the agent completes (success
 				// OR failure). Captures the diff as an artifact before removal. Best-effort
@@ -452,7 +490,18 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				return value as TResult;
 			});
 		},
-		async review(taskId: string, reviewerRole = "reviewer", reviewOpts?: { content?: string; artifactPath?: string; disableTools?: boolean }): Promise<{ outcome: "accept" | "reject" | "changes_requested"; feedback: string }> {
+		async review(
+			taskId: string,
+			reviewerRole = "reviewer",
+			reviewOpts?: {
+				content?: string;
+				artifactPath?: string;
+				disableTools?: boolean;
+			},
+		): Promise<{
+			outcome: "accept" | "reject" | "changes_requested";
+			feedback: string;
+		}> {
 			// review() is a VERDICT step: it must produce a parseable JSON {outcome, feedback}, not a
 			// free-form markdown review. The resolved reviewer agent (e.g. ~/.pi/agent/agents/reviewer.md)
 			// has tools (read/grep/bash) + a markdown-output system prompt. Without disableTools, the
@@ -470,13 +519,15 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				prompt: `You are reviewing the work for task '${taskId}'.${workContext}\n\nEvaluate the work and respond with ONLY a single JSON object, no prose, no markdown:\n{"outcome":"accept|reject|changes_requested","feedback":"<one-paragraph explanation>"}\n\n- "accept": work is complete and correct.\n- "reject": work is fundamentally wrong.\n- "changes_requested": work needs revision (explain what in feedback).`,
 				maxTurns: 3,
 				disableTools,
-				systemPrompt: "You are a JSON verdict judge. You output ONLY a single JSON object with keys \"outcome\" (one of accept/reject/changes_requested) and \"feedback\" (a concise explanation). Never output prose, markdown, or code fences. Begin your response with { and end with }.",
+				systemPrompt:
+					'You are a JSON verdict judge. You output ONLY a single JSON object with keys "outcome" (one of accept/reject/changes_requested) and "feedback" (a concise explanation). Never output prose, markdown, or code fences. Begin your response with { and end with }.',
 			});
 			const extracted = res.structured as { outcome?: string; feedback?: string } | undefined;
 			if (extracted && typeof extracted.outcome === "string" && typeof extracted.feedback === "string") {
-				const outcome = (extracted.outcome === "accept" || extracted.outcome === "reject" || extracted.outcome === "changes_requested")
-					? extracted.outcome
-					: "changes_requested";
+				const outcome =
+					extracted.outcome === "accept" || extracted.outcome === "reject" || extracted.outcome === "changes_requested"
+						? extracted.outcome
+						: "changes_requested";
 				return { outcome, feedback: extracted.feedback };
 			}
 			// Fallback (round-11 runtime): many models (e.g. MiniMax-M3) ignore JSON-output
@@ -491,13 +542,15 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 					prompt: `Convert the following code review into a verdict JSON. Read the review and decide the outcome.\n\nREVIEW:\n"""\n${res.text.slice(0, 4000)}\n"""\n\nRespond with ONLY a JSON object:\n{"outcome":"accept|reject|changes_requested","feedback":"<concise summary>"}\n- accept: review found no real issues.\n- reject: review found critical/fundamental problems.\n- changes_requested: review found issues that need fixing.`,
 					maxTurns: 1,
 					disableTools: true,
-					systemPrompt: "You output ONLY a single JSON object with keys outcome and feedback. Begin with { and end with }. Never output prose.",
+					systemPrompt:
+						"You output ONLY a single JSON object with keys outcome and feedback. Begin with { and end with }. Never output prose.",
 				});
 				const judged = judge.structured as { outcome?: string; feedback?: string } | undefined;
 				if (judged && typeof judged.outcome === "string" && typeof judged.feedback === "string") {
-					const outcome = (judged.outcome === "accept" || judged.outcome === "reject" || judged.outcome === "changes_requested")
-						? judged.outcome
-						: "changes_requested";
+					const outcome =
+						judged.outcome === "accept" || judged.outcome === "reject" || judged.outcome === "changes_requested"
+							? judged.outcome
+							: "changes_requested";
 					return { outcome, feedback: judged.feedback };
 				}
 			}
@@ -510,20 +563,41 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 			// always the hardcoded 'changes_requested' default (e.g. correct code was
 			// misclassified as needing changes).
 			if (res.text.trim()) {
-				return { outcome: classifyReviewOutcome(res.text), feedback: res.text };
+				return {
+					outcome: classifyReviewOutcome(res.text),
+					feedback: res.text,
+				};
 			}
-			return { outcome: "changes_requested", feedback: res.text || "(reviewer produced no parseable verdict)" };
+			return {
+				outcome: "changes_requested",
+				feedback: res.text || "(reviewer produced no parseable verdict)",
+			};
 		},
 		async retry(taskId: string, retryOpts?: { feedback?: string }): Promise<AgentResult> {
 			return executeWithRetry(
-				async () => ctx.agent({
-					role: "executor",
-					prompt: `Re-do task '${taskId}'.${retryOpts?.feedback ? ` Feedback: ${retryOpts.feedback}` : ""}`,
-				}),
-				{ maxAttempts: 3, backoffMs: 0, jitterRatio: 0, exponentialFactor: 1 },
+				async () =>
+					ctx.agent({
+						role: "executor",
+						prompt: `Re-do task '${taskId}'.${retryOpts?.feedback ? ` Feedback: ${retryOpts.feedback}` : ""}`,
+					}),
+				{
+					maxAttempts: 3,
+					backoffMs: 0,
+					jitterRatio: 0,
+					exponentialFactor: 1,
+				},
 			);
 		},
-		mail(to: string, body: string, mailOpts?: { kind?: string; taskId?: string; replyTo?: string; replyDeadline?: number }): string {
+		mail(
+			to: string,
+			body: string,
+			mailOpts?: {
+				kind?: string;
+				taskId?: string;
+				replyTo?: string;
+				replyDeadline?: number;
+			},
+		): string {
 			const msg = appendMailboxMessage(manifest, {
 				direction: "outbox",
 				from: "dynamic-workflow",
@@ -577,7 +651,9 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 					phaseCapWarned = true;
 					logInternalError(
 						"dynamic-workflow-context.phase-cap",
-						new Error("Phase list cap of 100 reached; further phases still emit events but are not added to the in-memory phases[] list. Use the events log as the durable source of truth."),
+						new Error(
+							"Phase list cap of 100 reached; further phases still emit events but are not added to the in-memory phases[] list. Use the events log as the durable source of truth.",
+						),
 						`runId=${manifest.runId}`,
 					);
 				}
@@ -638,12 +714,26 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 
 /** Read the final result set by the script (runner-only; not part of the public ctx surface). */
 export function getWorkflowFinalResult(ctx: WorkflowCtx): { artifactPath: string; meta?: Record<string, unknown> } | undefined {
-	return (ctx as unknown as { __finalResult?: { artifactPath: string; meta?: Record<string, unknown> } }).__finalResult;
+	return (
+		ctx as unknown as {
+			__finalResult?: {
+				artifactPath: string;
+				meta?: Record<string, unknown>;
+			};
+		}
+	).__finalResult;
 }
 
 /** Read the in-memory phase state set by the script (runner-only; not part of the public ctx surface). */
 export function getWorkflowPhaseState(ctx: WorkflowCtx): { currentPhase: string | undefined; phases: string[] } | undefined {
-	return (ctx as unknown as { __phaseState?: { currentPhase: string | undefined; phases: string[] } }).__phaseState;
+	return (
+		ctx as unknown as {
+			__phaseState?: {
+				currentPhase: string | undefined;
+				phases: string[];
+			};
+		}
+	).__phaseState;
 }
 
 /** Read the in-memory log buffer appended by ctx.log() (runner-only; not part of the public ctx surface).
@@ -753,22 +843,58 @@ export function classifyReviewOutcome(prose: string): "accept" | "reject" | "cha
 	const text = prose.toLowerCase();
 	// Strong negative signals → reject. These indicate fundamental/critical problems.
 	const rejectSignals = [
-		"\breject\b", "fundamentally", "completely broken", "totally broken",
-		"critical bug", "critical issue", "critical flaw", "security vulnerability",
-		"does not work", "doesn't work", "will not work", "fails to",
-		"unacceptable", "must not be merged", "do not merge", "wrong approach",
-		"logically incorrect", "incorrectly implements", "returns the opposite",
-		"subtraction instead of addition", "opposite of its intended",
+		"\breject\b",
+		"fundamentally",
+		"completely broken",
+		"totally broken",
+		"critical bug",
+		"critical issue",
+		"critical flaw",
+		"security vulnerability",
+		"does not work",
+		"doesn't work",
+		"will not work",
+		"fails to",
+		"unacceptable",
+		"must not be merged",
+		"do not merge",
+		"wrong approach",
+		"logically incorrect",
+		"incorrectly implements",
+		"returns the opposite",
+		"subtraction instead of addition",
+		"opposite of its intended",
 	];
 	// Acceptance signals → accept. These indicate explicit approval with no real issues.
 	const acceptSignals = [
-		"\baccept\b", "looks good", "well done", "no issues", "no real issues",
-		"no problems", "no concerns", "nothing to change", "ready to merge",
-		"lgtm", "ship it", "correctly implements", "correctly returns",
-		"works as expected", "works correctly", "no bugs", "no defects",
-		"meets all requirements", "all requirements met", "passes all",
-		"is correct", "are correct", "no changes needed", "no changes required",
-		"no further changes", "nothing more to", "complete and correct", "sound implementation",
+		"\baccept\b",
+		"looks good",
+		"well done",
+		"no issues",
+		"no real issues",
+		"no problems",
+		"no concerns",
+		"nothing to change",
+		"ready to merge",
+		"lgtm",
+		"ship it",
+		"correctly implements",
+		"correctly returns",
+		"works as expected",
+		"works correctly",
+		"no bugs",
+		"no defects",
+		"meets all requirements",
+		"all requirements met",
+		"passes all",
+		"is correct",
+		"are correct",
+		"no changes needed",
+		"no changes required",
+		"no further changes",
+		"nothing more to",
+		"complete and correct",
+		"sound implementation",
 	];
 	const hasReject = rejectSignals.some((sig) => new RegExp(sig).test(text));
 	const hasAccept = acceptSignals.some((sig) => new RegExp(sig).test(text));
@@ -808,7 +934,9 @@ export function extractTextFallback(stdout: string): string {
 		try {
 			const obj = JSON.parse(lineTrim);
 			collect(obj);
-		} catch { /* skip */ }
+		} catch {
+			/* skip */
+		}
 	}
 	// 2. If nothing from JSON, try plain text (longest non-empty line that's not JSON)
 	if (candidates.length === 0) {

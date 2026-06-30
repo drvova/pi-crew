@@ -1,6 +1,6 @@
+import { pad, truncate } from "../../utils/visual.ts";
 import { Box, Text } from "../layout-primitives.ts";
 import { asCrewTheme, type CrewTheme } from "../theme-adapter.ts";
-import { pad, truncate } from "../../utils/visual.ts";
 
 export interface ConfirmOptions {
 	title: string;
@@ -34,7 +34,9 @@ export class ConfirmOverlay {
 			`╭${"─".repeat(innerWidth)}╮`,
 			`│ ${pad(truncate(title, innerWidth - 1), innerWidth - 1)}│`,
 			`├${"─".repeat(innerWidth)}┤`,
-			...(bodyLines.length ? bodyLines : ["Are you sure?"]).map((line) => `│ ${pad(truncate(line, innerWidth - 1), innerWidth - 1)}│`),
+			...(bodyLines.length ? bodyLines : ["Are you sure?"]).map(
+				(line) => `│ ${pad(truncate(line, innerWidth - 1), innerWidth - 1)}│`,
+			),
 			`├${"─".repeat(innerWidth)}┤`,
 			`│ ${pad(truncate(this.theme.fg("dim", hint), innerWidth - 1), innerWidth - 1)}│`,
 			`╰${"─".repeat(innerWidth)}╯`,

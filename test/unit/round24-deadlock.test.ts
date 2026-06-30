@@ -17,19 +17,20 @@
  *  (b) the unlocked apply path actually compacts;
  *  (c) the public locked variants still work standalone.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
+import { withEventLogLockSync } from "../../src/state/event-log.ts";
 import {
+	applyCompactionUnlocked,
 	compactEventLog,
 	prepareCompaction,
-	applyCompactionUnlocked,
 	rotateEventLog,
 	rotateEventLogUnlocked,
 } from "../../src/state/event-log-rotation.ts";
-import { withEventLogLockSync } from "../../src/state/event-log.ts";
 
 function tmpDir(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-r24-deadlock-"));
@@ -39,7 +40,14 @@ function writeEvents(filePath: string, count: number): void {
 	const lines: string[] = [];
 	for (let i = 0; i < count; i++) {
 		const ts = new Date(Date.parse("2025-01-01T00:00:00.000Z") + i * 1000).toISOString();
-		lines.push(JSON.stringify({ time: ts, type: "tick", runId: "r1", metadata: { seq: i + 1, provenance: "test" } }));
+		lines.push(
+			JSON.stringify({
+				time: ts,
+				type: "tick",
+				runId: "r1",
+				metadata: { seq: i + 1, provenance: "test" },
+			}),
+		);
 	}
 	fs.writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
 }
@@ -50,7 +58,9 @@ describe("Round 24 BUG 1: re-entrant lock deadlock on compaction/rotation", () =
 		const filePath = path.join(dir, "events.jsonl");
 		writeEvents(filePath, 100);
 		try {
-			const prepared = prepareCompaction(filePath, { compactToCount: 10 });
+			const prepared = prepareCompaction(filePath, {
+				compactToCount: 10,
+			});
 			assert.ok(prepared, "prepareCompaction should produce a plan for 100 events (compactToCount=10)");
 			const result = applyCompactionUnlocked(filePath, prepared!);
 			assert.ok(result, "compaction should produce a result");
@@ -75,7 +85,9 @@ describe("Round 24 BUG 1: re-entrant lock deadlock on compaction/rotation", () =
 			// unlocked core (the fix). This must complete FAST (< 2s, well under the
 			// 5s timeout) and actually compact.
 			const result = withEventLogLockSync(filePath, () => {
-				const prepared = prepareCompaction(filePath, { compactToCount: 10 });
+				const prepared = prepareCompaction(filePath, {
+					compactToCount: 10,
+				});
 				return prepared ? applyCompactionUnlocked(filePath, prepared) : undefined;
 			});
 			const elapsed = Date.now() - start;
@@ -98,7 +110,10 @@ describe("Round 24 BUG 1: re-entrant lock deadlock on compaction/rotation", () =
 			assert.equal(result, true, "rotation should succeed inside the lock");
 			// Original file truncated to empty; archive created.
 			assert.equal(fs.readFileSync(filePath, "utf-8"), "", "original truncated");
-			assert.ok(fs.readdirSync(dir).some((f) => f.endsWith(".archive.jsonl")), "archive created");
+			assert.ok(
+				fs.readdirSync(dir).some((f) => f.endsWith(".archive.jsonl")),
+				"archive created",
+			);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}

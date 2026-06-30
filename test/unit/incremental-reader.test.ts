@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { readLinesSince, readJsonlSince, type IncrementalReadState } from "../../src/utils/incremental-reader.ts";
+import test from "node:test";
+import { type IncrementalReadState, readJsonlSince, readLinesSince } from "../../src/utils/incremental-reader.ts";
 
 function makeTempDir(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-inc-reader-"));
@@ -96,13 +96,7 @@ test("readJsonlSince skips malformed lines", () => {
 	const dir = makeTempDir();
 	const filePath = path.join(dir, "mixed.jsonl");
 	try {
-		const lines = [
-			'{"type":"ok","id":1}',
-			"NOT VALID JSON",
-			'{"type":"ok","id":2}',
-			"{broken",
-			'{"type":"ok","id":3}',
-		];
+		const lines = ['{"type":"ok","id":1}', "NOT VALID JSON", '{"type":"ok","id":2}', "{broken", '{"type":"ok","id":3}'];
 		fs.writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
 		const result = readJsonlSince<{ type: string; id: number }>(filePath, initial());
 		assert.equal(result.items.length, 3);

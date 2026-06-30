@@ -19,7 +19,13 @@ export function writeAsyncStartMarker(manifest: Pick<TeamRunManifest, "stateRoot
 export function hasAsyncStartMarker(manifest: Pick<TeamRunManifest, "stateRoot">): boolean {
 	try {
 		const raw = JSON.parse(fs.readFileSync(asyncStartMarkerPath(manifest), "utf-8")) as Partial<AsyncStartMarker>;
-		return typeof raw.pid === "number" && Number.isInteger(raw.pid) && raw.pid > 0 && typeof raw.startedAt === "string" && raw.startedAt.length > 0;
+		return (
+			typeof raw.pid === "number" &&
+			Number.isInteger(raw.pid) &&
+			raw.pid > 0 &&
+			typeof raw.startedAt === "string" &&
+			raw.startedAt.length > 0
+		);
 	} catch {
 		return false;
 	}

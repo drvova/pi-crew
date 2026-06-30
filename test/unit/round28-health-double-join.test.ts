@@ -11,11 +11,12 @@
  *
  * Fix: crewRoot = 3 dirnames up; HEALTH_DIR = "state/health" (relative to crew root).
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import { HealthStore } from "../../src/state/health-store.ts";
 
 function tmpDir(): string {

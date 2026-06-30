@@ -1,10 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { RenderCoalescer } from "../../src/ui/render-coalescer.ts";
 
 test("RenderCoalescer — initial state", () => {
 	let calls = 0;
-	const coalescer = new RenderCoalescer(() => { calls++; }, 10);
+	const coalescer = new RenderCoalescer(() => {
+		calls++;
+	}, 10);
 	assert.equal(coalescer.pending, false);
 	assert.equal(calls, 0);
 	coalescer.dispose();
@@ -12,7 +14,9 @@ test("RenderCoalescer — initial state", () => {
 
 test("RenderCoalescer — request() triggers callback after interval", async () => {
 	let calls = 0;
-	const coalescer = new RenderCoalescer(() => { calls++; }, 10);
+	const coalescer = new RenderCoalescer(() => {
+		calls++;
+	}, 10);
 	coalescer.request();
 	assert.equal(coalescer.pending, true);
 	assert.equal(calls, 0);
@@ -24,7 +28,9 @@ test("RenderCoalescer — request() triggers callback after interval", async () 
 
 test("RenderCoalescer — multiple request() calls only trigger one callback", async () => {
 	let calls = 0;
-	const coalescer = new RenderCoalescer(() => { calls++; }, 20);
+	const coalescer = new RenderCoalescer(() => {
+		calls++;
+	}, 20);
 	coalescer.request();
 	coalescer.request();
 	coalescer.request();
@@ -40,7 +46,9 @@ test("RenderCoalescer — multiple request() calls only trigger one callback", a
 
 test("RenderCoalescer — flush() triggers callback immediately", () => {
 	let calls = 0;
-	const coalescer = new RenderCoalescer(() => { calls++; }, 1000);
+	const coalescer = new RenderCoalescer(() => {
+		calls++;
+	}, 1000);
 	coalescer.request();
 	assert.equal(calls, 0);
 	coalescer.flush();
@@ -51,7 +59,9 @@ test("RenderCoalescer — flush() triggers callback immediately", () => {
 
 test("RenderCoalescer — flush() clears pending timer", async () => {
 	let calls = 0;
-	const coalescer = new RenderCoalescer(() => { calls++; }, 30);
+	const coalescer = new RenderCoalescer(() => {
+		calls++;
+	}, 30);
 	coalescer.request();
 	coalescer.flush();
 	assert.equal(calls, 1);
@@ -63,7 +73,9 @@ test("RenderCoalescer — flush() clears pending timer", async () => {
 
 test("RenderCoalescer — dispose() prevents callback from firing", async () => {
 	let calls = 0;
-	const coalescer = new RenderCoalescer(() => { calls++; }, 20);
+	const coalescer = new RenderCoalescer(() => {
+		calls++;
+	}, 20);
 	coalescer.request();
 	assert.equal(coalescer.pending, true);
 	coalescer.dispose();

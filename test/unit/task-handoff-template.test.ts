@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { HANDOFF_TEMPLATE, renderTaskPacket } from "../../src/runtime/task-packet.ts";
 import type { TaskPacket } from "../../src/state/types.ts";
 

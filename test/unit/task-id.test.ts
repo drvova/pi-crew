@@ -1,12 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	hashToBase36,
-	calculateAdaptiveLength,
-	generateTaskHashId,
-	parseHierarchicalId,
-	childId,
-} from "../../src/runtime/task-id.ts";
+import { describe, it } from "node:test";
+import { calculateAdaptiveLength, childId, generateTaskHashId, hashToBase36, parseHierarchicalId } from "../../src/runtime/task-id.ts";
 
 describe("task-id: hashToBase36", () => {
 	it("produces a string of the requested length", () => {

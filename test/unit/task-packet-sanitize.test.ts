@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import type { WorkflowStep } from "../../src/workflows/workflow-config.ts";
+import test from "node:test";
+import { buildTaskPacket, sanitizeTaskText } from "../../src/runtime/task-packet.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
-import { sanitizeTaskText, buildTaskPacket } from "../../src/runtime/task-packet.ts";
+import type { WorkflowStep } from "../../src/workflows/workflow-config.ts";
 
 const manifest: TeamRunManifest = {
 	schemaVersion: 1,
@@ -90,10 +90,7 @@ test("buildTaskPacket respects {goal} placeholder after sanitization (SEC-007)",
 		taskId: "test",
 		cwd: process.cwd(),
 	});
-	assert.ok(
-		packet.objective.includes("test goal"),
-		"Goal should be substituted"
-	);
+	assert.ok(packet.objective.includes("test goal"), "Goal should be substituted");
 	assert.ok(packet.objective.includes("security issues"), "Task content preserved");
 });
 

@@ -13,12 +13,7 @@ type WidgetOptionsWithPersist = WidgetOptions & { persist?: boolean };
 
 type CustomOptions = Parameters<ExtensionUi["custom"]>[1];
 
-type CustomFactory<T> = (
-	tui: unknown,
-	theme: unknown,
-	keybindings: unknown,
-	done: (result: T) => void,
-) => unknown;
+type CustomFactory<T> = (tui: unknown, theme: unknown, keybindings: unknown, done: (result: T) => void) => unknown;
 type GenericCustom = <T>(factory: CustomFactory<T>, options?: CustomOptions) => Promise<T>;
 
 function maybeRecord(value: unknown): Record<string, unknown> | undefined {
@@ -41,7 +36,12 @@ export function setWorkingIndicator(ctx: UiContext, options?: WorkingIndicatorOp
 	if (typeof fn === "function") fn.call(ctx.ui, options);
 }
 
-export function setExtensionWidget(ctx: UiContext, key: string, content: WidgetContent | undefined, options?: WidgetOptionsWithPersist): void {
+export function setExtensionWidget(
+	ctx: UiContext,
+	key: string,
+	content: WidgetContent | undefined,
+	options?: WidgetOptionsWithPersist,
+): void {
 	const { persist: _persist, ...widgetOptions } = options ?? {};
 	ctx.ui.setWidget(key, content as never, widgetOptions as WidgetOptions);
 }

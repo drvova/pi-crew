@@ -6,11 +6,7 @@
 // file for backwards compat — existing `import { CrewUiConfig } from "../config/config.ts"`
 // continues to work.
 
-export type PiTeamsAutonomyProfile =
-	| "manual"
-	| "suggested"
-	| "assisted"
-	| "aggressive";
+export type PiTeamsAutonomyProfile = "manual" | "suggested" | "assisted" | "aggressive";
 
 export interface PiTeamsAutonomousConfig {
 	profile?: PiTeamsAutonomyProfile;
@@ -34,11 +30,7 @@ export interface CrewLimitsConfig {
 	heartbeatStaleMs?: number;
 }
 
-export type CrewRuntimeMode =
-	| "auto"
-	| "scaffold"
-	| "child-process"
-	| "live-session";
+export type CrewRuntimeMode = "auto" | "scaffold" | "child-process" | "live-session";
 
 export type CompletionMutationGuardMode = "off" | "warn" | "fail";
 export type EffectivenessGuardMode = "off" | "warn" | "block" | "fail";
@@ -109,16 +101,7 @@ export interface CrewUiConfig {
 	showTools?: boolean;
 	transcriptTailBytes?: number;
 	mascotStyle?: "cat" | "armin";
-	mascotEffect?:
-		| "random"
-		| "none"
-		| "typewriter"
-		| "scanline"
-		| "rain"
-		| "fade"
-		| "crt"
-		| "glitch"
-		| "dissolve";
+	mascotEffect?: "random" | "none" | "typewriter" | "scanline" | "rain" | "fade" | "crt" | "glitch" | "dissolve";
 }
 
 export interface AgentOverrideConfig {
@@ -150,11 +133,7 @@ export interface CrewPolicyConfig {
 	disabledCapabilities?: string[];
 }
 
-export type CrewNotificationSeverity =
-	| "info"
-	| "warning"
-	| "error"
-	| "critical";
+export type CrewNotificationSeverity = "info" | "warning" | "error" | "critical";
 
 export interface CrewNotificationsConfig {
 	enabled?: boolean;

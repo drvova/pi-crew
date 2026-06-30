@@ -7,11 +7,12 @@
  * child-pi spawn. The user's main session never carries the marker, so it
  * can never be matched by zombie detection.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
-import { buildPiWorkerArgs } from "../../src/runtime/pi-args.ts";
-import { scanZombieSubagents, formatZombieReport } from "../../src/runtime/zombie-scanner.ts";
+import test from "node:test";
 import type { AgentConfig } from "../../src/agents/agent-config.ts";
+import { buildPiWorkerArgs } from "../../src/runtime/pi-args.ts";
+import { formatZombieReport, scanZombieSubagents } from "../../src/runtime/zombie-scanner.ts";
 
 function fakeAgent(): AgentConfig {
 	return {
@@ -27,7 +28,10 @@ function fakeAgent(): AgentConfig {
 }
 
 test("buildPiWorkerArgs: does NOT add an unknown argv flag (pi rejects unknown options)", () => {
-	const { args } = buildPiWorkerArgs({ task: "do thing", agent: fakeAgent() });
+	const { args } = buildPiWorkerArgs({
+		task: "do thing",
+		agent: fakeAgent(),
+	});
 	// Regression guard: an earlier fix tried to prepend `--crew-subagent`, but pi's
 	// strict option parser exits non-zero on unknown flags, breaking every agent call.
 	assert.ok(!args.includes("--crew-subagent"), "must not add argv flags pi does not recognize");

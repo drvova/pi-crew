@@ -1,18 +1,20 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { GoalStore } from "../../src/runtime/goal-state-store.ts";
-import { clearProjectRootCache } from "../../src/utils/paths.ts";
 import type { GoalLoopState } from "../../src/state/types.ts";
+import { clearProjectRootCache } from "../../src/utils/paths.ts";
 
 function makeTmpCwd(): string {
 	clearProjectRootCache(); // findRepoRoot has a global cache (paths.ts:71) — clear it so each tmpdir resolves correctly.
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-goal-store-"));
 	// Pre-create `.crew` so projectCrewRoot(cwd) resolves to `<cwd>/.crew` deterministically
 	// (otherwise findRepoRoot may walk up to /tmp and a sibling test's cache entry can win under concurrency).
-	fs.mkdirSync(path.join(cwd, ".crew", "state", "goals"), { recursive: true });
+	fs.mkdirSync(path.join(cwd, ".crew", "state", "goals"), {
+		recursive: true,
+	});
 	return cwd;
 }
 
@@ -74,7 +76,11 @@ test("GoalStore.patch() merges fields and preserves goalId + createdAt", () => {
 		const original = store.load(id);
 		assert.ok(original);
 
-		const patched = store.patch(id, { state: "achieved", turnsUsed: 3, budgetUsed: 12345 });
+		const patched = store.patch(id, {
+			state: "achieved",
+			turnsUsed: 3,
+			budgetUsed: 12345,
+		});
 		assert.ok(patched);
 		assert.equal(patched!.state, "achieved");
 		assert.equal(patched!.turnsUsed, 3);
@@ -167,7 +173,14 @@ test("GoalStore rejects path-traversal goalIds (§0c C10 — assertSafePathId)",
 		const store = new GoalStore(cwd);
 		// `../escape` must be rejected by assertSafePathId before any file access.
 		assert.throws(() => store.load("../escape"), /goalId/i);
-		assert.throws(() => store.save({ ...sampleGoal(cwd, "../escape"), goalId: "../escape" }), /goalId/i);
+		assert.throws(
+			() =>
+				store.save({
+					...sampleGoal(cwd, "../escape"),
+					goalId: "../escape",
+				}),
+			/goalId/i,
+		);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}

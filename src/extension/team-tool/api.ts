@@ -1,28 +1,46 @@
 import * as fs from "node:fs";
 import { loadConfig } from "../../config/config.ts";
-import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
-import { loadRunManifestById, saveRunManifest, saveRunTasks, updateRunStatus } from "../../state/state-store.ts";
-import { withRunLockSync } from "../../state/locks.ts";
-import { canTransitionTaskStatus, isTeamTaskStatus } from "../../state/contracts.ts";
-import { claimTask, releaseTaskClaim, transitionClaimedTaskStatus } from "../../state/task-claims.ts";
-import { acknowledgeMailboxMessage, appendFollowUpMessage, appendMailboxMessage, appendSteeringMessage, readDeliveryState, readMailbox, readMailboxMessage, validateMailbox, type MailboxDirection, type MailboxMessageKind } from "../../state/mailbox.ts";
-import { appendEvent, readEvents, readEventsCursor } from "../../state/event-log.ts";
-import { resolveCrewRuntime } from "../../runtime/runtime-resolver.ts";
-import { probeLiveSessionRuntime } from "../../subagents/live/session-runtime.ts";
-import { currentCrewRole, permissionForRole } from "../../runtime/role-permission.ts";
-import { touchWorkerHeartbeat } from "../../runtime/worker-heartbeat.ts";
-import { agentOutputPath, readCrewAgentEventsCursor, readCrewAgentStatus, readCrewAgents } from "../../runtime/crew-agent-records.ts";
-import { terminateLiveAgentsForRun } from "../../runtime/live-agent-manager.ts";
 import { buildAgentDashboard, readAgentOutput } from "../../runtime/agent-observability.ts";
-import { readForegroundControlStatus, writeForegroundInterruptRequest } from "../../runtime/foreground-control.ts";
-import { followUpLiveAgent, getLiveAgent, listActiveLiveAgents, resumeLiveAgent, steerLiveAgent, stopLiveAgent } from "../../subagents/live/manager.ts";
-import { appendLiveAgentControlRequest } from "../../subagents/live/control.ts";
-import { liveControlRealtimeMessage, publishLiveControlRealtime } from "../../subagents/live/realtime.ts";
-import { logInternalError } from "../../utils/internal-error.ts";
 import { buildCapabilityInventory } from "../../runtime/capability-inventory.ts";
+import { agentOutputPath, readCrewAgentEventsCursor, readCrewAgentStatus, readCrewAgents } from "../../runtime/crew-agent-records.ts";
+import { readForegroundControlStatus, writeForegroundInterruptRequest } from "../../runtime/foreground-control.ts";
+import { terminateLiveAgentsForRun } from "../../runtime/live-agent-manager.ts";
+import { currentCrewRole, permissionForRole } from "../../runtime/role-permission.ts";
+import { resolveCrewRuntime } from "../../runtime/runtime-resolver.ts";
+import { touchWorkerHeartbeat } from "../../runtime/worker-heartbeat.ts";
+import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
+import { canTransitionTaskStatus, isTeamTaskStatus } from "../../state/contracts.ts";
+import { appendEvent, readEvents, readEventsCursor } from "../../state/event-log.ts";
+import { withRunLockSync } from "../../state/locks.ts";
+import {
+	acknowledgeMailboxMessage,
+	appendFollowUpMessage,
+	appendMailboxMessage,
+	appendSteeringMessage,
+	type MailboxDirection,
+	type MailboxMessageKind,
+	readDeliveryState,
+	readMailbox,
+	readMailboxMessage,
+	validateMailbox,
+} from "../../state/mailbox.ts";
+import { loadRunManifestById, saveRunManifest, saveRunTasks, updateRunStatus } from "../../state/state-store.ts";
+import { claimTask, releaseTaskClaim, transitionClaimedTaskStatus } from "../../state/task-claims.ts";
+import { appendLiveAgentControlRequest } from "../../subagents/live/control.ts";
+import {
+	followUpLiveAgent,
+	getLiveAgent,
+	listActiveLiveAgents,
+	resumeLiveAgent,
+	steerLiveAgent,
+	stopLiveAgent,
+} from "../../subagents/live/manager.ts";
+import { liveControlRealtimeMessage, publishLiveControlRealtime } from "../../subagents/live/realtime.ts";
+import { probeLiveSessionRuntime } from "../../subagents/live/session-runtime.ts";
+import { logInternalError } from "../../utils/internal-error.ts";
 import { resolveRealContainedPath } from "../../utils/safe-paths.ts";
-import type { PiTeamsToolResult } from "../tool-result.ts";
 import { locateRunCwd } from "../team-tool.ts";
+import type { PiTeamsToolResult } from "../tool-result.ts";
 import { configRecord, result, type TeamContext } from "./context.ts";
 import { RUN_NOT_FOUND_HINT } from "./run-not-found.ts";
 
@@ -30,9 +48,9 @@ export function globMatch(value: string, pattern: string): boolean {
 	// Prevent ReDoS: reject excessively long patterns
 	if (pattern.length > 200) return false;
 	const regex = pattern
-		.replace(/[.+^${}()|[\]\\]/g, "\\$&")  // escape regex special chars
-		.replace(/\*/g, "[^/]*")  // * matches non-slash characters only
-		.replace(/\?/g, "[^/]");  // ? matches single non-slash
+		.replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape regex special chars
+		.replace(/\*/g, "[^/]*") // * matches non-slash characters only
+		.replace(/\?/g, "[^/]"); // ? matches single non-slash
 	return new RegExp(`^${regex}$`).test(value);
 }
 
@@ -68,7 +86,11 @@ function snapshotHasRunId(snapshot: { values?: unknown }, runId: string): boolea
 function canApprovePlan(): { allowed: boolean; reason?: string } {
 	const role = currentCrewRole();
 	if (!role) return { allowed: true };
-	if (permissionForRole(role) === "read_only") return { allowed: false, reason: `Role '${role}' is read-only and cannot approve or cancel plan gates.` };
+	if (permissionForRole(role) === "read_only")
+		return {
+			allowed: false,
+			reason: `Role '${role}' is read-only and cannot approve or cancel plan gates.`,
+		};
 	return { allowed: true };
 }
 
@@ -84,11 +106,18 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 			if (runIdFilter && !snapshotHasRunId(snapshot, runIdFilter)) return false;
 			return true;
 		});
-		return result(JSON.stringify(filtered, null, 2), { action: "api", status: "ok", ...(runIdFilter ? { runId: runIdFilter } : {}) });
+		return result(JSON.stringify(filtered, null, 2), {
+			action: "api",
+			status: "ok",
+			...(runIdFilter ? { runId: runIdFilter } : {}),
+		});
 	}
 	if (operation === "inventory") {
 		const inventory = buildCapabilityInventory(ctx.cwd, ctx.config);
-		return result(JSON.stringify(inventory, null, 2), { action: "api", status: "ok" });
+		return result(JSON.stringify(inventory, null, 2), {
+			action: "api",
+			status: "ok",
+		});
 	}
 	if (!params.runId) return result("API requires runId.", { action: "api", status: "error" }, true);
 	const runCwd = locateRunCwd(params.runId, ctx.cwd);
@@ -96,218 +125,737 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 	const loaded = loadRunManifestById(runCwd, params.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 	if (!loaded) return result(`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`, { action: "api", status: "error" }, true);
 	if (operation === "read-manifest") {
-		return result(JSON.stringify(loaded.manifest, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(loaded.manifest, null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "approve-plan") {
 		const permission = canApprovePlan();
-		if (!permission.allowed) return result(permission.reason ?? "Plan approval is not allowed in this context.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!permission.allowed)
+			return result(
+				permission.reason ?? "Plan approval is not allowed in this context.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
 			return withRunLockSync(loaded.manifest, () => {
 				const current = loadRunManifestById(ctx.cwd, loaded.manifest.runId) ?? loaded; // NOTE: inside withRunLockSync - consistent read
 				const approval = current.manifest.planApproval;
-				if (!approval?.required || approval.status !== "pending") return result("Run has no pending plan approval request.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+				if (!approval?.required || approval.status !== "pending")
+					return result(
+						"Run has no pending plan approval request.",
+						{
+							action: "api",
+							status: "error",
+							runId: loaded.manifest.runId,
+						},
+						true,
+					);
 				const now = new Date().toISOString();
-				const manifest = { ...current.manifest, updatedAt: now, planApproval: { ...approval, status: "approved" as const, approvedAt: now, updatedAt: now } };
+				const manifest = {
+					...current.manifest,
+					updatedAt: now,
+					planApproval: {
+						...approval,
+						status: "approved" as const,
+						approvedAt: now,
+						updatedAt: now,
+					},
+				};
 				saveRunManifest(manifest);
-				appendEvent(manifest.eventsPath, { type: "plan.approved", runId: manifest.runId, taskId: approval.planTaskId, message: "Adaptive implementation plan approved; resume the run to execute mutating tasks.", metadata: { provenance: "api" } });
-				return result(JSON.stringify(manifest.planApproval, null, 2), { action: "api", status: "ok", runId: manifest.runId, artifactsRoot: manifest.artifactsRoot });
+				appendEvent(manifest.eventsPath, {
+					type: "plan.approved",
+					runId: manifest.runId,
+					taskId: approval.planTaskId,
+					message: "Adaptive implementation plan approved; resume the run to execute mutating tasks.",
+					metadata: { provenance: "api" },
+				});
+				return result(JSON.stringify(manifest.planApproval, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: manifest.runId,
+					artifactsRoot: manifest.artifactsRoot,
+				});
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "cancel-plan") {
 		const permission = canApprovePlan();
-		if (!permission.allowed) return result(permission.reason ?? "Plan approval cancellation is not allowed in this context.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!permission.allowed)
+			return result(
+				permission.reason ?? "Plan approval cancellation is not allowed in this context.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
 			return withRunLockSync(loaded.manifest, () => {
 				const current = loadRunManifestById(ctx.cwd, loaded.manifest.runId) ?? loaded; // NOTE: inside withRunLockSync - consistent read
 				const approval = current.manifest.planApproval;
-				if (!approval?.required || approval.status !== "pending") return result("Run has no pending plan approval request.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+				if (!approval?.required || approval.status !== "pending")
+					return result(
+						"Run has no pending plan approval request.",
+						{
+							action: "api",
+							status: "error",
+							runId: loaded.manifest.runId,
+						},
+						true,
+					);
 				const now = new Date().toISOString();
-				const tasks = current.tasks.map((task) => task.status === "queued" || task.status === "running" || task.status === "waiting" ? { ...task, status: "cancelled" as const, finishedAt: now, error: "Plan approval was cancelled." } : task);
-				let manifest: typeof current.manifest = { ...current.manifest, updatedAt: now, planApproval: { ...approval, status: "cancelled" as const, cancelledAt: now, updatedAt: now } };
+				const tasks = current.tasks.map((task) =>
+					task.status === "queued" || task.status === "running" || task.status === "waiting"
+						? {
+								...task,
+								status: "cancelled" as const,
+								finishedAt: now,
+								error: "Plan approval was cancelled.",
+							}
+						: task,
+				);
+				let manifest: typeof current.manifest = {
+					...current.manifest,
+					updatedAt: now,
+					planApproval: {
+						...approval,
+						status: "cancelled" as const,
+						cancelledAt: now,
+						updatedAt: now,
+					},
+				};
 				saveRunManifest(manifest);
 				saveRunTasks(manifest, tasks);
-				appendEvent(manifest.eventsPath, { type: "plan.cancelled", runId: manifest.runId, taskId: approval.planTaskId, message: "Adaptive implementation plan was cancelled.", metadata: { provenance: "api" } });
+				appendEvent(manifest.eventsPath, {
+					type: "plan.cancelled",
+					runId: manifest.runId,
+					taskId: approval.planTaskId,
+					message: "Adaptive implementation plan was cancelled.",
+					metadata: { provenance: "api" },
+				});
 				manifest = updateRunStatus(manifest, "cancelled", "Plan approval was cancelled.");
-				void terminateLiveAgentsForRun(manifest.runId, "cancelled", appendEvent, manifest.eventsPath).catch((error) => logInternalError("team-tool.cancel-plan.terminate", error, `runId=${manifest.runId}`));
-				return result(JSON.stringify({ planApproval: manifest.planApproval, cancelledTasks: tasks.filter((task) => task.status === "cancelled").map((task) => task.id) }, null, 2), { action: "api", status: "ok", runId: manifest.runId, artifactsRoot: manifest.artifactsRoot });
+				void terminateLiveAgentsForRun(manifest.runId, "cancelled", appendEvent, manifest.eventsPath).catch((error) =>
+					logInternalError("team-tool.cancel-plan.terminate", error, `runId=${manifest.runId}`),
+				);
+				return result(
+					JSON.stringify(
+						{
+							planApproval: manifest.planApproval,
+							cancelledTasks: tasks.filter((task) => task.status === "cancelled").map((task) => task.id),
+						},
+						null,
+						2,
+					),
+					{
+						action: "api",
+						status: "ok",
+						runId: manifest.runId,
+						artifactsRoot: manifest.artifactsRoot,
+					},
+				);
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "list-tasks") {
-		return result(JSON.stringify(loaded.tasks, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(loaded.tasks, null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "read-task") {
 		const taskId = typeof cfg.taskId === "string" ? cfg.taskId : undefined;
 		const task = loaded.tasks.find((item) => item.id === taskId || item.stepId === taskId);
-		if (!task) return result("API read-task requires config.taskId matching a task id or step id.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-		return result(JSON.stringify(task, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		if (!task)
+			return result(
+				"API read-task requires config.taskId matching a task id or step id.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
+		return result(JSON.stringify(task, null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "read-events") {
 		const sinceSeq = typeof cfg.sinceSeq === "number" ? cfg.sinceSeq : undefined;
 		const limit = typeof cfg.limit === "number" ? cfg.limit : undefined;
-		const payload = sinceSeq !== undefined || limit !== undefined
-			? readEventsCursor(loaded.manifest.eventsPath, { sinceSeq, limit })
-			: { events: readEvents(loaded.manifest.eventsPath), nextSeq: undefined, total: undefined };
-		return result(JSON.stringify(payload, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		const payload =
+			sinceSeq !== undefined || limit !== undefined
+				? readEventsCursor(loaded.manifest.eventsPath, {
+						sinceSeq,
+						limit,
+					})
+				: {
+						events: readEvents(loaded.manifest.eventsPath),
+						nextSeq: undefined,
+						total: undefined,
+					};
+		return result(JSON.stringify(payload, null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "runtime-capabilities") {
 		const loadedConfig = loadConfig(ctx.cwd);
-		return result(JSON.stringify(await resolveCrewRuntime(loadedConfig.config), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(await resolveCrewRuntime(loadedConfig.config), null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "probe-live-session") {
-		return result(JSON.stringify(await probeLiveSessionRuntime(), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(await probeLiveSessionRuntime(), null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "list-agents") {
-		return result(JSON.stringify(readCrewAgents(loaded.manifest), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(readCrewAgents(loaded.manifest), null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "get-agent-result") {
 		const agentId = typeof cfg.agentId === "string" ? cfg.agentId : undefined;
 		const agent = readCrewAgents(loaded.manifest).find((item) => item.id === agentId || item.taskId === agentId);
-		if (!agent) return result("API get-agent-result requires config.agentId matching an agent id or task id.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!agent)
+			return result(
+				"API get-agent-result requires config.agentId matching an agent id or task id.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		const task = loaded.tasks.find((item) => item.id === agent.taskId);
 		const text = safeReadContainedFile(loaded.manifest.artifactsRoot, task?.resultArtifact?.path) ?? JSON.stringify(agent, null, 2);
-		return result(text, { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(text, {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "read-agent-status") {
 		const agentId = typeof cfg.agentId === "string" ? cfg.agentId : undefined;
 		const agent = agentId ? readCrewAgents(loaded.manifest).find((item) => item.id === agentId || item.taskId === agentId) : undefined;
-		const status = agent ? readCrewAgentStatus(loaded.manifest, agent.taskId) ?? agent : undefined;
-		if (!status) return result("API read-agent-status requires config.agentId matching an agent id or task id.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-		return result(JSON.stringify(status, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		const status = agent ? (readCrewAgentStatus(loaded.manifest, agent.taskId) ?? agent) : undefined;
+		if (!status)
+			return result(
+				"API read-agent-status requires config.agentId matching an agent id or task id.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
+		return result(JSON.stringify(status, null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "read-agent-events") {
 		const agentId = typeof cfg.agentId === "string" ? cfg.agentId : undefined;
 		const agents = readCrewAgents(loaded.manifest);
 		const agent = agentId ? agents.find((item) => item.id === agentId || item.taskId === agentId) : agents[0];
-		if (!agent) return result("API read-agent-events requires config.agentId matching an agent id or task id, or at least one agent in the run.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!agent)
+			return result(
+				"API read-agent-events requires config.agentId matching an agent id or task id, or at least one agent in the run.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		const sinceSeq = typeof cfg.sinceSeq === "number" ? cfg.sinceSeq : undefined;
 		const limit = typeof cfg.limit === "number" ? cfg.limit : undefined;
 		const cursorPayload = readCrewAgentEventsCursor(loaded.manifest, agent.taskId, { sinceSeq, limit });
-		const payload = sinceSeq !== undefined || limit !== undefined ? cursorPayload : { path: cursorPayload.path, events: cursorPayload.events };
-		return result(JSON.stringify(payload, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		const payload =
+			sinceSeq !== undefined || limit !== undefined ? cursorPayload : { path: cursorPayload.path, events: cursorPayload.events };
+		return result(JSON.stringify(payload, null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "read-agent-transcript") {
 		const agentId = typeof cfg.agentId === "string" ? cfg.agentId : undefined;
 		const agents = readCrewAgents(loaded.manifest);
 		const agent = agentId ? agents.find((item) => item.id === agentId || item.taskId === agentId) : agents[0];
-		if (!agent) return result("API read-agent-transcript requires config.agentId matching an agent id or task id, or at least one agent in the run.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!agent)
+			return result(
+				"API read-agent-transcript requires config.agentId matching an agent id or task id, or at least one agent in the run.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		const artifactTranscriptPath = safeContainedPath(loaded.manifest.artifactsRoot, agent.transcriptPath);
 		const fallbackPath = agentOutputPath(loaded.manifest, agent.taskId);
-		const artifactText = artifactTranscriptPath ? safeReadContainedFile(loaded.manifest.artifactsRoot, artifactTranscriptPath) ?? "" : "";
-		const fallbackText = artifactText ? "" : safeReadContainedFile(loaded.manifest.stateRoot, fallbackPath) ?? "";
+		const artifactText = artifactTranscriptPath
+			? (safeReadContainedFile(loaded.manifest.artifactsRoot, artifactTranscriptPath) ?? "")
+			: "";
+		const fallbackText = artifactText ? "" : (safeReadContainedFile(loaded.manifest.stateRoot, fallbackPath) ?? "");
 		const transcriptPath = artifactText ? artifactTranscriptPath : fallbackPath;
 		const text = artifactText || fallbackText;
-		return result(text || `(no transcript at ${transcriptPath})`, { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(text || `(no transcript at ${transcriptPath})`, {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "read-agent-output") {
 		const agentId = typeof cfg.agentId === "string" ? cfg.agentId : undefined;
 		const agents = readCrewAgents(loaded.manifest);
 		const agent = agentId ? agents.find((item) => item.id === agentId || item.taskId === agentId) : agents[0];
-		if (!agent) return result("API read-agent-output requires config.agentId matching an agent id or task id, or at least one agent in the run.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!agent)
+			return result(
+				"API read-agent-output requires config.agentId matching an agent id or task id, or at least one agent in the run.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		const maxBytes = typeof cfg.maxBytes === "number" ? cfg.maxBytes : undefined;
-		return result(JSON.stringify(readAgentOutput(loaded.manifest, agent.taskId, maxBytes), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(readAgentOutput(loaded.manifest, agent.taskId, maxBytes), null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "agent-dashboard") {
-		return result(buildAgentDashboard(loaded.manifest).text, { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(buildAgentDashboard(loaded.manifest).text, {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "foreground-status") {
-		return result(JSON.stringify(readForegroundControlStatus(loaded.manifest, loaded.tasks), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(readForegroundControlStatus(loaded.manifest, loaded.tasks), null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "foreground-interrupt") {
 		const reason = typeof cfg.reason === "string" && cfg.reason.trim() ? cfg.reason.trim() : undefined;
-		return result(JSON.stringify(writeForegroundInterruptRequest(loaded.manifest, reason), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(writeForegroundInterruptRequest(loaded.manifest, reason), null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "nudge-agent") {
 		const agentId = typeof cfg.agentId === "string" ? cfg.agentId : undefined;
 		const agent = readCrewAgents(loaded.manifest).find((item) => item.id === agentId || item.taskId === agentId);
-		if (!agent) return result("API nudge-agent requires config.agentId matching an agent id or task id.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-		const messageText = typeof cfg.message === "string" && cfg.message.trim() ? cfg.message.trim() : "Please report your current status, blocker, or smallest next step.";
-		const message = appendSteeringMessage(loaded.manifest, { taskId: agent.taskId, to: agent.taskId, body: messageText, priority: "normal", data: { source: "nudge-agent" } });
-		appendEvent(loaded.manifest.eventsPath, { type: "agent.nudged", runId: loaded.manifest.runId, taskId: agent.taskId, message: messageText, data: { agentId: agent.id, mailboxMessageId: message.id } });
-		ctx.events?.emit?.("crew.mailbox.message", { runId: loaded.manifest.runId, id: message.id, direction: message.direction, from: message.from, to: message.to, taskId: message.taskId, source: "nudge-agent" });
-		return result(JSON.stringify({ agentId: agent.id, mailboxMessage: message }, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		if (!agent)
+			return result(
+				"API nudge-agent requires config.agentId matching an agent id or task id.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
+		const messageText =
+			typeof cfg.message === "string" && cfg.message.trim()
+				? cfg.message.trim()
+				: "Please report your current status, blocker, or smallest next step.";
+		const message = appendSteeringMessage(loaded.manifest, {
+			taskId: agent.taskId,
+			to: agent.taskId,
+			body: messageText,
+			priority: "normal",
+			data: { source: "nudge-agent" },
+		});
+		appendEvent(loaded.manifest.eventsPath, {
+			type: "agent.nudged",
+			runId: loaded.manifest.runId,
+			taskId: agent.taskId,
+			message: messageText,
+			data: { agentId: agent.id, mailboxMessageId: message.id },
+		});
+		ctx.events?.emit?.("crew.mailbox.message", {
+			runId: loaded.manifest.runId,
+			id: message.id,
+			direction: message.direction,
+			from: message.from,
+			to: message.to,
+			taskId: message.taskId,
+			source: "nudge-agent",
+		});
+		return result(JSON.stringify({ agentId: agent.id, mailboxMessage: message }, null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "list-live-agents") {
-		return result(JSON.stringify(listActiveLiveAgents().filter((agent) => agent.runId === loaded.manifest.runId), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(
+			JSON.stringify(
+				listActiveLiveAgents().filter((agent) => agent.runId === loaded.manifest.runId),
+				null,
+				2,
+			),
+			{
+				action: "api",
+				status: "ok",
+				runId: loaded.manifest.runId,
+				artifactsRoot: loaded.manifest.artifactsRoot,
+			},
+		);
 	}
-	if (operation === "steer-agent" || operation === "follow-up-agent" || operation === "stop-agent" || operation === "resume-agent" || operation === "interrupt-agent") {
+	if (
+		operation === "steer-agent" ||
+		operation === "follow-up-agent" ||
+		operation === "stop-agent" ||
+		operation === "resume-agent" ||
+		operation === "interrupt-agent"
+	) {
 		const agentId = typeof cfg.agentId === "string" ? cfg.agentId : undefined;
-		if (!agentId) return result(`API ${operation} requires config.agentId.`, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!agentId)
+			return result(
+				`API ${operation} requires config.agentId.`,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		const message = typeof cfg.message === "string" && cfg.message.trim() ? cfg.message.trim() : undefined;
 		const prompt = typeof cfg.prompt === "string" && cfg.prompt.trim() ? cfg.prompt.trim() : message;
 		try {
 			const live = getLiveAgent(agentId);
-			if (live && live.runId !== loaded.manifest.runId) return result(`Live agent '${agentId}' does not belong to run ${loaded.manifest.runId}.`, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-			if (live && live.workspaceId !== loaded.manifest.cwd) return result(`Live agent '${agentId}' does not belong to workspace ${loaded.manifest.cwd}.`, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-			if (!live && (operation === "steer-agent" || operation === "follow-up-agent")) throw new Error(`Live agent '${agentId}' not found.`);
+			if (live && live.runId !== loaded.manifest.runId)
+				return result(
+					`Live agent '${agentId}' does not belong to run ${loaded.manifest.runId}.`,
+					{
+						action: "api",
+						status: "error",
+						runId: loaded.manifest.runId,
+					},
+					true,
+				);
+			if (live && live.workspaceId !== loaded.manifest.cwd)
+				return result(
+					`Live agent '${agentId}' does not belong to workspace ${loaded.manifest.cwd}.`,
+					{
+						action: "api",
+						status: "error",
+						runId: loaded.manifest.runId,
+					},
+					true,
+				);
+			if (!live && (operation === "steer-agent" || operation === "follow-up-agent"))
+				throw new Error(`Live agent '${agentId}' not found.`);
 			const liveTaskId = live?.taskId;
-			if ((operation === "steer-agent" || operation === "follow-up-agent") && !liveTaskId) throw new Error(`Live agent '${agentId}' not found.`);
+			if ((operation === "steer-agent" || operation === "follow-up-agent") && !liveTaskId)
+				throw new Error(`Live agent '${agentId}' not found.`);
 			const targetTaskId = liveTaskId ?? agentId;
 			if (operation === "steer-agent") {
 				const text = message ?? "Please report current status and wrap up if possible.";
 				const realtime = await steerLiveAgent(agentId, text);
-				const mailboxMessage = appendSteeringMessage(loaded.manifest, { taskId: targetTaskId, body: text, status: "delivered", data: { source: "steer-agent", realtime: true } });
-				return result(JSON.stringify({ realtime, mailboxMessage }, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				const mailboxMessage = appendSteeringMessage(loaded.manifest, {
+					taskId: targetTaskId,
+					body: text,
+					status: "delivered",
+					data: { source: "steer-agent", realtime: true },
+				});
+				return result(JSON.stringify({ realtime, mailboxMessage }, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			}
 			if (operation === "follow-up-agent") {
-				if (!prompt) return result("API follow-up-agent requires config.prompt or config.message.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+				if (!prompt)
+					return result(
+						"API follow-up-agent requires config.prompt or config.message.",
+						{
+							action: "api",
+							status: "error",
+							runId: loaded.manifest.runId,
+						},
+						true,
+					);
 				const realtime = await followUpLiveAgent(agentId, prompt);
-				const mailboxMessage = appendFollowUpMessage(loaded.manifest, { taskId: targetTaskId, body: prompt, status: "delivered", data: { source: "follow-up-agent", realtime: true } });
-				return result(JSON.stringify({ realtime, mailboxMessage }, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				const mailboxMessage = appendFollowUpMessage(loaded.manifest, {
+					taskId: targetTaskId,
+					body: prompt,
+					status: "delivered",
+					data: { source: "follow-up-agent", realtime: true },
+				});
+				return result(JSON.stringify({ realtime, mailboxMessage }, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			}
 			if (operation === "resume-agent") {
-				if (!prompt) return result("API resume-agent requires config.prompt or config.message.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-				return result(JSON.stringify(await resumeLiveAgent(agentId, prompt), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				if (!prompt)
+					return result(
+						"API resume-agent requires config.prompt or config.message.",
+						{
+							action: "api",
+							status: "error",
+							runId: loaded.manifest.runId,
+						},
+						true,
+					);
+				return result(JSON.stringify(await resumeLiveAgent(agentId, prompt), null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			}
-			return result(JSON.stringify(await stopLiveAgent(agentId), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+			return result(JSON.stringify(await stopLiveAgent(agentId), null, 2), {
+				action: "api",
+				status: "ok",
+				runId: loaded.manifest.runId,
+				artifactsRoot: loaded.manifest.artifactsRoot,
+			});
 		} catch (error) {
 			const agent = readCrewAgents(loaded.manifest).find((item) => item.id === agentId || item.taskId === agentId);
 			if (!agent) {
 				const err = error instanceof Error ? error.message : String(error);
-				return result(err, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+				return result(
+					err,
+					{
+						action: "api",
+						status: "error",
+						runId: loaded.manifest.runId,
+					},
+					true,
+				);
 			}
 			const task = loaded.tasks.find((item) => item.id === agent.taskId);
-			if (!task) return result(`API ${operation} agent '${agentId}' does not match a run task.`, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-			if (operation === "resume-agent" && !prompt) return result("API resume-agent requires config.prompt or config.message.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-			if (operation === "follow-up-agent" && !prompt) return result("API follow-up-agent requires config.prompt or config.message.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			if (!task)
+				return result(
+					`API ${operation} agent '${agentId}' does not match a run task.`,
+					{
+						action: "api",
+						status: "error",
+						runId: loaded.manifest.runId,
+					},
+					true,
+				);
+			if (operation === "resume-agent" && !prompt)
+				return result(
+					"API resume-agent requires config.prompt or config.message.",
+					{
+						action: "api",
+						status: "error",
+						runId: loaded.manifest.runId,
+					},
+					true,
+				);
+			if (operation === "follow-up-agent" && !prompt)
+				return result(
+					"API follow-up-agent requires config.prompt or config.message.",
+					{
+						action: "api",
+						status: "error",
+						runId: loaded.manifest.runId,
+					},
+					true,
+				);
 			try {
-				const request = appendLiveAgentControlRequest(loaded.manifest, { taskId: task.id, agentId: agent.id, operation: operation === "resume-agent" ? "resume" : operation === "follow-up-agent" ? "follow-up" : operation === "steer-agent" ? "steer" : "stop", message: operation === "resume-agent" || operation === "follow-up-agent" ? prompt : message });
-				const mailboxMessage = operation === "steer-agent" ? appendSteeringMessage(loaded.manifest, { taskId: task.id, to: agent.id, body: message ?? "Please report current status and wrap up if possible.", status: "delivered", data: { source: "steer-agent", liveControlRequestId: request.id } }) : operation === "follow-up-agent" && prompt ? appendFollowUpMessage(loaded.manifest, { taskId: task.id, to: agent.id, body: prompt, status: "delivered", data: { source: "follow-up-agent", liveControlRequestId: request.id } }) : undefined;
+				const request = appendLiveAgentControlRequest(loaded.manifest, {
+					taskId: task.id,
+					agentId: agent.id,
+					operation:
+						operation === "resume-agent"
+							? "resume"
+							: operation === "follow-up-agent"
+								? "follow-up"
+								: operation === "steer-agent"
+									? "steer"
+									: "stop",
+					message: operation === "resume-agent" || operation === "follow-up-agent" ? prompt : message,
+				});
+				const mailboxMessage =
+					operation === "steer-agent"
+						? appendSteeringMessage(loaded.manifest, {
+								taskId: task.id,
+								to: agent.id,
+								body: message ?? "Please report current status and wrap up if possible.",
+								status: "delivered",
+								data: {
+									source: "steer-agent",
+									liveControlRequestId: request.id,
+								},
+							})
+						: operation === "follow-up-agent" && prompt
+							? appendFollowUpMessage(loaded.manifest, {
+									taskId: task.id,
+									to: agent.id,
+									body: prompt,
+									status: "delivered",
+									data: {
+										source: "follow-up-agent",
+										liveControlRequestId: request.id,
+									},
+								})
+							: undefined;
 				publishLiveControlRealtime(request);
 				ctx.events?.emit?.("pi-crew:live-control", liveControlRealtimeMessage(request));
-				appendEvent(loaded.manifest.eventsPath, { type: "agent.control.queued", runId: loaded.manifest.runId, taskId: agent.taskId, message: `Queued ${request.operation} control request for live agent.`, data: { request, mailboxMessageId: mailboxMessage?.id, realtime: true } });
-				return result(JSON.stringify({ queued: true, request, mailboxMessage }, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				appendEvent(loaded.manifest.eventsPath, {
+					type: "agent.control.queued",
+					runId: loaded.manifest.runId,
+					taskId: agent.taskId,
+					message: `Queued ${request.operation} control request for live agent.`,
+					data: {
+						request,
+						mailboxMessageId: mailboxMessage?.id,
+						realtime: true,
+					},
+				});
+				return result(JSON.stringify({ queued: true, request, mailboxMessage }, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			} catch (queueError) {
 				const message = queueError instanceof Error ? queueError.message : String(queueError);
-				return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+				return result(
+					message,
+					{
+						action: "api",
+						status: "error",
+						runId: loaded.manifest.runId,
+					},
+					true,
+				);
 			}
 		}
 	}
 	if (operation === "read-mailbox") {
-		const direction = cfg.direction === "inbox" || cfg.direction === "outbox" ? cfg.direction as MailboxDirection : undefined;
+		const direction = cfg.direction === "inbox" || cfg.direction === "outbox" ? (cfg.direction as MailboxDirection) : undefined;
 		const taskId = typeof cfg.taskId === "string" ? cfg.taskId : undefined;
-		const kind = typeof cfg.kind === "string" && ["message", "steer", "follow-up", "response", "group_join"].includes(cfg.kind) ? cfg.kind as MailboxMessageKind : undefined;
-		if (taskId && !loaded.tasks.some((task) => task.id === taskId)) return result(`API read-mailbox taskId '${taskId}' does not match a run task.`, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		const kind =
+			typeof cfg.kind === "string" && ["message", "steer", "follow-up", "response", "group_join"].includes(cfg.kind)
+				? (cfg.kind as MailboxMessageKind)
+				: undefined;
+		if (taskId && !loaded.tasks.some((task) => task.id === taskId))
+			return result(
+				`API read-mailbox taskId '${taskId}' does not match a run task.`,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
-			return result(JSON.stringify(readMailbox(loaded.manifest, direction, taskId, kind), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+			return result(JSON.stringify(readMailbox(loaded.manifest, direction, taskId, kind), null, 2), {
+				action: "api",
+				status: "ok",
+				runId: loaded.manifest.runId,
+				artifactsRoot: loaded.manifest.artifactsRoot,
+			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "validate-mailbox") {
-		const report = validateMailbox(loaded.manifest, { repair: cfg.repair === true });
-		return result(JSON.stringify(report, null, 2), { action: "api", status: report.issues.some((issue) => issue.level === "error") && cfg.repair !== true ? "error" : "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot }, report.issues.some((issue) => issue.level === "error") && cfg.repair !== true);
+		const report = validateMailbox(loaded.manifest, {
+			repair: cfg.repair === true,
+		});
+		return result(
+			JSON.stringify(report, null, 2),
+			{
+				action: "api",
+				status: report.issues.some((issue) => issue.level === "error") && cfg.repair !== true ? "error" : "ok",
+				runId: loaded.manifest.runId,
+				artifactsRoot: loaded.manifest.artifactsRoot,
+			},
+			report.issues.some((issue) => issue.level === "error") && cfg.repair !== true,
+		);
 	}
 	if (operation === "read-delivery") {
-		return result(JSON.stringify(readDeliveryState(loaded.manifest), null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		return result(JSON.stringify(readDeliveryState(loaded.manifest), null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "send-message") {
 		const direction = cfg.direction === "outbox" ? "outbox" : "inbox";
@@ -315,67 +863,198 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 		const to = typeof cfg.to === "string" && cfg.to.trim() ? cfg.to.trim() : "leader";
 		const body = typeof cfg.body === "string" && cfg.body.trim() ? cfg.body : undefined;
 		const taskId = typeof cfg.taskId === "string" && cfg.taskId.trim() ? cfg.taskId.trim() : undefined;
-		if (!body) return result("API send-message requires config.body.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-		if (taskId && !loaded.tasks.some((task) => task.id === taskId)) return result(`API send-message taskId '${taskId}' does not match a run task.`, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!body)
+			return result(
+				"API send-message requires config.body.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
+		if (taskId && !loaded.tasks.some((task) => task.id === taskId))
+			return result(
+				`API send-message taskId '${taskId}' does not match a run task.`,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
 			return withRunLockSync(loaded.manifest, () => {
-				const message = appendMailboxMessage(loaded.manifest, { direction, from, to, body, taskId });
-				appendEvent(loaded.manifest.eventsPath, { type: "mailbox.message", runId: loaded.manifest.runId, data: { id: message.id, direction, from, to } });
-				ctx.events?.emit?.("crew.mailbox.message", { runId: loaded.manifest.runId, id: message.id, direction, from, to, taskId, source: "send-message" });
-				return result(JSON.stringify(message, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				const message = appendMailboxMessage(loaded.manifest, {
+					direction,
+					from,
+					to,
+					body,
+					taskId,
+				});
+				appendEvent(loaded.manifest.eventsPath, {
+					type: "mailbox.message",
+					runId: loaded.manifest.runId,
+					data: { id: message.id, direction, from, to },
+				});
+				ctx.events?.emit?.("crew.mailbox.message", {
+					runId: loaded.manifest.runId,
+					id: message.id,
+					direction,
+					from,
+					to,
+					taskId,
+					source: "send-message",
+				});
+				return result(JSON.stringify(message, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "ack-message") {
 		const messageId = typeof cfg.messageId === "string" ? cfg.messageId : undefined;
-		if (!messageId) return result("API ack-message requires config.messageId.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!messageId)
+			return result(
+				"API ack-message requires config.messageId.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
 			return withRunLockSync(loaded.manifest, () => {
 				const message = readMailboxMessage(loaded.manifest, messageId);
 				const delivery = acknowledgeMailboxMessage(loaded.manifest, messageId);
-				appendEvent(loaded.manifest.eventsPath, { type: "mailbox.acknowledged", runId: loaded.manifest.runId, data: { messageId } });
+				appendEvent(loaded.manifest.eventsPath, {
+					type: "mailbox.acknowledged",
+					runId: loaded.manifest.runId,
+					data: { messageId },
+				});
 				if (message?.data?.kind === "group_join" && typeof message.data.requestId === "string") {
 					appendEvent(loaded.manifest.eventsPath, {
 						type: "agent.group_join.acknowledged",
 						runId: loaded.manifest.runId,
 						message: "Group join delivery acknowledged via mailbox ack.",
-						data: { requestId: message.data.requestId, messageId, batchId: message.data.batchId, partial: message.data.partial, acknowledgedAt: delivery.updatedAt, acknowledgedBy: "leader" },
+						data: {
+							requestId: message.data.requestId,
+							messageId,
+							batchId: message.data.batchId,
+							partial: message.data.partial,
+							acknowledgedAt: delivery.updatedAt,
+							acknowledgedBy: "leader",
+						},
 						metadata: { provenance: "api" },
 					});
 				}
-				ctx.events?.emit?.("crew.mailbox.acknowledged", { runId: loaded.manifest.runId, messageId, delivery });
-				return result(JSON.stringify(delivery, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				ctx.events?.emit?.("crew.mailbox.acknowledged", {
+					runId: loaded.manifest.runId,
+					messageId,
+					delivery,
+				});
+				return result(JSON.stringify(delivery, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "read-heartbeat") {
 		const taskId = typeof cfg.taskId === "string" ? cfg.taskId : undefined;
 		const task = loaded.tasks.find((item) => item.id === taskId || item.stepId === taskId);
-		if (!task) return result("API read-heartbeat requires config.taskId matching a task id or step id.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-		return result(JSON.stringify(task.heartbeat ?? null, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+		if (!task)
+			return result(
+				"API read-heartbeat requires config.taskId matching a task id or step id.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
+		return result(JSON.stringify(task.heartbeat ?? null, null, 2), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+		});
 	}
 	if (operation === "claim-task") {
 		const taskId = typeof cfg.taskId === "string" ? cfg.taskId : undefined;
 		const owner = typeof cfg.owner === "string" ? cfg.owner : "api";
 		const task = loaded.tasks.find((item) => item.id === taskId || item.stepId === taskId);
-		if (!task) return result("API claim-task requires config.taskId matching a task id or step id.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!task)
+			return result(
+				"API claim-task requires config.taskId matching a task id or step id.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
 			return withRunLockSync(loaded.manifest, () => {
 				const updatedTask = claimTask(task, owner);
-				const tasks = loaded.tasks.map((item) => item.id === task.id ? updatedTask : item);
+				const tasks = loaded.tasks.map((item) => (item.id === task.id ? updatedTask : item));
 				saveRunTasks(loaded.manifest, tasks);
-				appendEvent(loaded.manifest.eventsPath, { type: "task.claimed", runId: loaded.manifest.runId, taskId: task.id, data: { owner, token: "[REDACTED]", leasedUntil: updatedTask.claim?.leasedUntil } });
-				return result(JSON.stringify(updatedTask.claim, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				appendEvent(loaded.manifest.eventsPath, {
+					type: "task.claimed",
+					runId: loaded.manifest.runId,
+					taskId: task.id,
+					data: {
+						owner,
+						token: "[REDACTED]",
+						leasedUntil: updatedTask.claim?.leasedUntil,
+					},
+				});
+				return result(JSON.stringify(updatedTask.claim, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "release-task-claim") {
@@ -383,18 +1062,45 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 		const owner = typeof cfg.owner === "string" ? cfg.owner : undefined;
 		const token = typeof cfg.token === "string" ? cfg.token : undefined;
 		const task = loaded.tasks.find((item) => item.id === taskId || item.stepId === taskId);
-		if (!task || !owner || !token) return result("API release-task-claim requires config.taskId, config.owner, and config.token.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!task || !owner || !token)
+			return result(
+				"API release-task-claim requires config.taskId, config.owner, and config.token.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
 			return withRunLockSync(loaded.manifest, () => {
 				const updatedTask = releaseTaskClaim(task, owner, token);
-				const tasks = loaded.tasks.map((item) => item.id === task.id ? updatedTask : item);
+				const tasks = loaded.tasks.map((item) => (item.id === task.id ? updatedTask : item));
 				saveRunTasks(loaded.manifest, tasks);
-				appendEvent(loaded.manifest.eventsPath, { type: "task.claim_released", runId: loaded.manifest.runId, taskId: task.id, data: { owner } });
-				return result(JSON.stringify(updatedTask, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				appendEvent(loaded.manifest.eventsPath, {
+					type: "task.claim_released",
+					runId: loaded.manifest.runId,
+					taskId: task.id,
+					data: { owner },
+				});
+				return result(JSON.stringify(updatedTask, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "transition-task-status") {
@@ -403,42 +1109,118 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 		const token = typeof cfg.token === "string" ? cfg.token : undefined;
 		const to = cfg.status;
 		const task = loaded.tasks.find((item) => item.id === taskId || item.stepId === taskId);
-		if (!task || !owner || !token || !isTeamTaskStatus(to)) return result("API transition-task-status requires config.taskId, config.owner, config.token, and valid config.status.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
-		if (!canTransitionTaskStatus(task.status, to)) return result(`Invalid task status transition: ${task.status} -> ${to}`, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!task || !owner || !token || !isTeamTaskStatus(to))
+			return result(
+				"API transition-task-status requires config.taskId, config.owner, config.token, and valid config.status.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
+		if (!canTransitionTaskStatus(task.status, to))
+			return result(
+				`Invalid task status transition: ${task.status} -> ${to}`,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
 			return withRunLockSync(loaded.manifest, () => {
 				const updatedTask = transitionClaimedTaskStatus(task, owner, token, to);
-				const tasks = loaded.tasks.map((item) => item.id === task.id ? updatedTask : item);
+				const tasks = loaded.tasks.map((item) => (item.id === task.id ? updatedTask : item));
 				saveRunTasks(loaded.manifest, tasks);
-				appendEvent(loaded.manifest.eventsPath, { type: "task.status_transitioned", runId: loaded.manifest.runId, taskId: task.id, data: { owner, status: to } });
-				return result(JSON.stringify(updatedTask, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				appendEvent(loaded.manifest.eventsPath, {
+					type: "task.status_transitioned",
+					runId: loaded.manifest.runId,
+					taskId: task.id,
+					data: { owner, status: to },
+				});
+				return result(JSON.stringify(updatedTask, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "write-heartbeat") {
 		const taskId = typeof cfg.taskId === "string" ? cfg.taskId : undefined;
 		const task = loaded.tasks.find((item) => item.id === taskId || item.stepId === taskId);
-		if (!task) return result("API write-heartbeat requires config.taskId matching a task id or step id.", { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+		if (!task)
+			return result(
+				"API write-heartbeat requires config.taskId matching a task id or step id.",
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		try {
 			return withRunLockSync(loaded.manifest, () => {
-				const heartbeat = touchWorkerHeartbeat(task.heartbeat ?? { workerId: task.id, lastSeenAt: new Date().toISOString() }, { alive: typeof cfg.alive === "boolean" ? cfg.alive : undefined });
-				const tasks = loaded.tasks.map((item) => item.id === task.id ? { ...item, heartbeat } : item);
+				const heartbeat = touchWorkerHeartbeat(
+					task.heartbeat ?? {
+						workerId: task.id,
+						lastSeenAt: new Date().toISOString(),
+					},
+					{
+						alive: typeof cfg.alive === "boolean" ? cfg.alive : undefined,
+					},
+				);
+				const tasks = loaded.tasks.map((item) => (item.id === task.id ? { ...item, heartbeat } : item));
 				saveRunTasks(loaded.manifest, tasks);
-				appendEvent(loaded.manifest.eventsPath, { type: "worker.heartbeat", runId: loaded.manifest.runId, taskId: task.id, data: { ...heartbeat } });
-				return result(JSON.stringify(heartbeat, null, 2), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot });
+				appendEvent(loaded.manifest.eventsPath, {
+					type: "worker.heartbeat",
+					runId: loaded.manifest.runId,
+					taskId: task.id,
+					data: { ...heartbeat },
+				});
+				return result(JSON.stringify(heartbeat, null, 2), {
+					action: "api",
+					status: "ok",
+					runId: loaded.manifest.runId,
+					artifactsRoot: loaded.manifest.artifactsRoot,
+				});
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			return result(message, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
+			return result(
+				message,
+				{
+					action: "api",
+					status: "error",
+					runId: loaded.manifest.runId,
+				},
+				true,
+			);
 		}
 	}
 	if (operation === "diff") {
-		const diffArtifacts = loaded.manifest.artifacts.filter(a => a.kind === "diff" || a.kind === "patch");
+		const diffArtifacts = loaded.manifest.artifacts.filter((a) => a.kind === "diff" || a.kind === "patch");
 		if (diffArtifacts.length === 0) {
-			return result(`No diff artifacts found for run ${loaded.manifest.runId}. Diffs are captured in worktree mode.`, { action: "api", status: "ok", runId: loaded.manifest.runId, intent: `diff ${loaded.manifest.runId}: no diffs` });
+			return result(`No diff artifacts found for run ${loaded.manifest.runId}. Diffs are captured in worktree mode.`, {
+				action: "api",
+				status: "ok",
+				runId: loaded.manifest.runId,
+				intent: `diff ${loaded.manifest.runId}: no diffs`,
+			});
 		}
 		const parts: string[] = [`Diff artifacts for run ${loaded.manifest.runId}:`];
 		for (const artifact of diffArtifacts) {
@@ -448,7 +1230,13 @@ export async function handleApi(params: TeamToolParamsValue, ctx: TeamContext): 
 				parts.push(`\n--- ${artifact.path} ---\n${display}`);
 			}
 		}
-		return result(parts.join("\n"), { action: "api", status: "ok", runId: loaded.manifest.runId, artifactsRoot: loaded.manifest.artifactsRoot, intent: `diff ${loaded.manifest.runId}` });
+		return result(parts.join("\n"), {
+			action: "api",
+			status: "ok",
+			runId: loaded.manifest.runId,
+			artifactsRoot: loaded.manifest.artifactsRoot,
+			intent: `diff ${loaded.manifest.runId}`,
+		});
 	}
 	return result(`Unknown API operation: ${operation}`, { action: "api", status: "error", runId: loaded.manifest.runId }, true);
 }

@@ -1,14 +1,17 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { createStreamingOutput, readStreamingOutput } from "../../src/runtime/streaming-output.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 
 function tmpManifest(): { dir: string; manifest: TeamRunManifest } {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-stream-"));
-	return { dir, manifest: { artifactsRoot: dir } as unknown as TeamRunManifest };
+	return {
+		dir,
+		manifest: { artifactsRoot: dir } as unknown as TeamRunManifest,
+	};
 }
 
 test("createStreamingOutput returns handle with correct path pattern", () => {

@@ -1,25 +1,28 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	detectImportConflicts,
-	detectResumeConflicts,
-	resolveConflict,
-	type ImportBundle,
-	type ExistingState,
 	type Conflict,
 	type ConflictReport,
-	type SuspendedState,
 	type CurrentState,
+	detectImportConflicts,
+	detectResumeConflicts,
+	type ExistingState,
+	type ImportBundle,
+	resolveConflict,
+	type SuspendedState,
 } from "../../src/runtime/delta-conflict.ts";
 
 // ── detectImportConflicts ──────────────────────────────────────────────
 
 test("detectImportConflicts returns empty report when no existing state", () => {
 	const bundle: ImportBundle = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
-		tasks: [
-			{ id: "t1", status: "completed", role: "agent", agent: "default" },
-		],
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
+		tasks: [{ id: "t1", status: "completed", role: "agent", agent: "default" }],
 	};
 	const result: ConflictReport = detectImportConflicts(bundle, {});
 	assert.equal(result.hasConflicts, false);
@@ -31,11 +34,21 @@ test("detectImportConflicts returns empty report when no existing state", () => 
 
 test("detectImportConflicts detects schema_drift", () => {
 	const bundle: ImportBundle = {
-		manifest: { schemaVersion: 2, runId: "r1", team: "impl", artifacts: [] },
+		manifest: {
+			schemaVersion: 2,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
 		tasks: [],
 	};
 	const existing: ExistingState = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
 		tasks: [],
 	};
 	const result = detectImportConflicts(bundle, existing);
@@ -55,7 +68,13 @@ test("detectImportConflicts detects file_overwrite for artifact collision", () =
 			runId: "r1",
 			team: "impl",
 			artifacts: [
-				{ kind: "result", path: "output.txt", createdAt: "2025-01-01", producer: "test", retention: "run" },
+				{
+					kind: "result",
+					path: "output.txt",
+					createdAt: "2025-01-01",
+					producer: "test",
+					retention: "run",
+				},
 			],
 		},
 		tasks: [],
@@ -66,7 +85,13 @@ test("detectImportConflicts detects file_overwrite for artifact collision", () =
 			runId: "r1",
 			team: "impl",
 			artifacts: [
-				{ kind: "result", path: "output.txt", createdAt: "2025-01-01", producer: "test", retention: "run" },
+				{
+					kind: "result",
+					path: "output.txt",
+					createdAt: "2025-01-01",
+					producer: "test",
+					retention: "run",
+				},
 			],
 		},
 		tasks: [],
@@ -82,14 +107,24 @@ test("detectImportConflicts detects file_overwrite for artifact collision", () =
 
 test("detectImportConflicts detects state_mismatch for differing task statuses", () => {
 	const bundle: ImportBundle = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
 		tasks: [
 			{ id: "t1", status: "completed", role: "agent", agent: "default" },
 			{ id: "t2", status: "failed", role: "agent", agent: "default" },
 		],
 	};
 	const existing: ExistingState = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
 		tasks: [
 			{ id: "t1", status: "running", role: "agent", agent: "default" },
 			{ id: "t2", status: "failed", role: "agent", agent: "default" },
@@ -108,11 +143,21 @@ test("detectImportConflicts detects state_mismatch for differing task statuses",
 
 test("detectImportConflicts detects resource_deleted for team mismatch", () => {
 	const bundle: ImportBundle = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "implementation", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "implementation",
+			artifacts: [],
+		},
 		tasks: [],
 	};
 	const existing: ExistingState = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "review", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "review",
+			artifacts: [],
+		},
 		tasks: [],
 	};
 	const result = detectImportConflicts(bundle, existing);
@@ -125,11 +170,23 @@ test("detectImportConflicts detects resource_deleted for team mismatch", () => {
 
 test("detectImportConflicts detects resource_deleted for workflow mismatch", () => {
 	const bundle: ImportBundle = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", workflow: "default", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			workflow: "default",
+			artifacts: [],
+		},
 		tasks: [],
 	};
 	const existing: ExistingState = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", workflow: "review", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			workflow: "review",
+			artifacts: [],
+		},
 		tasks: [],
 	};
 	const result = detectImportConflicts(bundle, existing);
@@ -141,15 +198,35 @@ test("detectImportConflicts detects resource_deleted for workflow mismatch", () 
 
 test("detectImportConflicts detects resource_deleted for reassigned agent", () => {
 	const bundle: ImportBundle = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
 		tasks: [
-			{ id: "t1", status: "completed", role: "agent", agent: "new-agent" },
+			{
+				id: "t1",
+				status: "completed",
+				role: "agent",
+				agent: "new-agent",
+			},
 		],
 	};
 	const existing: ExistingState = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
 		tasks: [
-			{ id: "t1", status: "completed", role: "agent", agent: "old-agent" },
+			{
+				id: "t1",
+				status: "completed",
+				role: "agent",
+				agent: "old-agent",
+			},
 		],
 	};
 	const result = detectImportConflicts(bundle, existing);
@@ -165,12 +242,16 @@ test("detectImportConflicts returns multiple conflict types", () => {
 			runId: "r1",
 			team: "other-team",
 			artifacts: [
-				{ kind: "result", path: "shared.txt", createdAt: "", producer: "", retention: "run" },
+				{
+					kind: "result",
+					path: "shared.txt",
+					createdAt: "",
+					producer: "",
+					retention: "run",
+				},
 			],
 		},
-		tasks: [
-			{ id: "t1", status: "completed", role: "agent", agent: "default" },
-		],
+		tasks: [{ id: "t1", status: "completed", role: "agent", agent: "default" }],
 	};
 	const existing: ExistingState = {
 		manifest: {
@@ -178,12 +259,16 @@ test("detectImportConflicts returns multiple conflict types", () => {
 			runId: "r1",
 			team: "impl",
 			artifacts: [
-				{ kind: "result", path: "shared.txt", createdAt: "", producer: "", retention: "run" },
+				{
+					kind: "result",
+					path: "shared.txt",
+					createdAt: "",
+					producer: "",
+					retention: "run",
+				},
 			],
 		},
-		tasks: [
-			{ id: "t1", status: "running", role: "agent", agent: "default" },
-		],
+		tasks: [{ id: "t1", status: "running", role: "agent", agent: "default" }],
 	};
 	const result = detectImportConflicts(bundle, existing);
 	assert.equal(result.hasConflicts, true);
@@ -196,16 +281,22 @@ test("detectImportConflicts returns multiple conflict types", () => {
 
 test("detectImportConflicts summary counts are accurate", () => {
 	const bundle: ImportBundle = {
-		manifest: { schemaVersion: 2, runId: "r1", team: "other", artifacts: [] },
-		tasks: [
-			{ id: "t1", status: "completed", role: "agent", agent: "default" },
-		],
+		manifest: {
+			schemaVersion: 2,
+			runId: "r1",
+			team: "other",
+			artifacts: [],
+		},
+		tasks: [{ id: "t1", status: "completed", role: "agent", agent: "default" }],
 	};
 	const existing: ExistingState = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
-		tasks: [
-			{ id: "t1", status: "running", role: "agent", agent: "default" },
-		],
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
+		tasks: [{ id: "t1", status: "running", role: "agent", agent: "default" }],
 	};
 	const result = detectImportConflicts(bundle, existing);
 	assert.equal(result.summary.errors, result.conflicts.filter((c) => c.severity === "error").length);
@@ -215,11 +306,21 @@ test("detectImportConflicts summary counts are accurate", () => {
 
 test("detectImportConflicts handles malformed tasks gracefully", () => {
 	const bundle: ImportBundle = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
 		tasks: [null, "not-an-object", { noId: true }, { id: 123, status: 456 }],
 	};
 	const existing: ExistingState = {
-		manifest: { schemaVersion: 1, runId: "r1", team: "impl", artifacts: [] },
+		manifest: {
+			schemaVersion: 1,
+			runId: "r1",
+			team: "impl",
+			artifacts: [],
+		},
 		tasks: [],
 	};
 	const result = detectImportConflicts(bundle, existing);

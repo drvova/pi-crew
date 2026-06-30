@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { sanitizeEnvSecrets } from "../../src/utils/env-filter.ts";
 
 test("default deny-list strips secret-like keys", () => {
@@ -21,10 +21,7 @@ test("PI_* glob is rejected as dangerous (catches accidental SECRET-like additio
 	// PI_* is rejected because the prefix + secret suffix would create a secret key
 	// (e.g., PI_TOKEN, PI_API_KEY, PI_PASSWORD could all exist in env and would leak).
 	// Use PI_CREW_* (controlled namespace) or explicit vars instead.
-	assert.throws(
-		() => sanitizeEnvSecrets({ PI_HOME: "/pi" }, { allowList: ["PI_*"] }),
-		/Allowlist pattern "PI_\*"/,
-	);
+	assert.throws(() => sanitizeEnvSecrets({ PI_HOME: "/pi" }, { allowList: ["PI_*"] }), /Allowlist pattern "PI_\*"/);
 });
 
 test("allow-list only passes through matched keys", () => {

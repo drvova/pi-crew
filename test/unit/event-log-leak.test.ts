@@ -3,13 +3,14 @@
  * - H1: asyncQueues deletes on success (not just on error)
  * - H3: queue.splice silently drops → rejects dropped promises
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { appendEventAsync, appendEventBuffered, flushEventLogBuffer } from "../../src/state/event-log.ts";
+import test from "node:test";
 import type { TeamEvent } from "../../src/state/event-log.ts";
+import { appendEventAsync, appendEventBuffered, flushEventLogBuffer } from "../../src/state/event-log.ts";
 
 async function makeTmp(): Promise<string> {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "event-log-leak-"));
@@ -21,11 +22,17 @@ test("H1: asyncQueues does not leak entries on success", async () => {
 	try {
 		// Issue 100 successful appends
 		const promises = Array.from({ length: 100 }, (_, i) =>
-			appendEventAsync(eventsPath, { type: "test.event", data: { i } } as unknown as TeamEvent),
+			appendEventAsync(eventsPath, {
+				type: "test.event",
+				data: { i },
+			} as unknown as TeamEvent),
 		);
 		await Promise.all(promises);
 		// After all resolve, asyncQueues map should be empty
-		const result = await appendEventAsync(eventsPath, { type: "test.event", data: { i: 999 } } as unknown as TeamEvent);
+		const result = await appendEventAsync(eventsPath, {
+			type: "test.event",
+			data: { i: 999 },
+		} as unknown as TeamEvent);
 		assert.equal(result.type, "test.event");
 	} finally {
 		await fs.rm(path.dirname(eventsPath), { recursive: true, force: true });
@@ -41,7 +48,10 @@ test("H3: dropped buffered events are rejected (not hanging)", async () => {
 		for (let i = 0; i < 1100; i += 1) {
 			// Use non-terminal types so they go through the buffer
 			promises.push(
-				appendEventBuffered(eventsPath, { type: "test.spam", data: { i } } as unknown as TeamEvent).catch((err) => err),
+				appendEventBuffered(eventsPath, {
+					type: "test.spam",
+					data: { i },
+				} as unknown as TeamEvent).catch((err) => err),
 			);
 		}
 		// Manually trigger the flush so the splice+reject logic runs.
@@ -49,16 +59,9 @@ test("H3: dropped buffered events are rejected (not hanging)", async () => {
 		const results = await Promise.all(promises);
 		// Some of these should be the rejection error from the splice
 		const rejected = results.filter((r) => r instanceof Error);
-		assert.ok(
-			rejected.length > 0,
-			`expected at least one rejection from buffer overflow, got ${rejected.length} of ${results.length}`,
-		);
+		assert.ok(rejected.length > 0, `expected at least one rejection from buffer overflow, got ${rejected.length} of ${results.length}`);
 		const sample = rejected[0] as Error;
-		assert.match(
-			sample.message,
-			/buffer overflow|dropped/i,
-			`rejection should mention overflow/dropped; got: ${sample.message}`,
-		);
+		assert.match(sample.message, /buffer overflow|dropped/i, `rejection should mention overflow/dropped; got: ${sample.message}`);
 	} finally {
 		await fs.rm(path.dirname(eventsPath), { recursive: true, force: true });
 	}

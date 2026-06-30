@@ -10,11 +10,7 @@ export interface CacheControlDeps {
  * a runEventBus event so the render scheduler coalescer fires immediately.
  * Call this after any state mutation that changes task/agent status.
  */
-export function invalidateSnapshot(
-	runId: string,
-	runCwd: string,
-	deps: CacheControlDeps,
-): void {
+export function invalidateSnapshot(runId: string, runCwd: string, deps: CacheControlDeps): void {
 	// 1. Invalidate snapshot cache entry
 	deps.getRunSnapshotCache(runCwd).invalidate(runId);
 

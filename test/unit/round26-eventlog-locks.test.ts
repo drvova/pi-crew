@@ -13,11 +13,12 @@
  *   another process stole the lock, our finally deleted the STEALER's dir.
  *   Fix: verify pidFile still records OUR pid before removing.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import { withEventLogLockSync } from "../../src/state/event-log.ts";
 
 function tmpDir(): string {
@@ -43,7 +44,10 @@ describe("Round 26 BUG 3: orphan lock dir without pidFile is reclaimed by mtime"
 			fs.utimesSync(ld, oldMtime, oldMtime);
 			// withEventLogLockSync should reclaim it and proceed (fast).
 			const start = Date.now();
-			const result = withEventLogLockSync(events, () => "ok", { staleMs: 50, timeoutMs: 2000 });
+			const result = withEventLogLockSync(events, () => "ok", {
+				staleMs: 50,
+				timeoutMs: 2000,
+			});
 			const elapsed = Date.now() - start;
 			assert.equal(result, "ok");
 			assert.ok(elapsed < 1500, `should reclaim quickly, took ${elapsed}ms`);
@@ -69,7 +73,10 @@ describe("Round 26 BUG 4: recycled PID handled by independent mtime check", () =
 			const oldMtime = new Date(Date.now() - 1000);
 			fs.utimesSync(ld, oldMtime, oldMtime);
 			const start = Date.now();
-			const result = withEventLogLockSync(events, () => "ok", { staleMs: 50, timeoutMs: 2000 });
+			const result = withEventLogLockSync(events, () => "ok", {
+				staleMs: 50,
+				timeoutMs: 2000,
+			});
 			const elapsed = Date.now() - start;
 			assert.equal(result, "ok");
 			assert.ok(elapsed < 1500, `should reclaim despite 'live' pid, took ${elapsed}ms`);
@@ -89,11 +96,15 @@ describe("Round 26 BUG 5: PID-guarded release does not delete a stealer's dir", 
 			// Then inside fn(), simulate a steal: replace pidFile with a different pid
 			// AND re-create the dir as if a stealer took it.
 			const stealerPid = 999999; // an unlikely real pid
-			const result = withEventLogLockSync(events, () => {
-				// Simulate the stealer stealing: overwrite pidFile.
-				fs.writeFileSync(path.join(ld, "pid"), String(stealerPid), "utf-8");
-				return "ran";
-			}, { staleMs: 5000, timeoutMs: 2000 });
+			const result = withEventLogLockSync(
+				events,
+				() => {
+					// Simulate the stealer stealing: overwrite pidFile.
+					fs.writeFileSync(path.join(ld, "pid"), String(stealerPid), "utf-8");
+					return "ran";
+				},
+				{ staleMs: 5000, timeoutMs: 2000 },
+			);
 			assert.equal(result, "ran");
 			// After release, the dir should STILL EXIST (we did not delete the
 			// stealer's dir because pidFile no longer matches our pid).
@@ -108,7 +119,10 @@ describe("Round 26 BUG 5: PID-guarded release does not delete a stealer's dir", 
 		const events = eventsPath(dir);
 		try {
 			const ld = lockDirFor(events);
-			const result = withEventLogLockSync(events, () => "ran", { staleMs: 5000, timeoutMs: 2000 });
+			const result = withEventLogLockSync(events, () => "ran", {
+				staleMs: 5000,
+				timeoutMs: 2000,
+			});
 			assert.equal(result, "ran");
 			assert.ok(!fs.existsSync(ld), "our own lock dir should be cleaned up");
 		} finally {

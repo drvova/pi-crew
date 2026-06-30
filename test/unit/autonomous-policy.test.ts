@@ -1,10 +1,15 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { appendAutonomousPolicy, buildAutonomousPolicy, detectTeamIntent } from "../../src/extension/autonomous-policy.ts";
 
 test("detectTeamIntent detects default, custom, and task-list signals", () => {
 	assert.deepEqual(detectTeamIntent("autoteam refactor this"), ["implementation"]);
-	assert.deepEqual(detectTeamIntent("please swarm this", { magicKeywords: { custom: ["swarm"] } }), ["custom"]);
+	assert.deepEqual(
+		detectTeamIntent("please swarm this", {
+			magicKeywords: { custom: ["swarm"] },
+		}),
+		["custom"],
+	);
 	assert.deepEqual(detectTeamIntent("Hãy thực hiện các task sau:\n- sửa config parser\n- thêm test\n- cập nhật docs"), ["taskList"]);
 });
 
@@ -13,7 +18,9 @@ test("detectTeamIntent handles docs-only task-list bullets", () => {
 });
 
 test("buildAutonomousPolicy contains routing guidance", () => {
-	const policy = buildAutonomousPolicy("review-team this diff", { preferAsyncForLongTasks: true });
+	const policy = buildAutonomousPolicy("review-team this diff", {
+		preferAsyncForLongTasks: true,
+	});
 	assert.match(policy, /pi-crew Delegation Policy/);
 	assert.match(policy, /team='review'/);
 	assert.match(policy, /review/);

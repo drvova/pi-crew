@@ -7,16 +7,22 @@
  * by the reconciler even when actively executing. This was the root cause of
  * the Round 15 review cancellation.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 
 test("heartbeat file written by startTeamRunHeartbeat is valid JSON", () => {
 	// Direct check: ensure heartbeat file format is parseable JSON
 	// (not strictly testing the helper, but the file shape contract)
-	const sample = { pid: 12345, at: Date.now(), runId: "r1", kind: "team-runner" };
+	const sample = {
+		pid: 12345,
+		at: Date.now(),
+		runId: "r1",
+		kind: "team-runner",
+	};
 	const json = JSON.stringify(sample);
 	const parsed = JSON.parse(json) as typeof sample;
 	assert.equal(parsed.kind, "team-runner");

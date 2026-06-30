@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 
-import { parsePiJsonOutput, type ParsedPiJsonOutput } from "../../src/runtime/pi-json-output.ts";
+import { type ParsedPiJsonOutput, parsePiJsonOutput } from "../../src/runtime/pi-json-output.ts";
 import { detectRetryableModelFailureFromOutput } from "../../src/runtime/task-runner.ts";
 
 /**
@@ -27,17 +27,28 @@ const event429 = JSON.stringify({
 
 const eventRateLimit = JSON.stringify({
 	type: "message_end",
-	message: { role: "assistant", content: [], errorMessage: "rate_limit_error: too many requests" },
+	message: {
+		role: "assistant",
+		content: [],
+		errorMessage: "rate_limit_error: too many requests",
+	},
 });
 
 const eventAuth = JSON.stringify({
 	type: "message_end",
-	message: { role: "assistant", content: [], errorMessage: "401 unauthorized: invalid api key" },
+	message: {
+		role: "assistant",
+		content: [],
+		errorMessage: "401 unauthorized: invalid api key",
+	},
 });
 
 const eventText = JSON.stringify({
 	type: "message",
-	message: { role: "assistant", content: [{ type: "text", text: "I will now edit the file." }] },
+	message: {
+		role: "assistant",
+		content: [{ type: "text", text: "I will now edit the file." }],
+	},
 });
 
 describe("parsePiJsonOutput — errorMessages extraction", () => {
@@ -119,7 +130,10 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			patches: undefined,
 			errorMessages: undefined,
 			messageEndEvents: [
-				{ stopReason: "error", errorMessage: "Provider error: api_error" },
+				{
+					stopReason: "error",
+					errorMessage: "Provider error: api_error",
+				},
 			],
 		} as unknown as ParsedPiJsonOutput;
 		const err = detectRetryableModelFailureFromOutput(parsed);
@@ -135,9 +149,7 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			finalText: undefined,
 			patches: undefined,
 			errorMessages: undefined,
-			transcript: [
-				{ stopReason: "error", errorMessage: "upstream timeout" },
-			],
+			transcript: [{ stopReason: "error", errorMessage: "upstream timeout" }],
 		} as unknown as ParsedPiJsonOutput;
 		const err = detectRetryableModelFailureFromOutput(parsed);
 		assert.ok(err);
@@ -152,7 +164,10 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			patches: undefined,
 			errorMessages: undefined,
 			messageEndEvents: [
-				{ stopReason: "stop", errorMessage: "Provider error: api_error" },
+				{
+					stopReason: "stop",
+					errorMessage: "Provider error: api_error",
+				},
 			],
 		} as unknown as ParsedPiJsonOutput;
 		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
@@ -165,10 +180,7 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			finalText: undefined,
 			patches: undefined,
 			errorMessages: undefined,
-			messageEndEvents: [
-				{ stopReason: "error", errorMessage: "" },
-				{ stopReason: "error" /* no errorMessage field */ },
-			],
+			messageEndEvents: [{ stopReason: "error", errorMessage: "" }, { stopReason: "error" /* no errorMessage field */ }],
 		} as unknown as ParsedPiJsonOutput;
 		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
 	});
@@ -181,7 +193,10 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			patches: undefined,
 			errorMessages: undefined,
 			messageEndEvents: [
-				{ stopReason: "error", errorMessage: "401 unauthorized: invalid api key" },
+				{
+					stopReason: "error",
+					errorMessage: "401 unauthorized: invalid api key",
+				},
 			],
 		} as unknown as ParsedPiJsonOutput;
 		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
@@ -195,7 +210,10 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			patches: undefined,
 			errorMessages: undefined,
 			messageEndEvents: [
-				{ stopReason: "error", errorMessage: "Provider error: api_error" },
+				{
+					stopReason: "error",
+					errorMessage: "Provider error: api_error",
+				},
 			],
 		} as unknown as ParsedPiJsonOutput;
 		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
@@ -212,7 +230,10 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			patches: undefined,
 			errorMessages: ["429 The service may be temporarily overloaded"],
 			messageEndEvents: [
-				{ stopReason: "error", errorMessage: "Provider error: api_error" },
+				{
+					stopReason: "error",
+					errorMessage: "Provider error: api_error",
+				},
 			],
 		} as unknown as ParsedPiJsonOutput;
 		const err = detectRetryableModelFailureFromOutput(parsed);

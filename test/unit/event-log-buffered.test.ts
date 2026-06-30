@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { appendEvent, appendEventBuffered, flushEventLogBuffer, readEvents } from "../../src/state/event-log.ts";
 
 test("appendEventBuffered batches into single lock acquire and preserves seq order (2.2)", async () => {
@@ -13,7 +13,18 @@ test("appendEventBuffered batches into single lock acquire and preserves seq ord
 	try {
 		const promises: Promise<unknown>[] = [];
 		for (let i = 0; i < 10; i++) {
-			promises.push(appendEventBuffered(eventsPath, { type: "task.progress", runId: "run-buf", taskId: `t${i}`, data: { i } }, 50));
+			promises.push(
+				appendEventBuffered(
+					eventsPath,
+					{
+						type: "task.progress",
+						runId: "run-buf",
+						taskId: `t${i}`,
+						data: { i },
+					},
+					50,
+				),
+			);
 		}
 		const results = await Promise.all(promises);
 		// Every event has a unique monotonic seq.
@@ -51,13 +62,22 @@ test("appendEvent and appendEventBuffered share the same seq sequence (2.2)", as
 	// Keep event loop alive so unref'd timer still fires
 	const keepAlive = setInterval(() => {}, 50);
 	try {
-		const sync = appendEvent(eventsPath, { type: "run.created", runId: "run-mix" });
+		const sync = appendEvent(eventsPath, {
+			type: "run.created",
+			runId: "run-mix",
+		});
 		const bufferedPromise = appendEventBuffered(eventsPath, { type: "task.progress", runId: "run-mix" }, 50);
-		const sync2 = appendEvent(eventsPath, { type: "run.completed", runId: "run-mix" });
+		const sync2 = appendEvent(eventsPath, {
+			type: "run.completed",
+			runId: "run-mix",
+		});
 		const buffered = await bufferedPromise;
 		const seqs = [sync.metadata?.seq, buffered.metadata?.seq, sync2.metadata?.seq];
 		// All seqs must be unique numbers
-		assert.ok(seqs.every((s) => typeof s === "number"), `all seqs must be numbers: ${seqs}`);
+		assert.ok(
+			seqs.every((s) => typeof s === "number"),
+			`all seqs must be numbers: ${seqs}`,
+		);
 		// All seqs must be unique (shared counter)
 		assert.equal(new Set(seqs).size, seqs.length, `seqs must be unique: ${seqs}`);
 		// Events on disk must have all 3 in the order they were actually written

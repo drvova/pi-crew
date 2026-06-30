@@ -24,10 +24,12 @@ const MAX_OUTPUT_LINE = 80;
 
 function pickActiveAgent(agents: CrewAgentRecord[] | undefined): CrewAgentRecord | undefined {
 	if (!agents || agents.length === 0) return undefined;
-	return agents.find((agent) => agent.status === "running")
-		?? agents.find((agent) => agent.status === "waiting")
-		?? agents.find((agent) => agent.status === "queued")
-		?? agents[agents.length - 1];
+	return (
+		agents.find((agent) => agent.status === "running") ??
+		agents.find((agent) => agent.status === "waiting") ??
+		agents.find((agent) => agent.status === "queued") ??
+		agents[agents.length - 1]
+	);
 }
 
 function totalTokens(agent: CrewAgentRecord): number {
@@ -52,9 +54,7 @@ function taskCounts(tasks: TeamTaskState[] | undefined): string | undefined {
 	const completed = tasks.filter((t) => t.status === "completed").length;
 	const buckets = new Map<string, number>();
 	for (const task of tasks) buckets.set(task.status, (buckets.get(task.status) ?? 0) + 1);
-	const summary = [...buckets.entries()]
-		.map(([status, count]) => `${status}=${count}`)
-		.join(" ");
+	const summary = [...buckets.entries()].map(([status, count]) => `${status}=${count}`).join(" ");
 	return `tasks ${completed}/${total} done ${summary}`;
 }
 

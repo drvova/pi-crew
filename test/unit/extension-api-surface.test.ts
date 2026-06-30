@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { createWorkerHeartbeat, type WorkerHeartbeatState } from "../../src/runtime/worker-heartbeat.ts";
 
 test("EventBus on returns unsubscribe and no off method is required", () => {
@@ -16,7 +16,9 @@ test("EventBus on returns unsubscribe and no off method is required", () => {
 		},
 	};
 	let calls = 0;
-	const unsubscribe = events.on("crew.test", () => { calls += 1; });
+	const unsubscribe = events.on("crew.test", () => {
+		calls += 1;
+	});
 	assert.equal(typeof unsubscribe, "function");
 	events.emit("crew.test", {});
 	unsubscribe();

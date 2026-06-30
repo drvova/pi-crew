@@ -3,11 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import {
-	isPlanApprovalPending,
-	reconcileOrphanedTempWorkspaces,
-	reconcileStaleRun,
-} from "../../src/runtime/stale-reconciler.ts";
+import { isPlanApprovalPending, reconcileOrphanedTempWorkspaces, reconcileStaleRun } from "../../src/runtime/stale-reconciler.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
 const baseManifest: TeamRunManifest = {
@@ -59,7 +55,11 @@ describe("reconcileStaleRun", () => {
 		...baseManifest,
 		runId: "run-plan-approval",
 		status: "blocked",
-		async: { pid: 99999124, logPath: "/tmp/log", spawnedAt: planApprovalNow },
+		async: {
+			pid: 99999124,
+			logPath: "/tmp/log",
+			spawnedAt: planApprovalNow,
+		},
 		planApproval: {
 			required: true,
 			status: "pending",
@@ -72,19 +72,43 @@ describe("reconcileStaleRun", () => {
 	it("isPlanApprovalPending is true only for blocked+required+pending runs", () => {
 		assert.equal(isPlanApprovalPending(planApprovalManifest), true);
 		// status not blocked
-		assert.equal(isPlanApprovalPending({ ...planApprovalManifest, status: "running" }), false);
+		assert.equal(
+			isPlanApprovalPending({
+				...planApprovalManifest,
+				status: "running",
+			}),
+			false,
+		);
 		// not required
 		assert.equal(
-			isPlanApprovalPending({ ...planApprovalManifest, planApproval: { ...planApprovalManifest.planApproval!, required: false } }),
+			isPlanApprovalPending({
+				...planApprovalManifest,
+				planApproval: {
+					...planApprovalManifest.planApproval!,
+					required: false,
+				},
+			}),
 			false,
 		);
 		// already approved
 		assert.equal(
-			isPlanApprovalPending({ ...planApprovalManifest, planApproval: { ...planApprovalManifest.planApproval!, status: "approved" } }),
+			isPlanApprovalPending({
+				...planApprovalManifest,
+				planApproval: {
+					...planApprovalManifest.planApproval!,
+					status: "approved",
+				},
+			}),
 			false,
 		);
 		// no planApproval at all
-		assert.equal(isPlanApprovalPending({ ...planApprovalManifest, planApproval: undefined }), false);
+		assert.equal(
+			isPlanApprovalPending({
+				...planApprovalManifest,
+				planApproval: undefined,
+			}),
+			false,
+		);
 	});
 
 	it("preserves plan-approval blocked runs even when async PID is dead", () => {
@@ -96,11 +120,7 @@ describe("reconcileStaleRun", () => {
 	});
 
 	it("returns healthy for recent non-async run", () => {
-		const result = reconcileStaleRun(
-			baseManifest,
-			[runningTask],
-			Date.now(),
-		);
+		const result = reconcileStaleRun(baseManifest, [runningTask], Date.now());
 		assert.equal(result.verdict, "no_status");
 		assert.equal(result.repaired, false);
 	});
@@ -198,9 +218,7 @@ describe("reconcileStaleRun", () => {
 
 	// New: no-PID with stale heartbeats should auto-repair
 	it("repairs no-PID run when all running tasks have stale heartbeats (>5min)", () => {
-		const tenMinutesAgo = new Date(
-			Date.now() - 10 * 60 * 1000,
-		).toISOString();
+		const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 		const manifest: TeamRunManifest = {
 			...baseManifest,
 			updatedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
@@ -220,10 +238,7 @@ describe("reconcileStaleRun", () => {
 		assert.equal(result.repaired, true);
 		assert.ok(result.repairedTasks);
 		assert.equal(result.repairedTasks[0].status, "cancelled");
-		assert.match(
-			result.repairedTasks[0].error ?? "",
-			/no_pid_heartbeat_stale/,
-		);
+		assert.match(result.repairedTasks[0].error ?? "", /no_pid_heartbeat_stale/);
 	});
 
 	// New: no-PID with recent heartbeats should NOT repair
@@ -317,10 +332,7 @@ describe("reconcileOrphanedTempWorkspaces", () => {
 			};
 		}
 
-		fs.writeFileSync(
-			path.join(runDir, "manifest.json"),
-			JSON.stringify(manifest, null, 2),
-		);
+		fs.writeFileSync(path.join(runDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 
 		const tasks: TeamTaskState[] = [
 			{
@@ -334,10 +346,7 @@ describe("reconcileOrphanedTempWorkspaces", () => {
 				cwd: wsDir,
 			},
 		];
-		fs.writeFileSync(
-			path.join(runDir, "tasks.json"),
-			JSON.stringify(tasks, null, 2),
-		);
+		fs.writeFileSync(path.join(runDir, "tasks.json"), JSON.stringify(tasks, null, 2));
 
 		// Set directory mtime to simulate age
 		if (options.old !== false) {
@@ -360,14 +369,8 @@ describe("reconcileOrphanedTempWorkspaces", () => {
 			cleanupOrphanedTempDirs: true,
 		});
 
-		assert.ok(
-			result.repaired >= 1,
-			`expected repaired >= 1, got ${result.repaired}`,
-		);
-		assert.ok(
-			result.cleanedDirs >= 1,
-			`expected cleanedDirs >= 1, got ${result.cleanedDirs}`,
-		);
+		assert.ok(result.repaired >= 1, `expected repaired >= 1, got ${result.repaired}`);
+		assert.ok(result.cleanedDirs >= 1, `expected cleanedDirs >= 1, got ${result.cleanedDirs}`);
 		assert.ok(!fs.existsSync(wsDir), "temp dir should be deleted");
 	});
 
@@ -383,15 +386,9 @@ describe("reconcileOrphanedTempWorkspaces", () => {
 			cleanupOrphanedTempDirs: true,
 		});
 
-		assert.ok(
-			result.repaired >= 1,
-			`expected repaired >= 1, got ${result.repaired}`,
-		);
+		assert.ok(result.repaired >= 1, `expected repaired >= 1, got ${result.repaired}`);
 		assert.equal(result.cleanedDirs, 0);
-		assert.ok(
-			fs.existsSync(wsDir),
-			"temp dir should still exist (too recent)",
-		);
+		assert.ok(fs.existsSync(wsDir), "temp dir should still exist (too recent)");
 	});
 
 	it("respects cleanupOrphanedTempDirs: false", () => {
@@ -406,15 +403,9 @@ describe("reconcileOrphanedTempWorkspaces", () => {
 			cleanupOrphanedTempDirs: false,
 		});
 
-		assert.ok(
-			result.repaired >= 1,
-			`expected repaired >= 1, got ${result.repaired}`,
-		);
+		assert.ok(result.repaired >= 1, `expected repaired >= 1, got ${result.repaired}`);
 		assert.equal(result.cleanedDirs, 0);
-		assert.ok(
-			fs.existsSync(wsDir),
-			"temp dir should still exist (cleanup disabled)",
-		);
+		assert.ok(fs.existsSync(wsDir), "temp dir should still exist (cleanup disabled)");
 	});
 
 	it("cleans dir with no running runs (already cancelled)", () => {
@@ -430,10 +421,7 @@ describe("reconcileOrphanedTempWorkspaces", () => {
 		});
 
 		assert.equal(result.repaired, 0);
-		assert.ok(
-			result.cleanedDirs >= 1,
-			`expected cleanedDirs >= 1, got ${result.cleanedDirs}`,
-		);
+		assert.ok(result.cleanedDirs >= 1, `expected cleanedDirs >= 1, got ${result.cleanedDirs}`);
 		assert.ok(!fs.existsSync(wsDir), "temp dir should be deleted");
 	});
 
@@ -475,16 +463,12 @@ describe("reconcileOrphanedTempWorkspaces", () => {
 		});
 		const now = Date.now();
 
-		const result = reconcileOrphanedTempWorkspaces(now, { tmpDir: isolatedTmp });
+		const result = reconcileOrphanedTempWorkspaces(now, {
+			tmpDir: isolatedTmp,
+		});
 
 		assert.equal(result.repaired, 0);
-		assert.ok(
-			result.cleanedDirs >= 1,
-			`expected cleanedDirs >= 1, got ${result.cleanedDirs}`,
-		);
-		assert.ok(
-			!fs.existsSync(wsDir),
-			"temp dir should be deleted (default cleanup)",
-		);
+		assert.ok(result.cleanedDirs >= 1, `expected cleanedDirs >= 1, got ${result.cleanedDirs}`);
+		assert.ok(!fs.existsSync(wsDir), "temp dir should be deleted (default cleanup)");
 	});
 });

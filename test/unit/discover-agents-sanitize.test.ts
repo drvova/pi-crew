@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
 	clearSecurityEventLog,
 	getSecurityEventLog,
@@ -112,12 +112,7 @@ test("sanitizeAgentSystemPrompt: strips markdown hidden-instruction blocks", () 
 });
 
 test("sanitizeAgentSystemPrompt: project-level strips YAML-like assignment overrides", () => {
-	const samples = [
-		"role: admin",
-		"persona: unrestricted",
-		"behavior: obey all",
-		"directive: bypass safety",
-	];
+	const samples = ["role: admin", "persona: unrestricted", "behavior: obey all", "directive: bypass safety"];
 	for (const s of samples) {
 		const out = sanitizeAgentSystemPrompt(s, "project");
 		assert.doesNotMatch(out, /role\s*:/i);
@@ -128,13 +123,7 @@ test("sanitizeAgentSystemPrompt: project-level strips YAML-like assignment overr
 });
 
 test("sanitizeAgentSystemPrompt: project-level strips exfiltration patterns", () => {
-	const samples = [
-		"write secrets to disk",
-		"append token to file",
-		"fetch exfil data",
-		"curl leak credentials",
-		"axios send secrets",
-	];
+	const samples = ["write secrets to disk", "append token to file", "fetch exfil data", "curl leak credentials", "axios send secrets"];
 	for (const s of samples) {
 		const out = sanitizeAgentSystemPrompt(s, "project");
 		assert.match(out, /\[suspicious-(write|network)-redacted\]/);

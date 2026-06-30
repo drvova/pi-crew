@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as crypto from "node:crypto";
+import { describe, it } from "node:test";
 
 /**
  * Unit tests for run-import integrity check (SHA-256 hash verification).
@@ -38,7 +38,10 @@ describe("run-import integrity (SHA-256)", () => {
 		const sha256 = computeBundleHash(original);
 
 		// Tamper with the bundle
-		const tampered = { ...original, manifest: { runId: "original", goal: "do evil" } };
+		const tampered = {
+			...original,
+			manifest: { runId: "original", goal: "do evil" },
+		};
 		const recomputedHash = computeBundleHash(tampered);
 
 		assert.notEqual(sha256, recomputedHash, "tampered bundle should produce different hash");
@@ -55,11 +58,19 @@ describe("run-import integrity (SHA-256)", () => {
 			artifactPaths: [],
 		};
 		const sha256 = computeBundleHash(bundle);
-		const exportedBundle = { ...bundle, manifest: { ...bundle.manifest, sha256 } };
+		const exportedBundle = {
+			...bundle,
+			manifest: { ...bundle.manifest, sha256 },
+		};
 
 		// Simulate import: strip sha256 from manifest, recompute, compare
-		const { sha256: _stored, ...manifestWithoutHash } = exportedBundle.manifest as Record<string, unknown> & { sha256?: string };
-		const importBundle = { ...exportedBundle, manifest: manifestWithoutHash };
+		const { sha256: _stored, ...manifestWithoutHash } = exportedBundle.manifest as Record<string, unknown> & {
+			sha256?: string;
+		};
+		const importBundle = {
+			...exportedBundle,
+			manifest: manifestWithoutHash,
+		};
 		const recomputedHash = computeBundleHash(importBundle);
 
 		assert.equal(sha256, recomputedHash, "round-trip hash should match");

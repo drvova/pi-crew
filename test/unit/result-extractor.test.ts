@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { Type } from "@sinclair/typebox";
 import { extractStructuredResult } from "../../src/runtime/result-extractor.ts";
 
@@ -25,7 +25,7 @@ test("direct JSON object extraction", () => {
 });
 
 test("direct JSON array extraction", () => {
-	const json = '[1,2,3]';
+	const json = "[1,2,3]";
 	const result = extractStructuredResult(json);
 	assert.equal(result.structured, true);
 	assert.deepEqual(result.data, [1, 2, 3]);
@@ -54,7 +54,7 @@ test("RESULT: marker extraction", () => {
 });
 
 test("OUTPUT: marker extraction", () => {
-	const text = 'Processing...\nOUTPUT: [10, 20, 30]';
+	const text = "Processing...\nOUTPUT: [10, 20, 30]";
 	const result = extractStructuredResult(text);
 	assert.equal(result.structured, true);
 	assert.deepEqual(result.data, [10, 20, 30]);
@@ -76,7 +76,7 @@ test("plain text returns unstructured", () => {
 });
 
 test("invalid JSON in fence returns unstructured", () => {
-	const text = '```json\n{not valid json}\n```';
+	const text = "```json\n{not valid json}\n```";
 	const result = extractStructuredResult(text);
 	assert.equal(result.structured, false);
 	assert.equal(result.data, null);
@@ -134,7 +134,10 @@ test("Strategy 4: JSON after prose preamble", () => {
 	const text = 'Here is my review of the work:\n{"outcome":"accept","feedback":"looks good"}';
 	const result = extractStructuredResult(text);
 	assert.equal(result.structured, true);
-	assert.deepEqual(result.data, { outcome: "accept", feedback: "looks good" });
+	assert.deepEqual(result.data, {
+		outcome: "accept",
+		feedback: "looks good",
+	});
 });
 
 test("Strategy 4: JSON surrounded by prose on both sides", () => {
@@ -152,7 +155,7 @@ test("Strategy 4: JSON in a sentence", () => {
 });
 
 test("Strategy 4: JSON array embedded in prose", () => {
-	const text = 'Items found: [1, 2, 3] done.';
+	const text = "Items found: [1, 2, 3] done.";
 	const result = extractStructuredResult(text);
 	assert.equal(result.structured, true);
 	assert.deepEqual(result.data, [1, 2, 3]);
@@ -243,7 +246,7 @@ test("round-13 P0-3: backward compat — no schema returns existing behavior", (
 });
 
 test("round-13 P0-3: schema validates array shape", () => {
-	const json = '[1,2,3]';
+	const json = "[1,2,3]";
 	const schema = Type.Array(Type.Number());
 	const result = extractStructuredResult(json, schema);
 	assert.equal(result.structured, true);

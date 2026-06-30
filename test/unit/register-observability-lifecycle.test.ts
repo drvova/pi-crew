@@ -1,8 +1,8 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { registerPiTeams } from "../../src/extension/register.ts";
 
 function createEventBus() {
@@ -12,7 +12,9 @@ function createEventBus() {
 			const set = handlers.get(event) ?? new Set<(payload: unknown) => void>();
 			set.add(handler);
 			handlers.set(event, set);
-			return () => { set.delete(handler); };
+			return () => {
+				set.delete(handler);
+			};
 		},
 		emit(event: string, payload: unknown) {
 			for (const handler of handlers.get(event) ?? []) handler(payload);
@@ -40,7 +42,9 @@ function createFakePi(events: ReturnType<typeof createEventBus>) {
 		registerCommand() {},
 		registerTool() {},
 		appendEntry() {},
-		getSessionName() { return undefined; },
+		getSessionName() {
+			return undefined;
+		},
 		setSessionName() {},
 	};
 }
@@ -52,7 +56,11 @@ test("registerPiTeams leaves no observability event subscriptions after repeated
 		const events = createEventBus();
 		const pi = createFakePi(events);
 		registerPiTeams(pi as never);
-		const ctx = { cwd, hasUI: false, ui: { notify() {}, setWorkingMessage() {} } };
+		const ctx = {
+			cwd,
+			hasUI: false,
+			ui: { notify() {}, setWorkingMessage() {} },
+		};
 		for (let index = 0; index < 3; index += 1) {
 			pi.emitLifecycle("session_start", ctx);
 			assert.ok(events.totalSubscriptions() > 0, "session_start should register event subscriptions");

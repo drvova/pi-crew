@@ -7,16 +7,12 @@
  * Full integration tests would require creating run manifests on disk.
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	handleEvents,
-	handleArtifacts,
-	handleSummary,
-} from "../../src/extension/team-tool/inspect.ts";
-import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
+import { describe, it } from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import { handleArtifacts, handleEvents, handleSummary } from "../../src/extension/team-tool/inspect.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
+import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
 
 function makeCtx(overrides: Partial<TeamContext> = {}): TeamContext {
 	return { cwd: "/tmp/inspect-test", ...overrides };
@@ -38,10 +34,7 @@ describe("handleEvents", () => {
 	});
 
 	it("returns error when run is not found", () => {
-		const res = handleEvents(
-			makeParams({ runId: "nonexistent-run-999" }),
-			makeCtx({ cwd: "/tmp/no-such-dir" }),
-		);
+		const res = handleEvents(makeParams({ runId: "nonexistent-run-999" }), makeCtx({ cwd: "/tmp/no-such-dir" }));
 
 		assert.strictEqual(res.isError, true);
 		const text = textFromToolResult(res);
@@ -49,10 +42,7 @@ describe("handleEvents", () => {
 	});
 
 	it("includes action=events in details", () => {
-		const res = handleEvents(
-			makeParams({ runId: "any-run" }),
-			makeCtx(),
-		);
+		const res = handleEvents(makeParams({ runId: "any-run" }), makeCtx());
 
 		assert.strictEqual(res.details.action, "events");
 	});
@@ -70,10 +60,7 @@ describe("handleArtifacts", () => {
 	});
 
 	it("returns error when run is not found", () => {
-		const res = handleArtifacts(
-			makeParams({ runId: "missing-run" }),
-			makeCtx({ cwd: "/tmp/no-such-dir" }),
-		);
+		const res = handleArtifacts(makeParams({ runId: "missing-run" }), makeCtx({ cwd: "/tmp/no-such-dir" }));
 
 		assert.strictEqual(res.isError, true);
 		const text = textFromToolResult(res);
@@ -81,10 +68,7 @@ describe("handleArtifacts", () => {
 	});
 
 	it("includes action=artifacts in details", () => {
-		const res = handleArtifacts(
-			makeParams({ runId: "any-run" }),
-			makeCtx(),
-		);
+		const res = handleArtifacts(makeParams({ runId: "any-run" }), makeCtx());
 
 		assert.strictEqual(res.details.action, "artifacts");
 	});
@@ -102,10 +86,7 @@ describe("handleSummary", () => {
 	});
 
 	it("returns error when run is not found", () => {
-		const res = handleSummary(
-			makeParams({ runId: "missing-run" }),
-			makeCtx({ cwd: "/tmp/no-such-dir" }),
-		);
+		const res = handleSummary(makeParams({ runId: "missing-run" }), makeCtx({ cwd: "/tmp/no-such-dir" }));
 
 		assert.strictEqual(res.isError, true);
 		const text = textFromToolResult(res);
@@ -113,10 +94,7 @@ describe("handleSummary", () => {
 	});
 
 	it("includes action=summary in details", () => {
-		const res = handleSummary(
-			makeParams({ runId: "any-run" }),
-			makeCtx(),
-		);
+		const res = handleSummary(makeParams({ runId: "any-run" }), makeCtx());
 
 		assert.strictEqual(res.details.action, "summary");
 	});

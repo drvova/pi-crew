@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { Semaphore } from "../../src/runtime/semaphore.ts";
 
 describe("Semaphore constructor", () => {
@@ -7,7 +7,9 @@ describe("Semaphore constructor", () => {
 		const s = new Semaphore(0);
 		// Acquire should succeed immediately (max was clamped to 1)
 		let resolved = false;
-		s.acquire().then(() => { resolved = true; });
+		s.acquire().then(() => {
+			resolved = true;
+		});
 		// Synchronous check — acquire resolves immediately since current < max
 		assert.strictEqual(s.current, 1);
 	});
@@ -34,7 +36,9 @@ describe("Semaphore acquire/release", () => {
 		assert.strictEqual(s.current, 1);
 
 		let secondResolved = false;
-		const p = s.acquire().then(() => { secondResolved = true; });
+		const p = s.acquire().then(() => {
+			secondResolved = true;
+		});
 		// Give microtask queue a tick
 		await new Promise((r) => setTimeout(r, 0));
 		assert.strictEqual(secondResolved, false);

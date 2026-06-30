@@ -109,12 +109,7 @@ test("CONCURRENT: parallel-research shape (7 steps, 4-way fan-out)", () => {
 			id: "synthesize",
 			role: "analyst",
 			task: "synth",
-			dependsOn: [
-				"explore-core",
-				"explore-ui",
-				"explore-runtime",
-				"explore-extensions",
-			],
+			dependsOn: ["explore-core", "explore-ui", "explore-runtime", "explore-extensions"],
 		},
 		{
 			id: "write",

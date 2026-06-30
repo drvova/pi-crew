@@ -13,15 +13,15 @@
  * per-turn usage stays on each turn's TeamRunManifest/tasks.json.
  */
 
-import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, openSync, closeSync, statSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { atomicWriteJson } from "../state/atomic-write.ts";
 import { appendEvent } from "../state/event-log.ts";
-import { assertSafePathId } from "../utils/safe-paths.ts";
-import { createRunId } from "../utils/ids.ts";
-import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
-import { logInternalError } from "../utils/internal-error.ts";
 import type { GoalLoopState, GoalLoopStatus } from "../state/types.ts";
+import { createRunId } from "../utils/ids.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
+import { assertSafePathId } from "../utils/safe-paths.ts";
 
 /** Default state-root resolver: project scope if a project crew-root exists, else user scope. */
 function resolveGoalsRoot(cwd: string): string {
@@ -81,7 +81,11 @@ export class GoalStore {
 			mkdirSync(dirname(path), { recursive: true });
 			atomicWriteJson(path, next);
 			if (eventsPath) {
-				appendEvent(eventsPath, { type: "goal.state_changed", runId: state.goalId, data: { goalId: state.goalId, state: state.state } });
+				appendEvent(eventsPath, {
+					type: "goal.state_changed",
+					runId: state.goalId,
+					data: { goalId: state.goalId, state: state.state },
+				});
 			}
 		} catch (error) {
 			logInternalError("goal-state-store.save", error, `goalId=${state.goalId}`);
@@ -93,7 +97,12 @@ export class GoalStore {
 	patch(goalId: string, patch: Partial<GoalLoopState>, eventsPath?: string): GoalLoopState | undefined {
 		const current = this.load(goalId);
 		if (!current) return undefined;
-		const next: GoalLoopState = { ...current, ...patch, goalId: current.goalId, createdAt: current.createdAt };
+		const next: GoalLoopState = {
+			...current,
+			...patch,
+			goalId: current.goalId,
+			createdAt: current.createdAt,
+		};
 		this.save(next, eventsPath);
 		return next;
 	}
@@ -126,12 +135,7 @@ export class GoalStore {
 	 * OS level — only one process can create the lockfile. The operation is fast (ms), so stale
 	 * lockfiles are rare; a 5s age guard force-clears them (crash recovery).
 	 */
-	compareAndSetStatus(
-		goalId: string,
-		expected: GoalLoopStatus,
-		next: GoalLoopStatus,
-		eventsPath?: string,
-	): GoalLoopState | undefined {
+	compareAndSetStatus(goalId: string, expected: GoalLoopStatus, next: GoalLoopStatus, eventsPath?: string): GoalLoopState | undefined {
 		const lockPath = `${goalFilePath(this.cwd, goalId)}.cas.lock`;
 		if (!this.acquireCasLock(lockPath)) {
 			return undefined; // Another process holds the CAS lock — caller treats as CAS-failed.
@@ -144,7 +148,11 @@ export class GoalStore {
 			this.save(updated, eventsPath);
 			return updated;
 		} finally {
-			try { unlinkSync(lockPath); } catch { /* best-effort; may already be gone */ }
+			try {
+				unlinkSync(lockPath);
+			} catch {
+				/* best-effort; may already be gone */
+			}
 		}
 	}
 
@@ -162,11 +170,13 @@ export class GoalStore {
 				const stat = statSync(lockPath);
 				if (Date.now() - stat.mtimeMs > 5000) {
 					unlinkSync(lockPath);
-				const fd = openSync(lockPath, "wx");
-				closeSync(fd);
-				return true;
+					const fd = openSync(lockPath, "wx");
+					closeSync(fd);
+					return true;
+				}
+			} catch {
+				/* fall through */
 			}
-			} catch { /* fall through */ }
 			return false;
 		}
 	}

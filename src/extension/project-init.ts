@@ -70,7 +70,13 @@ const DEFAULT_PI_CREW_CONFIG = {
 	},
 };
 
-function copyBuiltinDir(kind: "agents" | "teams" | "workflows", targetDir: string, overwrite: boolean, copiedFiles: string[], skippedFiles: string[]): void {
+function copyBuiltinDir(
+	kind: "agents" | "teams" | "workflows",
+	targetDir: string,
+	overwrite: boolean,
+	copiedFiles: string[],
+	skippedFiles: string[],
+): void {
 	const sourceDir = path.join(packageRoot(), kind);
 	if (!fs.existsSync(sourceDir)) return;
 	for (const entry of fs.readdirSync(sourceDir)) {
@@ -97,7 +103,8 @@ export function initializeProject(cwd: string, options: ProjectInitOptions = {})
 	const teamsDir = path.join(crewRoot, "teams");
 	const workflowsDir = path.join(crewRoot, "workflows");
 	const configScope = options.configScope ?? "global";
-	const configPath = configScope === "project" ? path.join(projectPiRoot(cwd), "pi-crew.json") : configScope === "global" ? globalConfigPath() : "";
+	const configPath =
+		configScope === "project" ? path.join(projectPiRoot(cwd), "pi-crew.json") : configScope === "global" ? globalConfigPath() : "";
 	ensureDir(agentsDir, createdDirs);
 	ensureDir(teamsDir, createdDirs);
 	ensureDir(workflowsDir, createdDirs);
@@ -124,9 +131,7 @@ export function initializeProject(cwd: string, options: ProjectInitOptions = {})
 
 	const ignoreMethod = options.ignoreMethod ?? "gitignore";
 	const desired = [`${ignorePrefix}/state/`, `${ignorePrefix}/artifacts/`, `${ignorePrefix}/worktrees/`, `${ignorePrefix}/imports/`];
-	const gitignorePath = ignoreMethod === "exclude"
-		? path.join(cwd, ".git", "info", "exclude")
-		: path.join(cwd, ".gitignore");
+	const gitignorePath = ignoreMethod === "exclude" ? path.join(cwd, ".git", "info", "exclude") : path.join(cwd, ".gitignore");
 	let gitignoreUpdated = false;
 	if (ignoreMethod === "exclude") {
 		// Ensure .git/info/ directory exists
@@ -151,5 +156,15 @@ export function initializeProject(cwd: string, options: ProjectInitOptions = {})
 	// learns pi-crew's commands from tool registration, not AGENTS.md.
 	// `team action=cleanup` still removes any block injected by older versions.
 
-	return { createdDirs, copiedFiles, skippedFiles, gitignorePath, gitignoreUpdated, configPath, configScope, configCreated, configSkipped };
+	return {
+		createdDirs,
+		copiedFiles,
+		skippedFiles,
+		gitignorePath,
+		gitignoreUpdated,
+		configPath,
+		configScope,
+		configCreated,
+		configSkipped,
+	};
 }

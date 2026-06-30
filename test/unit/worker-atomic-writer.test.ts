@@ -2,17 +2,18 @@
  * Phase 1.5 worker-thread atomic writer unit tests.
  * RFC: research-findings/goal-workflow/15-PHASE1.5-WORKER-WRITER-RFC.md
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import test from "node:test";
 import {
-	isWorkerAtomicWriterEnabled,
-	atomicWriteFileViaWorker,
-	appendFileViaWorker,
-	terminateWorkerAtomicWriter,
 	__setKeepWorkerRefForTests,
+	appendFileViaWorker,
+	atomicWriteFileViaWorker,
+	isWorkerAtomicWriterEnabled,
+	terminateWorkerAtomicWriter,
 } from "../../src/state/worker-atomic-writer.ts";
 
 // Keep worker ref'd for the WHOLE suite so the test runner doesn't exit before
@@ -133,7 +134,9 @@ test("terminateWorkerAtomicWriter: subsequent write spawns fresh worker", async 
 // resolved tmpdir). The old check rejected it → "Refusing to write: unsafe path"
 // (5 macOS CI failures). This test reproduces the structure on any POSIX
 // platform by pointing TMPDIR through a symlink and writing via the worker.
-test("atomicWriteFileViaWorker: accepts tmpdir reached via symlink ancestor (macOS /var → /private/var regression)", { skip: process.platform === "win32" ? "symlinks need admin on Windows CI" : false }, async () => {
+test("atomicWriteFileViaWorker: accepts tmpdir reached via symlink ancestor (macOS /var → /private/var regression)", {
+	skip: process.platform === "win32" ? "symlinks need admin on Windows CI" : false,
+}, async () => {
 	const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-mac-sym-"));
 	const realPrivate = path.join(sandbox, "private");
 	const realWork = path.join(realPrivate, "realwork");
@@ -148,10 +151,10 @@ test("atomicWriteFileViaWorker: accepts tmpdir reached via symlink ancestor (mac
 		process.env.TMPDIR = fakeTmp;
 		const file = path.join(fakeTmp, "out.txt");
 		await atomicWriteFileViaWorker(file, "hello-mac\n");
-		assert.equal(fs.readFileSync(file, "utf-8"), "hello-mac\n",
-			"write through symlink ancestor of tmpdir must succeed");
+		assert.equal(fs.readFileSync(file, "utf-8"), "hello-mac\n", "write through symlink ancestor of tmpdir must succeed");
 	} finally {
-		if (savedTmpdir === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = savedTmpdir;
+		if (savedTmpdir === undefined) delete process.env.TMPDIR;
+		else process.env.TMPDIR = savedTmpdir;
 		terminateWorkerAtomicWriter();
 		fs.rmSync(sandbox, { recursive: true, force: true });
 	}
@@ -159,7 +162,9 @@ test("atomicWriteFileViaWorker: accepts tmpdir reached via symlink ancestor (mac
 
 // Symlink-attack protection: a symlink under tmpdir that escapes to a sibling
 // dir must be REJECTED (no write through the attack symlink).
-test("atomicWriteFileViaWorker: rejects symlink escaping tmpdir (symlink attack)", { skip: process.platform === "win32" ? "symlinks need admin on Windows CI" : false }, async () => {
+test("atomicWriteFileViaWorker: rejects symlink escaping tmpdir (symlink attack)", {
+	skip: process.platform === "win32" ? "symlinks need admin on Windows CI" : false,
+}, async () => {
 	const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-sym-attack-"));
 	const outside = path.join(sandbox, "outside");
 	const insideTmp = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-inside-"));
@@ -172,14 +177,11 @@ test("atomicWriteFileViaWorker: rejects symlink escaping tmpdir (symlink attack)
 		// Make insideTmp the only safe tmp region; outside is a sibling sandbox.
 		process.env.TMPDIR = insideTmp;
 		const file = path.join(attackLink, "stolen.txt");
-		await assert.rejects(
-			() => atomicWriteFileViaWorker(file, "payload\n"),
-			/Refusing to write: unsafe path/,
-		);
-		assert.ok(!fs.existsSync(path.join(outside, "stolen.txt")),
-			"must not write through attack symlink");
+		await assert.rejects(() => atomicWriteFileViaWorker(file, "payload\n"), /Refusing to write: unsafe path/);
+		assert.ok(!fs.existsSync(path.join(outside, "stolen.txt")), "must not write through attack symlink");
 	} finally {
-		if (savedTmpdir === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = savedTmpdir;
+		if (savedTmpdir === undefined) delete process.env.TMPDIR;
+		else process.env.TMPDIR = savedTmpdir;
 		terminateWorkerAtomicWriter();
 		fs.rmSync(sandbox, { recursive: true, force: true });
 		fs.rmSync(insideTmp, { recursive: true, force: true });

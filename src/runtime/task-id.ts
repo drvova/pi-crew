@@ -56,10 +56,7 @@ export function hashToBase36(content: string, length: number): string {
  * @param config - Adaptive configuration
  * @returns Recommended hash length
  */
-export function calculateAdaptiveLength(
-	existingCount: number,
-	config: AdaptiveIDConfig = DEFAULT_CONFIG,
-): number {
+export function calculateAdaptiveLength(existingCount: number, config: AdaptiveIDConfig = DEFAULT_CONFIG): number {
 	for (let length = config.minLength; length <= config.maxLength; length++) {
 		const totalPossibilities = Math.pow(36, length);
 		const probability = 1 - Math.exp(-(existingCount * existingCount) / (2 * totalPossibilities));
@@ -78,11 +75,7 @@ export function calculateAdaptiveLength(
  * @param existingCount - Number of existing IDs (for adaptive length)
  * @returns Hash-based ID like "pc-a1b2"
  */
-export function generateTaskHashId(
-	parts: string[],
-	prefix = DEFAULT_PREFIX,
-	existingCount = 0,
-): string {
+export function generateTaskHashId(parts: string[], prefix = DEFAULT_PREFIX, existingCount = 0): string {
 	const content = parts.join("|");
 	const length = calculateAdaptiveLength(existingCount);
 	const hash = hashToBase36(content, length);
@@ -137,15 +130,15 @@ export function childId(parentId: string, childNum: number): string {
  * Only "blocks" and "parent-child" affect execution ordering.
  */
 export type DependencyType =
-	| "blocks"              // A must complete before B starts
-	| "parent-child"        // Hierarchical relationship
-	| "conditional-blocks"  // B runs only if A fails
-	| "waits-for"           // Fanout gate: wait for dynamic children
-	| "related"             // Association only (no ordering)
-	| "supersedes"          // A replaces B
-	| "duplicates"          // A duplicates B
-	| "delegated-from"      // A was delegated from B
-	| "validates";          // A validates B's output
+	| "blocks" // A must complete before B starts
+	| "parent-child" // Hierarchical relationship
+	| "conditional-blocks" // B runs only if A fails
+	| "waits-for" // Fanout gate: wait for dynamic children
+	| "related" // Association only (no ordering)
+	| "supersedes" // A replaces B
+	| "duplicates" // A duplicates B
+	| "delegated-from" // A was delegated from B
+	| "validates"; // A validates B's output
 
 // ── Stable IDs (full hash, for cross-run references) ──────────────────────
 

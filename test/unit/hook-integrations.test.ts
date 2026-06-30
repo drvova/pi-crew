@@ -1,7 +1,7 @@
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { getHookStats, resetHookStats } from "../../src/state/hook-integrations.ts";
+import { beforeEach, describe, it } from "node:test";
 import { crewHooks } from "../../src/runtime/crew-hooks.ts";
+import { getHookStats, resetHookStats } from "../../src/state/hook-integrations.ts";
 
 describe("getHookStats", () => {
 	beforeEach(() => {

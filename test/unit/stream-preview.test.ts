@@ -1,11 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	createStreamPreview,
-	feedJsonEvent,
-	finishStreamPreview,
-	renderPreviewStatus,
-} from "../../src/runtime/stream-preview.ts";
+import { describe, it } from "node:test";
+import { createStreamPreview, feedJsonEvent, finishStreamPreview, renderPreviewStatus } from "../../src/runtime/stream-preview.ts";
 
 describe("stream-preview", () => {
 	it("creates a preview with correct defaults", () => {
@@ -21,7 +16,11 @@ describe("stream-preview", () => {
 
 	it("detects tool_call events", () => {
 		const p = createStreamPreview("t1", "r1");
-		const modified = feedJsonEvent(p, { type: "tool_call", name: "read", input: { path: "/foo.ts" } });
+		const modified = feedJsonEvent(p, {
+			type: "tool_call",
+			name: "read",
+			input: { path: "/foo.ts" },
+		});
 		assert.ok(modified);
 		assert.ok(p.activeToolCall);
 		assert.equal(p.activeToolCall.toolName, "read");
@@ -30,7 +29,11 @@ describe("stream-preview", () => {
 
 	it("detects tool_result events and clears active tool", () => {
 		const p = createStreamPreview("t1", "r1");
-		feedJsonEvent(p, { type: "tool_call", name: "bash", input: { command: "ls" } });
+		feedJsonEvent(p, {
+			type: "tool_call",
+			name: "bash",
+			input: { command: "ls" },
+		});
 		assert.ok(p.activeToolCall);
 		feedJsonEvent(p, { type: "tool_result", output: "ok" });
 		assert.equal(p.activeToolCall, null);

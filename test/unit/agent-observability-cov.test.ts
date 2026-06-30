@@ -1,16 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
-
-import {
-	readTextTail,
-	buildAgentDashboard,
-	readAgentOutput,
-} from "../../src/runtime/agent-observability.ts";
-
+import { describe, it } from "node:test";
 import type { TextTailResult } from "../../src/runtime/agent-observability.ts";
+
+import { buildAgentDashboard, readAgentOutput, readTextTail } from "../../src/runtime/agent-observability.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 // ── readTextTail ──
 
@@ -161,9 +156,33 @@ describe("buildAgentDashboard", () => {
 
 			// readCrewAgents expects a flat JSON array at stateRoot/agents.json
 			const agents = [
-				{ id: "t-running-0", taskId: "t-running", role: "r", agent: "a", status: "running", runtime: "sync", startedAt: "2026-01-01T00:00:00Z" },
-				{ id: "t-queued-0", taskId: "t-queued", role: "r", agent: "a", status: "queued", runtime: "sync" },
-				{ id: "t-completed-0", taskId: "t-completed", role: "r", agent: "a", status: "completed", runtime: "sync", startedAt: "2026-01-01T00:00:00Z", completedAt: "2026-01-01T00:01:00Z" },
+				{
+					id: "t-running-0",
+					taskId: "t-running",
+					role: "r",
+					agent: "a",
+					status: "running",
+					runtime: "sync",
+					startedAt: "2026-01-01T00:00:00Z",
+				},
+				{
+					id: "t-queued-0",
+					taskId: "t-queued",
+					role: "r",
+					agent: "a",
+					status: "queued",
+					runtime: "sync",
+				},
+				{
+					id: "t-completed-0",
+					taskId: "t-completed",
+					role: "r",
+					agent: "a",
+					status: "completed",
+					runtime: "sync",
+					startedAt: "2026-01-01T00:00:00Z",
+					completedAt: "2026-01-01T00:01:00Z",
+				},
 			];
 			fs.writeFileSync(path.join(dir, "agents.json"), JSON.stringify(agents), "utf-8");
 

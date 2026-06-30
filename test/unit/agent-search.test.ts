@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildAgentSearchIndex, searchAgents } from "../../src/agents/agent-search.ts";
+import { describe, it } from "node:test";
 import type { AgentConfig } from "../../src/agents/agent-config.ts";
+import { buildAgentSearchIndex, searchAgents } from "../../src/agents/agent-search.ts";
 
 function makeAgent(overrides: Partial<AgentConfig> & { name: string }): AgentConfig {
 	return {
@@ -16,10 +16,22 @@ function makeAgent(overrides: Partial<AgentConfig> & { name: string }): AgentCon
 describe("agent-search", () => {
 	it("ranks agents by BM25 relevance", () => {
 		const agents = [
-			makeAgent({ name: "explorer", description: "Fast codebase discovery and file mapping" }),
-			makeAgent({ name: "planner", description: "Create execution plans with clear sequencing" }),
-			makeAgent({ name: "executor", description: "Implement planned code changes" }),
-			makeAgent({ name: "reviewer", description: "Review code for correctness and regressions" }),
+			makeAgent({
+				name: "explorer",
+				description: "Fast codebase discovery and file mapping",
+			}),
+			makeAgent({
+				name: "planner",
+				description: "Create execution plans with clear sequencing",
+			}),
+			makeAgent({
+				name: "executor",
+				description: "Implement planned code changes",
+			}),
+			makeAgent({
+				name: "reviewer",
+				description: "Review code for correctness and regressions",
+			}),
 		];
 		const index = buildAgentSearchIndex(agents);
 		const results = searchAgents(index, "explore codebase files", 3);
@@ -59,8 +71,14 @@ describe("agent-search", () => {
 
 	it("scores agent name higher than description", () => {
 		const agents = [
-			makeAgent({ name: "security-reviewer", description: "Review general changes" }),
-			makeAgent({ name: "general-helper", description: "Security audit and vulnerability scanning" }),
+			makeAgent({
+				name: "security-reviewer",
+				description: "Review general changes",
+			}),
+			makeAgent({
+				name: "general-helper",
+				description: "Security audit and vulnerability scanning",
+			}),
 		];
 		const index = buildAgentSearchIndex(agents);
 		const results = searchAgents(index, "security", 2);
@@ -70,9 +88,7 @@ describe("agent-search", () => {
 	});
 
 	it("handles duplicate terms in query", () => {
-		const agents = [
-			makeAgent({ name: "test-agent", description: "Testing agent" }),
-		];
+		const agents = [makeAgent({ name: "test-agent", description: "Testing agent" })];
 		const index = buildAgentSearchIndex(agents);
 		const results = searchAgents(index, "test test test", 5);
 		assert.ok(results.length > 0);
@@ -82,7 +98,10 @@ describe("agent-search", () => {
 	it("builds index with correct average length", () => {
 		const agents = [
 			makeAgent({ name: "a", description: "short" }),
-			makeAgent({ name: "b", description: "much longer description with many words" }),
+			makeAgent({
+				name: "b",
+				description: "much longer description with many words",
+			}),
 		];
 		const index = buildAgentSearchIndex(agents);
 		assert.ok(index.averageLength > 0);

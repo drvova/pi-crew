@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { Counter, Gauge, Histogram, labelKey } from "../../src/observability/metrics-primitives.ts";
 
 test("metric labels are stable regardless of insertion order", () => {

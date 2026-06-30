@@ -1,30 +1,50 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	calculateRetryDelay,
-	executeWithRetry,
-	DEFAULT_RETRY_POLICY,
-} from "../../src/runtime/retry-executor.ts";
-import type { RetryPolicy, RetryHooks } from "../../src/runtime/retry-executor.ts";
+import { describe, it } from "node:test";
+import type { RetryHooks, RetryPolicy } from "../../src/runtime/retry-executor.ts";
+import { calculateRetryDelay, DEFAULT_RETRY_POLICY, executeWithRetry } from "../../src/runtime/retry-executor.ts";
 
 // ── calculateRetryDelay ──
 
 describe("calculateRetryDelay", () => {
 	it("returns base delay for first attempt", () => {
-		const policy: RetryPolicy = { maxAttempts: 3, backoffMs: 1000, jitterRatio: 0, exponentialFactor: 2 };
+		const policy: RetryPolicy = {
+			maxAttempts: 3,
+			backoffMs: 1000,
+			jitterRatio: 0,
+			exponentialFactor: 2,
+		};
 		const delay = calculateRetryDelay(1, policy, () => 0.5);
 		assert.strictEqual(delay, 1000);
 	});
 
 	it("applies exponential backoff", () => {
-		const policy: RetryPolicy = { maxAttempts: 5, backoffMs: 1000, jitterRatio: 0, exponentialFactor: 2 };
-		assert.strictEqual(calculateRetryDelay(1, policy, () => 0.5), 1000);
-		assert.strictEqual(calculateRetryDelay(2, policy, () => 0.5), 2000);
-		assert.strictEqual(calculateRetryDelay(3, policy, () => 0.5), 4000);
+		const policy: RetryPolicy = {
+			maxAttempts: 5,
+			backoffMs: 1000,
+			jitterRatio: 0,
+			exponentialFactor: 2,
+		};
+		assert.strictEqual(
+			calculateRetryDelay(1, policy, () => 0.5),
+			1000,
+		);
+		assert.strictEqual(
+			calculateRetryDelay(2, policy, () => 0.5),
+			2000,
+		);
+		assert.strictEqual(
+			calculateRetryDelay(3, policy, () => 0.5),
+			4000,
+		);
 	});
 
 	it("applies jitter within expected range", () => {
-		const policy: RetryPolicy = { maxAttempts: 3, backoffMs: 1000, jitterRatio: 0.5, exponentialFactor: 1 };
+		const policy: RetryPolicy = {
+			maxAttempts: 3,
+			backoffMs: 1000,
+			jitterRatio: 0.5,
+			exponentialFactor: 1,
+		};
 		// With jitterRatio=0.5, jitter = (random * 2 - 1) * 0.5 * 1000
 		// random=0 → jitter=-500, random=1 → jitter=500
 		const minDelay = calculateRetryDelay(1, policy, () => 0);
@@ -35,7 +55,12 @@ describe("calculateRetryDelay", () => {
 	});
 
 	it("never returns negative delay", () => {
-		const policy: RetryPolicy = { maxAttempts: 3, backoffMs: 100, jitterRatio: 1, exponentialFactor: 1 };
+		const policy: RetryPolicy = {
+			maxAttempts: 3,
+			backoffMs: 100,
+			jitterRatio: 1,
+			exponentialFactor: 1,
+		};
 		for (let r = 0; r <= 1; r += 0.1) {
 			const delay = calculateRetryDelay(1, policy, () => r);
 			assert.ok(delay >= 0, `Delay should be >= 0 for random=${r}, got ${delay}`);
@@ -65,7 +90,12 @@ describe("executeWithRetry", () => {
 				if (attempt < 2) throw new Error("fail");
 				return "recovered";
 			},
-			{ maxAttempts: 3, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1 },
+			{
+				maxAttempts: 3,
+				backoffMs: 1,
+				jitterRatio: 0,
+				exponentialFactor: 1,
+			},
 		);
 		assert.strictEqual(result, "recovered");
 		assert.strictEqual(attempt, 2);
@@ -75,8 +105,15 @@ describe("executeWithRetry", () => {
 		await assert.rejects(
 			async () =>
 				executeWithRetry(
-					async () => { throw new Error("always fail"); },
-					{ maxAttempts: 2, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1 },
+					async () => {
+						throw new Error("always fail");
+					},
+					{
+						maxAttempts: 2,
+						backoffMs: 1,
+						jitterRatio: 0,
+						exponentialFactor: 1,
+					},
 				),
 			(err: unknown) => {
 				assert.ok(err instanceof Error);
@@ -95,8 +132,17 @@ describe("executeWithRetry", () => {
 				if (attempt < 2) throw new Error("fail");
 				return "ok";
 			},
-			{ maxAttempts: 3, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1 },
-			{ onAttemptFailed: (a) => { failedAttempts.push(a); } },
+			{
+				maxAttempts: 3,
+				backoffMs: 1,
+				jitterRatio: 0,
+				exponentialFactor: 1,
+			},
+			{
+				onAttemptFailed: (a) => {
+					failedAttempts.push(a);
+				},
+			},
 		);
 		assert.deepStrictEqual(failedAttempts, [1]);
 	});
@@ -105,9 +151,20 @@ describe("executeWithRetry", () => {
 		const givenUp: { attempts: number; error: Error }[] = [];
 		try {
 			await executeWithRetry(
-				async () => { throw new Error("nope"); },
-				{ maxAttempts: 2, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1 },
-				{ onRetryGivenUp: (a, e) => { givenUp.push({ attempts: a, error: e }); } },
+				async () => {
+					throw new Error("nope");
+				},
+				{
+					maxAttempts: 2,
+					backoffMs: 1,
+					jitterRatio: 0,
+					exponentialFactor: 1,
+				},
+				{
+					onRetryGivenUp: (a, e) => {
+						givenUp.push({ attempts: a, error: e });
+					},
+				},
 			);
 		} catch {
 			// expected
@@ -119,15 +176,20 @@ describe("executeWithRetry", () => {
 
 	it("filters errors by retryableErrors patterns", async () => {
 		let attempts = 0;
-		await assert.rejects(
-			async () =>
-				executeWithRetry(
-					async () => {
-						attempts++;
-						throw new Error("timeout error");
-					},
-					{ maxAttempts: 3, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1, retryableErrors: ["rate*"] },
-				),
+		await assert.rejects(async () =>
+			executeWithRetry(
+				async () => {
+					attempts++;
+					throw new Error("timeout error");
+				},
+				{
+					maxAttempts: 3,
+					backoffMs: 1,
+					jitterRatio: 0,
+					exponentialFactor: 1,
+					retryableErrors: ["rate*"],
+				},
+			),
 		);
 		// Should only attempt once because "timeout error" doesn't match "rate*"
 		assert.strictEqual(attempts, 1);
@@ -141,7 +203,13 @@ describe("executeWithRetry", () => {
 					attempts++;
 					throw new Error("rate limit exceeded");
 				},
-				{ maxAttempts: 3, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1, retryableErrors: ["rate*"] },
+				{
+					maxAttempts: 3,
+					backoffMs: 1,
+					jitterRatio: 0,
+					exponentialFactor: 1,
+					retryableErrors: ["rate*"],
+				},
 			);
 		} catch {
 			// expected
@@ -152,13 +220,17 @@ describe("executeWithRetry", () => {
 	it("respects AbortSignal", async () => {
 		const controller = new AbortController();
 		controller.abort();
-		await assert.rejects(
-			async () =>
-				executeWithRetry(
-					async () => "never",
-					{ maxAttempts: 3, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1 },
-					{ signal: controller.signal },
-				),
+		await assert.rejects(async () =>
+			executeWithRetry(
+				async () => "never",
+				{
+					maxAttempts: 3,
+					backoffMs: 1,
+					jitterRatio: 0,
+					exponentialFactor: 1,
+				},
+				{ signal: controller.signal },
+			),
 		);
 	});
 
@@ -172,7 +244,12 @@ describe("executeWithRetry", () => {
 				if (attempt < 2) throw new Error("fail");
 				return "ok";
 			},
-			{ maxAttempts: 3, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1 },
+			{
+				maxAttempts: 3,
+				backoffMs: 1,
+				jitterRatio: 0,
+				exponentialFactor: 1,
+			},
 			{ attemptId: (n) => `custom-${n}` },
 		);
 		assert.ok(infos[0].startsWith("custom-"));
@@ -193,7 +270,12 @@ describe("executeWithRetry", () => {
 					called = true;
 					throw new Error("fail");
 				},
-				{ maxAttempts: 0, backoffMs: 1, jitterRatio: 0, exponentialFactor: 1 } as any,
+				{
+					maxAttempts: 0,
+					backoffMs: 1,
+					jitterRatio: 0,
+					exponentialFactor: 1,
+				} as any,
 			);
 		} catch {
 			// expected

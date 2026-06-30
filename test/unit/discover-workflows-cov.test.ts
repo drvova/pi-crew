@@ -1,8 +1,8 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { discoverWorkflows, allWorkflows } from "../../src/workflows/discover-workflows.ts";
+import { describe, it } from "node:test";
+import { allWorkflows, discoverWorkflows } from "../../src/workflows/discover-workflows.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 describe("discoverWorkflows", () => {
@@ -39,16 +39,13 @@ describe("discoverWorkflows", () => {
 		try {
 			const wfDir = path.join(tmp, ".crew", "workflows");
 			fs.mkdirSync(wfDir, { recursive: true });
-			fs.writeFileSync(path.join(wfDir, "test.workflow.md"), [
-				"---",
-				"name: test-wf",
-				"description: A test workflow",
-				"---",
-				"## step1",
-				"role: explorer",
-				"",
-				"Do the thing",
-			].join("\n"), "utf-8");
+			fs.writeFileSync(
+				path.join(wfDir, "test.workflow.md"),
+				["---", "name: test-wf", "description: A test workflow", "---", "## step1", "role: explorer", "", "Do the thing"].join(
+					"\n",
+				),
+				"utf-8",
+			);
 
 			const result = discoverWorkflows(tmp);
 			assert.equal(result.project.length, 1);
@@ -69,15 +66,11 @@ describe("discoverWorkflows", () => {
 			const wfDir = path.join(tmp, ".crew", "workflows");
 			fs.mkdirSync(wfDir, { recursive: true });
 			fs.writeFileSync(path.join(wfDir, "notes.md"), "# Notes", "utf-8");
-			fs.writeFileSync(path.join(wfDir, "valid.workflow.md"), [
-				"---",
-				"name: valid",
-				"---",
-				"## step1",
-				"role: explorer",
-				"",
-				"task",
-			].join("\n"), "utf-8");
+			fs.writeFileSync(
+				path.join(wfDir, "valid.workflow.md"),
+				["---", "name: valid", "---", "## step1", "role: explorer", "", "task"].join("\n"),
+				"utf-8",
+			);
 
 			const result = discoverWorkflows(tmp);
 			assert.equal(result.project.length, 1);
@@ -92,12 +85,8 @@ describe("discoverWorkflows", () => {
 		try {
 			const wfDir = path.join(tmp, ".crew", "workflows");
 			fs.mkdirSync(wfDir, { recursive: true });
-			fs.writeFileSync(path.join(wfDir, "beta.workflow.md"), [
-				"---\nname: beta\n---\n## s1\nrole: x\n\nt",
-			].join("\n"), "utf-8");
-			fs.writeFileSync(path.join(wfDir, "alpha.workflow.md"), [
-				"---\nname: alpha\n---\n## s1\nrole: x\n\nt",
-			].join("\n"), "utf-8");
+			fs.writeFileSync(path.join(wfDir, "beta.workflow.md"), ["---\nname: beta\n---\n## s1\nrole: x\n\nt"].join("\n"), "utf-8");
+			fs.writeFileSync(path.join(wfDir, "alpha.workflow.md"), ["---\nname: alpha\n---\n## s1\nrole: x\n\nt"].join("\n"), "utf-8");
 
 			const result = discoverWorkflows(tmp);
 			assert.equal(result.project.length, 2);
@@ -113,9 +102,7 @@ describe("discoverWorkflows", () => {
 		try {
 			const wfDir = path.join(tmp, ".crew", "workflows");
 			fs.mkdirSync(wfDir, { recursive: true });
-			fs.writeFileSync(path.join(wfDir, "my-flow.workflow.md"), [
-				"---\n---\n## step1\nrole: explorer\n\ntask",
-			].join("\n"), "utf-8");
+			fs.writeFileSync(path.join(wfDir, "my-flow.workflow.md"), ["---\n---\n## step1\nrole: explorer\n\ntask"].join("\n"), "utf-8");
 
 			const result = discoverWorkflows(tmp);
 			assert.equal(result.project.length, 1);
@@ -130,19 +117,23 @@ describe("discoverWorkflows", () => {
 		try {
 			const wfDir = path.join(tmp, ".crew", "workflows");
 			fs.mkdirSync(wfDir, { recursive: true });
-			fs.writeFileSync(path.join(wfDir, "deps.workflow.md"), [
-				"---\nname: deps\n---",
-				"## step1",
-				"role: explorer",
-				"",
-				"Explore",
-				"## step2",
-				"role: analyst",
-				"dependsOn: step1",
-				"parallelGroup: analysis",
-				"",
-				"Analyze",
-			].join("\n"), "utf-8");
+			fs.writeFileSync(
+				path.join(wfDir, "deps.workflow.md"),
+				[
+					"---\nname: deps\n---",
+					"## step1",
+					"role: explorer",
+					"",
+					"Explore",
+					"## step2",
+					"role: analyst",
+					"dependsOn: step1",
+					"parallelGroup: analysis",
+					"",
+					"Analyze",
+				].join("\n"),
+				"utf-8",
+			);
 
 			const result = discoverWorkflows(tmp);
 			assert.equal(result.project.length, 1);
@@ -160,14 +151,11 @@ describe("discoverWorkflows", () => {
 		try {
 			const wfDir = path.join(tmp, ".crew", "workflows");
 			fs.mkdirSync(wfDir, { recursive: true });
-			fs.writeFileSync(path.join(wfDir, "out.workflow.md"), [
-				"---\nname: out\n---",
-				"## step1",
-				"role: explorer",
-				"output: false",
-				"",
-				"Task",
-			].join("\n"), "utf-8");
+			fs.writeFileSync(
+				path.join(wfDir, "out.workflow.md"),
+				["---\nname: out\n---", "## step1", "role: explorer", "output: false", "", "Task"].join("\n"),
+				"utf-8",
+			);
 
 			const result = discoverWorkflows(tmp);
 			assert.equal(result.project[0]!.steps[0]!.output, false);
@@ -221,8 +209,24 @@ describe("allWorkflows", () => {
 
 	it("sorts merged workflows alphabetically", () => {
 		const discovery = {
-			builtin: [{ name: "zebra", description: "", source: "builtin" as const, filePath: "/z", steps: [] }],
-			user: [{ name: "alpha", description: "", source: "user" as const, filePath: "/a", steps: [] }],
+			builtin: [
+				{
+					name: "zebra",
+					description: "",
+					source: "builtin" as const,
+					filePath: "/z",
+					steps: [],
+				},
+			],
+			user: [
+				{
+					name: "alpha",
+					description: "",
+					source: "user" as const,
+					filePath: "/a",
+					steps: [],
+				},
+			],
 			project: [],
 		};
 		const result = allWorkflows(discovery);

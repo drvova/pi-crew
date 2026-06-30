@@ -1,16 +1,16 @@
 /**
  * HiddenHandoffService - Sends hidden boomerang-handoff messages to parent agents.
- * 
+ *
  * Based on pi-boomerang's triggerHiddenOrchestratorHandoff() pattern:
  * - Sends customType: "boomerang-handoff" messages
  * - Full handoff details in hidden message to parent
  * - Orchestrator immediately reads summary
- * 
+ *
  * @see docs/pi-boomerang-integration-plan.md
  */
 
-import type { HandoffSummary } from "./handoff-manager.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import type { HandoffSummary } from "./handoff-manager.ts";
 
 /**
  * Type of hidden handoff message.
@@ -161,14 +161,11 @@ export class HiddenHandoffService {
 
 	/**
 	 * Send a hidden handoff to the parent agent or specified recipient.
-	 * 
+	 *
 	 * @param summary - The handoff summary to send
 	 * @param options - Send options
 	 */
-	sendHandoff(
-		summary: HandoffSummary,
-		options: SendHandoffOptions = {},
-	): void {
+	sendHandoff(summary: HandoffSummary, options: SendHandoffOptions = {}): void {
 		if (!this.enabled) {
 			return;
 		}
@@ -233,10 +230,7 @@ export class HiddenHandoffService {
 	/**
 	 * Send a hidden handoff immediately (fire and forget).
 	 */
-	sendHandoffAsync(
-		summary: HandoffSummary,
-		options?: SendHandoffOptions,
-	): void {
+	sendHandoffAsync(summary: HandoffSummary, options?: SendHandoffOptions): void {
 		// Fire and forget - no await
 		try {
 			this.sendHandoff(summary, options);
@@ -289,10 +283,7 @@ export class HiddenHandoffService {
 	 * Build summary text from summary.
 	 */
 	private buildSummaryText(summary: HandoffSummary): string {
-		const parts: string[] = [
-			`Completed: ${summary.task}`,
-			`Outcome: ${summary.outcome}`,
-		];
+		const parts: string[] = [`Completed: ${summary.task}`, `Outcome: ${summary.outcome}`];
 
 		if (summary.filesCreated.length > 0) {
 			parts.push(`Files created: ${summary.filesCreated.join(", ")}`);
@@ -310,10 +301,7 @@ export class HiddenHandoffService {
 			parts.push(`Next steps: ${summary.nextSteps.join("; ")}`);
 		}
 
-		parts.push(
-			`Tokens: ${summary.metrics.tokensUsed}`,
-			`Duration: ${Math.round(summary.metrics.duration / 1000)}s`,
-		);
+		parts.push(`Tokens: ${summary.metrics.tokensUsed}`, `Duration: ${Math.round(summary.metrics.duration / 1000)}s`);
 
 		return parts.join("\n");
 	}
@@ -361,9 +349,7 @@ export class HiddenHandoffService {
 		const timestamps = this.sendTimestamps.get(recipient) ?? [];
 
 		// Filter out old timestamps outside the window
-		const recentTimestamps = timestamps.filter(
-			(t) => now - t < this.RATE_LIMIT_WINDOW_MS,
-		);
+		const recentTimestamps = timestamps.filter((t) => now - t < this.RATE_LIMIT_WINDOW_MS);
 
 		// HIGH-11: If no recent timestamps, remove the empty key to prevent unbounded growth
 		if (recentTimestamps.length === 0) {
@@ -384,9 +370,7 @@ export class HiddenHandoffService {
 		timestamps.push(now);
 
 		// MEDIUM-14: Use RATE_LIMIT_WINDOW_MS consistently for both filter and record
-		const recentTimestamps = timestamps.filter(
-			(t) => now - t < this.RATE_LIMIT_WINDOW_MS,
-		);
+		const recentTimestamps = timestamps.filter((t) => now - t < this.RATE_LIMIT_WINDOW_MS);
 
 		this.sendTimestamps.set(recipient, recentTimestamps);
 	}
@@ -418,8 +402,6 @@ export interface SendHandoffOptions {
 /**
  * Create a HiddenHandoffService with default options.
  */
-export function createHiddenHandoffService(
-	options?: HiddenHandoffServiceOptions,
-): HiddenHandoffService {
+export function createHiddenHandoffService(options?: HiddenHandoffServiceOptions): HiddenHandoffService {
 	return new HiddenHandoffService(options);
 }

@@ -1,13 +1,13 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { AgentConfig } from "../../src/agents/agent-config.ts";
 import {
-	toolGuidanceBlock,
 	coordinationBridgeInstructions,
 	renderOutputSchemaBlock,
 	renderTaskPrompt,
+	toolGuidanceBlock,
 } from "../../src/runtime/task-runner/prompt-builder.ts";
-import type { AgentConfig } from "../../src/agents/agent-config.ts";
-import type { TeamRunManifest, TeamTaskState, TaskOutputSchema } from "../../src/state/types.ts";
+import type { TaskOutputSchema, TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 import type { WorkflowStep } from "../../src/workflows/workflow-config.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
@@ -68,17 +68,26 @@ describe("toolGuidanceBlock", () => {
 	});
 
 	it("returns empty string when loadMode is not lean", () => {
-		const agent = partialAgentConfig({ loadMode: "essential", defaultTools: ["bash", "read"] });
+		const agent = partialAgentConfig({
+			loadMode: "essential",
+			defaultTools: ["bash", "read"],
+		});
 		assert.strictEqual(toolGuidanceBlock(agent), "");
 	});
 
 	it("returns empty string when defaultTools is empty", () => {
-		const agent = partialAgentConfig({ loadMode: "lean", defaultTools: [] });
+		const agent = partialAgentConfig({
+			loadMode: "lean",
+			defaultTools: [],
+		});
 		assert.strictEqual(toolGuidanceBlock(agent), "");
 	});
 
 	it("returns guidance block for lean mode with tools", () => {
-		const agent = partialAgentConfig({ loadMode: "lean", defaultTools: ["bash", "read"] });
+		const agent = partialAgentConfig({
+			loadMode: "lean",
+			defaultTools: ["bash", "read"],
+		});
 		const result = toolGuidanceBlock(agent);
 		assert.ok(result.includes("Tool Guidance"));
 		assert.ok(result.includes("bash, read"));
@@ -120,7 +129,10 @@ describe("renderOutputSchemaBlock", () => {
 	});
 
 	it("includes description when provided", () => {
-		const schema: TaskOutputSchema = { format: "text", description: "A summary of changes" };
+		const schema: TaskOutputSchema = {
+			format: "text",
+			description: "A summary of changes",
+		};
 		const result = renderOutputSchemaBlock(schema);
 		assert.ok(result.includes("A summary of changes"));
 	});
@@ -128,7 +140,10 @@ describe("renderOutputSchemaBlock", () => {
 	it("includes JSON schema when format is json", () => {
 		const schema: TaskOutputSchema = {
 			format: "json",
-			schema: { type: "object", properties: { name: { type: "string" } } },
+			schema: {
+				type: "object",
+				properties: { name: { type: "string" } },
+			},
 		};
 		const result = renderOutputSchemaBlock(schema);
 		assert.ok(result.includes("```json"));
@@ -136,7 +151,10 @@ describe("renderOutputSchemaBlock", () => {
 	});
 
 	it("includes example when provided", () => {
-		const schema: TaskOutputSchema = { format: "text", example: "Hello world output" };
+		const schema: TaskOutputSchema = {
+			format: "text",
+			example: "Hello world output",
+		};
 		const result = renderOutputSchemaBlock(schema);
 		assert.ok(result.includes("Hello world output"));
 		assert.ok(result.includes("Example output"));
@@ -180,8 +198,15 @@ describe("renderTaskPrompt", () => {
 	it("includes read-only role instructions for read-only roles", async () => {
 		const tmpDir = createTrackedTempDir("pi-crew-pb-");
 
-		const manifest = makeManifest(tmpDir, { runId: "run_ro", goal: "Explore codebase" });
-		const task = makeTask({ id: "02_explore", role: "explorer", cwd: tmpDir });
+		const manifest = makeManifest(tmpDir, {
+			runId: "run_ro",
+			goal: "Explore codebase",
+		});
+		const task = makeTask({
+			id: "02_explore",
+			role: "explorer",
+			cwd: tmpDir,
+		});
 		const step: WorkflowStep = {
 			id: "02",
 			role: "explorer",
@@ -197,7 +222,11 @@ describe("renderTaskPrompt", () => {
 	it("includes workspace mode in prompt", async () => {
 		const tmpDir = createTrackedTempDir("pi-crew-pb-");
 
-		const manifest = makeManifest(tmpDir, { runId: "run_ws", goal: "Test workspace mode", workspaceMode: "worktree" });
+		const manifest = makeManifest(tmpDir, {
+			runId: "run_ws",
+			goal: "Test workspace mode",
+			workspaceMode: "worktree",
+		});
 		const task = makeTask({ id: "03_ws", cwd: tmpDir });
 		const step: WorkflowStep = {
 			id: "03",

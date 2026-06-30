@@ -72,13 +72,14 @@ export class CrewFooter {
 		const usage = this.data.usage;
 		const context = contextText(this.data);
 		const contextPercent = this.data.contextPercent;
-		const contextColor = contextPercent !== undefined && Number.isFinite(contextPercent)
-			? contextPercent > 90
-				? "error"
-				: contextPercent > 70
-					? "warning"
-					: undefined
-			: undefined;
+		const contextColor =
+			contextPercent !== undefined && Number.isFinite(contextPercent)
+				? contextPercent > 90
+					? "error"
+					: contextPercent > 70
+						? "warning"
+						: undefined
+				: undefined;
 		const contextRendered = contextColor ? this.theme.fg(contextColor, context) : context;
 		const usageLine = [
 			`↑${formatCount(usage?.input)}`,

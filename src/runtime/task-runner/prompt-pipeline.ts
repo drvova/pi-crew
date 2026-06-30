@@ -48,17 +48,41 @@ export function buildWorkerPromptPipeline(input: BuildWorkerPromptPipelineInput)
 		schemaVersion: 1,
 		taskId: input.taskId,
 		stages: [
-			{ name: "task-packet-built", references: [`metadata/${input.taskId}.task-packet.json`] },
-			{ name: "dependency-context-collected", references: [artifactReference(input.artifactsRoot, input.inputsArtifact) ?? `metadata/${input.taskId}.inputs.json`] },
+			{
+				name: "task-packet-built",
+				references: [`metadata/${input.taskId}.task-packet.json`],
+			},
+			{
+				name: "dependency-context-collected",
+				references: [artifactReference(input.artifactsRoot, input.inputsArtifact) ?? `metadata/${input.taskId}.inputs.json`],
+			},
 			{
 				name: "skills-rendered-or-disabled",
-				references: input.skillArtifact ? [artifactReference(input.artifactsRoot, input.skillArtifact) ?? `metadata/${input.taskId}.skills.md`] : [],
-				details: { disabled: input.skillsDisabled, skillInstructionCount: input.skillInstructionCount },
+				references: input.skillArtifact
+					? [artifactReference(input.artifactsRoot, input.skillArtifact) ?? `metadata/${input.taskId}.skills.md`]
+					: [],
+				details: {
+					disabled: input.skillsDisabled,
+					skillInstructionCount: input.skillInstructionCount,
+				},
 			},
-			{ name: "capability-inventory-recorded", references: [artifactReference(input.artifactsRoot, input.capabilityArtifact) ?? `metadata/${input.taskId}.capabilities.json`] },
-			{ name: "coordination-bridge-attached", references: [artifactReference(input.artifactsRoot, input.coordinationArtifact) ?? `metadata/${input.taskId}.coordination-bridge.md`] },
+			{
+				name: "capability-inventory-recorded",
+				references: [
+					artifactReference(input.artifactsRoot, input.capabilityArtifact) ?? `metadata/${input.taskId}.capabilities.json`,
+				],
+			},
+			{
+				name: "coordination-bridge-attached",
+				references: [
+					artifactReference(input.artifactsRoot, input.coordinationArtifact) ?? `metadata/${input.taskId}.coordination-bridge.md`,
+				],
+			},
 			{ name: "prompt-rendered", references: [] },
-			{ name: "prompt-artifact-written", references: [artifactReference(input.artifactsRoot, input.promptArtifact) ?? `prompts/${input.taskId}.md`] },
+			{
+				name: "prompt-artifact-written",
+				references: [artifactReference(input.artifactsRoot, input.promptArtifact) ?? `prompts/${input.taskId}.md`],
+			},
 		],
 	};
 }

@@ -60,10 +60,18 @@ export function collectLiveSessionHealth(
 
 	for (const agent of agents) {
 		switch (agent.status) {
-			case "running": running++; break;
-			case "idle": idle++; break;
-			case "completed": completed++; break;
-			case "failed": failed++; break;
+			case "running":
+				running++;
+				break;
+			case "idle":
+				idle++;
+				break;
+			case "completed":
+				completed++;
+				break;
+			case "failed":
+				failed++;
+				break;
 		}
 	}
 

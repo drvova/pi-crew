@@ -1,5 +1,6 @@
-import type { CrewAgentRecord } from "./crew-agent-runtime.ts";
 import type { TeamRunManifest } from "../state/types.ts";
+import type { CrewAgentRecord } from "./crew-agent-runtime.ts";
+
 export { hasAsyncStartMarker } from "./async-marker.ts";
 
 export interface ProcessLiveness {
@@ -34,7 +35,12 @@ export function checkProcessLiveness(pid: number | undefined): ProcessLiveness {
 		return { pid, alive: true, detail: "process is alive" };
 	} catch (error) {
 		const nodeError = error as NodeJS.ErrnoException;
-		if (nodeError.code === "EPERM") return { pid, alive: true, detail: "process exists but permission is denied" };
+		if (nodeError.code === "EPERM")
+			return {
+				pid,
+				alive: true,
+				detail: "process exists but permission is denied",
+			};
 		if (nodeError.code === "ESRCH") return { pid, alive: false, detail: "process does not exist" };
 		const message = error instanceof Error ? error.message : String(error);
 		return { pid, alive: false, detail: message };
@@ -56,7 +62,12 @@ export function isFinishedRunStatus(status: string): boolean {
  */
 const ORPHANED_NO_PROGRESS_MS = 5 * 60 * 1000;
 
-export function isLikelyOrphanedActiveRun(run: TeamRunManifest, agents: CrewAgentRecord[] = [], now = Date.now(), staleMs = ORPHANED_ACTIVE_RUN_MS): boolean {
+export function isLikelyOrphanedActiveRun(
+	run: TeamRunManifest,
+	agents: CrewAgentRecord[] = [],
+	now = Date.now(),
+	staleMs = ORPHANED_ACTIVE_RUN_MS,
+): boolean {
 	if (!isActiveRunStatus(run.status)) return false;
 	if (run.async?.pid !== undefined) return false;
 	const updatedAt = new Date(run.updatedAt).getTime();
@@ -91,8 +102,8 @@ function hasDurableActiveAgentEvidence(agent: CrewAgentRecord): boolean {
 		// spawned-but-never-executed agents should not appear as active.
 		return Boolean(
 			(agent.progress && (agent.progress.toolCount > 0 || agent.progress.recentOutput.length > 0)) ||
-			(agent.jsonEvents && agent.jsonEvents > 0) ||
-			(agent.toolUses && agent.toolUses > 0),
+				(agent.jsonEvents && agent.jsonEvents > 0) ||
+				(agent.toolUses && agent.toolUses > 0),
 		);
 	}
 	return false;

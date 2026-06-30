@@ -5,10 +5,7 @@ import * as path from "node:path";
 import test from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
 
 function restoreEnv(name: string, previous: string | undefined): void {
@@ -41,9 +38,7 @@ test("live-session runtime can inherit parent conversation context", async () =>
 						type: "message",
 						message: {
 							role: "user",
-							content: [
-								{ type: "text", text: "parent decision abc" },
-							],
+							content: [{ type: "text", text: "parent decision abc" }],
 						},
 					},
 				],

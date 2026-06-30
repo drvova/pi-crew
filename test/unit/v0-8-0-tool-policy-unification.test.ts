@@ -75,13 +75,21 @@ describe("resolveToolPolicy — allowlist precedence", () => {
 	it("user/project agent: role-config is the fallback when frontmatter omits tools", () => {
 		// A custom agent with no `tools:` frontmatter but spawned under the
 		// explorer role → inherits the explorer role-config allowlist.
-		const agent = makeAgent({ source: "project", name: "custom", tools: undefined });
+		const agent = makeAgent({
+			source: "project",
+			name: "custom",
+			tools: undefined,
+		});
 		const policy = resolveToolPolicy(agent, "explorer");
 		assert.deepEqual(policy.tools, ["read", "grep", "find", "ls", "glob"]);
 	});
 
 	it("no allowlist anywhere → tools undefined (all built-ins allowed)", () => {
-		const agent = makeAgent({ source: "project", name: "custom", tools: undefined });
+		const agent = makeAgent({
+			source: "project",
+			name: "custom",
+			tools: undefined,
+		});
 		const policy = resolveToolPolicy(agent, "executor"); // executor has no allowlist
 		assert.equal(policy.tools, undefined);
 	});
@@ -122,7 +130,11 @@ describe("resolveToolPolicy — denylist is additive (merged)", () => {
 
 	it("role excludeTools honored even when agent has no disallowedTools", () => {
 		// (this was the live-session bug: live-session ignored role-config)
-		const agent = makeAgent({ source: "project", name: "custom", disallowedTools: undefined });
+		const agent = makeAgent({
+			source: "project",
+			name: "custom",
+			disallowedTools: undefined,
+		});
 		const policy = resolveToolPolicy(agent, "writer"); // writer excludes bash,web,ask_question
 		assert.ok(policy.excludeTools?.includes("bash"));
 		assert.ok(policy.excludeTools?.includes("web"));
@@ -130,7 +142,11 @@ describe("resolveToolPolicy — denylist is additive (merged)", () => {
 	});
 
 	it("no denylist anywhere → excludeTools undefined", () => {
-		const agent = makeAgent({ source: "project", name: "custom", disallowedTools: undefined });
+		const agent = makeAgent({
+			source: "project",
+			name: "custom",
+			disallowedTools: undefined,
+		});
 		const policy = resolveToolPolicy(agent, "executor"); // executor has no excludeTools
 		assert.equal(policy.excludeTools, undefined);
 	});

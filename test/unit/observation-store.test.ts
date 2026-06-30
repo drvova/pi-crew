@@ -1,12 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import {
-	stripPrivacyTags,
-	ObservationStore,
-	type Observation,
-	type CompressedObservation,
-} from "../../src/state/observation-store.ts";
+import { describe, it } from "node:test";
+import { type CompressedObservation, type Observation, ObservationStore, stripPrivacyTags } from "../../src/state/observation-store.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeObservation(overrides: Partial<Observation> = {}): Observation {
@@ -37,7 +32,7 @@ function makeCompressed(overrides: Partial<CompressedObservation> = {}): Compres
 
 describe("stripPrivacyTags", () => {
 	it("strips content between default privacy tags", () => {
-		const input = 'api key is <secret>my-secret-key</secret> end';
+		const input = "api key is <secret>my-secret-key</secret> end";
 		const result = stripPrivacyTags(input);
 		assert.equal(result, "api key is [REDACTED] end");
 	});
@@ -101,10 +96,12 @@ describe("ObservationStore", () => {
 		try {
 			const storePath = path.join(tmp, "obs.json");
 			const store = new ObservationStore(storePath);
-			store.record(makeObservation({
-				input: "key is <secret>abc123</secret>",
-				output: "done",
-			}));
+			store.record(
+				makeObservation({
+					input: "key is <secret>abc123</secret>",
+					output: "done",
+				}),
+			);
 
 			const recent = store.getRecent(1);
 			assert.equal(recent[0]!.input, "key is [REDACTED]");
@@ -118,7 +115,9 @@ describe("ObservationStore", () => {
 		const tmp = createTrackedTempDir("pi-crew-obs-");
 		try {
 			const storePath = path.join(tmp, "obs.json");
-			const store = new ObservationStore(storePath, { maxObservations: 3 });
+			const store = new ObservationStore(storePath, {
+				maxObservations: 3,
+			});
 			for (let i = 0; i < 5; i++) {
 				store.record(makeObservation({ tool: `tool-${i}`, timestamp: i }));
 			}
@@ -187,12 +186,14 @@ describe("ObservationStore", () => {
 		try {
 			const storePath = path.join(tmp, "obs.json");
 			const store = new ObservationStore(storePath);
-			store.addCompressed(makeCompressed({
-				summary: "Read files for analysis",
-				patterns: ["file-reading"],
-				decisions: ["read-first"],
-				filesAffected: ["src/main.ts"],
-			}));
+			store.addCompressed(
+				makeCompressed({
+					summary: "Read files for analysis",
+					patterns: ["file-reading"],
+					decisions: ["read-first"],
+					filesAffected: ["src/main.ts"],
+				}),
+			);
 
 			const text = store.injectCompressed();
 			assert.ok(text.includes("## Observations from Previous Sessions"));

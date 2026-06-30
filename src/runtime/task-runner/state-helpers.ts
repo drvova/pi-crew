@@ -1,12 +1,12 @@
 import * as fs from "node:fs";
-import type { TaskCheckpointState, TeamRunManifest, TeamTaskState } from "../../state/types.ts";
-import { loadRunManifestById, saveRunTasks } from "../../state/state-store.ts";
-import { recordFromTask, upsertCrewAgent } from "../crew-agent-records.ts";
-import { logInternalError } from "../../utils/internal-error.ts";
 import { withRunLockSync } from "../../state/locks.ts";
+import { loadRunManifestById, saveRunTasks } from "../../state/state-store.ts";
+import type { TaskCheckpointState, TeamRunManifest, TeamTaskState } from "../../state/types.ts";
+import { logInternalError } from "../../utils/internal-error.ts";
+import { recordFromTask, upsertCrewAgent } from "../crew-agent-records.ts";
 
 export function updateTask(tasks: TeamTaskState[], updated: TeamTaskState): TeamTaskState[] {
-	return tasks.map((task) => task.id === updated.id ? updated : task);
+	return tasks.map((task) => (task.id === updated.id ? updated : task));
 }
 
 /**
@@ -25,7 +25,12 @@ export function updateTask(tasks: TeamTaskState[], updated: TeamTaskState): Team
  *
  * @param checkpointPhase - Optional checkpoint phase to include in the task state alongside the update.
  */
-export function persistSingleTaskUpdate(manifest: TeamRunManifest, fallbackTasks: TeamTaskState[], updated: TeamTaskState, checkpointPhase?: TaskCheckpointState["phase"]): TeamTaskState[] {
+export function persistSingleTaskUpdate(
+	manifest: TeamRunManifest,
+	fallbackTasks: TeamTaskState[],
+	updated: TeamTaskState,
+	checkpointPhase?: TaskCheckpointState["phase"],
+): TeamTaskState[] {
 	let baseMtime = 0;
 	try {
 		baseMtime = fs.statSync(manifest.tasksPath).mtimeMs;
@@ -38,7 +43,13 @@ export function persistSingleTaskUpdate(manifest: TeamRunManifest, fallbackTasks
 
 	// Build the task with optional checkpoint phase
 	const taskWithCheckpoint = checkpointPhase
-		? { ...updated, checkpoint: { phase: checkpointPhase, updatedAt: new Date().toISOString() } }
+		? {
+				...updated,
+				checkpoint: {
+					phase: checkpointPhase,
+					updatedAt: new Date().toISOString(),
+				},
+			}
 		: updated;
 
 	try {
@@ -113,8 +124,18 @@ export function persistSingleTaskUpdate(manifest: TeamRunManifest, fallbackTasks
 	}
 }
 
-export function checkpointTask(manifest: TeamRunManifest, tasks: TeamTaskState[], task: TeamTaskState, phase: TaskCheckpointState["phase"], childPid?: number): { task: TeamTaskState; tasks: TeamTaskState[] } {
-	const checkpoint: TaskCheckpointState = { phase, updatedAt: new Date().toISOString(), ...(childPid ? { childPid } : task.checkpoint?.childPid ? { childPid: task.checkpoint.childPid } : {}) };
+export function checkpointTask(
+	manifest: TeamRunManifest,
+	tasks: TeamTaskState[],
+	task: TeamTaskState,
+	phase: TaskCheckpointState["phase"],
+	childPid?: number,
+): { task: TeamTaskState; tasks: TeamTaskState[] } {
+	const checkpoint: TaskCheckpointState = {
+		phase,
+		updatedAt: new Date().toISOString(),
+		...(childPid ? { childPid } : task.checkpoint?.childPid ? { childPid: task.checkpoint.childPid } : {}),
+	};
 	const nextTask = { ...task, checkpoint };
 	const nextTasks = persistSingleTaskUpdate(manifest, updateTask(tasks, nextTask), nextTask);
 	try {

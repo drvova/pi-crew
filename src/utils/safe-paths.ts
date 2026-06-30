@@ -11,7 +11,7 @@ export function assertSafePathId(kind: string, value: string): string {
 }
 
 export function resolveContainedPath(baseDir: string, targetPath: string): string {
-	if (targetPath.includes('\0')) {
+	if (targetPath.includes("\0")) {
 		throw new Error(`Security: path contains null byte`);
 	}
 	const base = path.resolve(baseDir);
@@ -23,9 +23,10 @@ export function resolveContainedPath(baseDir: string, targetPath: string): strin
 	// OS-managed symlink is wrongly rejected as "outside" the base.
 	const baseNorm = resolveCanonicalPath(base);
 	const resolvedNorm = resolveCanonicalPath(resolved);
-	const relative = process.platform === "win32"
-		? path.relative(baseNorm.toLowerCase(), resolvedNorm.toLowerCase())
-		: path.relative(baseNorm, resolvedNorm);
+	const relative =
+		process.platform === "win32"
+			? path.relative(baseNorm.toLowerCase(), resolvedNorm.toLowerCase())
+			: path.relative(baseNorm, resolvedNorm);
 	if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`Path is outside ${baseDir}: ${targetPath}`);
 	return resolved;
 }
@@ -57,7 +58,9 @@ function resolveCanonicalPath(p: string): string {
 				let acc = real;
 				for (let i = parts.length - 1; i >= 0; i--) acc = path.join(acc, parts[i]);
 				return acc;
-			} catch { /* keep walking up */ }
+			} catch {
+				/* keep walking up */
+			}
 			parts.push(path.basename(current));
 			current = path.dirname(current);
 		}
@@ -91,14 +94,20 @@ function resolveWindowsCanonical(p: string): string {
 		try {
 			const real = fs.realpathSync(p);
 			return real;
-		} catch { /* proceed to ancestor walk */ }
+		} catch {
+			/* proceed to ancestor walk */
+		}
 		// Walk up to find the deepest existing ancestor
 		const parts: string[] = [];
 		let current = p;
 		while (current !== path.dirname(current)) {
 			try {
 				let real: string;
-				try { real = fs.realpathSync.native(current); } catch { real = fs.realpathSync(current); }
+				try {
+					real = fs.realpathSync.native(current);
+				} catch {
+					real = fs.realpathSync(current);
+				}
 				// Guard against NTFS internal paths
 				if (real.includes("$Extend") || real.includes("$Deleted")) throw new Error("NTFS internal path");
 				// Found existing ancestor — join with remaining parts in reverse order
@@ -107,7 +116,9 @@ function resolveWindowsCanonical(p: string): string {
 					real = path.join(real, parts[i]);
 				}
 				return real;
-			} catch { /* keep walking */ }
+			} catch {
+				/* keep walking */
+			}
 			parts.push(path.basename(current));
 			current = path.dirname(current);
 		}
@@ -161,7 +172,7 @@ function resolveWindowsCanonical(p: string): string {
  * operation is atomic and prevents TOCTOU attacks.
  */
 export function resolveRealContainedPath(baseDir: string, targetPath: string): string {
-	if (targetPath.includes('\0')) {
+	if (targetPath.includes("\0")) {
 		throw new Error(`Security: path contains null byte`);
 	}
 	const resolved = resolveContainedPath(baseDir, targetPath);
@@ -179,7 +190,9 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 				fs.mkdirSync(baseDir, { recursive: true });
 				baseFd = fs.openSync(baseDir, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
 			} catch (retryError) {
-				throw new Error(`Cannot open base directory ${baseDir}: ${retryError instanceof Error ? retryError.message : String(retryError)}`);
+				throw new Error(
+					`Cannot open base directory ${baseDir}: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
+				);
 			}
 		} else if (errCode === "ELOOP") {
 			// On macOS, system directories like /var → /private/var contain symlinks.
@@ -192,7 +205,9 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 						baseDir = realBaseDir; // update for later use
 						// Fall through to fstatSync below
 					}
-				} catch { /* throw original */ }
+				} catch {
+					/* throw original */
+				}
 			}
 			if (baseFd === undefined) throw new Error("Refusing to resolve: baseDir path contains a symlink: " + baseDir);
 		} else {
@@ -235,15 +250,15 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 			fs.closeSync(fd);
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code === "ELOOP") {
-			// On macOS, /var → /private/var, /tmp → /private/tmp, /etc → /private/etc
-			// are system symlinks managed by the OS. Allow them.
-			if (process.platform === "darwin") {
-				const resolvedSymlink = resolvedAccumulated;
-				const knownDarwinSymlinks = ["/var", "/tmp", "/etc", "/private/var", "/private/tmp", "/private/etc"];
-				if (knownDarwinSymlinks.includes(resolvedSymlink)) continue;
+				// On macOS, /var → /private/var, /tmp → /private/tmp, /etc → /private/etc
+				// are system symlinks managed by the OS. Allow them.
+				if (process.platform === "darwin") {
+					const resolvedSymlink = resolvedAccumulated;
+					const knownDarwinSymlinks = ["/var", "/tmp", "/etc", "/private/var", "/private/tmp", "/private/etc"];
+					if (knownDarwinSymlinks.includes(resolvedSymlink)) continue;
+				}
+				throw new Error("Refusing to resolve: target path ancestor is a symlink: " + resolvedAccumulated);
 			}
-			throw new Error("Refusing to resolve: target path ancestor is a symlink: " + resolvedAccumulated);
-		}
 			// EPERM on Windows when opening a directory — skip validation
 			if ((error as NodeJS.ErrnoException).code === "EPERM" && process.platform === "win32") continue;
 			// ENOENT means component doesn't exist — that's OK. Only existing symlinks
@@ -265,7 +280,8 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 	try {
 		targetFd = fs.openSync(resolved, O_RDONLY | O_NOFOLLOW);
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ELOOP") throw new Error("Refusing to resolve: target path is a symlink: " + resolved);
+		if ((error as NodeJS.ErrnoException).code === "ELOOP")
+			throw new Error("Refusing to resolve: target path is a symlink: " + resolved);
 		// EPERM on Windows when opening a directory — treat as non-existent
 		if ((error as NodeJS.ErrnoException).code === "EPERM" && process.platform === "win32") return resolved;
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -288,7 +304,9 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 			// We already validated all ancestors are not symlinks above.
 			return resolved;
 		}
-		throw new Error(`Cannot resolve real path of ${resolved}: ${targetError instanceof Error ? targetError.message : String(targetError)}`);
+		throw new Error(
+			`Cannot resolve real path of ${resolved}: ${targetError instanceof Error ? targetError.message : String(targetError)}`,
+		);
 	} finally {
 		fs.closeSync(targetFd);
 	}
@@ -330,7 +348,9 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 			// ENOENT on an ancestor of realTarget after realpathSync is concerning
 			// — the path existed when we validated it but now doesn't. This could
 			// indicate a race or attack. For safety, treat this as an error.
-			throw new Error(`Cannot validate resolved path: ${ancestor} disappeared after realpathSync: ${error instanceof Error ? error.message : String(error)}`);
+			throw new Error(
+				`Cannot validate resolved path: ${ancestor} disappeared after realpathSync: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		}
 		ancestor = path.dirname(ancestor);
 	}
@@ -354,12 +374,13 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 }
 
 export function resolveContainedRelativePath(baseDir: string, relativePath: string, kind = "path"): string {
-	if (relativePath.includes('\0')) {
+	if (relativePath.includes("\0")) {
 		throw new Error(`Security: path contains null byte: ${kind}`);
 	}
 	const normalized = relativePath.replace(/\\/g, "/").replace(/^\.\/+/, "");
 	// Detect Windows absolute paths (C:\, \\server\share) that path.isAbsolute may miss after normalization
 	if (/^[A-Za-z]:/.test(normalized)) throw new Error(`Invalid ${kind}: ${relativePath}`);
-	if (!normalized || normalized.split("/").some((segment) => segment === "..") || path.isAbsolute(normalized)) throw new Error(`Invalid ${kind}: ${relativePath}`);
+	if (!normalized || normalized.split("/").some((segment) => segment === "..") || path.isAbsolute(normalized))
+		throw new Error(`Invalid ${kind}: ${relativePath}`);
 	return resolveContainedPath(baseDir, path.resolve(baseDir, normalized));
 }

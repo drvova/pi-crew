@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { rewriteCrewInput, handleCrewInput, registerCrewInputRouter } from "../../src/extension/crew-input-router.ts";
+import { describe, it } from "node:test";
 import type { InputEvent } from "@earendil-works/pi-coding-agent";
+import { handleCrewInput, registerCrewInputRouter, rewriteCrewInput } from "../../src/extension/crew-input-router.ts";
 
 describe("rewriteCrewInput", () => {
 	it("returns null for slash commands (never shadows)", () => {
@@ -63,26 +63,42 @@ describe("rewriteCrewInput", () => {
 
 describe("handleCrewInput", () => {
 	it("transforms interactive crew phrases", () => {
-		const event: InputEvent = { type: "input", text: "crew status", source: "interactive" };
+		const event: InputEvent = {
+			type: "input",
+			text: "crew status",
+			source: "interactive",
+		};
 		const result = handleCrewInput(event);
 		assert.equal(result.action, "transform");
 		if (result.action === "transform") assert.equal(result.text, "/team-status");
 	});
 
 	it("passes through non-crew interactive input", () => {
-		const event: InputEvent = { type: "input", text: "explain this code", source: "interactive" };
+		const event: InputEvent = {
+			type: "input",
+			text: "explain this code",
+			source: "interactive",
+		};
 		const result = handleCrewInput(event);
 		assert.equal(result.action, "continue");
 	});
 
 	it("passes through slash commands", () => {
-		const event: InputEvent = { type: "input", text: "/team-status", source: "interactive" };
+		const event: InputEvent = {
+			type: "input",
+			text: "/team-status",
+			source: "interactive",
+		};
 		const result = handleCrewInput(event);
 		assert.equal(result.action, "continue");
 	});
 
 	it("does NOT transform non-interactive (rpc/extension) input", () => {
-		const event: InputEvent = { type: "input", text: "crew status", source: "rpc" };
+		const event: InputEvent = {
+			type: "input",
+			text: "crew status",
+			source: "rpc",
+		};
 		const result = handleCrewInput(event);
 		assert.equal(result.action, "continue");
 	});
@@ -92,7 +108,12 @@ describe("handleCrewInput", () => {
 			type: "input",
 			text: "crew dashboard",
 			source: "interactive",
-			images: [{ type: "image", source: { kind: "inline", data: "abc" } } as never],
+			images: [
+				{
+					type: "image",
+					source: { kind: "inline", data: "abc" },
+				} as never,
+			],
 		};
 		const result = handleCrewInput(event);
 		assert.equal(result.action, "transform");
@@ -106,7 +127,11 @@ describe("handleCrewInput", () => {
 describe("registerCrewInputRouter", () => {
 	it("registers an input handler without throwing", () => {
 		const events: string[] = [];
-		const fakePi = { on: (event: string) => { events.push(event); } };
+		const fakePi = {
+			on: (event: string) => {
+				events.push(event);
+			},
+		};
 		registerCrewInputRouter(fakePi as never);
 		assert.ok(events.includes("input"));
 	});

@@ -8,9 +8,14 @@
  * - sink error handling
  * - dispose
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
-import { NotificationRouter, type NotificationDescriptor, type NotificationRouterOptions } from "../../src/extension/notification-router.ts";
+import test from "node:test";
+import {
+	type NotificationDescriptor,
+	NotificationRouter,
+	type NotificationRouterOptions,
+} from "../../src/extension/notification-router.ts";
 
 const baseNotification = (overrides: Partial<NotificationDescriptor> = {}): NotificationDescriptor => ({
 	severity: "warning",
@@ -22,10 +27,8 @@ const baseNotification = (overrides: Partial<NotificationDescriptor> = {}): Noti
 });
 
 // Helper that disables default severity filter
-const makeRouter = (
-	opts: NotificationRouterOptions,
-	deliver: (n: NotificationDescriptor) => void,
-) => new NotificationRouter({ severityFilter: ["info", "warning", "error", "critical"], ...opts }, deliver);
+const makeRouter = (opts: NotificationRouterOptions, deliver: (n: NotificationDescriptor) => void) =>
+	new NotificationRouter({ severityFilter: ["info", "warning", "error", "critical"], ...opts }, deliver);
 
 test("NotificationRouter delivers a single notification immediately", () => {
 	const delivered: NotificationDescriptor[] = [];
@@ -55,10 +58,7 @@ test("NotificationRouter deduplicates within the window", () => {
 test("NotificationRouter allows after dedup window expires", () => {
 	let now = 1000;
 	const delivered: NotificationDescriptor[] = [];
-	const router = makeRouter(
-		{ dedupWindowMs: 1000, now: () => now },
-		(n) => delivered.push(n),
-	);
+	const router = makeRouter({ dedupWindowMs: 1000, now: () => now }, (n) => delivered.push(n));
 	router.enqueue(baseNotification());
 	now = 2500; // Past the dedup window
 	router.enqueue(baseNotification());
@@ -82,10 +82,7 @@ test("NotificationRouter inQuietHours blocks delivery", () => {
 	// 22:00 to 23:00 - mock current time at 22:30
 	const mockDate = new Date();
 	mockDate.setHours(22, 30, 0, 0);
-	const router = makeRouter(
-		{ quietHours: "22:00-23:00", now: () => mockDate.getTime() },
-		(n) => delivered.push(n),
-	);
+	const router = makeRouter({ quietHours: "22:00-23:00", now: () => mockDate.getTime() }, (n) => delivered.push(n));
 	const result = router.enqueue(baseNotification({ severity: "warning" }));
 	assert.equal(result, false);
 	assert.equal(delivered.length, 0);
@@ -93,7 +90,11 @@ test("NotificationRouter inQuietHours blocks delivery", () => {
 
 test("NotificationRouter.sink errors do not break enqueue", () => {
 	const router = makeRouter(
-		{ sink: () => { throw new Error("sink broken"); } },
+		{
+			sink: () => {
+				throw new Error("sink broken");
+			},
+		},
 		() => {},
 	);
 	// Should not throw

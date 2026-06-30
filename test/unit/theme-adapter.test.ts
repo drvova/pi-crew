@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { asCrewTheme, subscribeThemeChange } from "../../src/ui/theme-adapter.ts";
 
 function wait(ms: number): Promise<void> {
@@ -11,7 +11,11 @@ test("asCrewTheme provides ANSI inverse fallback", () => {
 });
 
 test("asCrewTheme preserves provided inverse function", () => {
-	const theme = asCrewTheme({ fg: (_color: string, text: string) => text, bold: (text: string) => text, inverse: (text: string) => `<inv>${text}</inv>` });
+	const theme = asCrewTheme({
+		fg: (_color: string, text: string) => text,
+		bold: (text: string) => text,
+		inverse: (text: string) => `<inv>${text}</inv>`,
+	});
 	assert.equal(theme.inverse?.("x"), "<inv>x</inv>");
 });
 
@@ -33,8 +37,12 @@ test("asCrewTheme binds Pi theme methods to their source object", () => {
 
 test("asCrewTheme falls back to plain text when theme methods throw", () => {
 	const theme = asCrewTheme({
-		fg: () => { throw new Error("theme not bound"); },
-		bold: () => { throw new Error("theme not bound"); },
+		fg: () => {
+			throw new Error("theme not bound");
+		},
+		bold: () => {
+			throw new Error("theme not bound");
+		},
 	});
 	assert.equal(theme.fg("accent", "x"), "x");
 	assert.equal(theme.bold("x"), "x");

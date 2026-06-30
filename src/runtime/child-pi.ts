@@ -1,23 +1,23 @@
-import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
 import type { AgentConfig } from "../agents/agent-config.ts";
-import type { WorkerExitStatus } from "../state/types.ts";
-import { buildPiWorkerArgs, checkCrewDepth, cleanupTempDir } from "./pi-args.ts";
-import { getPiSpawnCommand } from "./pi-spawn.ts";
 import { DEFAULT_CHILD_PI } from "../config/defaults.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import { attachPostExitStdioGuard, trySignalChild } from "./post-exit-stdio-guard.ts";
-import { redactJsonLine, redactSecretString } from "../utils/redaction.ts";
-import { applyCompactPipeline } from "./compact-pipeline.ts";
-import { TruncationStage, TailCaptureStage } from "./compact-stages/index.ts";
-import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { registerChildProcess, unregisterChildProcess } from "../extension/crew-cleanup.ts";
-import { classifyProcessCrash } from "./crash-classification.ts";
+import type { WorkerExitStatus } from "../state/types.ts";
+import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
+import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { redactJsonLine, redactSecretString } from "../utils/redaction.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
+import { applyCompactPipeline } from "./compact-pipeline.ts";
+import { TailCaptureStage, TruncationStage } from "./compact-stages/index.ts";
+import { classifyProcessCrash } from "./crash-classification.ts";
+import { buildPiWorkerArgs, checkCrewDepth, cleanupTempDir } from "./pi-args.ts";
 import { extractText } from "./pi-json-output.ts";
+import { getPiSpawnCommand } from "./pi-spawn.ts";
+import { attachPostExitStdioGuard, trySignalChild } from "./post-exit-stdio-guard.ts";
 
 const POST_EXIT_STDIO_GUARD_MS = DEFAULT_CHILD_PI.postExitStdioGuardMs;
 const FINAL_DRAIN_MS = DEFAULT_CHILD_PI.finalDrainMs;
@@ -75,13 +75,27 @@ export function killProcessPid(pid: number): void {
 			// 3.8: Windows path uses taskkill /T /F (force kill the entire tree).
 			// taskkill itself can silently fail (PID gone, permission denied, etc.)
 			// so verify after 2s and log a warning if the process is still alive.
-			spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+			spawn("taskkill", ["/pid", String(pid), "/t", "/f"], {
+				stdio: "ignore",
+				windowsHide: true,
+			});
 			const verifyTimer = setTimeout(() => {
 				try {
 					process.kill(pid, 0); // throws ESRCH when dead
 					// Still alive — log and retry once.
-					logInternalError("child-pi.taskkill-stuck", new Error(`process ${pid} still alive 2s after taskkill /T /F; retrying`), `pid=${pid}`);
-					try { spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore", windowsHide: true }); } catch { /* best-effort */ }
+					logInternalError(
+						"child-pi.taskkill-stuck",
+						new Error(`process ${pid} still alive 2s after taskkill /T /F; retrying`),
+						`pid=${pid}`,
+					);
+					try {
+						spawn("taskkill", ["/pid", String(pid), "/t", "/f"], {
+							stdio: "ignore",
+							windowsHide: true,
+						});
+					} catch {
+						/* best-effort */
+					}
 				} catch {
 					// ESRCH or EPERM — process is gone. OK.
 				}
@@ -131,7 +145,9 @@ function killProcessTree(pid: number | undefined, child?: ChildProcess): void {
 			new Error(`pid=${pid} called from:\n${callerStack.split("\n").slice(0, 8).join("\n")}`),
 			`pid=${pid}`,
 		);
-	} catch { /* diagnostic best-effort */ }
+	} catch {
+		/* diagnostic best-effort */
+	}
 	if (!pid || !Number.isInteger(pid) || pid <= 0) return;
 	if (child && child.exitCode !== null) return;
 	killProcessPid(pid);
@@ -143,7 +159,6 @@ export function terminateActiveChildPiProcesses(): number {
 	for (const [pid, child] of entries) killProcessTree(pid, child);
 	return entries.length;
 }
-
 
 /** Structured lifecycle event emitted by child-pi for critical transitions. */
 export interface ChildPiLifecycleEvent {
@@ -417,11 +432,7 @@ function appendTranscript(input: ChildPiRunInput, line: string): void {
 	}
 }
 
-export function compactString(
-	value: string,
-	maxChars = MAX_COMPACT_CONTENT_CHARS,
-	opts: { preserveImportant?: boolean } = {},
-): string {
+export function compactString(value: string, maxChars = MAX_COMPACT_CONTENT_CHARS, opts: { preserveImportant?: boolean } = {}): string {
 	if (value.length <= maxChars) return value;
 	// L4: head + tail instead of head-only. Keeps closing markdown structure
 	// (code fences, headings, list tails) instead of dropping them — the old
@@ -438,7 +449,11 @@ export function compactString(
 	// P0-B: the TruncationStage scans the middle slice for important diagnostic
 	// lines (error, file:line, HTTP 4xx/5xx, compiler codes) and preserves them
 	// within a 15% slack budget. The `preserveImportant` opt propagates here.
-	const result = applyCompactPipeline(value, [new TruncationStage(maxChars, { preserveImportant: opts.preserveImportant })]);
+	const result = applyCompactPipeline(value, [
+		new TruncationStage(maxChars, {
+			preserveImportant: opts.preserveImportant,
+		}),
+	]);
 	return result.text;
 }
 
@@ -466,9 +481,30 @@ export function compactValue(value: unknown): unknown {
 function compactContentPart(part: unknown): unknown | undefined {
 	const record = asRecord(part);
 	if (!record) return undefined;
-	if (record.type === "text") return { type: "text", text: typeof record.text === "string" ? compactString(record.text, MAX_ASSISTANT_TEXT_CHARS, { preserveImportant: false }) : "" };
-	if (record.type === "toolCall") return { type: "toolCall", name: record.name, input: compactValue(typeof record.input === "string" ? compactString(record.input, MAX_TOOL_INPUT_CHARS) : record.input) };
-	if (record.type === "toolResult") return { type: "toolResult", name: record.name, content: compactValue(typeof record.content === "string" ? compactString(record.content, MAX_TOOL_RESULT_CHARS) : record.content) };
+	if (record.type === "text")
+		return {
+			type: "text",
+			text:
+				typeof record.text === "string"
+					? compactString(record.text, MAX_ASSISTANT_TEXT_CHARS, {
+							preserveImportant: false,
+						})
+					: "",
+		};
+	if (record.type === "toolCall")
+		return {
+			type: "toolCall",
+			name: record.name,
+			input: compactValue(typeof record.input === "string" ? compactString(record.input, MAX_TOOL_INPUT_CHARS) : record.input),
+		};
+	if (record.type === "toolResult")
+		return {
+			type: "toolResult",
+			name: record.name,
+			content: compactValue(
+				typeof record.content === "string" ? compactString(record.content, MAX_TOOL_RESULT_CHARS) : record.content,
+			),
+		};
 	return undefined;
 }
 
@@ -477,16 +513,33 @@ function compactChildPiEvent(event: unknown): unknown | undefined {
 	if (!record) return undefined;
 	if (record.type === "message_update") return undefined;
 	if (record.type === "tool_execution_start" || record.type === "tool_execution_end") {
-		return { type: record.type, toolName: record.toolName, args: record.args };
+		return {
+			type: record.type,
+			toolName: record.toolName,
+			args: record.args,
+		};
 	}
 	if (record.type === "tool_result_end" || record.type === "message_end" || record.type === "message") {
 		const message = asRecord(record.message);
 		if (message?.role === "user" || message?.role === "system") return undefined;
-		const content = Array.isArray(message?.content) ? message.content.map(compactContentPart).filter((part) => part !== undefined) : undefined;
+		const content = Array.isArray(message?.content)
+			? message.content.map(compactContentPart).filter((part) => part !== undefined)
+			: undefined;
 		return {
 			type: record.type,
 			...(typeof record.text === "string" ? { text: record.text } : {}),
-			...(message ? { message: { role: message.role, ...(content ? { content } : {}), usage: message.usage, model: message.model, errorMessage: message.errorMessage, stopReason: message.stopReason } } : {}),
+			...(message
+				? {
+						message: {
+							role: message.role,
+							...(content ? { content } : {}),
+							usage: message.usage,
+							model: message.model,
+							errorMessage: message.errorMessage,
+							stopReason: message.stopReason,
+						},
+					}
+				: {}),
 			usage: record.usage,
 			model: record.model,
 			provider: record.provider,
@@ -506,18 +559,31 @@ function displayTextFromCompactEvent(event: unknown): string | undefined {
 	const message = asRecord(record.message);
 	if (message?.role !== undefined && message.role !== "assistant") return undefined;
 	const content = Array.isArray(message?.content) ? message.content : [];
-	const text = content.flatMap((part) => {
-		const item = asRecord(part);
-		return item?.type === "text" && typeof item.text === "string" ? [item.text] : [];
-	}).join("\n").trim();
+	const text = content
+		.flatMap((part) => {
+			const item = asRecord(part);
+			return item?.type === "text" && typeof item.text === "string" ? [item.text] : [];
+		})
+		.join("\n")
+		.trim();
 	return text || (typeof record.text === "string" ? record.text : undefined);
 }
 
-function compactChildPiLine(line: string): { persistedLine: string; event?: unknown; displayLine?: string; json: boolean } {
+function compactChildPiLine(line: string): {
+	persistedLine: string;
+	event?: unknown;
+	displayLine?: string;
+	json: boolean;
+} {
 	try {
 		const parsed = JSON.parse(line);
 		const compact = compactChildPiEvent(parsed);
-		return { json: true, event: compact, persistedLine: compact ? JSON.stringify(compact) : "", displayLine: displayTextFromCompactEvent(compact) };
+		return {
+			json: true,
+			event: compact,
+			persistedLine: compact ? JSON.stringify(compact) : "",
+			displayLine: displayTextFromCompactEvent(compact),
+		};
 	} catch {
 		return { json: false, persistedLine: line, displayLine: line };
 	}
@@ -632,7 +698,7 @@ function observeStdoutChunk(input: ChildPiRunInput, text: string): void {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function isFinalAssistantEvent(event: unknown): boolean {
@@ -641,7 +707,8 @@ function isFinalAssistantEvent(event: unknown): boolean {
 	const message = asRecord(obj.message);
 	const role = message?.role;
 	if (role !== undefined && role !== "assistant") return false;
-	const stopReason = typeof message?.stopReason === "string" ? message.stopReason : typeof obj.stopReason === "string" ? obj.stopReason : undefined;
+	const stopReason =
+		typeof message?.stopReason === "string" ? message.stopReason : typeof obj.stopReason === "string" ? obj.stopReason : undefined;
 	if (stopReason !== undefined && stopReason !== "stop") return false;
 	const content = Array.isArray(message?.content) ? message.content : [];
 	return !content.some((part) => asRecord(part)?.type === "toolCall");
@@ -651,11 +718,17 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 	// Phase 1 (live-session parity): prepend parent context when inheritContext is true.
 	// This mirrors the effectivePrompt logic in live-session-runtime.ts so that
 	// child-process workers receive the same inherited-context treatment.
-	const effectiveTask = input.inheritContext === true && input.parentContext
-		? `${input.parentContext}\n\n---\n# Child Worker Task\n${input.task}`
-		: input.task;
+	const effectiveTask =
+		input.inheritContext === true && input.parentContext
+			? `${input.parentContext}\n\n---\n# Child Worker Task\n${input.task}`
+			: input.task;
 	const depth = checkCrewDepth(input.maxDepth);
-	if (depth.blocked) return { exitCode: 1, stdout: "", stderr: `pi-crew depth guard blocked child worker: depth ${depth.depth} >= max ${depth.maxDepth}` };
+	if (depth.blocked)
+		return {
+			exitCode: 1,
+			stdout: "",
+			stderr: `pi-crew depth guard blocked child worker: depth ${depth.depth} >= max ${depth.maxDepth}`,
+		};
 	const mock = process.env.PI_TEAMS_MOCK_CHILD_PI;
 	if (mock) {
 		// SECURITY (Issue #2): Mock mode security model is intentionally asymmetric.
@@ -671,7 +744,11 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 		// Setup hooks cannot inject PI_CREW_ALLOW_MOCK into the parent's env.
 		const allowMock = process.env.PI_CREW_ALLOW_MOCK === "1" || process.env.PI_CREW_ALLOW_MOCK === "true";
 		if (!allowMock) {
-			return { exitCode: 1, stdout: "", stderr: "Mock mode requires PI_CREW_ALLOW_MOCK=1" };
+			return {
+				exitCode: 1,
+				stdout: "",
+				stderr: "Mock mode requires PI_CREW_ALLOW_MOCK=1",
+			};
 		}
 		// SECURITY: Log mock mode activation prominently for audit trail
 		logInternalError("child-pi.mock", new Error(`Mock mode active: ${mock}`), "NOT running real agents");
@@ -681,14 +758,66 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			return { exitCode: 0, stdout, stderr: "" };
 		}
 		if (mock === "json-success" || mock === "adaptive-plan") {
-			const text = mock === "adaptive-plan" && effectiveTask.includes("ADAPTIVE_PLAN_JSON_START")
-				? `[MOCK] Adaptive plan\nADAPTIVE_PLAN_JSON_START\n${JSON.stringify({ phases: [{ name: "research", tasks: [{ role: "explorer", task: "Explore adaptive target" }, { role: "analyst", task: "Analyze adaptive target" }, { role: "planner", task: "Plan adaptive target" }] }, { name: "build", tasks: [{ role: "executor", task: "Implement adaptive target" }] }, { name: "check", tasks: [{ role: "reviewer", task: "Review adaptive target" }, { role: "test-engineer", task: "Test adaptive target" }, { role: "writer", task: "Summarize adaptive target" }] }] })}\nADAPTIVE_PLAN_JSON_END`
-				: `[MOCK] JSON success for ${input.agent.name}`;
+			const text =
+				mock === "adaptive-plan" && effectiveTask.includes("ADAPTIVE_PLAN_JSON_START")
+					? `[MOCK] Adaptive plan\nADAPTIVE_PLAN_JSON_START\n${JSON.stringify({
+							phases: [
+								{
+									name: "research",
+									tasks: [
+										{
+											role: "explorer",
+											task: "Explore adaptive target",
+										},
+										{
+											role: "analyst",
+											task: "Analyze adaptive target",
+										},
+										{
+											role: "planner",
+											task: "Plan adaptive target",
+										},
+									],
+								},
+								{
+									name: "build",
+									tasks: [
+										{
+											role: "executor",
+											task: "Implement adaptive target",
+										},
+									],
+								},
+								{
+									name: "check",
+									tasks: [
+										{
+											role: "reviewer",
+											task: "Review adaptive target",
+										},
+										{
+											role: "test-engineer",
+											task: "Test adaptive target",
+										},
+										{
+											role: "writer",
+											task: "Summarize adaptive target",
+										},
+									],
+								},
+							],
+						})}\nADAPTIVE_PLAN_JSON_END`
+					: `[MOCK] JSON success for ${input.agent.name}`;
 			const stdout = `${JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text }] } })}\n${JSON.stringify({ type: "message_end", usage: { input: 10, output: 5, cost: 0.001, turns: 1 } })}\n`;
 			observeStdoutChunk(input, stdout);
 			return { exitCode: 0, stdout, stderr: "" };
 		}
-		if (mock === "retryable-failure") return { exitCode: 1, stdout: "", stderr: "[MOCK] rate limit: mock failure" };
+		if (mock === "retryable-failure")
+			return {
+				exitCode: 1,
+				stdout: "",
+				stderr: "[MOCK] rate limit: mock failure",
+			};
 		// E2E fallback-chain fixture: invocation #1 returns a SILENT retryable
 		// failure (exit code 0, no real assistant text, message_end carries a
 		// retryable-pattern errorMessage). Invocation #2+ delegates to the
@@ -740,7 +869,15 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 		}
 		return { exitCode: 1, stdout: "", stderr: `[MOCK] failure: ${mock}` };
 	}
-	const built = buildPiWorkerArgs({ task: effectiveTask, agent: input.agent, model: input.model, sessionEnabled: true, maxDepth: input.maxDepth, skillPaths: input.skillPaths, role: input.role });
+	const built = buildPiWorkerArgs({
+		task: effectiveTask,
+		agent: input.agent,
+		model: input.model,
+		sessionEnabled: true,
+		maxDepth: input.maxDepth,
+		skillPaths: input.skillPaths,
+		role: input.role,
+	});
 	const spawnSpec = getPiSpawnCommand(built.args);
 	try {
 		return await new Promise<ChildPiRunResult>((resolve) => {
@@ -755,20 +892,37 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			// built.env, the assertion will throw before the secret reaches the child process.
 			for (const key of Object.keys(built.env)) {
 				if (!key.startsWith("PI_CREW_") && !key.startsWith("PI_TEAMS_")) {
-					throw new Error(`SECURITY: built.env contains unexpected key "${key}"; expected only PI_CREW_* or PI_TEAMS_* execution-control vars`);
+					throw new Error(
+						`SECURITY: built.env contains unexpected key "${key}"; expected only PI_CREW_* or PI_TEAMS_* execution-control vars`,
+					);
 				}
 			}
-			const child = spawn(spawnSpec.command, spawnSpec.args, buildChildPiSpawnOptions(input.cwd, { ...process.env, ...built.env }));
+			const child = spawn(
+				spawnSpec.command,
+				spawnSpec.args,
+				buildChildPiSpawnOptions(input.cwd, {
+					...process.env,
+					...built.env,
+				}),
+			);
 			if (child.pid) {
 				activeChildProcesses.set(child.pid, child);
 				input.onSpawn?.(child.pid);
-				input.onLifecycleEvent?.({ type: "spawned", pid: child.pid, ts: new Date().toISOString() });
+				input.onLifecycleEvent?.({
+					type: "spawned",
+					pid: child.pid,
+					ts: new Date().toISOString(),
+				});
 				// Register with cleanup handler for graceful shutdown
 				if (input.runId && input.agentId) {
 					registerChildProcess(child.pid, input.runId, input.agentId);
 				}
 			} else {
-				input.onLifecycleEvent?.({ type: "spawn_error", error: "spawn returned no pid", ts: new Date().toISOString() });
+				input.onLifecycleEvent?.({
+					type: "spawn_error",
+					error: "spawn returned no pid",
+					ts: new Date().toISOString(),
+				});
 			}
 			let stdout = "";
 			let stderr = "";
@@ -797,8 +951,11 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			const RESPONSE_TIMEOUT_MIN_MS = 1_000;
 			const RESPONSE_TIMEOUT_MAX_MS = 3_600_000;
 			const responseTimeoutEnv = Number.parseInt(process.env.PI_TEAMS_CHILD_RESPONSE_TIMEOUT_MS ?? "", 10);
-			const envInRange = Number.isFinite(responseTimeoutEnv) && responseTimeoutEnv >= RESPONSE_TIMEOUT_MIN_MS && responseTimeoutEnv <= RESPONSE_TIMEOUT_MAX_MS;
-			const responseTimeoutMs = envInRange ? responseTimeoutEnv : input.responseTimeoutMs ?? RESPONSE_TIMEOUT_MS;
+			const envInRange =
+				Number.isFinite(responseTimeoutEnv) &&
+				responseTimeoutEnv >= RESPONSE_TIMEOUT_MIN_MS &&
+				responseTimeoutEnv <= RESPONSE_TIMEOUT_MAX_MS;
+			const responseTimeoutMs = envInRange ? responseTimeoutEnv : (input.responseTimeoutMs ?? RESPONSE_TIMEOUT_MS);
 			let responseTimeoutHit = false;
 			let forcedFinalDrain = false;
 			let abortRequested = input.signal?.aborted === true;
@@ -849,8 +1006,12 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			// MaxListenersExceededWarning and each leaked listener pinned the task's
 			// stack frame (abortDueToParentSignal closure) in memory. { once: true }
 			// only auto-removes AFTER the signal fires; on normal completion it leaks.
-			const onParentAbort = (): void => { abortDueToParentSignal = true; };
-			input.signal?.addEventListener("abort", onParentAbort, { once: true });
+			const onParentAbort = (): void => {
+				abortDueToParentSignal = true;
+			};
+			input.signal?.addEventListener("abort", onParentAbort, {
+				once: true,
+			});
 			const restartNoResponseTimer = (): void => {
 				if (responseTimeoutMs <= 0) return;
 				if (noResponseTimer) clearTimeout(noResponseTimer);
@@ -860,7 +1021,13 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 					// SEC-1: redact secrets before embedding in lifecycle event so
 					// worker-emitted secrets (API keys etc.) don't bypass redaction.
 					const timeoutStderr = redactStderrExcerpt(stderr, 1024); // Last 1KB of stderr (redacted, SEC-1)
-					input.onLifecycleEvent?.({ type: "response_timeout", pid: child.pid, error: `No output for ${responseTimeoutMs}ms`, ts: new Date().toISOString(), stderr: timeoutStderr || undefined });
+					input.onLifecycleEvent?.({
+						type: "response_timeout",
+						pid: child.pid,
+						error: `No output for ${responseTimeoutMs}ms`,
+						ts: new Date().toISOString(),
+						stderr: timeoutStderr || undefined,
+					});
 					killProcessTree(child.pid, child);
 					try {
 						child.kill(process.platform === "win32" ? undefined : "SIGTERM");
@@ -946,24 +1113,45 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 									// disableTools/maxTurns:1 exit-null bug). Just log + let the hard-abort
 									// path handle a genuinely runaway worker.
 									if (child.stdin?.writable) {
-										const steerPayload = JSON.stringify({ type: "steer", message: "You have reached your turn limit. Wrap up immediately — provide your final answer now." }) + "\n";
+										const steerPayload =
+											JSON.stringify({
+												type: "steer",
+												message:
+													"You have reached your turn limit. Wrap up immediately — provide your final answer now.",
+											}) + "\n";
 										const writeSucceeded = child.stdin.write(steerPayload);
 										if (!writeSucceeded) {
 											// Normal Node backpressure: the payload is buffered and will flush on
 											// 'drain'. NOT a failure — do NOT kill the worker. The steer is
 											// advisory; if the worker ignores it and runs past maxTurns +
 											// graceTurns, the hard-abort below terminates it.
-											logInternalError("child-pi.steer-backpressure", new Error("stdin write returned false (normal backpressure); steer buffered, worker NOT killed"), `pid=${child.pid}`);
+											logInternalError(
+												"child-pi.steer-backpressure",
+												new Error(
+													"stdin write returned false (normal backpressure); steer buffered, worker NOT killed",
+												),
+												`pid=${child.pid}`,
+											);
 										}
 									} else {
 										// stdin closed (worker already finished) or otherwise unwritable.
 										// Also advisory — the worker is done or nearly done; let it exit
 										// naturally. Hard-abort remains the safety net for true runaways.
-										logInternalError("child-pi.steer-not-writable", new Error("stdin not writable when attempting steer injection (worker may be done); worker NOT killed"), `pid=${child.pid}`);
+										logInternalError(
+											"child-pi.steer-not-writable",
+											new Error(
+												"stdin not writable when attempting steer injection (worker may be done); worker NOT killed",
+											),
+											`pid=${child.pid}`,
+										);
 									}
 								} else if (maxTurns !== undefined && softLimitReached && turnCount >= maxTurns + (graceTurns ?? 5)) {
 									// Hard abort — terminate after grace turns
-									try { child.kill(process.platform === "win32" ? undefined : "SIGTERM"); } catch { /* best-effort */ }
+									try {
+										child.kill(process.platform === "win32" ? undefined : "SIGTERM");
+									} catch {
+										/* best-effort */
+									}
 								}
 							}
 						}
@@ -980,7 +1168,11 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 						if (settled || childExited) return;
 						forcedFinalDrain = true;
 						finalDrainFiredMonotonicMs = performance.now(); // Phase-0 diagnostic: race timing.
-						input.onLifecycleEvent?.({ type: "final_drain", pid: child.pid, ts: new Date().toISOString() });
+						input.onLifecycleEvent?.({
+							type: "final_drain",
+							pid: child.pid,
+							ts: new Date().toISOString(),
+						});
 						try {
 							child.kill(process.platform === "win32" ? undefined : "SIGTERM");
 						} catch (error) {
@@ -990,7 +1182,11 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 							if (settled || childExited) return;
 							try {
 								hardKilled = true;
-								input.onLifecycleEvent?.({ type: "hard_kill", pid: child.pid, ts: new Date().toISOString() });
+								input.onLifecycleEvent?.({
+									type: "hard_kill",
+									pid: child.pid,
+									ts: new Date().toISOString(),
+								});
 								child.kill(process.platform === "win32" ? undefined : "SIGKILL");
 							} catch (error) {
 								logInternalError("child-pi.final-drain-kill", error, `pid=${child.pid}`);
@@ -1051,7 +1247,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 										finalDrainArmed,
 										forcedFinalDrain,
 										finalDrainFiredMonotonicMs,
-								  }
+									}
 								: {}),
 							cleanupErrors,
 							finalDrainMs,
@@ -1099,7 +1295,11 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			let backpressureBytes = 0;
 			const releaseBackpressure = (): void => {
 				backpressureBytes = 0;
-				try { child.stdout?.resume(); } catch { /* ignore */ }
+				try {
+					child.stdout?.resume();
+				} catch {
+					/* ignore */
+				}
 			};
 			child.stdout?.on("data", (chunk: Buffer) => {
 				restartNoResponseTimer();
@@ -1111,7 +1311,11 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 					logInternalError("child-pi.line-observer-observe", err, `text=${text.slice(0, 100)}`);
 				}
 				if (backpressureBytes > BACKPRESSURE_HIGH && child.stdout && !child.stdout.isPaused()) {
-					try { child.stdout.pause(); } catch { /* ignore */ }
+					try {
+						child.stdout.pause();
+					} catch {
+						/* ignore */
+					}
 					const timer = setTimeout(releaseBackpressure, 50);
 					timer.unref();
 				}
@@ -1128,11 +1332,37 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				);
 				rejectPendingOperations(processError);
 				try {
-					input.onLifecycleEvent?.({ type: "spawn_error", pid: child.pid, error: processError.message, ts: new Date().toISOString(), stderrExcerpt: redactStderrExcerpt(stderr, 500) || undefined });
+					input.onLifecycleEvent?.({
+						type: "spawn_error",
+						pid: child.pid,
+						error: processError.message,
+						ts: new Date().toISOString(),
+						stderrExcerpt: redactStderrExcerpt(stderr, 500) || undefined,
+					});
 				} catch (err) {
 					logInternalError("child-pi.on-lifecycle-event", err, `event=error, pid=${child.pid}`);
 				}
-				settle({ exitCode: null, stdout, stderr, error: processError.message, exitStatus: { exitCode: null, cancelled: abortRequested, timedOut: responseTimeoutHit, killed: false, cleanupErrors, finalDrainMs, crashClass: classifyProcessCrash({ exitCode: null, cancelled: abortRequested, timedOut: responseTimeoutHit, spawnError: error, stderrSnippet: stderr ? redactStderrExcerpt(stderr, 1000) : undefined }).crashClass } });
+				settle({
+					exitCode: null,
+					stdout,
+					stderr,
+					error: processError.message,
+					exitStatus: {
+						exitCode: null,
+						cancelled: abortRequested,
+						timedOut: responseTimeoutHit,
+						killed: false,
+						cleanupErrors,
+						finalDrainMs,
+						crashClass: classifyProcessCrash({
+							exitCode: null,
+							cancelled: abortRequested,
+							timedOut: responseTimeoutHit,
+							spawnError: error,
+							stderrSnippet: stderr ? redactStderrExcerpt(stderr, 1000) : undefined,
+						}).crashClass,
+					},
+				});
 			});
 			child.on("exit", (code, signal) => {
 				if (child.pid) {
@@ -1150,9 +1380,9 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				const isUnexpectedExit = !childExited && !settled && !responseTimeoutHit && !abortRequested && abnormalExit;
 				const exitError = isUnexpectedExit
 					? new Error(
-						`Child Pi process exited unexpectedly (code=${code ?? "null"} signal=${signal ?? "null"}). `
-						+ `Stderr: ${redactStderrExcerpt(stderr, 1000) || "(none)"}`,
-					)
+							`Child Pi process exited unexpectedly (code=${code ?? "null"} signal=${signal ?? "null"}). ` +
+								`Stderr: ${redactStderrExcerpt(stderr, 1000) || "(none)"}`,
+						)
 					: null;
 				if (exitError) {
 					rejectPendingOperations(exitError);
@@ -1179,7 +1409,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 										finalAssistantEventMonotonicMs,
 										exitMonotonicMs: performance.now() - spawnMonotonicMs,
 									},
-							  }
+								}
 							: {}),
 					});
 				} catch (err) {
@@ -1203,18 +1433,36 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 					unregisterChildProcess(child.pid);
 				}
 				try {
-					input.onLifecycleEvent?.({ type: "close", pid: child.pid, exitCode, ts: new Date().toISOString() });
+					input.onLifecycleEvent?.({
+						type: "close",
+						pid: child.pid,
+						exitCode,
+						ts: new Date().toISOString(),
+					});
 				} catch (err) {
 					logInternalError("child-pi.on-lifecycle-event", err, `event=close, pid=${child.pid}`);
 				}
-				const timeoutError = responseTimeoutHit && !stderr.trim() ? { error: `Child Pi produced no new output for ${responseTimeoutMs}ms; process was terminated as unresponsive.` } : responseTimeoutHit && stderr.trim() ? { error: `Child Pi timed out after ${responseTimeoutMs}ms with stderr: ${redactStderrExcerpt(stderr, 500)}` } : undefined;
+				const timeoutError =
+					responseTimeoutHit && !stderr.trim()
+						? {
+								error: `Child Pi produced no new output for ${responseTimeoutMs}ms; process was terminated as unresponsive.`,
+							}
+						: responseTimeoutHit && stderr.trim()
+							? {
+									error: `Child Pi timed out after ${responseTimeoutMs}ms with stderr: ${redactStderrExcerpt(stderr, 500)}`,
+								}
+							: undefined;
 				// M6 fix: log when forced final drain converts non-zero exit to 0.
-			// This is expected in normal operation (child finished cleanly but linger was killed),
-			// but the telemetry helps detect regressions where crashes are hidden.
-			if (forcedFinalDrain && !timeoutError && exitCode !== 0) {
-				logInternalError("child-pi.final-drain-zero-exit", new Error(`Child exit code overridden to 0 after forced final drain (original=${exitCode})`), `pid=${child.pid}, finalDrainMs=${finalDrainMs}`);
-			}
-			const finalExitCode = forcedFinalDrain && !timeoutError ? 0 : exitCode;
+				// This is expected in normal operation (child finished cleanly but linger was killed),
+				// but the telemetry helps detect regressions where crashes are hidden.
+				if (forcedFinalDrain && !timeoutError && exitCode !== 0) {
+					logInternalError(
+						"child-pi.final-drain-zero-exit",
+						new Error(`Child exit code overridden to 0 after forced final drain (original=${exitCode})`),
+						`pid=${child.pid}, finalDrainMs=${finalDrainMs}`,
+					);
+				}
+				const finalExitCode = forcedFinalDrain && !timeoutError ? 0 : exitCode;
 				const wasGraceAborted = softLimitReached && turnCount >= (maxTurns ?? 0) + (graceTurns ?? 5);
 				const wasParentAborted = abortDueToParentSignal && !wasGraceAborted;
 				// steerInjectionFailed is now always false (Phase-1 fix: steer backpressure
@@ -1233,7 +1481,24 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 					spawnError: undefined,
 					stderrSnippet: stderr ? redactStderrExcerpt(stderr, 1000) : undefined,
 				});
-				settle({ exitCode: finalExitCode, stdout, stderr, ...(timeoutError ? { error: timeoutError.error } : {}), ...(steerError ? { error: steerError } : {}), aborted: wasGraceAborted || wasParentAborted, steered: softLimitReached && !wasGraceAborted, exitStatus: { exitCode: finalExitCode, cancelled: abortRequested, timedOut: responseTimeoutHit, killed: hardKilled, cleanupErrors, finalDrainMs, crashClass: crashClassification.crashClass } });
+				settle({
+					exitCode: finalExitCode,
+					stdout,
+					stderr,
+					...(timeoutError ? { error: timeoutError.error } : {}),
+					...(steerError ? { error: steerError } : {}),
+					aborted: wasGraceAborted || wasParentAborted,
+					steered: softLimitReached && !wasGraceAborted,
+					exitStatus: {
+						exitCode: finalExitCode,
+						cancelled: abortRequested,
+						timedOut: responseTimeoutHit,
+						killed: hardKilled,
+						cleanupErrors,
+						finalDrainMs,
+						crashClass: crashClassification.crashClass,
+					},
+				});
 			});
 		});
 	} finally {

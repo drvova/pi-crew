@@ -6,11 +6,12 @@
  * - correlation: context propagation
  * - OTLP convertToOTLP: shape, label redaction, empty input
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
-import { MetricRegistry } from "../../src/observability/metric-registry.ts";
+import test from "node:test";
+import { type CorrelationContext, getCurrentContext, withCorrelation } from "../../src/observability/correlation.ts";
 import { convertToOTLP } from "../../src/observability/exporters/otlp-exporter.ts";
-import { withCorrelation, getCurrentContext, type CorrelationContext } from "../../src/observability/correlation.ts";
+import { MetricRegistry } from "../../src/observability/metric-registry.ts";
 
 test("MetricRegistry registers a counter and increments it", () => {
 	const registry = new MetricRegistry();
@@ -57,14 +58,18 @@ test("correlation context returns undefined outside withCorrelation", () => {
 test("convertToOTLP produces a valid OTLP envelope", () => {
 	const registry = new MetricRegistry();
 	registry.counter("crew.test.alpha", "Counter 1").inc();
-	const otlp = convertToOTLP(registry.snapshot()) as { resourceMetrics: Array<{ scopeMetrics: Array<{ metrics: unknown[] }> }> };
+	const otlp = convertToOTLP(registry.snapshot()) as {
+		resourceMetrics: Array<{ scopeMetrics: Array<{ metrics: unknown[] }> }>;
+	};
 	assert.ok(otlp.resourceMetrics);
 	assert.ok(otlp.resourceMetrics[0]);
 	assert.ok(Array.isArray(otlp.resourceMetrics[0].scopeMetrics));
 });
 
 test("convertToOTLP handles empty snapshot array", () => {
-	const otlp = convertToOTLP([]) as { resourceMetrics: Array<{ scopeMetrics: Array<{ metrics: unknown[] }> }> };
+	const otlp = convertToOTLP([]) as {
+		resourceMetrics: Array<{ scopeMetrics: Array<{ metrics: unknown[] }> }>;
+	};
 	assert.equal(otlp.resourceMetrics[0].scopeMetrics[0].metrics.length, 0);
 });
 

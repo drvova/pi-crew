@@ -1,9 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	validateWithSeverity,
-} from "../../src/schema/validation-types.ts";
+import test from "node:test";
 import type { ValidationOutcome, ValidationSeverity } from "../../src/schema/validation-types.ts";
+import { validateWithSeverity } from "../../src/schema/validation-types.ts";
 
 /**
  * Round 27 (test coverage gaps): `validation-types.ts` provides config
@@ -47,9 +45,7 @@ test("validateWithSeverity: defaults to strict mode", () => {
 
 test("validateWithSeverity: lenient mode downgrades unknown properties to WARNING", () => {
 	const result = validateWithSeverity({ unknownProp: true }, "lenient");
-	const unknownFindings = result.findings.filter(
-		(f) => f.message?.includes("unknown property"),
-	);
+	const unknownFindings = result.findings.filter((f) => f.message?.includes("unknown property"));
 	if (unknownFindings.length > 0) {
 		for (const f of unknownFindings) {
 			assert.equal(f.severity, "WARNING" as ValidationSeverity);
@@ -59,9 +55,7 @@ test("validateWithSeverity: lenient mode downgrades unknown properties to WARNIN
 
 test("validateWithSeverity: strict mode treats unknown properties as ERROR", () => {
 	const result = validateWithSeverity({ unknownProp: true }, "strict");
-	const unknownFindings = result.findings.filter(
-		(f) => f.message?.includes("unknown property"),
-	);
+	const unknownFindings = result.findings.filter((f) => f.message?.includes("unknown property"));
 	if (unknownFindings.length > 0) {
 		for (const f of unknownFindings) {
 			assert.equal(f.severity, "ERROR" as ValidationSeverity);
@@ -72,23 +66,25 @@ test("validateWithSeverity: strict mode treats unknown properties as ERROR", () 
 // ─── Recommended ranges ────────────────────────────────────────────────────
 
 test("validateWithSeverity: warns when maxConcurrentWorkers exceeds 8", () => {
-	const result = validateWithSeverity({
-		limits: { maxConcurrentWorkers: 20 },
-	}, "lenient");
-	const warning = result.findings.find(
-		(f) => f.field === "limits.maxConcurrentWorkers" && f.severity === "WARNING",
+	const result = validateWithSeverity(
+		{
+			limits: { maxConcurrentWorkers: 20 },
+		},
+		"lenient",
 	);
+	const warning = result.findings.find((f) => f.field === "limits.maxConcurrentWorkers" && f.severity === "WARNING");
 	assert.ok(warning, "should warn about high maxConcurrentWorkers");
 	assert.match(warning!.message ?? "", /maxConcurrentWorkers/);
 });
 
 test("validateWithSeverity: warns when maxTaskDepth exceeds 4", () => {
-	const result = validateWithSeverity({
-		limits: { maxTaskDepth: 10 },
-	}, "lenient");
-	const warning = result.findings.find(
-		(f) => f.field === "limits.maxTaskDepth" && f.severity === "WARNING",
+	const result = validateWithSeverity(
+		{
+			limits: { maxTaskDepth: 10 },
+		},
+		"lenient",
 	);
+	const warning = result.findings.find((f) => f.field === "limits.maxTaskDepth" && f.severity === "WARNING");
 	assert.ok(warning, "should warn about high maxTaskDepth");
 	assert.match(warning!.message ?? "", /maxTaskDepth/);
 });
@@ -108,10 +104,13 @@ test("validateWithSeverity: info for missing recommended keys", () => {
 
 test("validateWithSeverity: hasErrors is false for valid config", () => {
 	// Minimal valid config: check what the schema accepts
-	const result = validateWithSeverity({
-		limits: { maxConcurrentWorkers: 4 },
-		runtime: { groupJoin: "smart" },
-	}, "strict");
+	const result = validateWithSeverity(
+		{
+			limits: { maxConcurrentWorkers: 4 },
+			runtime: { groupJoin: "smart" },
+		},
+		"strict",
+	);
 	// Even if valid, there may be INFO findings for missing optional fields
 	// but hasErrors should only be true for ERROR severity
 	const errorFindings = result.findings.filter((f) => f.severity === "ERROR");
@@ -119,9 +118,12 @@ test("validateWithSeverity: hasErrors is false for valid config", () => {
 });
 
 test("validateWithSeverity: hasWarnings reflects WARNING severity", () => {
-	const result = validateWithSeverity({
-		limits: { maxConcurrentWorkers: 20 },
-	}, "lenient");
+	const result = validateWithSeverity(
+		{
+			limits: { maxConcurrentWorkers: 20 },
+		},
+		"lenient",
+	);
 	const warningFindings = result.findings.filter((f) => f.severity === "WARNING");
 	assert.equal(result.hasWarnings, warningFindings.length > 0);
 });
@@ -129,12 +131,13 @@ test("validateWithSeverity: hasWarnings reflects WARNING severity", () => {
 // ─── suggestion field ──────────────────────────────────────────────────────
 
 test("validateWithSeverity: warnings for out-of-range values include suggestion", () => {
-	const result = validateWithSeverity({
-		limits: { maxConcurrentWorkers: 20 },
-	}, "lenient");
-	const warning = result.findings.find(
-		(f) => f.field === "limits.maxConcurrentWorkers" && f.severity === "WARNING",
+	const result = validateWithSeverity(
+		{
+			limits: { maxConcurrentWorkers: 20 },
+		},
+		"lenient",
 	);
+	const warning = result.findings.find((f) => f.field === "limits.maxConcurrentWorkers" && f.severity === "WARNING");
 	assert.ok(warning?.suggestion, "should include a suggestion");
 	assert.match(warning!.suggestion ?? "", /≤ 8/);
 });

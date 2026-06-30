@@ -73,7 +73,11 @@ export function scanConflictLines(lines: readonly string[], firstLineNumber: num
 
 		const oursLabel = matchMarker(line, OURS_PREFIX);
 		if (oursLabel !== null) {
-			partial = { startLine: ln, oursLabel: oursLabel || undefined, oursLines: [] };
+			partial = {
+				startLine: ln,
+				oursLabel: oursLabel || undefined,
+				oursLines: [],
+			};
 			phase = "ours";
 			continue;
 		}
@@ -318,9 +322,7 @@ export function parseConflictUri(raw: string): ParsedConflictUri | null {
 	let scope: ConflictScope | undefined;
 	if (scopePart !== undefined) {
 		if (!CONFLICT_SCOPES.has(scopePart as ConflictScope)) {
-			throw new Error(
-				`Invalid conflict URI '${raw}': scope must be one of 'ours', 'theirs', 'base', or omitted.`,
-			);
+			throw new Error(`Invalid conflict URI '${raw}': scope must be one of 'ours', 'theirs', 'base', or omitted.`);
 		}
 		scope = scopePart as ConflictScope;
 	}
@@ -375,7 +377,10 @@ function locateRegion(
 	if (expected.length === 0 || expected.length > lines.length) return null;
 	// Fast path: try the recorded position first.
 	if (preferredIdx >= 0 && matchesAt(lines, preferredIdx, expected)) {
-		return { startIdx: preferredIdx, endIdx: preferredIdx + expected.length - 1 };
+		return {
+			startIdx: preferredIdx,
+			endIdx: preferredIdx + expected.length - 1,
+		};
 	}
 	let best: number | null = null;
 	let bestDist = Number.POSITIVE_INFINITY;
@@ -462,15 +467,15 @@ function markerLine(prefix: string, label: string | undefined): string {
  * - `startLine`: the 1-indexed file line number `lines[0]` corresponds
  *   to, so the read formatter can label hashline anchors.
  */
-export function renderConflictRegion(
-	entry: ConflictEntry,
-	scope: ConflictScope | undefined,
-): { lines: string[]; startLine: number } {
+export function renderConflictRegion(entry: ConflictEntry, scope: ConflictScope | undefined): { lines: string[]; startLine: number } {
 	if (scope === "ours") {
 		return { lines: [...entry.oursLines], startLine: entry.startLine + 1 };
 	}
 	if (scope === "theirs") {
-		return { lines: [...entry.theirsLines], startLine: entry.separatorLine + 1 };
+		return {
+			lines: [...entry.theirsLines],
+			startLine: entry.separatorLine + 1,
+		};
 	}
 	if (scope === "base") {
 		if (entry.baseLines === undefined || entry.baseLine === undefined) {
@@ -495,10 +500,7 @@ export function renderConflictRegion(
 
 const PREVIEW_SIDE_LINES = 6;
 
-function pickLabel(
-	entries: readonly ConflictEntry[],
-	get: (e: ConflictEntry) => string | undefined,
-): string | undefined {
+function pickLabel(entries: readonly ConflictEntry[], get: (e: ConflictEntry) => string | undefined): string | undefined {
 	for (const e of entries) {
 		const label = get(e);
 		if (label && label.trim().length > 0) return label;
@@ -552,10 +554,7 @@ export interface FormatConflictWarningOptions {
  *     >>> theirs
  *     …theirs body…
  */
-export function formatConflictWarning(
-	entries: readonly ConflictEntry[],
-	options: FormatConflictWarningOptions = {},
-): string {
+export function formatConflictWarning(entries: readonly ConflictEntry[], options: FormatConflictWarningOptions = {}): string {
 	if (entries.length === 0) return "";
 	const total = options.totalInFile ?? entries.length;
 	const partial = total > entries.length;
@@ -585,7 +584,7 @@ export function formatConflictWarning(
 		'NOTICE: Inspect a block by reading `conflict://<N>` (add `/ours` / `/theirs` / `/base` to render a single side). Resolve with `write({ path: "conflict://<N>", content })`, or bulk-resolve every registered conflict with `write({ path: "conflict://*", content })`.',
 	);
 	out.push(
-		'`content` shorthand: a line that is exactly `@ours` / `@theirs` / `@base` / `@both` expands to that recorded section. Non-token lines pass through verbatim.',
+		"`content` shorthand: a line that is exactly `@ours` / `@theirs` / `@base` / `@both` expands to that recorded section. Non-token lines pass through verbatim.",
 	);
 
 	for (const entry of entries) {
@@ -627,7 +626,9 @@ export function formatConflictWarning(
  */
 export function formatConflictSummary(
 	entries: readonly ConflictEntry[],
-	options: { displayPath: string; scanTruncated?: boolean } = { displayPath: "" },
+	options: { displayPath: string; scanTruncated?: boolean } = {
+		displayPath: "",
+	},
 ): string {
 	const lines: string[] = [];
 	const total = entries.length;

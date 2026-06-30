@@ -1,8 +1,8 @@
 /**
  * Tool Progress Event System
- * 
+ *
  * Provides real-time visibility into tool execution within child Pi workers.
- * 
+ *
  * Event flow:
  * 1. Child Pi emits JSON events on stdout (tool_execution_start, tool_execution_end, etc.)
  * 2. child-pi.ts parses these events and passes them to onJsonEvent callback
@@ -165,9 +165,7 @@ export function formatToolProgress(progress: CrewAgentProgress, maxContextTokens
 	}));
 
 	// If there's a currentTool but no endedAt, it's still running
-	const currentRunning = progress.recentTools.find(
-		(t) => !t.endedAt && t.tool === progress.currentTool,
-	);
+	const currentRunning = progress.recentTools.find((t) => !t.endedAt && t.tool === progress.currentTool);
 	if (currentRunning && progress.currentTool) {
 		recentTools.push({
 			tool: progress.currentTool,
@@ -199,13 +197,13 @@ export function formatToolProgress(progress: CrewAgentProgress, maxContextTokens
  */
 export function formatCurrentToolLine(progress: CrewAgentProgress): string {
 	if (!progress.currentTool) return "";
-	
-	const args = progress.currentToolArgs 
+
+	const args = progress.currentToolArgs
 		? ` ${progress.currentToolArgs.slice(0, 50)}${progress.currentToolArgs.length > 50 ? "..." : ""}`
 		: "";
-	
+
 	const toolCount = progress.toolCount > 0 ? ` (${progress.toolCount})` : "";
-	
+
 	return `${progress.currentTool}${args}${toolCount}`;
 }
 
@@ -229,10 +227,7 @@ export interface ProgressBarOptions {
 /**
  * Render a progress bar for tool execution
  */
-export function renderProgressBar(
-	progress: CrewAgentProgress,
-	options: ProgressBarOptions = {},
-): string {
+export function renderProgressBar(progress: CrewAgentProgress, options: ProgressBarOptions = {}): string {
 	const width = options.width ?? 20;
 	const showPercent = options.showPercent ?? true;
 	const showCount = options.showCount ?? true;
@@ -244,9 +239,7 @@ export function renderProgressBar(
 
 	const bar = "█".repeat(filled) + "░".repeat(empty);
 	const percent = showPercent ? ` ${progress.toolCount} tools` : "";
-	const tokens = progress.tokens 
-		? ` | ${(progress.tokens / 1000).toFixed(1)}k tokens` 
-		: "";
+	const tokens = progress.tokens ? ` | ${(progress.tokens / 1000).toFixed(1)}k tokens` : "";
 
 	return `[${bar}]${percent}${tokens}`;
 }
@@ -270,10 +263,7 @@ export function filterToolEvents(events: ToolProgressEvent[]): ToolProgressEvent
 /**
  * Get events for a specific tool
  */
-export function getEventsForTool(
-	events: ToolProgressEvent[],
-	toolName: string,
-): ToolProgressEvent[] {
+export function getEventsForTool(events: ToolProgressEvent[], toolName: string): ToolProgressEvent[] {
 	return events.filter((e) => {
 		if ("toolName" in e) return e.toolName === toolName;
 		return false;

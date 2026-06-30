@@ -4,14 +4,14 @@
  * Extracted from crew-widget.ts.
  */
 
-import type { TeamRunManifest } from "../../state/types.ts";
+import { listRecentRuns } from "../../extension/run-index.ts";
+import { reconcileAllStaleRuns } from "../../runtime/crash-recovery.ts";
 import { readCrewAgents } from "../../runtime/crew-agent-records.ts";
 import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
-import { isDisplayActiveRun } from "../../runtime/process-status.ts";
-import { listLiveAgents, evictStaleLiveAgentHandles } from "../../runtime/live-agent-manager.ts";
+import { evictStaleLiveAgentHandles, listLiveAgents } from "../../runtime/live-agent-manager.ts";
 import type { ManifestCache } from "../../runtime/manifest-cache.ts";
-import { reconcileAllStaleRuns } from "../../runtime/crash-recovery.ts";
-import { listRecentRuns } from "../../extension/run-index.ts";
+import { isDisplayActiveRun } from "../../runtime/process-status.ts";
+import type { TeamRunManifest } from "../../state/types.ts";
 import type { RunSnapshotCache } from "../snapshot-types.ts";
 import type { WidgetRun } from "./widget-types.ts";
 
@@ -41,7 +41,11 @@ export function activeWidgetRuns(
 	const now = Date.now();
 	if (now - lastStaleReconcileAt > STALE_RECONCILE_INTERVAL_MS && manifestCache) {
 		lastStaleReconcileAt = now;
-		try { reconcileAllStaleRuns(cwd, manifestCache); } catch { /* non-critical */ }
+		try {
+			reconcileAllStaleRuns(cwd, manifestCache);
+		} catch {
+			/* non-critical */
+		}
 	}
 
 	let runs = preloadedManifests ?? (manifestCache ? manifestCache.list(20) : listRecentRuns(cwd, 20));
@@ -54,7 +58,11 @@ export function activeWidgetRuns(
 			try {
 				const snapshot = snapshotCache?.get(run.runId);
 				return snapshot
-					? { run: snapshot.manifest, agents: snapshot.agents, snapshot }
+					? {
+							run: snapshot.manifest,
+							agents: snapshot.agents,
+							snapshot,
+						}
 					: { run, agents: agentsFor(run) };
 			} catch {
 				return { run, agents: agentsFor(run) };
@@ -73,7 +81,10 @@ export function statusSummary(runs: WidgetRun[]): string {
 	const completedAgents = agents.filter((a) => a.status === "completed").length;
 	const totalAgents = agents.length;
 	const totalRuns = runs.length;
-	const model = agents.find((a) => a.model)?.model?.split("/").at(-1);
+	const model = agents
+		.find((a) => a.model)
+		?.model?.split("/")
+		.at(-1);
 	const parts = [`⚙ ${runningAgents}r`];
 	if (queuedAgents > 0) parts.push(`${queuedAgents}q`);
 	if (completedAgents > 0) parts.push(`${completedAgents}/${totalAgents}done`);

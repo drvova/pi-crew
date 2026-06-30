@@ -1,12 +1,16 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createJsonlWriter, type DrainableSource, type JsonlWriteStream, type JsonlWriterDeps } from "../../src/state/jsonl-writer.ts";
+import { describe, it } from "node:test";
+import { createJsonlWriter, type DrainableSource, type JsonlWriterDeps, type JsonlWriteStream } from "../../src/state/jsonl-writer.ts";
 
 class MockSource implements DrainableSource {
 	pauseCount = 0;
 	resumeCount = 0;
-	pause(): void { this.pauseCount++; }
-	resume(): void { this.resumeCount++; }
+	pause(): void {
+		this.pauseCount++;
+	}
+	resume(): void {
+		this.resumeCount++;
+	}
 }
 
 class MockStream implements JsonlWriteStream {
@@ -159,7 +163,9 @@ describe("createJsonlWriter", () => {
 	it("handles stream creation failure gracefully", () => {
 		const source = new MockSource();
 		const writer = createJsonlWriter("/tmp/test.jsonl", source, {
-			createWriteStream: () => { throw new Error("no stream"); },
+			createWriteStream: () => {
+				throw new Error("no stream");
+			},
 		});
 		writer.writeLine('{"test":true}');
 		// Should not throw

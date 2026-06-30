@@ -3,16 +3,16 @@
  * @see src/runtime/hidden-handoff.ts
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import type { HandoffSummary } from "../../src/runtime/handoff-manager.ts";
 import {
-	HiddenHandoffService,
 	createHiddenHandoffService,
-	type HiddenHandoff,
 	type HandoffPriority,
+	type HiddenHandoff,
+	HiddenHandoffService,
 	type HiddenHandoffType,
 } from "../../src/runtime/hidden-handoff.ts";
-import type { HandoffSummary } from "../../src/runtime/handoff-manager.ts";
 
 // Test helpers
 function createHandoffSummary(overrides: Partial<HandoffSummary> = {}): HandoffSummary {
@@ -25,11 +25,13 @@ function createHandoffSummary(overrides: Partial<HandoffSummary> = {}): HandoffS
 		filesCreated: ["file1.ts", "file2.ts"],
 		filesModified: ["config.ts"],
 		filesDeleted: [],
-		decisions: [{
-			rationale: "Chose approach A",
-			outcome: "Successfully implemented",
-			alternativesConsidered: ["Approach B"],
-		}],
+		decisions: [
+			{
+				rationale: "Chose approach A",
+				outcome: "Successfully implemented",
+				alternativesConsidered: ["Approach B"],
+			},
+		],
 		blockers: ["Waiting for approval"],
 		nextSteps: ["Deploy to staging", "Run tests"],
 		metrics: {
@@ -151,7 +153,12 @@ test("HiddenHandoffService - sendHandoff with normal priority for high tokens", 
 	const summary = createHandoffSummary({
 		outcome: "success",
 		blockers: [],
-		metrics: { tokensUsed: 15000, duration: 30000, iterations: 1, toolsUsed: [] },
+		metrics: {
+			tokensUsed: 15000,
+			duration: 30000,
+			iterations: 1,
+			toolsUsed: [],
+		},
 	});
 
 	service.sendHandoff(summary, { to: "recipient" });
@@ -165,7 +172,12 @@ test("HiddenHandoffService - sendHandoff with low priority for simple tasks", ()
 	const summary = createHandoffSummary({
 		outcome: "success",
 		blockers: [],
-		metrics: { tokensUsed: 1000, duration: 5000, iterations: 1, toolsUsed: [] },
+		metrics: {
+			tokensUsed: 1000,
+			duration: 5000,
+			iterations: 1,
+			toolsUsed: [],
+		},
 	});
 
 	service.sendHandoff(summary, { to: "recipient" });
@@ -206,7 +218,10 @@ test("HiddenHandoffService - customType changes message type", () => {
 	const service = new HiddenHandoffService({ mailbox });
 	const summary = createHandoffSummary();
 
-	service.sendHandoff(summary, { to: "recipient", customType: "task-complete" });
+	service.sendHandoff(summary, {
+		to: "recipient",
+		customType: "task-complete",
+	});
 
 	assert.strictEqual(sentMessages[0].message.type, "task-complete");
 });
@@ -264,12 +279,15 @@ test("HiddenHandoffService - getParentAgentId falls back to global context", () 
 test("HiddenHandoffService - emits handoff:sent event", () => {
 	const { emitter, emittedEvents } = createMockEventEmitter();
 	const { mailbox } = createMockMailbox();
-	const service = new HiddenHandoffService({ mailbox, eventEmitter: emitter });
+	const service = new HiddenHandoffService({
+		mailbox,
+		eventEmitter: emitter,
+	});
 	const summary = createHandoffSummary();
 
 	service.sendHandoff(summary, { to: "recipient" });
 
-	assert.ok(emittedEvents.some(e => e.event === "handoff:sent"));
+	assert.ok(emittedEvents.some((e) => e.event === "handoff:sent"));
 });
 
 test("HiddenHandoffService - emits handoff:sent_no_recipient when no parent", () => {
@@ -280,7 +298,7 @@ test("HiddenHandoffService - emits handoff:sent_no_recipient when no parent", ()
 
 	service.sendHandoff(summary);
 
-	assert.ok(emittedEvents.some(e => e.event === "handoff:sent_no_recipient"));
+	assert.ok(emittedEvents.some((e) => e.event === "handoff:sent_no_recipient"));
 });
 
 test("HiddenHandoffService - setMailbox can update mailbox", () => {
@@ -414,7 +432,12 @@ test("HiddenHandoffService - priority respects blockers even if outcome is succe
 	const summary = createHandoffSummary({
 		outcome: "success",
 		blockers: ["Has blockers"],
-		metrics: { tokensUsed: 500, duration: 1000, iterations: 1, toolsUsed: [] },
+		metrics: {
+			tokensUsed: 500,
+			duration: 1000,
+			iterations: 1,
+			toolsUsed: [],
+		},
 	});
 
 	service.sendHandoff(summary, { to: "recipient" });

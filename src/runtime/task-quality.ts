@@ -104,7 +104,8 @@ function isResultDescriptive(task: TeamTaskState): boolean {
 		typeof task.diagnostics === "object" &&
 		typeof task.diagnostics.result === "string" &&
 		(task.diagnostics.result as string).trim().length > 0
-	) return true;
+	)
+		return true;
 
 	return false;
 }
@@ -138,22 +139,13 @@ function isDurationReasonable(task: TeamTaskState): boolean {
  * @param artifactsDir - Optional path to the run artifacts directory
  * @returns TaskQualityScore with numeric score, breakdown, and letter grade
  */
-export function computeTaskQuality(
-	task: TeamTaskState,
-	artifactsDir?: string,
-): TaskQualityScore {
+export function computeTaskQuality(task: TeamTaskState, artifactsDir?: string): TaskQualityScore {
 	const hasDiagnostics =
-		task.diagnostics !== undefined &&
-		typeof task.diagnostics === "object" &&
-		Object.keys(task.diagnostics).length > 0;
+		task.diagnostics !== undefined && typeof task.diagnostics === "object" && Object.keys(task.diagnostics).length > 0;
 
-	const hasMetrics =
-		task.metrics !== undefined &&
-		typeof task.metrics === "object" &&
-		Object.keys(task.metrics).length > 0;
+	const hasMetrics = task.metrics !== undefined && typeof task.metrics === "object" && Object.keys(task.metrics).length > 0;
 
-	const producedArtifacts =
-		artifactsDir !== undefined && hasTaskArtifacts(task.id, artifactsDir);
+	const producedArtifacts = artifactsDir !== undefined && hasTaskArtifacts(task.id, artifactsDir);
 
 	const hasDescription = isResultDescriptive(task);
 

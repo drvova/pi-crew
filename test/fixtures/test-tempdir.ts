@@ -26,7 +26,9 @@ export function createTrackedTempDir(prefix: string): string {
 	try {
 		const r = fs.realpathSync.native(dir);
 		dir = r.startsWith("\\\\?\\") ? r.slice(4) : r;
-	} catch { /* keep as-is */ }
+	} catch {
+		/* keep as-is */
+	}
 	// LEAK PREVENTION: create a `.git` marker dir so findRepoRoot(dir) succeeds,
 	// making useProjectState(dir) → true. Without this, scopeBaseRoot falls back
 	// to userCrewRoot() and any createRunManifest/writeRunFixture/createRunPaths
@@ -34,7 +36,11 @@ export function createTrackedTempDir(prefix: string): string {
 	// (~/.pi/agent/extensions/pi-crew/state/runs/) — the one the crew UI reads —
 	// creating persistent "zombie agent" rows after every test run. A bare `.git`
 	// directory is enough for findRepoRoot; a real `git init` is unnecessary here.
-	try { fs.mkdirSync(path.join(dir, ".git"), { recursive: true }); } catch { /* best-effort */ }
+	try {
+		fs.mkdirSync(path.join(dir, ".git"), { recursive: true });
+	} catch {
+		/* best-effort */
+	}
 	tracked.add(dir);
 	return dir;
 }
@@ -69,6 +75,10 @@ export function resolveCanonicalDir(dir: string): string {
 		const resolved = fs.realpathSync.native(dir);
 		return resolved.startsWith("\\\\?\\") ? resolved.slice(4) : resolved;
 	} catch {
-		try { return fs.realpathSync(dir); } catch { return dir; }
+		try {
+			return fs.realpathSync(dir);
+		} catch {
+			return dir;
+		}
 	}
 }

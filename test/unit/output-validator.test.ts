@@ -1,10 +1,10 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
-	validateWorkerOutput,
-	parseReviewerFindings,
 	parseExplorerResults,
+	parseReviewerFindings,
 	validateCompressionPreservation,
+	validateWorkerOutput,
 } from "../../src/runtime/output-validator.ts";
 
 describe("output-validator", () => {

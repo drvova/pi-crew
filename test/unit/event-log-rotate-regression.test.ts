@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { rotateEventLog, compactEventLog } from "../../src/state/event-log-rotation.ts";
+import * as path from "node:path";
+import { describe, it } from "node:test";
+import { compactEventLog, rotateEventLog } from "../../src/state/event-log-rotation.ts";
 
 function tmpDir(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-rotate-"));
@@ -13,7 +13,14 @@ function writeEvents(filePath: string, count: number, baseTime = "2025-01-01T00:
 	const lines: string[] = [];
 	for (let i = 0; i < count; i++) {
 		const ts = new Date(Date.parse(baseTime) + i * 1000).toISOString();
-		lines.push(JSON.stringify({ time: ts, type: "tick", runId: "r1", metadata: { seq: i + 1, provenance: "test" } }));
+		lines.push(
+			JSON.stringify({
+				time: ts,
+				type: "tick",
+				runId: "r1",
+				metadata: { seq: i + 1, provenance: "test" },
+			}),
+		);
 	}
 	fs.writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
 }

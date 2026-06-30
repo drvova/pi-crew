@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { withSessionId } from "../../src/extension/team-tool/context.ts";
 

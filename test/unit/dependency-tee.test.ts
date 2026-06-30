@@ -14,22 +14,32 @@
  * @see src/runtime/task-output-context.ts collectDependencyOutputContext / renderDependencyOutputContext
  * @see research-findings/output-handling-deep-dive.md §D
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { test } from "node:test";
 import {
 	collectDependencyOutputContext,
-	renderDependencyOutputContext,
 	MAX_RESULT_INLINE_BYTES,
+	renderDependencyOutputContext,
 } from "../../src/runtime/task-output-context.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 import type { WorkflowStep } from "../../src/workflows/workflow-config.ts";
 
 function makeTmpDir(prefix: string): { dir: string; cleanup: () => void } {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-	return { dir, cleanup: () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ } } };
+	return {
+		dir,
+		cleanup: () => {
+			try {
+				fs.rmSync(dir, { recursive: true, force: true });
+			} catch {
+				/* best-effort */
+			}
+		},
+	};
 }
 
 function buildFixtures(dir: string, depResultChars: number) {
@@ -39,7 +49,10 @@ function buildFixtures(dir: string, depResultChars: number) {
 	const rawResult = "X".repeat(depResultChars);
 	fs.writeFileSync(fullResultPath, rawResult, "utf-8");
 
-	const manifest = { artifactsRoot: dir, artifacts: [] } as unknown as TeamRunManifest;
+	const manifest = {
+		artifactsRoot: dir,
+		artifacts: [],
+	} as unknown as TeamRunManifest;
 	const depTask = {
 		id: "dep-1",
 		stepId: "dep-step",
@@ -80,8 +93,11 @@ test("renderDependencyOutputContext surfaces the recovery hint for dependencies 
 		const { manifest, depTask, mainTask, step } = buildFixtures(dir, chars);
 		const ctx = collectDependencyOutputContext(manifest, [depTask, mainTask], mainTask, step);
 		const rendered = renderDependencyOutputContext(ctx);
-		assert.match(rendered, /Full output \(if you need the missing middle\): .+/,
-			"rendered dependency context must include the recovery-hint line");
+		assert.match(
+			rendered,
+			/Full output \(if you need the missing middle\): .+/,
+			"rendered dependency context must include the recovery-hint line",
+		);
 		// The head+tail inline summary is still present.
 		assert.match(rendered, /## dep-1 \(explorer\)/);
 	} finally {
@@ -98,8 +114,7 @@ test("small dependency result (< MAX_RESULT_INLINE_BYTES) does NOT tee and has n
 		const dep = ctx.dependencies[0]!;
 		assert.equal(dep.fullOutputPath, undefined, "small results must not tee");
 		const rendered = renderDependencyOutputContext(ctx);
-		assert.doesNotMatch(rendered, /Full output \(if you need the missing middle\)/,
-			"small results must not emit a recovery hint");
+		assert.doesNotMatch(rendered, /Full output \(if you need the missing middle\)/, "small results must not emit a recovery hint");
 		// Full content survives inline (no truncation).
 		assert.ok(rendered.includes(rawResult));
 	} finally {
@@ -121,9 +136,22 @@ test("re-reading the hinted path recovers the dropped middle (no circular re-rea
 		const abs = path.join(dir, relResultPath);
 		fs.mkdirSync(path.dirname(abs), { recursive: true });
 		fs.writeFileSync(abs, full, "utf-8");
-		const manifest = { artifactsRoot: dir, artifacts: [] } as unknown as TeamRunManifest;
-		const depTask = { id: "dep-1", stepId: "dep-step", role: "explorer", status: "completed", resultArtifact: { path: relResultPath }, dependsOn: [] } as unknown as TeamTaskState;
-		const mainTask = { id: "t-1", dependsOn: ["dep-step"] } as unknown as TeamTaskState;
+		const manifest = {
+			artifactsRoot: dir,
+			artifacts: [],
+		} as unknown as TeamRunManifest;
+		const depTask = {
+			id: "dep-1",
+			stepId: "dep-step",
+			role: "explorer",
+			status: "completed",
+			resultArtifact: { path: relResultPath },
+			dependsOn: [],
+		} as unknown as TeamTaskState;
+		const mainTask = {
+			id: "t-1",
+			dependsOn: ["dep-step"],
+		} as unknown as TeamTaskState;
 		const step = {} as unknown as WorkflowStep;
 
 		const ctx = collectDependencyOutputContext(manifest, [depTask, mainTask], mainTask, step);

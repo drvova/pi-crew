@@ -1,12 +1,26 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { parseTranscriptEntries, toggleEntry, renderEntries } from "../../src/ui/transcript-entries.ts";
+import test from "node:test";
+import { parseTranscriptEntries, renderEntries, toggleEntry } from "../../src/ui/transcript-entries.ts";
 
 test("parseTranscriptEntries parses message and tool events from JSONL", () => {
 	const lines = [
-		JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "hello world" }] } }),
-		JSON.stringify({ type: "tool_call", name: "bash", input: { command: "ls" } }),
-		JSON.stringify({ type: "tool_result", toolName: "bash", text: "file.txt" }),
+		JSON.stringify({
+			type: "message_end",
+			message: {
+				role: "assistant",
+				content: [{ type: "text", text: "hello world" }],
+			},
+		}),
+		JSON.stringify({
+			type: "tool_call",
+			name: "bash",
+			input: { command: "ls" },
+		}),
+		JSON.stringify({
+			type: "tool_result",
+			toolName: "bash",
+			text: "file.txt",
+		}),
 	];
 	const entries = parseTranscriptEntries(lines);
 	assert.equal(entries.length, 2);
@@ -21,8 +35,16 @@ test("parseTranscriptEntries parses message and tool events from JSONL", () => {
 
 test("parseTranscriptEntries groups tool_call with subsequent tool_result", () => {
 	const lines = [
-		JSON.stringify({ type: "tool_call", toolName: "read", input: { path: "/foo.ts" } }),
-		JSON.stringify({ type: "tool_result", toolName: "read", text: "contents here" }),
+		JSON.stringify({
+			type: "tool_call",
+			toolName: "read",
+			input: { path: "/foo.ts" },
+		}),
+		JSON.stringify({
+			type: "tool_result",
+			toolName: "read",
+			text: "contents here",
+		}),
 	];
 	const entries = parseTranscriptEntries(lines);
 	assert.equal(entries.length, 1, "tool_call + tool_result should be grouped into one entry");
@@ -33,7 +55,12 @@ test("parseTranscriptEntries groups tool_call with subsequent tool_result", () =
 
 test("parseTranscriptEntries handles standalone tool_result", () => {
 	const lines = [
-		JSON.stringify({ type: "tool_result", toolName: "bash", text: "output", isError: true }),
+		JSON.stringify({
+			type: "tool_result",
+			toolName: "bash",
+			text: "output",
+			isError: true,
+		}),
 	];
 	const entries = parseTranscriptEntries(lines);
 	assert.equal(entries.length, 1);
@@ -50,8 +77,14 @@ test("parseTranscriptEntries handles empty input", () => {
 
 test("toggleEntry expands and collapses correctly", () => {
 	const entries = parseTranscriptEntries([
-		JSON.stringify({ type: "message_end", message: { role: "user", content: "hi" } }),
-		JSON.stringify({ type: "message_end", message: { role: "assistant", content: "hey" } }),
+		JSON.stringify({
+			type: "message_end",
+			message: { role: "user", content: "hi" },
+		}),
+		JSON.stringify({
+			type: "message_end",
+			message: { role: "assistant", content: "hey" },
+		}),
 	]);
 	assert.equal(entries[0]!.expanded, false);
 	assert.equal(entries[1]!.expanded, false);
@@ -69,8 +102,14 @@ test("toggleEntry expands and collapses correctly", () => {
 
 test("renderEntries collapses entries to single line and expands to multi-line", () => {
 	const entries = parseTranscriptEntries([
-		JSON.stringify({ type: "message_end", message: { role: "assistant", content: "short" } }),
-		JSON.stringify({ type: "message_end", message: { role: "user", content: "hello\nworld" } }),
+		JSON.stringify({
+			type: "message_end",
+			message: { role: "assistant", content: "short" },
+		}),
+		JSON.stringify({
+			type: "message_end",
+			message: { role: "user", content: "hello\nworld" },
+		}),
 	]);
 
 	// Both collapsed → 2 lines
@@ -90,7 +129,13 @@ test("renderEntries collapses entries to single line and expands to multi-line",
 
 test("renderEntries truncates lines to maxWidth", () => {
 	const entries = parseTranscriptEntries([
-		JSON.stringify({ type: "message_end", message: { role: "assistant", content: "this is a somewhat long message that should be truncated" } }),
+		JSON.stringify({
+			type: "message_end",
+			message: {
+				role: "assistant",
+				content: "this is a somewhat long message that should be truncated",
+			},
+		}),
 	]);
 	const lines = renderEntries(entries, 20);
 	assert.equal(lines.length, 1);
@@ -102,7 +147,13 @@ test("renderEntries handles empty entries", () => {
 });
 
 test("parseTranscriptEntries handles non-JSON lines as system entries", () => {
-	const lines = ["plain text line", JSON.stringify({ type: "message_end", message: { role: "assistant", content: "ok" } })];
+	const lines = [
+		"plain text line",
+		JSON.stringify({
+			type: "message_end",
+			message: { role: "assistant", content: "ok" },
+		}),
+	];
 	const entries = parseTranscriptEntries(lines);
 	assert.equal(entries.length, 2);
 	assert.equal(entries[0]!.type, "system");
@@ -110,7 +161,13 @@ test("parseTranscriptEntries handles non-JSON lines as system entries", () => {
 });
 
 test("parseTranscriptEntries preserves timestamp", () => {
-	const lines = [JSON.stringify({ type: "message_end", timestamp: 12345, message: { role: "user", content: "hi" } })];
+	const lines = [
+		JSON.stringify({
+			type: "message_end",
+			timestamp: 12345,
+			message: { role: "user", content: "hi" },
+		}),
+	];
 	const entries = parseTranscriptEntries(lines);
 	assert.equal(entries[0]!.timestamp, 12345);
 });

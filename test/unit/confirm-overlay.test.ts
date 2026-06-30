@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { ConfirmOverlay } from "../../src/ui/overlays/confirm-overlay.ts";
 
 test("ConfirmOverlay renders title and safe hint", () => {

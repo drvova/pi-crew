@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	normalizeErrorSignature,
 	aggregateFailurePatterns,
 	formatFailurePatterns,
+	normalizeErrorSignature,
 } from "../../src/extension/team-tool/failure-patterns.ts";
 
 test("normalizeErrorSignature strips run ids, task ids, paths, numbers", () => {
@@ -29,25 +29,48 @@ test("normalizeErrorSignature groups semantically identical errors", () => {
 });
 
 test("aggregateFailurePatterns returns [] when no failures", () => {
-	assert.deepEqual(aggregateFailurePatterns([
-		{ id: "01", status: "completed" },
-		{ id: "02", status: "running" },
-	]), []);
+	assert.deepEqual(
+		aggregateFailurePatterns([
+			{ id: "01", status: "completed" },
+			{ id: "02", status: "running" },
+		]),
+		[],
+	);
 });
 
 test("aggregateFailurePatterns returns [] when failures are all unique (no repeats)", () => {
 	const out = aggregateFailurePatterns([
-		{ id: "01", status: "failed", error: "unique error A about filesystem" },
-		{ id: "02", status: "failed", error: "totally different error about network" },
+		{
+			id: "01",
+			status: "failed",
+			error: "unique error A about filesystem",
+		},
+		{
+			id: "02",
+			status: "failed",
+			error: "totally different error about network",
+		},
 	]);
 	assert.equal(out.length, 0, "singletons are not patterns");
 });
 
 test("aggregateFailurePatterns groups repeated root causes", () => {
 	const out = aggregateFailurePatterns([
-		{ id: "02_exec", status: "failed", error: "model routing fallback failed: all 2 candidates exhausted" },
-		{ id: "03_exec", status: "failed", error: "model routing fallback failed: all 5 candidates exhausted" },
-		{ id: "04_exec", status: "failed", error: "model routing fallback failed: all 1 candidates exhausted" },
+		{
+			id: "02_exec",
+			status: "failed",
+			error: "model routing fallback failed: all 2 candidates exhausted",
+		},
+		{
+			id: "03_exec",
+			status: "failed",
+			error: "model routing fallback failed: all 5 candidates exhausted",
+		},
+		{
+			id: "04_exec",
+			status: "failed",
+			error: "model routing fallback failed: all 1 candidates exhausted",
+		},
 		{ id: "05_exec", status: "failed", error: "EPERM rename /tmp/foo" },
 		{ id: "06_exec", status: "failed", error: "EPERM rename /tmp/bar" },
 	]);
@@ -80,16 +103,27 @@ test("aggregateFailurePatterns sorts by count descending", () => {
 });
 
 test("formatFailurePatterns returns [] when no repeated patterns", () => {
-	assert.deepEqual(formatFailurePatterns([
-		{ id: "01", status: "failed", error: "unique A" },
-		{ id: "02", status: "failed", error: "unique B" },
-	]), []);
+	assert.deepEqual(
+		formatFailurePatterns([
+			{ id: "01", status: "failed", error: "unique A" },
+			{ id: "02", status: "failed", error: "unique B" },
+		]),
+		[],
+	);
 });
 
 test("formatFailurePatterns renders a header + grouped lines", () => {
 	const lines = formatFailurePatterns([
-		{ id: "02_exec", status: "failed", error: "model routing failed: 2 candidates" },
-		{ id: "03_exec", status: "failed", error: "model routing failed: 5 candidates" },
+		{
+			id: "02_exec",
+			status: "failed",
+			error: "model routing failed: 2 candidates",
+		},
+		{
+			id: "03_exec",
+			status: "failed",
+			error: "model routing failed: 5 candidates",
+		},
 		{ id: "05_exec", status: "failed", error: "EPERM rename" },
 		{ id: "06_exec", status: "failed", error: "EPERM rename" },
 		{ id: "07_exec", status: "failed", error: "one-off unique problem" },
@@ -111,7 +145,11 @@ test("formatFailurePatterns truncates long representative errors", () => {
 });
 
 test("formatFailurePatterns handles +N more when many tasks in a bucket", () => {
-	const tasks = Array.from({ length: 10 }, (_, i) => ({ id: `t${i}`, status: "failed" as const, error: "same root cause" }));
+	const tasks = Array.from({ length: 10 }, (_, i) => ({
+		id: `t${i}`,
+		status: "failed" as const,
+		error: "same root cause",
+	}));
 	const lines = formatFailurePatterns(tasks);
 	const text = lines.join("\n");
 	assert.match(text, /tasks: t0, t1, t2, t3, t4, t5, \+4 more/);

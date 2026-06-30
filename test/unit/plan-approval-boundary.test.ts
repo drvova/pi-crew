@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { hasPendingMutatingTaskAtBoundary } from "../../src/runtime/team-runner.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
@@ -71,7 +71,11 @@ describe("hasPendingMutatingTaskAtBoundary", () => {
 		// Real default workflow scenario: explore + plan (both read-only) complete,
 		// execute (workspace_write) pending → boundary.
 		const tasks = [
-			makeTask({ id: "01_explore", role: "explorer", status: "completed" }),
+			makeTask({
+				id: "01_explore",
+				role: "explorer",
+				status: "completed",
+			}),
 			makeTask({ id: "02_plan", role: "planner", status: "completed" }),
 			makeTask({ id: "03_execute", role: "executor", status: "queued" }),
 			makeTask({ id: "04_verify", role: "verifier", status: "queued" }),

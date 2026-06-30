@@ -1,10 +1,10 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
-	heartbeatAgeMs,
 	classifyHeartbeat,
 	DEFAULT_GRADIENT_THRESHOLDS,
 	type HeartbeatLevel,
+	heartbeatAgeMs,
 } from "../../src/runtime/heartbeat-gradient.ts";
 import type { WorkerHeartbeatState } from "../../src/runtime/worker-heartbeat.ts";
 

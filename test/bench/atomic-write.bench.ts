@@ -10,14 +10,20 @@
  *   - cold: first write to a fresh path (temp file creation + fsync)
  *   - warm: overwrite an existing file (fsync only, no create)
  */
-import { performance } from "node:perf_hooks";
+
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { performance } from "node:perf_hooks";
 import { atomicWriteJson } from "../../src/state/atomic-write.ts";
 
 const ITERS = Number(process.env.BENCH_ITERS ?? 200);
-const PAYLOAD = { runId: "bench", status: "running", tasks: Array.from({ length: 20 }, (_v, i) => ({ id: `t-${i}` })), updatedAt: "2026-06-24T00:00:00.000Z" };
+const PAYLOAD = {
+	runId: "bench",
+	status: "running",
+	tasks: Array.from({ length: 20 }, (_v, i) => ({ id: `t-${i}` })),
+	updatedAt: "2026-06-24T00:00:00.000Z",
+};
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-bench-aw-"));
 try {
@@ -66,4 +72,6 @@ function percentile(sorted: number[], q: number): number {
 	const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q));
 	return sorted[idx];
 }
-function round(n: number): number { return Math.round(n * 100) / 100; }
+function round(n: number): number {
+	return Math.round(n * 100) / 100;
+}

@@ -6,30 +6,31 @@
  * appendSteeringMessage, appendFollowUpMessage, acknowledgeMailboxMessage,
  * validateMailbox, replayPendingMailboxMessages, readDeliveryState, etc.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import {
-	readMailbox,
+	acknowledgeMailboxMessage,
+	appendFollowUpMessage,
 	appendMailboxMessage,
 	appendSteeringMessage,
-	appendFollowUpMessage,
-	acknowledgeMailboxMessage,
-	validateMailbox,
-	replayPendingMailboxMessages,
-	readDeliveryState,
-	readAllMailboxMessages,
-	listMailboxByKind,
-	readMailboxMessage,
 	findMailboxMessageByRequestId,
-	updateMailboxMessageReply,
-	type MailboxMessage,
+	listMailboxByKind,
 	type MailboxDirection,
+	type MailboxMessage,
+	readAllMailboxMessages,
+	readDeliveryState,
+	readMailbox,
+	readMailboxMessage,
+	replayPendingMailboxMessages,
+	updateMailboxMessageReply,
+	validateMailbox,
 } from "../../src/state/mailbox.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeManifest(stateRoot: string): TeamRunManifest {
 	return {
@@ -178,8 +179,14 @@ describe("readMailbox filters by kind", () => {
 	it("returns only messages matching the specified kind", () => {
 		const { dir, manifest } = setupMailboxWorkspace();
 		try {
-			appendSteeringMessage(manifest, { taskId: "01_task", body: "Steer!" });
-			appendFollowUpMessage(manifest, { taskId: "01_task", body: "Follow up" });
+			appendSteeringMessage(manifest, {
+				taskId: "01_task",
+				body: "Steer!",
+			});
+			appendFollowUpMessage(manifest, {
+				taskId: "01_task",
+				body: "Follow up",
+			});
 
 			// Steering messages are written to task-specific mailboxes;
 			// readMailbox with taskId returns messages from that task's mailbox.
@@ -309,10 +316,7 @@ describe("acknowledgeMailboxMessage throws for unknown message", () => {
 				to: "b",
 				body: "init",
 			});
-			assert.throws(
-				() => acknowledgeMailboxMessage(manifest, "nonexistent-msg"),
-				/not found/,
-			);
+			assert.throws(() => acknowledgeMailboxMessage(manifest, "nonexistent-msg"), /not found/);
 		} finally {
 			removeTrackedTempDir(dir);
 		}

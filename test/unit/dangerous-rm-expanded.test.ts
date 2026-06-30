@@ -3,8 +3,8 @@
  * blocks additional patterns beyond the original rm -rf / and rm -rf ~.
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { isDangerous } from "../../src/tools/safe-bash.ts";
 
 test("blocks rm -rf with absolute paths beyond /", () => {

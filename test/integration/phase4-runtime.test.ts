@@ -1,11 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
+import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { ChildPiLineObserver } from "../../src/runtime/child-pi.ts";
 import { deliverGroupJoin, resolveGroupJoinMode, shouldGroupJoin } from "../../src/runtime/group-join.ts";
-import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { parseSessionUsageFromJsonlText } from "../../src/runtime/session-usage.ts";
 import { readMailbox } from "../../src/state/mailbox.ts";
 import { createRunManifest } from "../../src/state/state-store.ts";
@@ -17,7 +17,10 @@ const team: TeamConfig = {
 	description: "phase4",
 	source: "builtin",
 	filePath: "phase4.team.md",
-	roles: [{ name: "explorer", agent: "explorer" }, { name: "planner", agent: "planner" }],
+	roles: [
+		{ name: "explorer", agent: "explorer" },
+		{ name: "planner", agent: "planner" },
+	],
 };
 
 const workflow: WorkflowConfig = {
@@ -40,7 +43,13 @@ test("child Pi line observer preserves JSON events split across chunks", () => {
 		const observer = new ChildPiLineObserver({
 			cwd: dir,
 			task: "task",
-			agent: { name: "mock", description: "mock", source: "builtin", filePath: "mock.md", systemPrompt: "mock" },
+			agent: {
+				name: "mock",
+				description: "mock",
+				source: "builtin",
+				filePath: "mock.md",
+				systemPrompt: "mock",
+			},
 			transcriptPath,
 			onStdoutLine: (line) => lines.push(line),
 			onJsonEvent: (event) => events.push(event),
@@ -65,13 +74,23 @@ test("child Pi line observer does not mirror user prompts into output log", () =
 		const observer = new ChildPiLineObserver({
 			cwd: dir,
 			task: "task",
-			agent: { name: "mock", description: "mock", source: "builtin", filePath: "mock.md", systemPrompt: "mock" },
+			agent: {
+				name: "mock",
+				description: "mock",
+				source: "builtin",
+				filePath: "mock.md",
+				systemPrompt: "mock",
+			},
 			transcriptPath,
 			onStdoutLine: (line) => lines.push(line),
 			onJsonEvent: (event) => events.push(event),
 		});
-		observer.observe(`${JSON.stringify({ type: "message", message: { role: "user", content: [{ type: "text", text: "task prompt" }] } })}\n`);
-		observer.observe(`${JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "answer" }] } })}\n`);
+		observer.observe(
+			`${JSON.stringify({ type: "message", message: { role: "user", content: [{ type: "text", text: "task prompt" }] } })}\n`,
+		);
+		observer.observe(
+			`${JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "answer" }] } })}\n`,
+		);
 		observer.flush();
 		assert.deepEqual(lines, ["answer"]);
 		assert.equal(events.length, 1);
@@ -90,13 +109,23 @@ test("child Pi line observer drops noisy message updates from durable logs", () 
 		const observer = new ChildPiLineObserver({
 			cwd: dir,
 			task: "task",
-			agent: { name: "mock", description: "mock", source: "builtin", filePath: "mock.md", systemPrompt: "mock" },
+			agent: {
+				name: "mock",
+				description: "mock",
+				source: "builtin",
+				filePath: "mock.md",
+				systemPrompt: "mock",
+			},
 			transcriptPath,
 			onStdoutLine: (line) => lines.push(line),
 			onJsonEvent: (event) => events.push(event),
 		});
-		observer.observe(`${JSON.stringify({ type: "message_update", message: { content: [{ type: "thinking", thinkingSignature: "x".repeat(10_000) }] } })}\n`);
-		observer.observe(`${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }] } })}\n`);
+		observer.observe(
+			`${JSON.stringify({ type: "message_update", message: { content: [{ type: "thinking", thinkingSignature: "x".repeat(10_000) }] } })}\n`,
+		);
+		observer.observe(
+			`${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }] } })}\n`,
+		);
 		observer.flush();
 		assert.equal(events.length, 1);
 		assert.equal(lines.length, 1);
@@ -109,23 +138,58 @@ test("child Pi line observer drops noisy message updates from durable logs", () 
 });
 
 test("session usage parser sums JSONL token usage and ignores corrupt lines", () => {
-	const usage = parseSessionUsageFromJsonlText([
-		JSON.stringify({ usage: { inputTokens: 10, outputTokens: 5, turns: 1 } }),
-		"not-json",
-		JSON.stringify({ message: { usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 1, cost: 0.25 } } }),
-	].join("\n"));
-	assert.deepEqual(usage, { input: 12, output: 8, turns: 1, cacheRead: 4, cacheWrite: 1, cost: 0.25 });
+	const usage = parseSessionUsageFromJsonlText(
+		[
+			JSON.stringify({
+				usage: { inputTokens: 10, outputTokens: 5, turns: 1 },
+			}),
+			"not-json",
+			JSON.stringify({
+				message: {
+					usage: {
+						input: 2,
+						output: 3,
+						cacheRead: 4,
+						cacheWrite: 1,
+						cost: 0.25,
+					},
+				},
+			}),
+		].join("\n"),
+	);
+	assert.deepEqual(usage, {
+		input: 12,
+		output: 8,
+		turns: 1,
+		cacheRead: 4,
+		cacheWrite: 1,
+		cost: 0.25,
+	});
 });
 
 test("group join writes metadata artifact, event, and mailbox delivery", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-group-join-"));
 	try {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-		const { manifest, tasks } = createRunManifest({ cwd, team, workflow, goal: "phase4" });
-		const completed = tasks.map((task) => ({ ...task, status: "completed" as const, finishedAt: new Date().toISOString() }));
+		const { manifest, tasks } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "phase4",
+		});
+		const completed = tasks.map((task) => ({
+			...task,
+			status: "completed" as const,
+			finishedAt: new Date().toISOString(),
+		}));
 		assert.equal(resolveGroupJoinMode({ groupJoin: "smart" }), "smart");
 		assert.equal(shouldGroupJoin("smart", completed), true);
-		const delivery = deliverGroupJoin({ manifest, mode: "smart", batch: tasks, allTasks: completed });
+		const delivery = deliverGroupJoin({
+			manifest,
+			mode: "smart",
+			batch: tasks,
+			allTasks: completed,
+		});
 		assert.ok(delivery?.artifact);
 		assert.deepEqual(delivery.completed.sort(), completed.map((task) => task.id).sort());
 		assert.match(fs.readFileSync(delivery.artifact.path, "utf-8"), /"partial": false/);
@@ -134,7 +198,12 @@ test("group join writes metadata artifact, event, and mailbox delivery", () => {
 		assert.match(mailbox[0]!.body, /Group join completed/);
 		assert.equal(mailbox[0]!.data?.kind, "group_join");
 		assert.equal(mailbox[0]!.data?.requestId, delivery.requestId);
-		const reused = deliverGroupJoin({ manifest, mode: "smart", batch: tasks, allTasks: completed });
+		const reused = deliverGroupJoin({
+			manifest,
+			mode: "smart",
+			batch: tasks,
+			allTasks: completed,
+		});
 		assert.equal(reused?.messageId, delivery.messageId);
 		assert.equal(readMailbox(manifest, "outbox").length, 1);
 		assert.match(fs.readFileSync(manifest.eventsPath, "utf-8"), /agent\.group_join\.completed/);
@@ -148,18 +217,49 @@ test("group join mailbox ack emits acknowledged event", async () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-group-join-ack-"));
 	try {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-		const { manifest, tasks } = createRunManifest({ cwd, team, workflow, goal: "phase4 ack" });
-		const completed = tasks.map((task) => ({ ...task, status: "completed" as const, finishedAt: new Date().toISOString() }));
-		const delivery = deliverGroupJoin({ manifest, mode: "smart", batch: tasks, allTasks: completed });
+		const { manifest, tasks } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "phase4 ack",
+		});
+		const completed = tasks.map((task) => ({
+			...task,
+			status: "completed" as const,
+			finishedAt: new Date().toISOString(),
+		}));
+		const delivery = deliverGroupJoin({
+			manifest,
+			mode: "smart",
+			batch: tasks,
+			allTasks: completed,
+		});
 		assert.ok(delivery?.messageId);
-		const pendingStatus = await handleTeamTool({ action: "status", runId: manifest.runId, config: { runtime: { groupJoinAckTimeoutMs: 1 } } }, { cwd });
+		const pendingStatus = await handleTeamTool(
+			{
+				action: "status",
+				runId: manifest.runId,
+				config: { runtime: { groupJoinAckTimeoutMs: 1 } },
+			},
+			{ cwd },
+		);
 		assert.equal(pendingStatus.isError, false);
-		const pendingText = pendingStatus.content.map((item) => item.type === "text" ? item.text : "").join("\n");
+		const pendingText = pendingStatus.content.map((item) => (item.type === "text" ? item.text : "")).join("\n");
 		assert.match(pendingText, /Group joins:/);
-		const ack = await handleTeamTool({ action: "api", runId: manifest.runId, config: { operation: "ack-message", messageId: delivery.messageId } }, { cwd });
+		const ack = await handleTeamTool(
+			{
+				action: "api",
+				runId: manifest.runId,
+				config: {
+					operation: "ack-message",
+					messageId: delivery.messageId,
+				},
+			},
+			{ cwd },
+		);
 		assert.equal(ack.isError, false);
 		const acknowledgedStatus = await handleTeamTool({ action: "status", runId: manifest.runId }, { cwd });
-		const acknowledgedText = acknowledgedStatus.content.map((item) => item.type === "text" ? item.text : "").join("\n");
+		const acknowledgedText = acknowledgedStatus.content.map((item) => (item.type === "text" ? item.text : "")).join("\n");
 		assert.match(acknowledgedText, /ack=acknowledged/);
 		assert.match(fs.readFileSync(manifest.eventsPath, "utf-8"), /agent\.group_join\.acknowledged/);
 	} finally {

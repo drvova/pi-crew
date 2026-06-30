@@ -1,8 +1,8 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import { withEventLogLockSync } from "../../src/state/event-log.ts";
 
 describe("event-log lock timeout is capped", () => {
@@ -20,7 +20,11 @@ describe("event-log lock timeout is capped", () => {
 		// The test now runs in <100ms instead of >4s, exercising the same code path.
 		const start = Date.now();
 		assert.throws(
-			() => withEventLogLockSync(eventsPath, () => "unreachable", { timeoutMs: 50, staleMs: 60_000 }),
+			() =>
+				withEventLogLockSync(eventsPath, () => "unreachable", {
+					timeoutMs: 50,
+					staleMs: 60_000,
+				}),
 			/lock timeout/,
 		);
 		const elapsed = Date.now() - start;
@@ -31,7 +35,11 @@ describe("event-log lock timeout is capped", () => {
 		assert.ok(elapsed >= 40, `Expected >= 40ms but took only ${elapsed}ms`);
 
 		// Cleanup
-		try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+		try {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		} catch {
+			/* ignore */
+		}
 	});
 
 	it("should succeed when no lock contention", () => {
@@ -42,6 +50,10 @@ describe("event-log lock timeout is capped", () => {
 		assert.equal(result, 42);
 
 		// Cleanup
-		try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+		try {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		} catch {
+			/* ignore */
+		}
 	});
 });

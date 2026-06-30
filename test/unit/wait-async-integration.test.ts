@@ -14,10 +14,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
 
 function restoreEnv(name: string, previous: string | undefined): void {
@@ -53,10 +50,7 @@ test("wait returns completed for child-process mock run", async () => {
 		const runId = run.details.runId!;
 
 		// Wait should find the already-completed manifest on disk.
-		const waitResult = await handleTeamTool(
-			{ action: "wait", runId, config: { timeoutMs: 5000 } },
-			{ cwd },
-		);
+		const waitResult = await handleTeamTool({ action: "wait", runId, config: { timeoutMs: 5000 } }, { cwd });
 		assert.equal(waitResult.isError, false, `wait should succeed: ${firstText(waitResult)}`);
 		assert.match(firstText(waitResult), /finished: completed/);
 	} finally {

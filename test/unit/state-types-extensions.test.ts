@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
 /**
@@ -30,7 +30,11 @@ describe("TeamTaskState — diagnostics field", () => {
 		const task = makeMinimalTask({
 			diagnostics: { toolCalls: 5, filesRead: 3, duration: "2m" },
 		});
-		assert.deepStrictEqual(task.diagnostics, { toolCalls: 5, filesRead: 3, duration: "2m" });
+		assert.deepStrictEqual(task.diagnostics, {
+			toolCalls: 5,
+			filesRead: 3,
+			duration: "2m",
+		});
 	});
 
 	it("accepts task with empty diagnostics", () => {
@@ -69,9 +73,17 @@ describe("TeamTaskState — metrics field", () => {
 
 	it("accepts task with metrics", () => {
 		const task = makeMinimalTask({
-			metrics: { files_changed: 3, tests_passed: 12, duration_ms: 4500.5 },
+			metrics: {
+				files_changed: 3,
+				tests_passed: 12,
+				duration_ms: 4500.5,
+			},
 		});
-		assert.deepStrictEqual(task.metrics, { files_changed: 3, tests_passed: 12, duration_ms: 4500.5 });
+		assert.deepStrictEqual(task.metrics, {
+			files_changed: 3,
+			tests_passed: 12,
+			duration_ms: 4500.5,
+		});
 	});
 
 	it("accepts task with empty metrics", () => {

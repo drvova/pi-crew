@@ -10,12 +10,13 @@
  * - packageRoot returns valid path
  * - clearProjectRootCache
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { findRepoRoot, projectPiRoot, projectCrewRoot, userPiRoot, packageRoot, clearProjectRootCache } from "../../src/utils/paths.ts";
+import test from "node:test";
+import { clearProjectRootCache, findRepoRoot, packageRoot, projectCrewRoot, projectPiRoot, userPiRoot } from "../../src/utils/paths.ts";
 
 const makeTempDir = () => {
 	let dir = fs.mkdtempSync(path.join(os.tmpdir(), "paths-test-"));
@@ -23,7 +24,13 @@ const makeTempDir = () => {
 	try {
 		const r = fs.realpathSync.native(dir);
 		dir = r.startsWith("\\\\?\\") ? r.slice(4) : r;
-	} catch { try { dir = fs.realpathSync(dir); } catch { /* keep as-is */ } }
+	} catch {
+		try {
+			dir = fs.realpathSync(dir);
+		} catch {
+			/* keep as-is */
+		}
+	}
 	return dir;
 };
 
@@ -116,7 +123,9 @@ test("findRepoRoot walks up to find a parent marker", () => {
 	try {
 		// .git in parent, no markers in child
 		fs.mkdirSync(path.join(parent, ".git"));
-		fs.mkdirSync(path.join(parent, "subdir", "nested"), { recursive: true });
+		fs.mkdirSync(path.join(parent, "subdir", "nested"), {
+			recursive: true,
+		});
 		const child = path.join(parent, "subdir", "nested");
 		const result = findRepoRoot(child);
 		assert.equal(result, parent);

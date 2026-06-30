@@ -1,6 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { __test__clearVisibleWidthCache, __test__visibleWidthCacheSize, truncate, truncateToVisualLines, visibleWidth } from "../../src/utils/visual.ts";
+import test from "node:test";
+import {
+	__test__clearVisibleWidthCache,
+	__test__visibleWidthCacheSize,
+	truncate,
+	truncateToVisualLines,
+	visibleWidth,
+} from "../../src/utils/visual.ts";
 
 test("truncateToVisualLines keeps the tail after merging wrapped source lines", () => {
 	const result = truncateToVisualLines("abcdefghij", 2, 2);
@@ -9,11 +15,17 @@ test("truncateToVisualLines keeps the tail after merging wrapped source lines", 
 
 test("truncateToVisualLines counts skipped lines across multiple source lines", () => {
 	const result = truncateToVisualLines("abcd\nefgh\nijkl", 4, 2);
-	assert.deepEqual(result, { visualLines: ["ef", "gh", "ij", "kl"], skippedCount: 2 });
+	assert.deepEqual(result, {
+		visualLines: ["ef", "gh", "ij", "kl"],
+		skippedCount: 2,
+	});
 });
 
 test("truncateToVisualLines returns no visual lines for empty input", () => {
-	assert.deepEqual(truncateToVisualLines("", 3, 10), { visualLines: [], skippedCount: 0 });
+	assert.deepEqual(truncateToVisualLines("", 3, 10), {
+		visualLines: [],
+		skippedCount: 0,
+	});
 });
 
 test("visibleWidth memoizes repeated strings without changing output", () => {

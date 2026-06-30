@@ -1,19 +1,17 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
-	HookRegistry,
-	crewHooks,
-	isValidEventType,
-	isHookEvent,
-	type CrewHookEventType,
 	type CrewHookEvent,
+	type CrewHookEventType,
+	crewHooks,
+	HookRegistry,
+	isHookEvent,
+	isValidEventType,
 } from "../../src/runtime/crew-hooks.ts";
 
 describe("isValidEventType", () => {
 	it("returns true for all valid event types", () => {
-		const validTypes: CrewHookEventType[] = [
-			"task_started", "task_completed", "task_failed", "run_completed", "run_failed",
-		];
+		const validTypes: CrewHookEventType[] = ["task_started", "task_completed", "task_failed", "run_completed", "run_failed"];
 		for (const t of validTypes) {
 			assert.equal(isValidEventType(t), true, `Expected ${t} to be valid`);
 		}
@@ -61,7 +59,15 @@ describe("isHookEvent", () => {
 	});
 
 	it("returns false for non-string taskId", () => {
-		assert.equal(isHookEvent({ type: "task_started", timestamp: "", runId: "r", taskId: 123 }), false);
+		assert.equal(
+			isHookEvent({
+				type: "task_started",
+				timestamp: "",
+				runId: "r",
+				taskId: 123,
+			}),
+			false,
+		);
 	});
 });
 
@@ -69,8 +75,15 @@ describe("HookRegistry", () => {
 	it("register and emit invokes the hook", () => {
 		const registry = new HookRegistry();
 		let received: CrewHookEvent | undefined;
-		registry.register("task_started", (e) => { received = e; });
-		const event: CrewHookEvent = { type: "task_started", timestamp: new Date().toISOString(), runId: "run-1", taskId: "t1" };
+		registry.register("task_started", (e) => {
+			received = e;
+		});
+		const event: CrewHookEvent = {
+			type: "task_started",
+			timestamp: new Date().toISOString(),
+			runId: "run-1",
+			taskId: "t1",
+		};
 		registry.emit(event);
 		assert.deepEqual(received, event);
 	});
@@ -78,7 +91,9 @@ describe("HookRegistry", () => {
 	it("unregister removes the hook", () => {
 		const registry = new HookRegistry();
 		let called = false;
-		const hook = () => { called = true; };
+		const hook = () => {
+			called = true;
+		};
 		registry.register("task_completed", hook);
 		registry.unregister("task_completed", hook);
 		registry.emit({ type: "task_completed", timestamp: "", runId: "r" });
@@ -88,7 +103,11 @@ describe("HookRegistry", () => {
 	it("emit with unknown type does not throw", () => {
 		const registry = new HookRegistry();
 		assert.doesNotThrow(() => {
-			registry.emit({ type: "task_started" as CrewHookEventType, timestamp: "", runId: "r" });
+			registry.emit({
+				type: "task_started" as CrewHookEventType,
+				timestamp: "",
+				runId: "r",
+			});
 		});
 	});
 
@@ -137,8 +156,12 @@ describe("HookRegistry", () => {
 	it("emit catches synchronous errors from hooks", () => {
 		const registry = new HookRegistry();
 		let secondCalled = false;
-		registry.register("task_failed", () => { throw new Error("boom"); });
-		registry.register("task_failed", () => { secondCalled = true; });
+		registry.register("task_failed", () => {
+			throw new Error("boom");
+		});
+		registry.register("task_failed", () => {
+			secondCalled = true;
+		});
 		// Should not throw — errors are caught
 		registry.emit({ type: "task_failed", timestamp: "", runId: "r" });
 		assert.equal(secondCalled, true, "second hook should still be called after first throws");
@@ -161,8 +184,14 @@ describe("crewHooks (global singleton)", () => {
 	it("can register and emit events", () => {
 		crewHooks.clearAll();
 		let received: CrewHookEvent | undefined;
-		crewHooks.register("run_completed", (e) => { received = e; });
-		crewHooks.emit({ type: "run_completed", timestamp: "2026-01-01T00:00:00Z", runId: "r1" });
+		crewHooks.register("run_completed", (e) => {
+			received = e;
+		});
+		crewHooks.emit({
+			type: "run_completed",
+			timestamp: "2026-01-01T00:00:00Z",
+			runId: "r1",
+		});
 		assert.ok(received);
 		assert.equal(received!.runId, "r1");
 		crewHooks.clearAll();

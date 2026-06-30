@@ -1,6 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { childProcessRegistry, registerChildProcess, unregisterChildProcess, registerCleanupHandler } from "../../src/extension/crew-cleanup.ts";
+import test from "node:test";
+import {
+	childProcessRegistry,
+	registerChildProcess,
+	registerCleanupHandler,
+	unregisterChildProcess,
+} from "../../src/extension/crew-cleanup.ts";
 
 test("ChildProcessRegistry registers processes", () => {
 	childProcessRegistry.clear();

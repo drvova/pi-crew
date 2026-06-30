@@ -14,9 +14,7 @@
  */
 export function assertValidSessionId(id: string): void {
 	if (!id || !/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(id)) {
-		throw new Error(
-			`Invalid session id: must be non-empty, alphanumeric with '-', '_', '.' and start/end with alphanumeric`,
-		);
+		throw new Error(`Invalid session id: must be non-empty, alphanumeric with '-', '_', '.' and start/end with alphanumeric`);
 	}
 }
 

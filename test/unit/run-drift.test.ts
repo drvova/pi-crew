@@ -1,16 +1,16 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
+import type { DriftContext } from "../../src/runtime/run-drift.ts";
 import {
+	detectMissingTimestamps,
 	detectOrphanedClaim,
 	detectOrphanedWorktree,
-	detectMissingTimestamps,
 	detectStatusDivergence,
 	detectUnregisteredRun,
 	runDriftDetection,
 } from "../../src/runtime/run-drift.ts";
-import type { DriftContext } from "../../src/runtime/run-drift.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeCtx(overrides: Partial<DriftContext> & { crewRoot: string }): DriftContext {
@@ -33,13 +33,15 @@ describe("run-drift: detectOrphanedClaim", () => {
 		const dir = createTrackedTempDir("pi-crew-drift-");
 		const claimsDir = path.join(dir, "state", "task-claims");
 		fs.mkdirSync(claimsDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(claimsDir, "claim-1.json"),
-			JSON.stringify({ runId: "run-1", taskId: "task-a" }),
-		);
+		fs.writeFileSync(path.join(claimsDir, "claim-1.json"), JSON.stringify({ runId: "run-1", taskId: "task-a" }));
 		const ctx = makeCtx({
 			crewRoot: dir,
-			manifest: { runId: "run-1", status: "running", cwd: "/tmp", tasks: [{ id: "task-a" }] },
+			manifest: {
+				runId: "run-1",
+				status: "running",
+				cwd: "/tmp",
+				tasks: [{ id: "task-a" }],
+			},
 		});
 		const result = detectOrphanedClaim(ctx);
 		assert.equal(result, null);
@@ -50,13 +52,15 @@ describe("run-drift: detectOrphanedClaim", () => {
 		const dir = createTrackedTempDir("pi-crew-drift-");
 		const claimsDir = path.join(dir, "state", "task-claims");
 		fs.mkdirSync(claimsDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(claimsDir, "claim-1.json"),
-			JSON.stringify({ runId: "run-1", taskId: "nonexistent-task" }),
-		);
+		fs.writeFileSync(path.join(claimsDir, "claim-1.json"), JSON.stringify({ runId: "run-1", taskId: "nonexistent-task" }));
 		const ctx = makeCtx({
 			crewRoot: dir,
-			manifest: { runId: "run-1", status: "running", cwd: "/tmp", tasks: [{ id: "task-a" }] },
+			manifest: {
+				runId: "run-1",
+				status: "running",
+				cwd: "/tmp",
+				tasks: [{ id: "task-a" }],
+			},
 		});
 		const result = detectOrphanedClaim(ctx);
 		assert.ok(result);
@@ -80,7 +84,12 @@ describe("run-drift: detectOrphanedClaim", () => {
 		fs.writeFileSync(path.join(claimsDir, "bad.json"), "not valid json{{{");
 		const ctx = makeCtx({
 			crewRoot: dir,
-			manifest: { runId: "run-1", status: "running", cwd: "/tmp", tasks: [] },
+			manifest: {
+				runId: "run-1",
+				status: "running",
+				cwd: "/tmp",
+				tasks: [],
+			},
 		});
 		const result = detectOrphanedClaim(ctx);
 		assert.equal(result, null);

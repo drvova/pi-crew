@@ -1,15 +1,10 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import {
-	runIterationHook,
-	steerMessageFromHook,
-	hookLogEntry,
-	isAllowedHookPath,
-} from "../../src/runtime/iteration-hooks.ts";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import type { HookPayload, HookResult, HookStage } from "../../src/runtime/iteration-hooks.ts";
+import { hookLogEntry, isAllowedHookPath, runIterationHook, steerMessageFromHook } from "../../src/runtime/iteration-hooks.ts";
 
 /** Helper to create a standard hook payload. */
 function makePayload(overrides: Partial<HookPayload> = {}): HookPayload {
@@ -86,9 +81,12 @@ describe("runIterationHook", () => {
 		// resolveShellForScript policy — so we skip on win32 rather than
 		// rewriting the test to cover a .bat equivalent (out of scope; the
 		// shim's own .ps1/.bat routing is unit-tested elsewhere).
-		if (process.platform === "win32") { t.skip("POSIX .sh fixture; Windows iteration-hook path uses .ps1/.bat"); return; }
+		if (process.platform === "win32") {
+			t.skip("POSIX .sh fixture; Windows iteration-hook path uses .ps1/.bat");
+			return;
+		}
 		const scriptPath = path.join(hooksDir, "success.sh");
-		fs.writeFileSync(scriptPath, "#!/bin/bash\nread input\necho \"hook-output: $input\"\nexit 0\n");
+		fs.writeFileSync(scriptPath, '#!/bin/bash\nread input\necho "hook-output: $input"\nexit 0\n');
 		fs.chmodSync(scriptPath, 0o755);
 		const result = await runIterationHook(makePayload({ cwd: dir }), ".hooks/success.sh");
 		assert.equal(result.fired, true);
@@ -98,9 +96,12 @@ describe("runIterationHook", () => {
 	});
 
 	it("fires and captures stderr when script exits non-zero", async (t) => {
-		if (process.platform === "win32") { t.skip("POSIX .sh fixture; Windows iteration-hook path uses .ps1/.bat"); return; }
+		if (process.platform === "win32") {
+			t.skip("POSIX .sh fixture; Windows iteration-hook path uses .ps1/.bat");
+			return;
+		}
 		const scriptPath = path.join(hooksDir, "fail.sh");
-		fs.writeFileSync(scriptPath, "#!/bin/bash\necho \"error message\" >&2\nexit 1\n");
+		fs.writeFileSync(scriptPath, '#!/bin/bash\necho "error message" >&2\nexit 1\n');
 		fs.chmodSync(scriptPath, 0o755);
 		const result = await runIterationHook(makePayload({ cwd: dir }), ".hooks/fail.sh");
 		assert.equal(result.fired, true);
@@ -110,7 +111,10 @@ describe("runIterationHook", () => {
 	});
 
 	it("reports timeout when script runs longer than timeout", async (t) => {
-		if (process.platform === "win32") { t.skip("POSIX .sh fixture with sleep builtin; Windows iteration-hook path uses .ps1/.bat"); return; }
+		if (process.platform === "win32") {
+			t.skip("POSIX .sh fixture with sleep builtin; Windows iteration-hook path uses .ps1/.bat");
+			return;
+		}
 		const scriptPath = path.join(hooksDir, "slow.sh");
 		fs.writeFileSync(scriptPath, "#!/bin/bash\nsleep 5\necho done\nexit 0\n");
 		fs.chmodSync(scriptPath, 0o755);
@@ -121,9 +125,12 @@ describe("runIterationHook", () => {
 	});
 
 	it("truncates stdout at 8KB boundary on newline", async (t) => {
-		if (process.platform === "win32") { t.skip("POSIX .sh fixture with for/seq; Windows iteration-hook path uses .ps1/.bat"); return; }
+		if (process.platform === "win32") {
+			t.skip("POSIX .sh fixture with for/seq; Windows iteration-hook path uses .ps1/.bat");
+			return;
+		}
 		const scriptPath = path.join(hooksDir, "verbose.sh");
-		fs.writeFileSync(scriptPath, "#!/bin/bash\nfor i in $(seq 1 1000); do echo \"Line $i: padding\"; done\nexit 0\n");
+		fs.writeFileSync(scriptPath, '#!/bin/bash\nfor i in $(seq 1 1000); do echo "Line $i: padding"; done\nexit 0\n');
 		fs.chmodSync(scriptPath, 0o755);
 		const result = await runIterationHook(makePayload({ cwd: dir }), ".hooks/verbose.sh");
 		assert.equal(result.fired, true);
@@ -148,28 +155,48 @@ describe("runIterationHook", () => {
 describe("steerMessageFromHook", () => {
 	it("returns null for notFired result", () => {
 		const result: HookResult = {
-			fired: false, stdout: "", stderr: "", exitCode: null, timedOut: false, durationMs: 0,
+			fired: false,
+			stdout: "",
+			stderr: "",
+			exitCode: null,
+			timedOut: false,
+			durationMs: 0,
 		};
 		assert.equal(steerMessageFromHook("before", result), null);
 	});
 
 	it("returns trimmed stdout for successful hook with output", () => {
 		const result: HookResult = {
-			fired: true, stdout: "  proceed with plan  \n", stderr: "", exitCode: 0, timedOut: false, durationMs: 100,
+			fired: true,
+			stdout: "  proceed with plan  \n",
+			stderr: "",
+			exitCode: 0,
+			timedOut: false,
+			durationMs: 100,
 		};
 		assert.equal(steerMessageFromHook("after", result), "proceed with plan");
 	});
 
 	it("returns null for successful hook with empty stdout", () => {
 		const result: HookResult = {
-			fired: true, stdout: "   \n  \n", stderr: "", exitCode: 0, timedOut: false, durationMs: 50,
+			fired: true,
+			stdout: "   \n  \n",
+			stderr: "",
+			exitCode: 0,
+			timedOut: false,
+			durationMs: 50,
 		};
 		assert.equal(steerMessageFromHook("after", result), null);
 	});
 
 	it("returns error steer message for non-zero exit code", () => {
 		const result: HookResult = {
-			fired: true, stdout: "", stderr: "something went wrong", exitCode: 1, timedOut: false, durationMs: 200,
+			fired: true,
+			stdout: "",
+			stderr: "something went wrong",
+			exitCode: 1,
+			timedOut: false,
+			durationMs: 200,
 		};
 		const msg = steerMessageFromHook("before", result);
 		assert.ok(msg !== null);
@@ -180,7 +207,12 @@ describe("steerMessageFromHook", () => {
 
 	it("returns timeout steer message for timed out hook", () => {
 		const result: HookResult = {
-			fired: true, stdout: "", stderr: "", exitCode: null, timedOut: true, durationMs: 30_000,
+			fired: true,
+			stdout: "",
+			stderr: "",
+			exitCode: null,
+			timedOut: true,
+			durationMs: 30_000,
 		};
 		const msg = steerMessageFromHook("after", result);
 		assert.ok(msg !== null);
@@ -190,8 +222,12 @@ describe("steerMessageFromHook", () => {
 
 	it("filters denied metric names from hook output", () => {
 		const result: HookResult = {
-			fired: true, stdout: "CREW_METRIC __proto__=42\nCREW_METRIC valid_count=7\nCREW_METRIC constructor=99\n",
-			stderr: "", exitCode: 0, timedOut: false, durationMs: 100,
+			fired: true,
+			stdout: "CREW_METRIC __proto__=42\nCREW_METRIC valid_count=7\nCREW_METRIC constructor=99\n",
+			stderr: "",
+			exitCode: 0,
+			timedOut: false,
+			durationMs: 100,
 		};
 		const msg = steerMessageFromHook("after", result);
 		assert.ok(msg !== null);
@@ -204,7 +240,12 @@ describe("steerMessageFromHook", () => {
 describe("hookLogEntry", () => {
 	it("produces minimal entry for notFired result", () => {
 		const result: HookResult = {
-			fired: false, stdout: "", stderr: "", exitCode: null, timedOut: false, durationMs: 0,
+			fired: false,
+			stdout: "",
+			stderr: "",
+			exitCode: null,
+			timedOut: false,
+			durationMs: 0,
 		};
 		const entry = hookLogEntry("before", result);
 		assert.equal(entry.type, "iteration-hook");
@@ -216,7 +257,12 @@ describe("hookLogEntry", () => {
 
 	it("includes exitCode and stdout/stderr previews for fired result", () => {
 		const result: HookResult = {
-			fired: true, stdout: "hook output here", stderr: "some stderr", exitCode: 0, timedOut: false, durationMs: 150,
+			fired: true,
+			stdout: "hook output here",
+			stderr: "some stderr",
+			exitCode: 0,
+			timedOut: false,
+			durationMs: 150,
 		};
 		const entry = hookLogEntry("after", result);
 		assert.equal(entry.fired, true);
@@ -227,7 +273,12 @@ describe("hookLogEntry", () => {
 
 	it("includes timedOut flag for timed-out results", () => {
 		const result: HookResult = {
-			fired: true, stdout: "", stderr: "", exitCode: null, timedOut: true, durationMs: 30_000,
+			fired: true,
+			stdout: "",
+			stderr: "",
+			exitCode: null,
+			timedOut: true,
+			durationMs: 30_000,
 		};
 		const entry = hookLogEntry("before", result);
 		assert.equal(entry.timedOut, true);

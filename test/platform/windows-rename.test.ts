@@ -10,16 +10,19 @@
  * only at publish time. The same risk applies here in reverse — Windows-only
  * retry behavior must be verified on Windows.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { renameWithRetry } from "../../src/state/atomic-write.ts";
 
 const isWindows = process.platform === "win32";
 
-test("HB-002 Windows: renameWithRetry succeeds on a simple rename (Windows-only)", { skip: isWindows ? false : "Windows-only; run on windows-latest CI" }, () => {
+test("HB-002 Windows: renameWithRetry succeeds on a simple rename (Windows-only)", {
+	skip: isWindows ? false : "Windows-only; run on windows-latest CI",
+}, () => {
 	const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-plat-win-"));
 	try {
 		const src = path.join(tmpRoot, "src.json");
@@ -35,7 +38,9 @@ test("HB-002 Windows: renameWithRetry succeeds on a simple rename (Windows-only)
 	}
 });
 
-test("HB-002 Windows: renameWithRetry overwrites an existing destination", { skip: isWindows ? false : "Windows-only; run on windows-latest CI" }, () => {
+test("HB-002 Windows: renameWithRetry overwrites an existing destination", {
+	skip: isWindows ? false : "Windows-only; run on windows-latest CI",
+}, () => {
 	const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-plat-win2-"));
 	try {
 		const src = path.join(tmpRoot, "src.json");

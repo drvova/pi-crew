@@ -1,6 +1,6 @@
-import { permissionForRole } from "./role-permission.ts";
 import type { CrewRuntimeConfig } from "../config/config.ts";
 import type { PolicyDecision, TeamRunManifest, TeamTaskState } from "../state/types.ts";
+import { permissionForRole } from "./role-permission.ts";
 
 export type EffectivenessGuardMode = "off" | "warn" | "block" | "fail";
 export type WorkerExecutionState = "enabled" | "disabled/scaffold";
@@ -18,22 +18,30 @@ export interface RunEffectivenessSummary {
 
 export function taskHasObservableWorkerActivity(task: TeamTaskState): boolean {
 	return Boolean(
-		(task.agentProgress?.toolCount ?? 0) > 0
-		|| task.usage
-		|| task.transcriptArtifact
-		|| task.modelAttempts?.some((attempt) => attempt.success)
-		|| task.jsonEvents,
+		(task.agentProgress?.toolCount ?? 0) > 0 ||
+			task.usage ||
+			task.transcriptArtifact ||
+			task.modelAttempts?.some((attempt) => attempt.success) ||
+			task.jsonEvents,
 	);
 }
 
-export function resolveEffectivenessGuardMode(runtimeConfig: CrewRuntimeConfig | undefined, manifest?: TeamRunManifest): EffectivenessGuardMode {
+export function resolveEffectivenessGuardMode(
+	runtimeConfig: CrewRuntimeConfig | undefined,
+	manifest?: TeamRunManifest,
+): EffectivenessGuardMode {
 	const configured = runtimeConfig?.effectivenessGuard;
 	if (configured === "off" || configured === "warn" || configured === "block" || configured === "fail") return configured;
 	if (manifest?.runtimeResolution?.safety === "explicit_dry_run") return "off";
 	return "warn";
 }
 
-export function evaluateRunEffectiveness(input: { manifest?: TeamRunManifest; tasks: TeamTaskState[]; executeWorkers: boolean; runtimeConfig?: CrewRuntimeConfig }): RunEffectivenessSummary {
+export function evaluateRunEffectiveness(input: {
+	manifest?: TeamRunManifest;
+	tasks: TeamTaskState[];
+	executeWorkers: boolean;
+	runtimeConfig?: CrewRuntimeConfig;
+}): RunEffectivenessSummary {
 	const completedTasks = input.tasks.filter((task) => task.status === "completed");
 	const noObservedWorkTasks = completedTasks.filter((task) => !taskHasObservableWorkerActivity(task));
 	const needsAttentionTasks = input.tasks.filter((task) => task.agentProgress?.activityState === "needs_attention");

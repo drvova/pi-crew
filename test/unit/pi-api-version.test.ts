@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { describe, it } from "node:test";
 import { BUILT_AGAINST_PI_VERSION } from "../../src/extension/pi-api.ts";
 
 describe("BUILT_AGAINST_PI_VERSION", () => {
@@ -12,15 +12,7 @@ describe("BUILT_AGAINST_PI_VERSION", () => {
 		// test time so this test always catches drift.
 		const nodeModulesPkg = JSON.parse(
 			readFileSync(
-				join(
-					import.meta.dirname,
-					"..",
-					"..",
-					"node_modules",
-					"@earendil-works",
-					"pi-coding-agent",
-					"package.json",
-				),
+				join(import.meta.dirname, "..", "..", "node_modules", "@earendil-works", "pi-coding-agent", "package.json"),
 				"utf-8",
 			),
 		) as { version: string };

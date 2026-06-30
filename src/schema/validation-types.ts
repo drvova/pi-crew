@@ -40,15 +40,18 @@ const DEFAULT_MODE: ValidationMode = "strict";
 
 /** Recommended range constraints (not enforced by schema, but advisory). */
 const RECOMMENDED_RANGES: Record<string, { max: number; label: string }> = {
-	"limits.maxConcurrentWorkers": { max: 8, label: "maxConcurrentWorkers > 8 may degrade performance" },
-	"limits.maxTaskDepth": { max: 4, label: "maxTaskDepth > 4 may cause excessive nesting" },
+	"limits.maxConcurrentWorkers": {
+		max: 8,
+		label: "maxConcurrentWorkers > 8 may degrade performance",
+	},
+	"limits.maxTaskDepth": {
+		max: 4,
+		label: "maxTaskDepth > 4 may cause excessive nesting",
+	},
 };
 
 /** Recommended optional top-level keys that should be explicitly set. */
-const RECOMMENDED_OPTIONAL_KEYS: readonly string[] = [
-	"limits",
-	"runtime",
-];
+const RECOMMENDED_OPTIONAL_KEYS: readonly string[] = ["limits", "runtime"];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,7 +86,11 @@ export function validateWithSeverity(raw: unknown, mode: ValidationMode = DEFAUL
 	const findings: ValidationFinding[] = [];
 
 	if (!isObject(raw)) {
-		findings.push({ severity: "ERROR", message: "config must be an object", field: "config" });
+		findings.push({
+			severity: "ERROR",
+			message: "config must be an object",
+			field: "config",
+		});
 		return { findings, mode, hasErrors: true, hasWarnings: false };
 	}
 
@@ -92,22 +99,23 @@ export function validateWithSeverity(raw: unknown, mode: ValidationMode = DEFAUL
 	if (!isValid) {
 		for (const error of Value.Errors(PiTeamsConfigSchema, raw)) {
 			const errRecord = error as unknown as Record<string, unknown>;
-			const rawPath = typeof errRecord.path === "string"
-				? errRecord.path
-				: typeof errRecord.instancePath === "string"
-					? errRecord.instancePath
-					: "config";
+			const rawPath =
+				typeof errRecord.path === "string"
+					? errRecord.path
+					: typeof errRecord.instancePath === "string"
+						? errRecord.instancePath
+						: "config";
 
-			const message = typeof errRecord.message === "string"
-				? errRecord.message
-				: "invalid value";
+			const message = typeof errRecord.message === "string" ? errRecord.message : "invalid value";
 
 			const field = rawPath.replace(/^\//, "").replace(/\//g, ".") || undefined;
 
 			// Additional properties / unknown keys are less severe in lenient mode.
 			// @sinclair/typebox uses keyword=undefined with message="Unexpected property" for these.
-			const isUnknownProperty = errRecord.keyword === "additionalProperties" ||
-				message === "Unexpected property" || message.startsWith("Unexpected property");
+			const isUnknownProperty =
+				errRecord.keyword === "additionalProperties" ||
+				message === "Unexpected property" ||
+				message.startsWith("Unexpected property");
 			if (isUnknownProperty) {
 				findings.push({
 					severity: mode === "lenient" ? "WARNING" : "ERROR",

@@ -1,13 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	getLifetimeTotal,
-	addUsage,
-	aggregateUsage,
-	formatUsage,
-	type LifetimeUsage,
-} from "../../src/state/usage.ts";
+import { describe, it } from "node:test";
 import type { TeamTaskState } from "../../src/state/types.ts";
+import { addUsage, aggregateUsage, formatUsage, getLifetimeTotal, type LifetimeUsage } from "../../src/state/usage.ts";
 
 function makeTask(usage?: Partial<Record<string, number>>): TeamTaskState {
 	return {

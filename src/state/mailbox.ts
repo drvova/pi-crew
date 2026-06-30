@@ -1,13 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { TeamRunManifest } from "./types.ts";
-import { resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { redactSecrets } from "../utils/redaction.ts";
+import { DEFAULT_MAILBOX } from "../config/defaults.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { redactSecrets } from "../utils/redaction.ts";
+import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 import { atomicWriteFile } from "./atomic-write.ts";
 import { withEventLogLockSync } from "./event-log.ts";
 import { withFileLockSync } from "./locks.ts";
-import { DEFAULT_MAILBOX } from "../config/defaults.ts";
+import type { TeamRunManifest } from "./types.ts";
 
 export type MailboxDirection = "inbox" | "outbox";
 export type MailboxMessageStatus = "queued" | "delivered" | "acknowledged";
@@ -81,7 +81,9 @@ function safeMailboxDir(manifest: TeamRunManifest, create = false): string {
 					const realDir = fs.realpathSync(path.dirname(dir));
 					const correctedDir = path.join(realDir, path.basename(dir));
 					fs.mkdirSync(correctedDir, { recursive: true });
-				} catch { throw error; }
+				} catch {
+					throw error;
+				}
 			} else {
 				throw error;
 			}
@@ -104,7 +106,8 @@ function safeMailboxDir(manifest: TeamRunManifest, create = false): string {
 }
 
 function safeTaskId(taskId: string): string {
-	if (!/^[\w.-]+$/.test(taskId) || taskId.includes("..") || path.isAbsolute(taskId)) throw new Error(`Invalid mailbox task id: ${taskId}`);
+	if (!/^[\w.-]+$/.test(taskId) || taskId.includes("..") || path.isAbsolute(taskId))
+		throw new Error(`Invalid mailbox task id: ${taskId}`);
 	return taskId;
 }
 
@@ -130,7 +133,9 @@ function taskMailboxDir(manifest: TeamRunManifest, taskId: string, create = fals
 }
 
 function mailboxPath(manifest: TeamRunManifest, direction: MailboxDirection, taskId?: string, create = false): string {
-	return taskId ? path.join(taskMailboxDir(manifest, taskId, create), `${direction}.jsonl`) : path.join(safeMailboxDir(manifest, create), `${direction}.jsonl`);
+	return taskId
+		? path.join(taskMailboxDir(manifest, taskId, create), `${direction}.jsonl`)
+		: path.join(safeMailboxDir(manifest, create), `${direction}.jsonl`);
 }
 
 function deliveryPath(manifest: TeamRunManifest, create = false): string {
@@ -221,11 +226,41 @@ function isDeliveryMode(value: unknown): value is MailboxDeliveryMode {
 function parseMailboxMessage(raw: unknown, expectedDirection: MailboxDirection): MailboxMessage | undefined {
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
 	const obj = raw as Record<string, unknown>;
-	if (typeof obj.id !== "string" || typeof obj.runId !== "string" || !isDirection(obj.direction) || typeof obj.from !== "string" || typeof obj.to !== "string" || typeof obj.body !== "string" || typeof obj.createdAt !== "string" || !isStatus(obj.status)) return undefined;
+	if (
+		typeof obj.id !== "string" ||
+		typeof obj.runId !== "string" ||
+		!isDirection(obj.direction) ||
+		typeof obj.from !== "string" ||
+		typeof obj.to !== "string" ||
+		typeof obj.body !== "string" ||
+		typeof obj.createdAt !== "string" ||
+		!isStatus(obj.status)
+	)
+		return undefined;
 	if (obj.direction !== expectedDirection) return undefined;
-	const data = obj.data && typeof obj.data === "object" && !Array.isArray(obj.data) ? obj.data as Record<string, unknown> : undefined;
+	const data = obj.data && typeof obj.data === "object" && !Array.isArray(obj.data) ? (obj.data as Record<string, unknown>) : undefined;
 	const dataKind = data?.kind;
-	return { id: obj.id, runId: obj.runId, direction: obj.direction, from: obj.from, to: obj.to, body: obj.body, createdAt: obj.createdAt, status: obj.status, kind: isKind(obj.kind) ? obj.kind : isKind(dataKind) ? dataKind : undefined, priority: isPriority(obj.priority) ? obj.priority : undefined, deliveryMode: isDeliveryMode(obj.deliveryMode) ? obj.deliveryMode : undefined, taskId: typeof obj.taskId === "string" ? obj.taskId : undefined, acknowledgedAt: typeof obj.acknowledgedAt === "string" ? obj.acknowledgedAt : undefined, data, replyTo: typeof obj.replyTo === "string" ? obj.replyTo : undefined, replyFrom: typeof obj.replyFrom === "string" ? obj.replyFrom : undefined, replyDeadline: typeof obj.replyDeadline === "number" ? obj.replyDeadline : undefined, repliedAt: typeof obj.repliedAt === "string" ? obj.repliedAt : undefined, replyContent: typeof obj.replyContent === "string" ? obj.replyContent : undefined };
+	return {
+		id: obj.id,
+		runId: obj.runId,
+		direction: obj.direction,
+		from: obj.from,
+		to: obj.to,
+		body: obj.body,
+		createdAt: obj.createdAt,
+		status: obj.status,
+		kind: isKind(obj.kind) ? obj.kind : isKind(dataKind) ? dataKind : undefined,
+		priority: isPriority(obj.priority) ? obj.priority : undefined,
+		deliveryMode: isDeliveryMode(obj.deliveryMode) ? obj.deliveryMode : undefined,
+		taskId: typeof obj.taskId === "string" ? obj.taskId : undefined,
+		acknowledgedAt: typeof obj.acknowledgedAt === "string" ? obj.acknowledgedAt : undefined,
+		data,
+		replyTo: typeof obj.replyTo === "string" ? obj.replyTo : undefined,
+		replyFrom: typeof obj.replyFrom === "string" ? obj.replyFrom : undefined,
+		replyDeadline: typeof obj.replyDeadline === "number" ? obj.replyDeadline : undefined,
+		repliedAt: typeof obj.repliedAt === "string" ? obj.repliedAt : undefined,
+		replyContent: typeof obj.replyContent === "string" ? obj.replyContent : undefined,
+	};
 }
 
 function readMailboxFile(filePath: string, direction: MailboxDirection): MailboxMessage[] {
@@ -308,13 +343,21 @@ function pruneOldMailboxArchives(mailboxFilePath: string): void {
 	}
 }
 
-export function readMailbox(manifest: TeamRunManifest, direction?: MailboxDirection, taskId?: string, kind?: MailboxMessageKind): MailboxMessage[] {
-	const directions = direction ? [direction] : ["inbox", "outbox"] as const;
-	return directions.flatMap((item) => safeReadMailboxFile(mailboxFile(manifest, item, taskId), item)).filter((msg) => !kind || msg.kind === kind).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+export function readMailbox(
+	manifest: TeamRunManifest,
+	direction?: MailboxDirection,
+	taskId?: string,
+	kind?: MailboxMessageKind,
+): MailboxMessage[] {
+	const directions = direction ? [direction] : (["inbox", "outbox"] as const);
+	return directions
+		.flatMap((item) => safeReadMailboxFile(mailboxFile(manifest, item, taskId), item))
+		.filter((msg) => !kind || msg.kind === kind)
+		.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 export function readAllMailboxMessages(manifest: TeamRunManifest, direction?: MailboxDirection, signal?: AbortSignal): MailboxMessage[] {
-	const directions = direction ? [direction] : ["inbox", "outbox"] as const;
+	const directions = direction ? [direction] : (["inbox", "outbox"] as const);
 	return directions.flatMap((item) => readAllMessages(manifest, item, signal)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
@@ -344,7 +387,10 @@ export function readDeliveryState(manifest: TeamRunManifest): MailboxDeliverySta
 		if (obj.messages && typeof obj.messages === "object" && !Array.isArray(obj.messages)) {
 			for (const [id, status] of Object.entries(obj.messages)) if (isStatus(status)) messages[id] = status;
 		}
-		return { messages, updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : new Date().toISOString() };
+		return {
+			messages,
+			updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : new Date().toISOString(),
+		};
 	} catch {
 		return { messages: {}, updatedAt: new Date().toISOString() };
 	}
@@ -377,7 +423,13 @@ function writeDeliveryState(manifest: TeamRunManifest, state: MailboxDeliverySta
  * If pi-crew ever exposes mailbox writes to external/untrusted input, sender
  * authentication (HMAC or session key) must be added.
  */
-export function appendMailboxMessage(manifest: TeamRunManifest, message: Omit<MailboxMessage, "id" | "runId" | "createdAt" | "status"> & { id?: string; status?: MailboxMessageStatus }): MailboxMessage {
+export function appendMailboxMessage(
+	manifest: TeamRunManifest,
+	message: Omit<MailboxMessage, "id" | "runId" | "createdAt" | "status"> & {
+		id?: string;
+		status?: MailboxMessageStatus;
+	},
+): MailboxMessage {
 	if (message.taskId) ensureTaskMailbox(manifest, message.taskId);
 	else ensureRunMailbox(manifest);
 	const createdAt = new Date().toISOString();
@@ -403,7 +455,11 @@ export function appendMailboxMessage(manifest: TeamRunManifest, message: Omit<Ma
 	};
 	// H2 fix: wrap append in cross-process lock to prevent interleaving on Windows.
 	withEventLogLockSync(mailboxFile(manifest, complete.direction, complete.taskId), () => {
-		fs.appendFileSync(mailboxFile(manifest, complete.direction, complete.taskId), `${JSON.stringify(redactSecrets(complete))}\n`, "utf-8");
+		fs.appendFileSync(
+			mailboxFile(manifest, complete.direction, complete.taskId),
+			`${JSON.stringify(redactSecrets(complete))}\n`,
+			"utf-8",
+		);
 	});
 	// 3.3 — rotate mailbox file if it has grown past 10 MB. Cheap stat
 	// check; rotates at most once per append.
@@ -421,16 +477,64 @@ export function appendMailboxMessage(manifest: TeamRunManifest, message: Omit<Ma
 	return complete;
 }
 
-export function appendSteeringMessage(manifest: TeamRunManifest, input: { taskId: string; body: string; from?: string; to?: string; priority?: MailboxMessagePriority; status?: MailboxMessageStatus; data?: Record<string, unknown> }): MailboxMessage {
-	return appendMailboxMessage(manifest, { direction: "inbox", from: input.from ?? "leader", to: input.to ?? input.taskId, taskId: input.taskId, body: input.body, kind: "steer", priority: input.priority ?? "urgent", deliveryMode: "interrupt", status: input.status, data: { ...(input.data ?? {}), kind: "steer" } });
+export function appendSteeringMessage(
+	manifest: TeamRunManifest,
+	input: {
+		taskId: string;
+		body: string;
+		from?: string;
+		to?: string;
+		priority?: MailboxMessagePriority;
+		status?: MailboxMessageStatus;
+		data?: Record<string, unknown>;
+	},
+): MailboxMessage {
+	return appendMailboxMessage(manifest, {
+		direction: "inbox",
+		from: input.from ?? "leader",
+		to: input.to ?? input.taskId,
+		taskId: input.taskId,
+		body: input.body,
+		kind: "steer",
+		priority: input.priority ?? "urgent",
+		deliveryMode: "interrupt",
+		status: input.status,
+		data: { ...(input.data ?? {}), kind: "steer" },
+	});
 }
 
-export function appendFollowUpMessage(manifest: TeamRunManifest, input: { taskId: string; body: string; from?: string; to?: string; priority?: MailboxMessagePriority; status?: MailboxMessageStatus; data?: Record<string, unknown> }): MailboxMessage {
-	return appendMailboxMessage(manifest, { direction: "inbox", from: input.from ?? "leader", to: input.to ?? input.taskId, taskId: input.taskId, body: input.body, kind: "follow-up", priority: input.priority ?? "normal", deliveryMode: "next_turn", status: input.status, data: { ...(input.data ?? {}), kind: "follow-up" } });
+export function appendFollowUpMessage(
+	manifest: TeamRunManifest,
+	input: {
+		taskId: string;
+		body: string;
+		from?: string;
+		to?: string;
+		priority?: MailboxMessagePriority;
+		status?: MailboxMessageStatus;
+		data?: Record<string, unknown>;
+	},
+): MailboxMessage {
+	return appendMailboxMessage(manifest, {
+		direction: "inbox",
+		from: input.from ?? "leader",
+		to: input.to ?? input.taskId,
+		taskId: input.taskId,
+		body: input.body,
+		kind: "follow-up",
+		priority: input.priority ?? "normal",
+		deliveryMode: "next_turn",
+		status: input.status,
+		data: { ...(input.data ?? {}), kind: "follow-up" },
+	});
 }
 
 export function listMailboxByKind(manifest: TeamRunManifest, kind: MailboxMessageKind, direction?: MailboxDirection): MailboxMessage[] {
-	const messages = direction ? readAllMessages(manifest, direction) : [...readAllMessages(manifest, "inbox"), ...readAllMessages(manifest, "outbox")].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+	const messages = direction
+		? readAllMessages(manifest, direction)
+		: [...readAllMessages(manifest, "inbox"), ...readAllMessages(manifest, "outbox")].sort((a, b) =>
+				a.createdAt.localeCompare(b.createdAt),
+			);
 	return messages.filter((message) => message.kind === kind || message.data?.kind === kind);
 }
 
@@ -464,16 +568,25 @@ export function updateMailboxMessageReply(manifest: TeamRunManifest, originalMes
 	const directions: MailboxDirection[] = ["inbox", "outbox"];
 
 	// Collect all mailbox file paths (global + task-specific)
-	const filesToSearch: Array<{ filePath: string; direction: MailboxDirection }> = [];
+	const filesToSearch: Array<{
+		filePath: string;
+		direction: MailboxDirection;
+	}> = [];
 	for (const direction of directions) {
-		filesToSearch.push({ filePath: mailboxFile(manifest, direction), direction });
+		filesToSearch.push({
+			filePath: mailboxFile(manifest, direction),
+			direction,
+		});
 	}
 	const tasksDir = safeMailboxTasksRoot(manifest);
 	if (fs.existsSync(tasksDir)) {
 		for (const entry of fs.readdirSync(tasksDir, { withFileTypes: true })) {
 			if (!entry.isDirectory()) continue;
 			for (const direction of directions) {
-				filesToSearch.push({ filePath: mailboxFile(manifest, direction, entry.name), direction });
+				filesToSearch.push({
+					filePath: mailboxFile(manifest, direction, entry.name),
+					direction,
+				});
 			}
 		}
 	}
@@ -517,7 +630,9 @@ export function replayPendingMailboxMessages(manifest: TeamRunManifest): Mailbox
 	// clobber concurrent appends/acknowledgments. FIX: wrap in a file lock.
 	return withFileLockSync(deliveryFile(manifest, true), () => {
 		const delivery = readDeliveryState(manifest);
-		const pending = readAllInboxMessages(manifest).filter((message) => message.status !== "acknowledged" && delivery.messages[message.id] !== "acknowledged");
+		const pending = readAllInboxMessages(manifest).filter(
+			(message) => message.status !== "acknowledged" && delivery.messages[message.id] !== "acknowledged",
+		);
 		if (!pending.length) return { messages: [], updatedAt: delivery.updatedAt };
 		const updatedAt = new Date().toISOString();
 		for (const message of pending) delivery.messages[message.id] = "delivered";
@@ -527,7 +642,10 @@ export function replayPendingMailboxMessages(manifest: TeamRunManifest): Mailbox
 	});
 }
 
-export function validateMailbox(manifest: TeamRunManifest, options: { repair?: boolean; signal?: AbortSignal } = {}): MailboxValidationReport {
+export function validateMailbox(
+	manifest: TeamRunManifest,
+	options: { repair?: boolean; signal?: AbortSignal } = {},
+): MailboxValidationReport {
 	ensureRunMailbox(manifest);
 	const issues: MailboxValidationIssue[] = [];
 	const repaired: string[] = [];
@@ -564,7 +682,12 @@ export function validateMailbox(manifest: TeamRunManifest, options: { repair?: b
 	const allMessages = readMailbox(manifest);
 	for (const message of allMessages) {
 		if (options.signal?.aborted) break;
-		if (!delivery.messages[message.id]) issues.push({ level: "warning", path: deliveryFile(manifest), message: `Missing delivery entry for ${message.id}.` });
+		if (!delivery.messages[message.id])
+			issues.push({
+				level: "warning",
+				path: deliveryFile(manifest),
+				message: `Missing delivery entry for ${message.id}.`,
+			});
 	}
 	if (options.repair) {
 		for (const message of allMessages) delivery.messages[message.id] ??= message.status;

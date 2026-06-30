@@ -8,9 +8,9 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
-import { HeadSnapStage } from "./compact-stages/index.ts";
-import { resolveShellForScript } from "../utils/resolve-shell.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
+import { resolveShellForScript } from "../utils/resolve-shell.ts";
+import { HeadSnapStage } from "./compact-stages/index.ts";
 import { DENIED_METRIC_NAMES } from "./metric-parser.ts";
 
 /** Hook execution stage. */
@@ -139,7 +139,14 @@ export async function runIterationHook(
 	options?: { timeoutMs?: number },
 ): Promise<HookResult> {
 	if (!isAllowedHookPath(hookScriptPath)) {
-		return { fired: false, stdout: "", stderr: "hook path not allowed: " + hookScriptPath, exitCode: null, timedOut: false, durationMs: 0 };
+		return {
+			fired: false,
+			stdout: "",
+			stderr: "hook path not allowed: " + hookScriptPath,
+			exitCode: null,
+			timedOut: false,
+			durationMs: 0,
+		};
 	}
 	// Resolve relative paths relative to cwd
 	const resolvedScript = path.isAbsolute(hookScriptPath) ? hookScriptPath : path.join(payload.cwd, hookScriptPath);
@@ -156,7 +163,12 @@ export async function runIterationHook(
 		const { command, args } = resolveShellForScript(resolvedScript);
 		const child = spawn(command, args, {
 			cwd: payload.cwd,
-			env: { ...sanitizeEnvSecrets(process.env, { allowList: ["PATH", "HOME", "USER", ...WINDOWS_ESSENTIAL_ENV_VARS, "TMPDIR", "LANG", "LC_ALL", "PI_CREW_*"] }), PI_CREW_HOOK: "1" },
+			env: {
+				...sanitizeEnvSecrets(process.env, {
+					allowList: ["PATH", "HOME", "USER", ...WINDOWS_ESSENTIAL_ENV_VARS, "TMPDIR", "LANG", "LC_ALL", "PI_CREW_*"],
+				}),
+				PI_CREW_HOOK: "1",
+			},
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 
@@ -184,7 +196,9 @@ export async function runIterationHook(
 			// then apply the byte-cap stage with newline-snap so partial lines
 			// never appear in the captured preview. HeadSnapStage is byte-cap-safe
 			// (walks back partial UTF-8 sequences at the cut boundary).
-			const stdoutText = new HeadSnapStage({ maxBytes: MAX_STDOUT_BYTES }).apply(rawStdout.toString("utf-8"));
+			const stdoutText = new HeadSnapStage({
+				maxBytes: MAX_STDOUT_BYTES,
+			}).apply(rawStdout.toString("utf-8"));
 
 			const rawStderr = Buffer.concat(stderrChunks);
 
@@ -214,7 +228,9 @@ export async function runIterationHook(
 		// Write payload to stdin and close it.
 		// Handle EPIPE errors gracefully (occurs if the hook script exits before
 		// reading all of stdin, which is normal for some hook scripts on certain OS).
-		child.stdin.on("error", () => { /* ignore EPIPE — hook exited early */ });
+		child.stdin.on("error", () => {
+			/* ignore EPIPE — hook exited early */
+		});
 		try {
 			child.stdin.write(stdinJson, "utf-8");
 			child.stdin.end();
@@ -232,10 +248,7 @@ export async function runIterationHook(
  * - Empty stdout → null (no steer)
  * - Otherwise → trimmed stdout content
  */
-export function steerMessageFromHook(
-	stage: HookStage,
-	result: HookResult,
-): string | null {
+export function steerMessageFromHook(stage: HookStage, result: HookResult): string | null {
 	if (!result.fired) return null;
 
 	if (result.timedOut) {
@@ -267,10 +280,7 @@ export function steerMessageFromHook(
 /**
  * Build a log entry for recording hook execution in events.jsonl.
  */
-export function hookLogEntry(
-	stage: HookStage,
-	result: HookResult,
-): Record<string, unknown> {
+export function hookLogEntry(stage: HookStage, result: HookResult): Record<string, unknown> {
 	const entry: Record<string, unknown> = {
 		type: "iteration-hook",
 		stage,

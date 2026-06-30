@@ -23,16 +23,15 @@ export default function safeBashExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "safe_bash",
 		label: "Safe Bash",
-		description:
-			"Execute a bash command safely. Blocks dangerous commands like `rm -rf /`, `sudo`, `curl | sh`, etc.",
+		description: "Execute a bash command safely. Blocks dangerous commands like `rm -rf /`, `sudo`, `curl | sh`, etc.",
 		parameters: Type.Object({
 			command: Type.String({ description: "Bash command to execute" }),
 			/** Timeout in seconds (optional). Default: no timeout. If exceeded, the command is killed. */
-			timeout: Type.Optional(
-				Type.Number({ description: "Timeout in seconds (optional)" }),
-			),
+			timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional)" })),
 			description: Type.Optional(
-				Type.String({ description: "Description of what this command does (optional)" }),
+				Type.String({
+					description: "Description of what this command does (optional)",
+				}),
 			),
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {

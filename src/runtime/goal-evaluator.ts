@@ -23,15 +23,15 @@
  * + verification-gates results + transcript tail (~8 KiB bounded read).
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { runChildPi } from "./child-pi.ts";
-import { parsePiJsonOutput } from "./pi-json-output.ts";
-import { extractStructuredResult } from "./result-extractor.ts";
-import { collectToolCallsFromEvent } from "./completion-guard.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import { redactSecretString } from "../utils/redaction.ts";
+import { existsSync, readFileSync } from "node:fs";
 import type { AgentConfig } from "../agents/agent-config.ts";
 import type { GoalVerdict } from "../state/types.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { redactSecretString } from "../utils/redaction.ts";
+import { runChildPi } from "./child-pi.ts";
+import { collectToolCallsFromEvent } from "./completion-guard.ts";
+import { parsePiJsonOutput } from "./pi-json-output.ts";
+import { extractStructuredResult } from "./result-extractor.ts";
 
 export interface GoalEvidence {
 	/** Tail slice of the turn's worker transcript (bounded ~8 KiB). */
@@ -39,7 +39,11 @@ export interface GoalEvidence {
 	/** Structured tool-call summary extracted from transcript events. */
 	toolCalls: Array<{ tool: string; args?: unknown }>;
 	/** Verification command results (exit codes + output refs), if verification ran. */
-	verificationResults?: Array<{ command: string; exitCode: number | null; passed: boolean }>;
+	verificationResults?: Array<{
+		command: string;
+		exitCode: number | null;
+		passed: boolean;
+	}>;
 }
 
 export interface EvaluateGoalInput {
@@ -102,10 +106,7 @@ Respond with ONLY a single JSON object, no prose, no markdown fences:
 
 /** Build the judge task prompt: objective + scope + verification + evidence. */
 function buildJudgeTask(input: EvaluateGoalInput): string {
-	const lines: string[] = [
-		"# Goal to evaluate",
-		input.objective,
-	];
+	const lines: string[] = ["# Goal to evaluate", input.objective];
 	if (input.scope) lines.push("", "# Scope (allowed changes)", input.scope);
 	if (input.verification?.commands?.length) {
 		lines.push("", "# Acceptance verification (ALL must pass with exit code 0)", ...input.verification.commands.map((c) => `- ${c}`));
@@ -118,7 +119,9 @@ function buildJudgeTask(input: EvaluateGoalInput): string {
 		lines.push("", "# ⚠ VERIFICATION COMPROMISED — objective oracle UNRELIABLE for this turn");
 		lines.push("The following project-manifest files changed during the loop (detected by integrity snapshot):");
 		lines.push(...input.verificationCompromised.map((f) => `- ${f}`));
-		lines.push("Do NOT trust any verification-result 'PASS' for this turn. A worker may have rewritten the manifest to satisfy the command. Judge completion SOLELY from the transcript + artifact evidence, and default to achieved:false unless the transcript shows concrete finished work that does not depend on the compromised command.");
+		lines.push(
+			"Do NOT trust any verification-result 'PASS' for this turn. A worker may have rewritten the manifest to satisfy the command. Judge completion SOLELY from the transcript + artifact evidence, and default to achieved:false unless the transcript shows concrete finished work that does not depend on the compromised command.",
+		);
 	}
 	lines.push("", "# Evidence");
 	if (input.evidence.verificationResults?.length) {
@@ -170,7 +173,11 @@ function tryParseDirectVerdict(stdout: string): { achieved: boolean; reason: str
 		const parsed = JSON.parse(trimmed) as Record<string, unknown>;
 		if (typeof parsed.achieved !== "boolean" || typeof parsed.reason !== "string") return undefined;
 		const refs = Array.isArray(parsed.evidenceRefs) ? parsed.evidenceRefs.filter((r): r is string => typeof r === "string") : undefined;
-		return { achieved: parsed.achieved, reason: parsed.reason, ...(refs ? { evidenceRefs: refs } : {}) };
+		return {
+			achieved: parsed.achieved,
+			reason: parsed.reason,
+			...(refs ? { evidenceRefs: refs } : {}),
+		};
 	} catch {
 		return undefined;
 	}
@@ -205,7 +212,12 @@ export async function evaluateGoal(input: EvaluateGoalInput): Promise<GoalVerdic
 		});
 
 		if (result.exitCode !== 0 || result.error) {
-			return blockedVerdict(input.turn, input.model, evaluatedAt, `judge spawn failed (exit=${result.exitCode}): ${result.error ?? result.stderr.slice(0, 200)}`);
+			return blockedVerdict(
+				input.turn,
+				input.model,
+				evaluatedAt,
+				`judge spawn failed (exit=${result.exitCode}): ${result.error ?? result.stderr.slice(0, 200)}`,
+			);
 		}
 
 		const parsed = parsePiJsonOutput(result.stdout);
@@ -232,11 +244,19 @@ export async function evaluateGoal(input: EvaluateGoalInput): Promise<GoalVerdic
 		}
 
 		const extracted = extractStructuredResult(finalText);
-		const data = extracted.structured ? (extracted.data as { achieved?: unknown; reason?: unknown; evidenceRefs?: unknown }) : undefined;
+		const data = extracted.structured
+			? (extracted.data as {
+					achieved?: unknown;
+					reason?: unknown;
+					evidenceRefs?: unknown;
+				})
+			: undefined;
 		if (!data || typeof data.achieved !== "boolean" || typeof data.reason !== "string") {
 			return blockedVerdict(input.turn, input.model, evaluatedAt, `judge output not valid verdict JSON: ${truncate(finalText, 200)}`);
 		}
-		const evidenceRefs = Array.isArray(data.evidenceRefs) ? data.evidenceRefs.filter((r): r is string => typeof r === "string") : undefined;
+		const evidenceRefs = Array.isArray(data.evidenceRefs)
+			? data.evidenceRefs.filter((r): r is string => typeof r === "string")
+			: undefined;
 		return {
 			turn: input.turn,
 			achieved: data.achieved,
@@ -247,12 +267,23 @@ export async function evaluateGoal(input: EvaluateGoalInput): Promise<GoalVerdic
 		};
 	} catch (error) {
 		logInternalError("goal-evaluator.evaluateGoal", error, `turn=${input.turn}`);
-		return blockedVerdict(input.turn, input.model, evaluatedAt, `judge threw: ${error instanceof Error ? error.message : String(error)}`);
+		return blockedVerdict(
+			input.turn,
+			input.model,
+			evaluatedAt,
+			`judge threw: ${error instanceof Error ? error.message : String(error)}`,
+		);
 	}
 }
 
 function blockedVerdict(turn: number, model: string, evaluatedAt: string, reason: string): GoalVerdict {
-	return { turn, achieved: false, reason: `BLOCKED: ${reason}`, evaluatorModel: model, evaluatedAt };
+	return {
+		turn,
+		achieved: false,
+		reason: `BLOCKED: ${reason}`,
+		evaluatorModel: model,
+		evaluatedAt,
+	};
 }
 
 /**
@@ -290,5 +321,9 @@ export function bundleEvidence(
 		}
 	}
 
-	return { transcriptSlice, toolCalls: toolCalls.slice(-50), verificationResults };
+	return {
+		transcriptSlice,
+		toolCalls: toolCalls.slice(-50),
+		verificationResults,
+	};
 }

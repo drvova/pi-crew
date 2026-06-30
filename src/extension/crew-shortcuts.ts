@@ -50,7 +50,7 @@ const CREW_SHORTCUTS: ReadonlyArray<ShortcutRegistration> = [
 		// (avoids pulling the full commands.ts dependency tree into every
 		// process that imports this module, e.g. the unit test).
 		handler: async (ctx) => {
-		// LAZY: defer dynamic import of ./registration/commands.ts to its call site.
+			// LAZY: defer dynamic import of ./registration/commands.ts to its call site.
 			const { openTeamSettingsOverlay } = await import("./registration/commands.ts");
 			await openTeamSettingsOverlay(ctx);
 		},
@@ -61,7 +61,7 @@ const CREW_SHORTCUTS: ReadonlyArray<ShortcutRegistration> = [
 		// Lazy-import so the heavy UI module chain (RunDashboard etc.) is only
 		// loaded on first use, not at extension load.
 		handler: async (ctx) => {
-		// LAZY: defer dynamic import of ./registration/commands.ts to its call site.
+			// LAZY: defer dynamic import of ./registration/commands.ts to its call site.
 			const { openTeamDashboard } = await import("./registration/commands.ts");
 			await openTeamDashboard(ctx);
 		},
@@ -72,11 +72,14 @@ const CREW_SHORTCUTS: ReadonlyArray<ShortcutRegistration> = [
  * Register all crew keyboard shortcuts on a Pi instance. Safe to call once at
  * extension load. No-ops when `registerShortcut` is unavailable (older Pi).
  */
-export function registerCrewShortcuts(
-	pi: { registerShortcut?: (shortcut: KeyId, options: { description?: string; handler: ShortcutHandler }) => void },
-): void {
+export function registerCrewShortcuts(pi: {
+	registerShortcut?: (shortcut: KeyId, options: { description?: string; handler: ShortcutHandler }) => void;
+}): void {
 	for (const sc of CREW_SHORTCUTS) {
-		pi.registerShortcut?.(sc.key, { description: sc.description, handler: sc.handler });
+		pi.registerShortcut?.(sc.key, {
+			description: sc.description,
+			handler: sc.handler,
+		});
 	}
 }
 

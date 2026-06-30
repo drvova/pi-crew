@@ -3,13 +3,14 @@
  * The sequenceCache (256-entry, evict-oldest-half-by-lastAccessMs) had zero
  * coverage of its eviction policy.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	__test__sequenceCacheSize,
-	__test__seedSequenceCache,
-	__test__evictOldestSequenceCacheEntries,
 	__test__clearSequenceCache,
+	__test__evictOldestSequenceCacheEntries,
+	__test__seedSequenceCache,
+	__test__sequenceCacheSize,
 	MAX_SEQUENCE_CACHE_ENTRIES_VALUE,
 } from "../../src/state/event-log.ts";
 

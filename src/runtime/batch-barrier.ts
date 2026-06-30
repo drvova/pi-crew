@@ -39,13 +39,7 @@ export interface BatchSnapshot {
 	notified: boolean;
 }
 
-const TERMINAL_STATUSES = new Set([
-	"completed",
-	"failed",
-	"cancelled",
-	"error",
-	"stopped",
-]);
+const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "error", "stopped"]);
 
 export function isTerminalStatus(status: string): boolean {
 	return TERMINAL_STATUSES.has(status);
@@ -65,7 +59,11 @@ export class BatchBarrier {
 	register(batchId: string, agentId: string, meta?: { description?: string; type?: string }): void {
 		let batch = this.batches.get(batchId);
 		if (!batch) {
-			batch = { members: new Map(), terminal: new Map(), notified: false };
+			batch = {
+				members: new Map(),
+				terminal: new Map(),
+				notified: false,
+			};
 			this.batches.set(batchId, batch);
 		}
 		if (!batch.members.has(agentId)) {
@@ -87,7 +85,11 @@ export class BatchBarrier {
 	markTerminal(batchId: string, member: BatchMember): BatchSnapshot {
 		let batch = this.batches.get(batchId);
 		if (!batch) {
-			batch = { members: new Map(), terminal: new Map(), notified: false };
+			batch = {
+				members: new Map(),
+				terminal: new Map(),
+				notified: false,
+			};
 			this.batches.set(batchId, batch);
 		}
 		// Ensure the member is known (auto-register for the defensive case).
@@ -97,11 +99,13 @@ export class BatchBarrier {
 		if (isTerminalStatus(member.status)) {
 			batch.terminal.set(member.id, { ...member });
 			const existing = batch.members.get(member.id);
-			if (existing) batch.members.set(member.id, { ...existing, status: member.status });
+			if (existing)
+				batch.members.set(member.id, {
+					...existing,
+					status: member.status,
+				});
 		}
-		const allDone =
-			batch.members.size > 0 &&
-			[...batch.members.keys()].every((id) => batch.terminal.has(id));
+		const allDone = batch.members.size > 0 && [...batch.members.keys()].every((id) => batch.terminal.has(id));
 		return {
 			batchId,
 			members: [...batch.members.values()],
@@ -130,9 +134,7 @@ export class BatchBarrier {
 			batchId,
 			members: [...batch.members.values()],
 			terminal: [...batch.terminal.values()],
-			allDone:
-				batch.members.size > 0 &&
-				[...batch.members.keys()].every((id) => batch.terminal.has(id)),
+			allDone: batch.members.size > 0 && [...batch.members.keys()].every((id) => batch.terminal.has(id)),
 			notified: batch.notified,
 		};
 	}

@@ -80,7 +80,10 @@ export function resolveCrewMaxDepth(inputMaxDepth?: number, env: NodeJS.ProcessE
 	return DEFAULT_MAX_CREW_DEPTH;
 }
 
-export function checkCrewDepth(inputMaxDepth?: number, env: NodeJS.ProcessEnv = process.env): { blocked: boolean; depth: number; maxDepth: number } {
+export function checkCrewDepth(
+	inputMaxDepth?: number,
+	env: NodeJS.ProcessEnv = process.env,
+): { blocked: boolean; depth: number; maxDepth: number } {
 	const depth = currentCrewDepth(env);
 	const maxDepth = resolveCrewMaxDepth(inputMaxDepth, env);
 	return { depth, maxDepth, blocked: depth >= maxDepth };
@@ -218,7 +221,8 @@ export function createSafeTempDir(base: string, prefix: string): string {
 		resolvedAccumulated = path.join(resolvedAccumulated, resolvedParts[i]);
 		try {
 			const stat = fs.lstatSync(resolvedAccumulated);
-			if (stat.isSymbolicLink()) throw new Error("Refusing to create temp dir: resolved path contains symlink ancestor: " + resolvedAccumulated);
+			if (stat.isSymbolicLink())
+				throw new Error("Refusing to create temp dir: resolved path contains symlink ancestor: " + resolvedAccumulated);
 		} catch (e) {
 			if (e instanceof Error && e.message.includes("symlink")) throw e;
 			// Component doesn't exist — OK
@@ -334,9 +338,9 @@ export function buildPiWorkerArgs(input: BuildPiWorkerArgsInput): BuildPiWorkerA
 		args,
 		env: {
 			// PI_CREW_KIND is the authoritative machine-readable sub-agent marker. It is always
-		// present on a child-pi process and NEVER present on a user's interactive main session.
+			// present on a child-pi process and NEVER present on a user's interactive main session.
 			// doctor --zombies uses it to safely list orphaned sub-agents without ever matching a
-		// main session (the lesson from an accidental `kill` of a live main session).
+			// main session (the lesson from an accidental `kill` of a live main session).
 			PI_CREW_KIND: "subagent",
 			PI_CREW_INHERIT_PROJECT_CONTEXT: input.agent.inheritProjectContext ? "1" : "0",
 			PI_CREW_INHERIT_SKILLS: input.agent.inheritSkills ? "1" : "0",
@@ -385,7 +389,10 @@ export function cleanupTempDir(tempDir: string | undefined): void {
  * /tmp/pi-crew-* dirs when individual cleanupTempDir calls are missed
  * (e.g. parent process killed before child-pi.ts settles).
  */
-export function cleanupAllTrackedTempDirs(): { cleaned: number; failed: number } {
+export function cleanupAllTrackedTempDirs(): {
+	cleaned: number;
+	failed: number;
+} {
 	let cleaned = 0;
 	let failed = 0;
 	// Snapshot to avoid mutation during iteration
@@ -441,7 +448,10 @@ export function __test_getTrackedTempDirs(): readonly string[] {
  * Called at startup as a belt-and-suspenders measure alongside the
  * periodic cleanupOrphanTempDirs.
  */
-export function purgeStaleTrackedTempDirs(): { removed: number; remaining: number } {
+export function purgeStaleTrackedTempDirs(): {
+	removed: number;
+	remaining: number;
+} {
 	let removed = 0;
 	for (const dir of [...createdTempDirs]) {
 		if (!fs.existsSync(dir)) {

@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { CancellationToken, createCancellationToken } from "../../src/runtime/cancellation-token.ts";
+import { describe, it } from "node:test";
 import { CrewCancellationError } from "../../src/runtime/cancellation.ts";
+import { CancellationToken, createCancellationToken } from "../../src/runtime/cancellation-token.ts";
 
 describe("CancellationToken", () => {
 	it("starts in non-aborted state", () => {
@@ -123,7 +123,9 @@ describe("CancellationToken", () => {
 	it("onHeartbeat callback receives state", () => {
 		let captured: unknown;
 		const token = new CancellationToken({
-			onHeartbeat: (state) => { captured = state; },
+			onHeartbeat: (state) => {
+				captured = state;
+			},
 			now: () => new Date("2026-01-01T00:00:00Z"),
 		});
 		token.heartbeat("my-stage");

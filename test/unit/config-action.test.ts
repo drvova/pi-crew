@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
 
@@ -11,4 +11,3 @@ test("config action shows config path and effective config", async () => {
 	assert.match(text, /Effective config:/);
 	assert.match(text, /schema\.json/);
 });
-

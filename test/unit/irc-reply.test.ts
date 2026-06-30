@@ -10,24 +10,27 @@
  * - broadcast ignores awaitReply
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import { createIrcTool } from "../../src/runtime/custom-tools/irc-tool.ts";
 import {
+	cancelIrcReply,
 	clearLiveAgentsForTest,
 	clearPendingRepliesForTest,
-	registerLiveAgent,
-	respondAsBackground,
-	resolveIrcReply,
-	cancelIrcReply,
 	pendingReplyCorrIdsForTarget,
+	registerLiveAgent,
+	resolveIrcReply,
+	respondAsBackground,
 	terminateLiveAgent,
 } from "../../src/runtime/live-agent-manager.ts";
-import { createIrcTool } from "../../src/runtime/custom-tools/irc-tool.ts";
 
 const WORKSPACE = "workspace:///irc-reply-test";
 
 function makeSession(overrides: Record<string, unknown> = {}) {
-	const calls: { prompt: string[]; sendCustom: Array<{ msg: unknown; opts: unknown }> } = {
+	const calls: {
+		prompt: string[];
+		sendCustom: Array<{ msg: unknown; opts: unknown }>;
+	} = {
 		prompt: [],
 		sendCustom: [],
 	};
@@ -153,7 +156,9 @@ test("respondAsBackground: recipient delivery is non-blocking", async () => {
 
 	// Fire-and-forget delivery (awaitReply false): must return immediately.
 	const t0 = Date.now();
-	const fireForget = await respondAsBackground("target-D", "sender", "ping", { awaitReply: false });
+	const fireForget = await respondAsBackground("target-D", "sender", "ping", {
+		awaitReply: false,
+	});
 	const elapsed = Date.now() - t0;
 	assert.equal(fireForget.ok, true);
 	assert.ok(elapsed < 100, `fire-and-forget delivery returned promptly (${elapsed}ms)`);
@@ -182,7 +187,9 @@ test("respondAsBackground: recipient delivery is non-blocking", async () => {
 test("respondAsBackground: target not found returns error", async () => {
 	clearLiveAgentsForTest();
 	clearPendingRepliesForTest();
-	const result = await respondAsBackground("nope", "sender", "hi", { awaitReply: true });
+	const result = await respondAsBackground("nope", "sender", "hi", {
+		awaitReply: true,
+	});
 	assert.equal(result.ok, false);
 	assert.ok(result.error);
 });
@@ -192,7 +199,9 @@ test("respondAsBackground: no message channel returns error", async () => {
 	clearPendingRepliesForTest();
 	// Session with neither sendCustomMessage nor prompt.
 	registerTarget("target-E", {});
-	const result = await respondAsBackground("target-E", "sender", "hi", { awaitReply: false });
+	const result = await respondAsBackground("target-E", "sender", "hi", {
+		awaitReply: false,
+	});
 	assert.equal(result.ok, false);
 	assert.ok(result.error);
 	terminateLiveAgent("target-E");
@@ -204,7 +213,10 @@ test("resolveIrcReply / cancelIrcReply return false for unknown corrId", () => {
 	assert.equal(cancelIrcReply("unknown"), false);
 });
 
-type IrcToolResult = { content: Array<{ type: "text"; text: string }>; details: IrcToolDetails };
+type IrcToolResult = {
+	content: Array<{ type: "text"; text: string }>;
+	details: IrcToolDetails;
+};
 interface IrcToolDetails {
 	delivered?: string[];
 	notFound?: string[];
@@ -212,7 +224,9 @@ interface IrcToolDetails {
 }
 
 function ircExecute(selfId: string): (params: Record<string, unknown>) => Promise<IrcToolResult> {
-	const tool = createIrcTool(selfId) as unknown as { execute: (id: string, p: unknown, s?: AbortSignal) => Promise<IrcToolResult> };
+	const tool = createIrcTool(selfId) as unknown as {
+		execute: (id: string, p: unknown, s?: AbortSignal) => Promise<IrcToolResult>;
+	};
 	return (params) => tool.execute("call", params, undefined);
 }
 
@@ -254,7 +268,12 @@ test("irc-tool: broadcast ignores awaitReply (fire-and-forget)", async () => {
 
 	// Broadcast with awaitReply explicitly true — must NOT await any reply.
 	const t0 = Date.now();
-	const { details } = await execute({ op: "send", to: "all", message: "heads up", awaitReply: true });
+	const { details } = await execute({
+		op: "send",
+		to: "all",
+		message: "heads up",
+		awaitReply: true,
+	});
 	const elapsed = Date.now() - t0;
 
 	assert.ok(elapsed < 100, `broadcast returned promptly (${elapsed}ms)`);
@@ -276,7 +295,12 @@ test("irc-tool: DM awaitReply:false stays fire-and-forget", async () => {
 	const execute = ircExecute("self");
 
 	const t0 = Date.now();
-	const { details } = await execute({ op: "send", to: "peer-4", message: "fyi", awaitReply: false });
+	const { details } = await execute({
+		op: "send",
+		to: "peer-4",
+		message: "fyi",
+		awaitReply: false,
+	});
 	const elapsed = Date.now() - t0;
 
 	assert.ok(elapsed < 100, "fire-and-forget DM returned promptly");

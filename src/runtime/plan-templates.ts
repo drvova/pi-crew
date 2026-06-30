@@ -89,10 +89,7 @@ export function listPlanTemplates(): string[] {
  * @param variables - Key-value pairs for substitution
  * @returns Rendered plan, or undefined if template not found
  */
-export function renderPlanTemplate(
-	templateName: string,
-	variables: Record<string, string>,
-): RenderedPlan | undefined {
+export function renderPlanTemplate(templateName: string, variables: Record<string, string>): RenderedPlan | undefined {
 	const template = templates.get(templateName);
 	if (!template) {
 		logInternalError("plan-templates", new Error(`Template not found: ${templateName}`));
@@ -135,7 +132,8 @@ registerPlanTemplate({
 		{
 			name: "review",
 			role: "reviewer",
-			taskTemplate: "Review the code identified in the explore phase for: {{goal}}. Check correctness, maintainability, and security.",
+			taskTemplate:
+				"Review the code identified in the explore phase for: {{goal}}. Check correctness, maintainability, and security.",
 			maxTasks: 1,
 			dependsOn: ["explore"],
 		},
@@ -160,7 +158,8 @@ registerPlanTemplate({
 		{
 			name: "explore",
 			role: "explorer",
-			taskTemplate: "Explore the codebase to understand the current state relevant to: {{goal}}. Identify affected files and patterns.",
+			taskTemplate:
+				"Explore the codebase to understand the current state relevant to: {{goal}}. Identify affected files and patterns.",
 			maxTasks: 1,
 			dependsOn: [],
 		},

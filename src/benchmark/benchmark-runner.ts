@@ -41,42 +41,42 @@ export interface BenchmarkResult {
  * Uses comprehensive shell metacharacter blocking similar to safe-bash.ts.
  */
 function validateCommand(command: string): void {
-  // Basic allowlist - must start with an allowed command.
-  // SECURITY (H-7): `npx`/`node` were removed because they enable arbitrary code
-  // execution without any shell metacharacter (e.g. `npx --yes evil-package`
-  // or `node -e "require('fs')…"`). Use `npm test`/`npm run …` instead of raw
-  // `node`/`npx` in benchmark task definitions.
-  // `echo` is allowed because the metachar blocker (validateGateCommand) rejects
-  // command substitution (`$(...)`, backticks), so `echo $(evil)` cannot run;
-  // bare `echo …` only prints. It's the canonical exit-0 command used in
-  // benchmark fixtures across Linux/macOS/Windows(sh).
-  const allowlist = /^(pytest|grep|npm test|cargo test|cargo clippy|echo) /;
-  if (!allowlist.test(command)) {
-    throw new Error(`Command not allowed: ${command}. Only pytest, grep, npm test, cargo test/clippy, echo allowed.`);
-  }
-  
-  // Block shell metacharacters after command name
-  const afterCommand = command.substring(command.indexOf(" ") + 1);
-  
-  // Block dangerous shell metacharacters
-  const dangerousPatterns = [
-    /[;&|`$(){}[\]<>\\]/,                    // Shell metacharacters
-    /\$\([^)]*\)/,                            // Command substitution $(...)
-    /`[^`]*`/,                                // Backtick command substitution
-    /\|/,                                     // Pipe
-    /&&/,                                     // And
-    /\|\|/,                                   // Or
-    />>/,                                     // Append redirect
-    /2>&1/,                                   // stderr redirect
-    />/,                                      // Output redirect
-    /</,                                      // Input redirect
-  ];
-  
-  for (const pattern of dangerousPatterns) {
-    if (pattern.test(afterCommand)) {
-      throw new Error(`Shell metacharacters not allowed in command arguments`);
-    }
-  }
+	// Basic allowlist - must start with an allowed command.
+	// SECURITY (H-7): `npx`/`node` were removed because they enable arbitrary code
+	// execution without any shell metacharacter (e.g. `npx --yes evil-package`
+	// or `node -e "require('fs')…"`). Use `npm test`/`npm run …` instead of raw
+	// `node`/`npx` in benchmark task definitions.
+	// `echo` is allowed because the metachar blocker (validateGateCommand) rejects
+	// command substitution (`$(...)`, backticks), so `echo $(evil)` cannot run;
+	// bare `echo …` only prints. It's the canonical exit-0 command used in
+	// benchmark fixtures across Linux/macOS/Windows(sh).
+	const allowlist = /^(pytest|grep|npm test|cargo test|cargo clippy|echo) /;
+	if (!allowlist.test(command)) {
+		throw new Error(`Command not allowed: ${command}. Only pytest, grep, npm test, cargo test/clippy, echo allowed.`);
+	}
+
+	// Block shell metacharacters after command name
+	const afterCommand = command.substring(command.indexOf(" ") + 1);
+
+	// Block dangerous shell metacharacters
+	const dangerousPatterns = [
+		/[;&|`$(){}[\]<>\\]/, // Shell metacharacters
+		/\$\([^)]*\)/, // Command substitution $(...)
+		/`[^`]*`/, // Backtick command substitution
+		/\|/, // Pipe
+		/&&/, // And
+		/\|\|/, // Or
+		/>>/, // Append redirect
+		/2>&1/, // stderr redirect
+		/>/, // Output redirect
+		/</, // Input redirect
+	];
+
+	for (const pattern of dangerousPatterns) {
+		if (pattern.test(afterCommand)) {
+			throw new Error(`Shell metacharacters not allowed in command arguments`);
+		}
+	}
 }
 
 /**
@@ -143,10 +143,18 @@ export async function runBenchmark(task: BenchmarkTask): Promise<BenchmarkResult
 				passed = true; // Command succeeded = pass
 			}
 
-			judgeResults.push({ description: judge.description, passed: passed ?? false, output });
+			judgeResults.push({
+				description: judge.description,
+				passed: passed ?? false,
+				output,
+			});
 		} catch (e: unknown) {
 			const error = e as { message?: string };
-			judgeResults.push({ description: judge.description, passed: false, output: error.message ?? String(e) });
+			judgeResults.push({
+				description: judge.description,
+				passed: false,
+				output: error.message ?? String(e),
+			});
 		}
 	}
 
@@ -200,9 +208,7 @@ export async function runBenchmarkSuite(
 	totalDurationMs: number;
 	totalCost: number;
 }> {
-	const filtered = taskTypes
-		? tasks.filter((t) => t.taskType && taskTypes.includes(t.taskType))
-		: tasks;
+	const filtered = taskTypes ? tasks.filter((t) => t.taskType && taskTypes.includes(t.taskType)) : tasks;
 
 	const results: BenchmarkResult[] = [];
 
@@ -241,8 +247,7 @@ export function aggregateBenchmarkMetrics(results: BenchmarkResult[]): Aggregate
 		const totalTasks = group.length;
 		const passedTasks = group.filter((r) => r.passed).length;
 		const passRate = totalTasks > 0 ? passedTasks / totalTasks : 0;
-		const avgTimeMs =
-			totalTasks > 0 ? group.reduce((s, r) => s + r.durationMs, 0) / totalTasks : 0;
+		const avgTimeMs = totalTasks > 0 ? group.reduce((s, r) => s + r.durationMs, 0) / totalTasks : 0;
 		const totalCost = group.reduce((s, r) => s + r.cost, 0);
 		const avgCost = totalTasks > 0 ? totalCost / totalTasks : 0;
 
@@ -266,10 +271,7 @@ export function aggregateBenchmarkMetrics(results: BenchmarkResult[]): Aggregate
  * @param results - Benchmark results to report.
  * @param includeTaskTypeComparison - When true (default), appends a per-task-type aggregate table.
  */
-export function generateBenchmarkReport(
-	results: BenchmarkResult[],
-	includeTaskTypeComparison = true,
-): string {
+export function generateBenchmarkReport(results: BenchmarkResult[], includeTaskTypeComparison = true): string {
 	const lines: string[] = ["# Benchmark Results", ""];
 
 	lines.push("| Task | Type | Status | Duration | Cost |");
@@ -298,9 +300,7 @@ export function generateBenchmarkReport(
 				const m = metrics[t];
 				const passRatePct = `${(m.passRate * 100).toFixed(1)}%`;
 				const avgCostStr = m.avgCost > 0 ? `$${m.avgCost.toFixed(4)}` : "—";
-				lines.push(
-					`| ${m.taskType} | ${m.totalTasks} | ${m.passedTasks} | ${passRatePct} | ${m.avgTimeMs}ms | ${avgCostStr} |`,
-				);
+				lines.push(`| ${m.taskType} | ${m.totalTasks} | ${m.passedTasks} | ${passRatePct} | ${m.avgTimeMs}ms | ${avgCostStr} |`);
 			}
 		}
 	}

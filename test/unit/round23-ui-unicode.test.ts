@@ -3,8 +3,9 @@
  * CJK (double-width) and emoji (surrogate pairs) were mishandled by the
  * hand-rolled truncators, overflowing card frames and splitting surrogates.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { visibleWidth } from "../../src/ui/card-colors.ts";
 import { truncLine } from "../../src/ui/tool-render.ts";
 

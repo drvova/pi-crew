@@ -33,7 +33,15 @@ function requestId(): string {
 	return `ctrl_${Date.now().toString(36)}_${Math.random().toString(16).slice(2, 10)}`;
 }
 
-export function appendLiveAgentControlRequest(manifest: TeamRunManifest, input: { taskId: string; agentId?: string; operation: LiveAgentControlOperation; message?: string }): LiveAgentControlRequest {
+export function appendLiveAgentControlRequest(
+	manifest: TeamRunManifest,
+	input: {
+		taskId: string;
+		agentId?: string;
+		operation: LiveAgentControlOperation;
+		message?: string;
+	},
+): LiveAgentControlRequest {
 	const request: LiveAgentControlRequest = {
 		id: requestId(),
 		runId: manifest.runId,
@@ -48,7 +56,11 @@ export function appendLiveAgentControlRequest(manifest: TeamRunManifest, input: 
 	return request;
 }
 
-export function readLiveAgentControlRequests(manifest: TeamRunManifest, taskId: string, cursor: LiveAgentControlCursor = { offset: 0 }): { requests: LiveAgentControlRequest[]; cursor: LiveAgentControlCursor } {
+export function readLiveAgentControlRequests(
+	manifest: TeamRunManifest,
+	taskId: string,
+	cursor: LiveAgentControlCursor = { offset: 0 },
+): { requests: LiveAgentControlRequest[]; cursor: LiveAgentControlCursor } {
 	let filePath: string;
 	try {
 		filePath = liveAgentControlFile(manifest, taskId);
@@ -69,20 +81,56 @@ export function readLiveAgentControlRequests(manifest: TeamRunManifest, taskId: 
 	return { requests, cursor: { offset: lines.length } };
 }
 
-export async function applyLiveAgentControlRequest(input: { request: LiveAgentControlRequest; taskId: string; agentId: string; session: { steer?: (text: string) => Promise<void>; prompt?: (text: string, options?: Record<string, unknown>) => Promise<void>; abort?: () => Promise<void> | void }; seenRequestIds?: Set<string> }): Promise<boolean> {
+export async function applyLiveAgentControlRequest(input: {
+	request: LiveAgentControlRequest;
+	taskId: string;
+	agentId: string;
+	session: {
+		steer?: (text: string) => Promise<void>;
+		prompt?: (text: string, options?: Record<string, unknown>) => Promise<void>;
+		abort?: () => Promise<void> | void;
+	};
+	seenRequestIds?: Set<string>;
+}): Promise<boolean> {
 	const { request, taskId, agentId, session, seenRequestIds } = input;
 	if (seenRequestIds?.has(request.id)) return false;
 	if (request.agentId && request.agentId !== agentId && request.agentId !== taskId) return false;
 	seenRequestIds?.add(request.id);
 	if (request.operation === "steer") await session.steer?.(request.message ?? "Please report current status and wrap up if possible.");
-	else if (request.operation === "follow-up") await session.prompt?.(request.message ?? "Please continue with the follow-up request.", { source: "api", expandPromptTemplates: false });
-	else if (request.operation === "resume") await session.prompt?.(request.message ?? "Please resume and report final status.", { source: "api", expandPromptTemplates: false });
+	else if (request.operation === "follow-up")
+		await session.prompt?.(request.message ?? "Please continue with the follow-up request.", {
+			source: "api",
+			expandPromptTemplates: false,
+		});
+	else if (request.operation === "resume")
+		await session.prompt?.(request.message ?? "Please resume and report final status.", {
+			source: "api",
+			expandPromptTemplates: false,
+		});
 	else if (request.operation === "stop") await session.abort?.();
 	return true;
 }
 
-export async function applyLiveAgentControlRequests(input: { manifest: TeamRunManifest; taskId: string; agentId: string; session: { steer?: (text: string) => Promise<void>; prompt?: (text: string, options?: Record<string, unknown>) => Promise<void>; abort?: () => Promise<void> | void }; cursor: LiveAgentControlCursor; seenRequestIds?: Set<string> }): Promise<LiveAgentControlCursor> {
+export async function applyLiveAgentControlRequests(input: {
+	manifest: TeamRunManifest;
+	taskId: string;
+	agentId: string;
+	session: {
+		steer?: (text: string) => Promise<void>;
+		prompt?: (text: string, options?: Record<string, unknown>) => Promise<void>;
+		abort?: () => Promise<void> | void;
+	};
+	cursor: LiveAgentControlCursor;
+	seenRequestIds?: Set<string>;
+}): Promise<LiveAgentControlCursor> {
 	const batch = readLiveAgentControlRequests(input.manifest, input.taskId, input.cursor);
-	for (const request of batch.requests) await applyLiveAgentControlRequest({ request, taskId: input.taskId, agentId: input.agentId, session: input.session, seenRequestIds: input.seenRequestIds });
+	for (const request of batch.requests)
+		await applyLiveAgentControlRequest({
+			request,
+			taskId: input.taskId,
+			agentId: input.agentId,
+			session: input.session,
+			seenRequestIds: input.seenRequestIds,
+		});
 	return batch.cursor;
 }

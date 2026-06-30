@@ -12,16 +12,17 @@
  * pure dir-mapping helper, (4) the Issue-#33 scenario end-to-end (pi found
  * under a custom npm global root, NOT %APPDATA%\npm).
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import {
+	__setNpmGlobalRootForTest,
+	buildNpmGlobalPackageDirs,
 	getPiSpawnCommand,
 	resolveNpmGlobalRoot,
-	buildNpmGlobalPackageDirs,
-	__setNpmGlobalRootForTest,
 } from "../../src/runtime/pi-spawn.ts";
 
 test("resolveNpmGlobalRoot returns an absolute path on a machine with npm", () => {
@@ -76,7 +77,10 @@ test("Issue #33: pi found under a custom npm global root (nvm/Volta/fnm layout),
 	fs.mkdirSync(distDir, { recursive: true });
 	fs.writeFileSync(
 		path.join(pkgDir, "package.json"),
-		JSON.stringify({ name: "@earendil-works/pi-coding-agent", bin: { pi: "dist/cli.js" } }),
+		JSON.stringify({
+			name: "@earendil-works/pi-coding-agent",
+			bin: { pi: "dist/cli.js" },
+		}),
 		"utf-8",
 	);
 	fs.writeFileSync(cliJs, "#!/usr/bin/env node\nconsole.log('pi shim');\n", "utf-8");
@@ -108,7 +112,10 @@ test("Issue #33: @mariozechner legacy scope also resolves via the global root", 
 	fs.mkdirSync(distDir, { recursive: true });
 	fs.writeFileSync(
 		path.join(pkgDir, "package.json"),
-		JSON.stringify({ name: "@mariozechner/pi-coding-agent", bin: { pi: "dist/cli.js" } }),
+		JSON.stringify({
+			name: "@mariozechner/pi-coding-agent",
+			bin: { pi: "dist/cli.js" },
+		}),
 		"utf-8",
 	);
 	fs.writeFileSync(cliJs, "#!/usr/bin/env node\nconsole.log('pi shim');\n", "utf-8");

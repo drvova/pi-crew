@@ -6,17 +6,13 @@
  * Process start times are MOCKED via the injected startTimeResolver so no real
  * process spawn is needed (and PID recycling can be simulated deterministically).
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { describe, it, beforeEach, afterEach } from "node:test";
-import assert from "node:assert/strict";
-import {
-	acquireWorkspaceLock,
-	reclaimStaleLocks,
-	workspaceLockPath,
-	type StartTimeResolver,
-} from "../../src/runtime/workspace-lock.ts";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { acquireWorkspaceLock, reclaimStaleLocks, type StartTimeResolver, workspaceLockPath } from "../../src/runtime/workspace-lock.ts";
 import { clearProjectRootCache } from "../../src/utils/paths.ts";
 
 function makeTmpCwd(): string {

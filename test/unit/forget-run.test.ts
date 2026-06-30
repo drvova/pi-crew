@@ -1,8 +1,8 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { loadRunManifestById } from "../../src/state/state-store.ts";
 
@@ -10,7 +10,15 @@ test("forget deletes run state and artifacts when confirmed", async () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-forget-test-"));
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	try {
-		const run = await handleTeamTool({ action: "run", config: { runtime: { mode: "scaffold" } }, team: "fast-fix", goal: "Forget me" }, { cwd });
+		const run = await handleTeamTool(
+			{
+				action: "run",
+				config: { runtime: { mode: "scaffold" } },
+				team: "fast-fix",
+				goal: "Forget me",
+			},
+			{ cwd },
+		);
 		const runId = run.details.runId;
 		assert.ok(runId);
 		const loaded = loadRunManifestById(cwd, runId!);
@@ -22,7 +30,15 @@ test("forget deletes run state and artifacts when confirmed", async () => {
 		assert.equal(blocked.isError, true);
 		assert.ok(fs.existsSync(stateRoot));
 
-		const forgotten = await handleTeamTool({ action: "forget", runId, confirm: true, config: { intent: "remove old scaffold test run" } }, { cwd });
+		const forgotten = await handleTeamTool(
+			{
+				action: "forget",
+				runId,
+				confirm: true,
+				config: { intent: "remove old scaffold test run" },
+			},
+			{ cwd },
+		);
 		assert.equal(forgotten.isError, false);
 		assert.equal(forgotten.details.intent, "remove old scaffold test run");
 		assert.equal(fs.existsSync(stateRoot), false);

@@ -1,12 +1,12 @@
+import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
+import { type LiveAgentHandle, listLiveAgents, listLiveAgentsByWorkspace } from "../../runtime/live-agent-manager.ts";
+import { formatCost } from "../../state/usage.ts";
+import { visibleWidth } from "../../utils/visual.ts";
+import { computeLiveDurationMs } from "../live-duration.ts";
 import type { RunDashboardOptions } from "../run-dashboard.ts";
-import { iconForStatus } from "../status-colors.ts";
 import type { RunUiSnapshot } from "../snapshot-types.ts";
 import { spinnerFrame } from "../spinner.ts";
-import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
-import { formatCost } from "../../state/usage.ts";
-import { listLiveAgents, listLiveAgentsByWorkspace, type LiveAgentHandle } from "../../runtime/live-agent-manager.ts";
-import { computeLiveDurationMs } from "../live-duration.ts";
-import { visibleWidth } from "../../utils/visual.ts";
+import { iconForStatus } from "../status-colors.ts";
 
 /**
  * Fixed visible widths for the per-agent numeric metrics (finding V-1).
@@ -63,11 +63,15 @@ const TOOL_LABELS: Record<string, string> = {
 function describeActivity(handle: LiveAgentHandle): string {
 	const act = handle.activity;
 	if (act.activeTools.size > 0) {
-		const tools = [...new Set([...act.activeTools.values()])].map(t => TOOL_LABELS[t] ?? t);
+		const tools = [...new Set([...act.activeTools.values()])].map((t) => TOOL_LABELS[t] ?? t);
 		return tools.join(", ") + "…";
 	}
 	if (act.responseText?.trim()) {
-		const line = act.responseText.split("\n").find((l) => l.trim())?.trim() ?? "";
+		const line =
+			act.responseText
+				.split("\n")
+				.find((l) => l.trim())
+				?.trim() ?? "";
 		return line.length > 40 ? line.slice(0, 40) + "…" : line;
 	}
 	return "thinking…";
@@ -77,38 +81,50 @@ export function renderAgentsPane(snapshot: RunUiSnapshot | undefined, options: R
 	if (!snapshot) return ["(snapshot unavailable)"];
 	if (!snapshot.agents.length) return ["(no agents)"];
 	// Filter live agents by workspaceId for session isolation
-	const allLive = options.workspaceId
-		? listLiveAgentsByWorkspace(options.workspaceId)
-		: listLiveAgents();
-	const liveForRun = allLive.filter(h => h.runId === snapshot.runId);
+	const allLive = options.workspaceId ? listLiveAgentsByWorkspace(options.workspaceId) : listLiveAgents();
+	const liveForRun = allLive.filter((h) => h.runId === snapshot.runId);
 	const { completed, total } = snapshot.progress;
 
 	const lines: string[] = [];
 
-	const realAgents = snapshot.agents.filter(a => isRealAgent(a, liveForRun.find(h => h.taskId === a.taskId)));
+	const realAgents = snapshot.agents.filter((a) =>
+		isRealAgent(
+			a,
+			liveForRun.find((h) => h.taskId === a.taskId),
+		),
+	);
 	const lineCount = Math.min(realAgents.length, 12);
-	const label = realAgents.length !== snapshot.agents.length
-		? `${realAgents.length} real agents (${snapshot.agents.length} total)`
-		: `${realAgents.length} agents`;
+	const label =
+		realAgents.length !== snapshot.agents.length
+			? `${realAgents.length} real agents (${snapshot.agents.length} total)`
+			: `${realAgents.length} agents`;
 
 	lines.push(`${completed}/${total} tasks · ${label}`);
 
 	for (const agent of realAgents.slice(0, 12)) {
-		const liveHandle = liveForRun.find(h => h.taskId === agent.taskId);
-		const icon = iconForStatus(agent.status, { runningGlyph: spinnerFrame(agent.taskId) });
+		const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
+		const icon = iconForStatus(agent.status, {
+			runningGlyph: spinnerFrame(agent.taskId),
+		});
 		const role = `${agent.role}`;
 
 		// Compact activity line
-		const activity = liveHandle ? describeActivity(liveHandle)
-			: agent.progress?.currentTool ? `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`
-			: agent.status === "running" ? "thinking…"
-			: agent.status === "queued" ? "queued"
-			: agent.status === "failed" ? (agent.error ?? "failed")
-			: "done";
+		const activity = liveHandle
+			? describeActivity(liveHandle)
+			: agent.progress?.currentTool
+				? `${TOOL_LABELS[agent.progress.currentTool] ?? agent.progress.currentTool}…`
+				: agent.status === "running"
+					? "thinking…"
+					: agent.status === "queued"
+						? "queued"
+						: agent.status === "failed"
+							? (agent.error ?? "failed")
+							: "done";
 
 		// Stats: tokens + cost + duration
 		const stats: string[] = [];
-		const tokenTotal = (agent.usage?.input ?? 0) + (agent.usage?.output ?? 0) + (agent.usage?.cacheRead ?? 0) + (agent.usage?.cacheWrite ?? 0);
+		const tokenTotal =
+			(agent.usage?.input ?? 0) + (agent.usage?.output ?? 0) + (agent.usage?.cacheRead ?? 0) + (agent.usage?.cacheWrite ?? 0);
 		if (tokenTotal > 0) {
 			const tok = tokenTotal >= 1000 ? `${(tokenTotal / 1000).toFixed(1)}k` : `${tokenTotal}`;
 			stats.push(alignMetric(tok, TOKENS_METRIC_WIDTH));

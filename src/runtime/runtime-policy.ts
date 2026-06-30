@@ -22,12 +22,7 @@ export function resolveTaskRuntimeKind(
 	// Exception: when PI_CREW_MOCK_LIVE_SESSION is set, we're in a test harness
 	// that mocks the live-session path — forcing child-process would spawn a real
 	// pi process and hang the test.
-	if (
-		globalKind === "live-session" &&
-		currentCrewDepth(env) > 0 &&
-		env.PI_CREW_MOCK_LIVE_SESSION !== "success"
-	)
-		return "child-process";
+	if (globalKind === "live-session" && currentCrewDepth(env) > 0 && env.PI_CREW_MOCK_LIVE_SESSION !== "success") return "child-process";
 	const isolatedRoles = isolationPolicy?.isolatedRoles ?? [];
 	if (isolatedRoles.includes(role)) return "child-process";
 	return isolationPolicy?.defaultRuntime ?? globalKind;

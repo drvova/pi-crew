@@ -8,8 +8,9 @@
  *   - Nested expressions and computed properties are walked correctly
  *   - Parse errors are silently deferred to jiti (no double-report)
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { assertDeterministicScript, DeterminismError, isDeterminismCheckEnabled } from "../../src/runtime/deterministic-ast.ts";
 
 test("rejects Date.now() call", () => {
@@ -67,45 +68,65 @@ const e = Math.round(3.5);
 });
 
 test("walks nested Date.now() inside an arrow function", () => {
-	assert.throws(() => assertDeterministicScript(`
+	assert.throws(
+		() =>
+			assertDeterministicScript(`
 const f = () => {
   return Date.now();
 };
-`), DeterminismError);
+`),
+		DeterminismError,
+	);
 });
 
 test("walks Date.now() inside a try/catch", () => {
-	assert.throws(() => assertDeterministicScript(`
+	assert.throws(
+		() =>
+			assertDeterministicScript(`
 try {
   const t = Date.now();
 } catch (e) {
   console.error(e);
 }
-`), DeterminismError);
+`),
+		DeterminismError,
+	);
 });
 
 test("walks Date.now() inside an if block", () => {
-	assert.throws(() => assertDeterministicScript(`
+	assert.throws(
+		() =>
+			assertDeterministicScript(`
 if (cond) {
   const t = Date.now();
 }
-`), DeterminismError);
+`),
+		DeterminismError,
+	);
 });
 
 test("rejects Math.random() inside a function declaration", () => {
-	assert.throws(() => assertDeterministicScript(`
+	assert.throws(
+		() =>
+			assertDeterministicScript(`
 function roll() {
   return Math.random();
 }
-`), DeterminismError);
+`),
+		DeterminismError,
+	);
 });
 
 test("accepts Date.now assigned via destructuring rename", () => {
 	// `[now]` would still be a CallExpression — we test that the property name
 	// is checked regardless of how the result is bound.
-	assert.throws(() => assertDeterministicScript(`
+	assert.throws(
+		() =>
+			assertDeterministicScript(`
 const [now] = [Date.now()];
-`), DeterminismError);
+`),
+		DeterminismError,
+	);
 });
 
 test("accepts nested Math.max with no .random", () => {
@@ -173,9 +194,13 @@ test("isDeterminismCheckEnabled: returns false when env=1", () => {
 
 test("accepts Date.now as property name in an object literal", () => {
 	// { now: Date.now() } is rejected — we still detect the call.
-	assert.throws(() => assertDeterministicScript(`
+	assert.throws(
+		() =>
+			assertDeterministicScript(`
 const obj = { now: Date.now() };
-`), DeterminismError);
+`),
+		DeterminismError,
+	);
 });
 
 test("accepts Date.now as a property KEY (computed string literal)", () => {
@@ -189,7 +214,11 @@ test("rejects Date.now via member-expression bracket access with string literal"
 	// Date["now"]() is detected via staticStringOf resolving the bracket
 	// property to the string "now". This is the correct security behavior:
 	// we want to block all equivalent forms of Date.now().
-	assert.throws(() => assertDeterministicScript(`
+	assert.throws(
+		() =>
+			assertDeterministicScript(`
 const t = Date["now"]();
-`), DeterminismError);
+`),
+		DeterminismError,
+	);
 });

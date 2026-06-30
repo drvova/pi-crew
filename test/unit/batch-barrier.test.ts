@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { BatchBarrier, isTerminalStatus } from "../../src/runtime/batch-barrier.ts";
 
 test("BatchBarrier: empty batch snapshot is undefined", () => {
@@ -12,7 +12,12 @@ test("BatchBarrier: single-member batch notifies when that member completes", ()
 	const b = new BatchBarrier();
 	b.register("b1", "agent_a", { description: "Task A", type: "explorer" });
 	// Before terminal: not all done
-	let snap = b.markTerminal("b1", { id: "agent_a", description: "Task A", type: "explorer", status: "completed" });
+	let snap = b.markTerminal("b1", {
+		id: "agent_a",
+		description: "Task A",
+		type: "explorer",
+		status: "completed",
+	});
 	assert.equal(snap.allDone, true, "single member terminal => all done");
 	assert.equal(snap.notified, false);
 	assert.equal(snap.terminal.length, 1);
@@ -63,7 +68,10 @@ test("BatchBarrier: register is idempotent per (batchId, agentId)", () => {
 
 test("BatchBarrier: markTerminal for unregistered batch treats as batch-of-one", () => {
 	const b = new BatchBarrier();
-	const snap = b.markTerminal("phantom", { id: "ghost", status: "completed" });
+	const snap = b.markTerminal("phantom", {
+		id: "ghost",
+		status: "completed",
+	});
 	assert.equal(snap.allDone, true, "unregistered terminal => all done (batch of one)");
 	assert.equal(snap.terminal.length, 1);
 });
@@ -101,7 +109,12 @@ test("BatchBarrier: dispose single + all", () => {
 test("BatchBarrier: member status updates in snapshot after terminal", () => {
 	const b = new BatchBarrier();
 	b.register("b8", "a", { description: "D", type: "executor" });
-	const snap = b.markTerminal("b8", { id: "a", description: "D", type: "executor", status: "failed" });
+	const snap = b.markTerminal("b8", {
+		id: "a",
+		description: "D",
+		type: "executor",
+		status: "failed",
+	});
 	assert.equal(snap.members[0]!.status, "failed", "member status reflects terminal");
 	assert.equal(snap.terminal[0]!.status, "failed");
 });

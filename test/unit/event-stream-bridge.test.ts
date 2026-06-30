@@ -1,10 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	registerStreamBridge,
-	unregisterStreamBridge,
-	bridgeEventFromJsonEvent,
-} from "../../src/runtime/event-stream-bridge.ts";
+import test from "node:test";
+import { bridgeEventFromJsonEvent, registerStreamBridge, unregisterStreamBridge } from "../../src/runtime/event-stream-bridge.ts";
 import { runEventBus } from "../../src/ui/run-event-bus.ts";
 
 test("registerStreamBridge returns handler and dispose", () => {
@@ -43,7 +39,12 @@ test("bridge handler emits worker_status via runEventBus", () => {
 		timestamp: 1000,
 	});
 	assert.equal(received.length, 1);
-	const emitted = received[0] as { type: string; runId: string; taskId: string; data: unknown };
+	const emitted = received[0] as {
+		type: string;
+		runId: string;
+		taskId: string;
+		data: unknown;
+	};
 	assert.equal(emitted.type, "worker_status");
 	assert.equal(emitted.runId, "test-emit-1");
 	assert.equal(emitted.taskId, "task-1");

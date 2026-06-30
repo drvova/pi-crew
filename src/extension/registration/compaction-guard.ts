@@ -1,8 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { listRecentRuns } from "../run-index.ts";
+import type { ArtifactDescriptor, TeamRunManifest } from "../../state/types.ts";
 import { findRepoRoot } from "../../utils/paths.ts";
 import { extractSessionId } from "../../utils/session-utils.ts";
-import type { ArtifactDescriptor, TeamRunManifest } from "../../state/types.ts";
+import { listRecentRuns } from "../run-index.ts";
 
 export interface RegisterCompactionGuardOptions {
 	foregroundControllers: Map<string | symbol, AbortController>;
@@ -22,7 +22,10 @@ function contextWindow(ctx: { model?: { contextWindow?: number } }): number {
 	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : DEFAULT_CONTEXT_WINDOW;
 }
 
-function usageRatio(ctx: { getContextUsage(): { tokens: number | null } | undefined; model?: { contextWindow?: number } }): number | undefined {
+function usageRatio(ctx: {
+	getContextUsage(): { tokens: number | null } | undefined;
+	model?: { contextWindow?: number };
+}): number | undefined {
 	const tokens = ctx.getContextUsage()?.tokens;
 	if (tokens === null || tokens === undefined || !Number.isFinite(tokens)) return undefined;
 	return tokens / contextWindow(ctx);
@@ -65,7 +68,9 @@ function formatCrewArtifactIndex(entries: CrewArtifactIndexEntry[]): string {
 	if (!entries.length) return "";
 	const lines = ["", "# pi-crew artifact index", "Preserve these run artifact references in the compaction summary:"];
 	for (const entry of entries) {
-		lines.push(`- ${entry.artifact.kind}: ${entry.artifact.path} (run=${entry.runId}, status=${entry.status}, team=${entry.team}, workflow=${entry.workflow ?? "none"}, producer=${entry.artifact.producer})`);
+		lines.push(
+			`- ${entry.artifact.kind}: ${entry.artifact.path} (run=${entry.runId}, status=${entry.status}, team=${entry.team}, workflow=${entry.workflow ?? "none"}, producer=${entry.artifact.producer})`,
+		);
 	}
 	return lines.join("\n");
 }
@@ -138,9 +143,7 @@ function formatResumeDirective(runs: TeamRunManifest[]): string {
 	];
 	for (const run of runs) {
 		const wf = run.workflow ? `, workflow=${run.workflow}` : "";
-		lines.push(
-			`- runId=${run.runId} (status=${run.status}, team=${run.team}${wf}): ${run.goal}`,
-		);
+		lines.push(`- runId=${run.runId} (status=${run.status}, team=${run.team}${wf}): ${run.goal}`);
 	}
 	lines.push("");
 	lines.push("To resume: call the `team` tool with action='status' to check progress, then");
@@ -159,15 +162,15 @@ function formatResumeDirective(runs: TeamRunManifest[]): string {
  */
 export function buildContinuationPrompt(runs: TeamRunManifest[]): string {
 	if (!runs.length) return "";
-	const lines = [
-		"[pi-crew] Context was compacted while crew tasks were still in-flight. Continue the work — do not wait for me.",
-	];
+	const lines = ["[pi-crew] Context was compacted while crew tasks were still in-flight. Continue the work — do not wait for me."];
 	for (const run of runs) {
 		const wf = run.workflow ? `, workflow=${run.workflow}` : "";
 		lines.push(`- runId=${run.runId} (status=${run.status}, team=${run.team}${wf}): ${run.goal}`);
 	}
 	lines.push("");
-	lines.push("Resume: call `team` with action='status' to check progress, then action='wait' (join a running task), action='summary', or action='get' as appropriate. If a worker is still alive it continues independently — just re-attach. Do NOT restart completed work.");
+	lines.push(
+		"Resume: call `team` with action='status' to check progress, then action='wait' (join a running task), action='summary', or action='get' as appropriate. If a worker is still alive it continues independently — just re-attach. Do NOT restart completed work.",
+	);
 	return lines.join("\n");
 }
 
@@ -294,10 +297,7 @@ export function registerCompactionGuard(pi: ExtensionAPI, options: RegisterCompa
 					goal: r.goal,
 				})),
 			});
-			ctx.ui.notify(
-				`Context compacted. ${inFlight.length} pi-crew run(s) still in-flight — auto-resuming.`,
-				"info",
-			);
+			ctx.ui.notify(`Context compacted. ${inFlight.length} pi-crew run(s) still in-flight — auto-resuming.`, "info");
 			// THE FIX: trigger automatic continuation. Without this, Pi stops
 			// after threshold compaction and the user must type "continue".
 			triggerContinuation(pi, ctx, inFlight);

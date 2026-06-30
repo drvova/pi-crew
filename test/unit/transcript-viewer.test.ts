@@ -1,13 +1,13 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { DurableTextViewer, DurableTranscriptViewer, formatTranscriptText, readRunTranscript } from "../../src/ui/transcript-viewer.ts";
-import { clearTranscriptCache, getTranscriptCacheEntry, readTranscriptLinesCached } from "../../src/ui/transcript-cache.ts";
+import test from "node:test";
 import { saveCrewAgents } from "../../src/runtime/crew-agent-records.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 import type { CrewTheme } from "../../src/ui/theme-adapter.ts";
+import { clearTranscriptCache, getTranscriptCacheEntry, readTranscriptLinesCached } from "../../src/ui/transcript-cache.ts";
+import { DurableTextViewer, DurableTranscriptViewer, formatTranscriptText, readRunTranscript } from "../../src/ui/transcript-viewer.ts";
 
 function manifest(tmp: string): TeamRunManifest {
 	return {
@@ -87,12 +87,17 @@ test("transcript cache defaults to bounded tail and can force full reads", () =>
 		const tailed = readTranscriptLinesCached(transcriptPath, parse, Date.now(), { maxTailBytes: 1024 });
 		assert.ok(tailed.length < lines.length);
 		assert.ok(tailed.at(0)?.startsWith("line-"));
-		const tailEntry = getTranscriptCacheEntry(transcriptPath, { maxTailBytes: 1024 });
+		const tailEntry = getTranscriptCacheEntry(transcriptPath, {
+			maxTailBytes: 1024,
+		});
 		assert.equal(tailEntry?.truncated, true);
 		assert.ok((tailEntry?.bytesRead ?? 0) <= 1024);
 		const full = readTranscriptLinesCached(transcriptPath, parse, Date.now(), { full: true, maxTailBytes: 1024 });
 		assert.equal(full.length, lines.length);
-		const fullEntry = getTranscriptCacheEntry(transcriptPath, { full: true, maxTailBytes: 1024 });
+		const fullEntry = getTranscriptCacheEntry(transcriptPath, {
+			full: true,
+			maxTailBytes: 1024,
+		});
 		assert.equal(fullEntry?.truncated, false);
 		assert.equal(fullEntry?.size, fs.statSync(transcriptPath).size);
 	} finally {
@@ -105,17 +110,51 @@ test("DurableTranscriptViewer renders transcript overlay and scroll controls", (
 	try {
 		const run = manifest(tmp);
 		const transcriptPath = path.join(tmp, "transcript.jsonl");
-		fs.writeFileSync(transcriptPath, `${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "viewer hello" }] } })}\n`, "utf-8");
-		saveCrewAgents(run, [{ id: "team_transcript:01", runId: run.runId, taskId: "01", agent: "explorer", role: "explorer", runtime: "live-session", status: "completed", startedAt: run.createdAt, transcriptPath }]);
+		fs.writeFileSync(
+			transcriptPath,
+			`${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "viewer hello" }] } })}\n`,
+			"utf-8",
+		);
+		saveCrewAgents(run, [
+			{
+				id: "team_transcript:01",
+				runId: run.runId,
+				taskId: "01",
+				agent: "explorer",
+				role: "explorer",
+				runtime: "live-session",
+				status: "completed",
+				startedAt: run.createdAt,
+				transcriptPath,
+			},
+		]);
 		assert.match(readRunTranscript(run).lines.join("\n"), /viewer hello/);
 		let closed = false;
-		const viewer = new DurableTranscriptViewer(run, { fg: (_color: string, value: string) => value, bold: (value: string) => value } as never, () => { closed = true; });
+		const viewer = new DurableTranscriptViewer(
+			run,
+			{
+				fg: (_color: string, value: string) => value,
+				bold: (value: string) => value,
+			} as never,
+			() => {
+				closed = true;
+			},
+		);
 		const lines = viewer.render(100);
 		assert.ok(lines.some((line) => line.includes("pi-crew transcript")));
 		assert.ok(lines.some((line) => line.includes("viewer hello")));
 		viewer.handleInput("q");
 		assert.equal(closed, true);
-		const resultViewer = new DurableTextViewer("pi-crew result", "team_transcript:01", ["result hello"], { fg: (_color: string, value: string) => value, bold: (value: string) => value } as never, () => {});
+		const resultViewer = new DurableTextViewer(
+			"pi-crew result",
+			"team_transcript:01",
+			["result hello"],
+			{
+				fg: (_color: string, value: string) => value,
+				bold: (value: string) => value,
+			} as never,
+			() => {},
+		);
 		assert.ok(resultViewer.render(80).some((line) => line.includes("result hello")));
 	} finally {
 		fs.rmSync(tmp, { recursive: true, force: true });

@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { readEvents } from "../../src/state/event-log.ts";
 import { loadRunManifestById, saveRunTasks, updateRunStatus } from "../../src/state/state-store.ts";
@@ -19,16 +19,37 @@ test("resume recovers running task with child-stdout-final checkpoint from trans
 	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-resume-transcript-"));
 	try {
-		const run = await handleTeamTool({ action: "run", team: "fast-fix", goal: "checkpoint transcript recovery" }, { cwd });
+		const run = await handleTeamTool(
+			{
+				action: "run",
+				team: "fast-fix",
+				goal: "checkpoint transcript recovery",
+			},
+			{ cwd },
+		);
 		const runId = run.details?.runId;
 		assert.ok(runId);
 		const loaded = loadRunManifestById(cwd, runId)!;
 		const task = loaded.tasks[0]!;
-		const rewound = loaded.tasks.map((item, index) => index === 0 ? { ...item, status: "running" as const, finishedAt: undefined, resultArtifact: undefined, transcriptArtifact: undefined, checkpoint: { phase: "child-stdout-final" as const, updatedAt: new Date().toISOString() } } : item);
+		const rewound = loaded.tasks.map((item, index) =>
+			index === 0
+				? {
+						...item,
+						status: "running" as const,
+						finishedAt: undefined,
+						resultArtifact: undefined,
+						transcriptArtifact: undefined,
+						checkpoint: {
+							phase: "child-stdout-final" as const,
+							updatedAt: new Date().toISOString(),
+						},
+					}
+				: item,
+		);
 		saveRunTasks(loaded.manifest, rewound);
 		updateRunStatus(loaded.manifest, "running", "simulate crash after final stdout");
 		process.env.PI_CREW_ALLOW_MOCK = "1";
-	process.env.PI_TEAMS_MOCK_CHILD_PI = "fail";
+		process.env.PI_TEAMS_MOCK_CHILD_PI = "fail";
 
 		const resumed = await handleTeamTool({ action: "resume", runId }, { cwd });
 		assert.equal(resumed.isError, false);
@@ -36,7 +57,12 @@ test("resume recovers running task with child-stdout-final checkpoint from trans
 		assert.equal(after.tasks[0]!.status, "completed");
 		assert.ok(after.tasks[0]!.resultArtifact?.path);
 		assert.match(fs.readFileSync(after.tasks[0]!.resultArtifact!.path, "utf-8"), /MOCK.*JSON success/);
-		assert.equal(readEvents(after.manifest.eventsPath).some((event) => event.type === "task.checkpoint_recovered" && JSON.stringify(event.data).includes(task.id)), true);
+		assert.equal(
+			readEvents(after.manifest.eventsPath).some(
+				(event) => event.type === "task.checkpoint_recovered" && JSON.stringify(event.data).includes(task.id),
+			),
+			true,
+		);
 	} finally {
 		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
 		restoreEnv("PI_CREW_ALLOW_MOCK", previousAllowMock);
@@ -60,11 +86,25 @@ test("resume recovers running task with artifact-written checkpoint without reru
 		assert.ok(["completed", "needs_attention"].includes(task.status), `Expected completed or needs_attention, got ${task.status}`);
 		assert.equal(task.checkpoint?.phase, "artifact-written");
 		assert.ok(task.resultArtifact);
-		const rewound = loaded.tasks.map((item, index) => index === 0 ? { ...item, status: "running" as const, finishedAt: undefined, claim: undefined, checkpoint: { phase: "artifact-written" as const, updatedAt: new Date().toISOString(), childPid: 12345 } } : item);
+		const rewound = loaded.tasks.map((item, index) =>
+			index === 0
+				? {
+						...item,
+						status: "running" as const,
+						finishedAt: undefined,
+						claim: undefined,
+						checkpoint: {
+							phase: "artifact-written" as const,
+							updatedAt: new Date().toISOString(),
+							childPid: 12345,
+						},
+					}
+				: item,
+		);
 		saveRunTasks(loaded.manifest, rewound);
 		updateRunStatus(loaded.manifest, "running", "simulate crash after artifact write");
 		process.env.PI_CREW_ALLOW_MOCK = "1";
-	process.env.PI_TEAMS_MOCK_CHILD_PI = "fail";
+		process.env.PI_TEAMS_MOCK_CHILD_PI = "fail";
 
 		const resumed = await handleTeamTool({ action: "resume", runId }, { cwd });
 		assert.equal(resumed.isError, false);

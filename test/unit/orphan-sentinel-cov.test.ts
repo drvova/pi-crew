@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 
 // orphan-sentinel is a deprecated no-op module. We import it to confirm
 // it loads without error and verify the placeholder nature.

@@ -1,13 +1,43 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { BM25Search } from "../../src/utils/bm25-search.ts";
 
 const docs = [
-	{ id: "a", fields: { name: "security review", description: "OWASP and STRIDE analysis" } },
-	{ id: "b", fields: { name: "performance tuning", description: "profile and optimize code" } },
-	{ id: "c", fields: { name: "security audit", description: "comprehensive security check" } },
-	{ id: "d", fields: { name: "data analysis", description: "explore and visualize data" } },
-	{ id: "e", fields: { name: "code review", description: "review pull requests for quality" } },
+	{
+		id: "a",
+		fields: {
+			name: "security review",
+			description: "OWASP and STRIDE analysis",
+		},
+	},
+	{
+		id: "b",
+		fields: {
+			name: "performance tuning",
+			description: "profile and optimize code",
+		},
+	},
+	{
+		id: "c",
+		fields: {
+			name: "security audit",
+			description: "comprehensive security check",
+		},
+	},
+	{
+		id: "d",
+		fields: {
+			name: "data analysis",
+			description: "explore and visualize data",
+		},
+	},
+	{
+		id: "e",
+		fields: {
+			name: "code review",
+			description: "review pull requests for quality",
+		},
+	},
 ];
 
 const weights = { name: 3.0, description: 1.0 };

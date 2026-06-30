@@ -1,8 +1,8 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { ScheduleStore } from "../../src/state/schedule.ts";
 
 test("ScheduleStore.save() uses logInternalError on write failure (Round 21 L1)", () => {

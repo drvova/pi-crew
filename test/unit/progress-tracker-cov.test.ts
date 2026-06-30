@@ -1,8 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	ProgressTracker,
-} from "../../src/runtime/progress-tracker.ts";
+import { describe, it } from "node:test";
+import { ProgressTracker } from "../../src/runtime/progress-tracker.ts";
 
 function makeSession() {
 	const listeners: Array<(event: any) => void> = [];
@@ -67,7 +65,11 @@ describe("ProgressTracker", () => {
 			const tracker = new ProgressTracker();
 			const session = makeSession();
 			const progress = tracker.track(session, "agent-5", "run-1");
-			session.emit({ type: "tool_execution_end", isError: true, result: "permission denied" });
+			session.emit({
+				type: "tool_execution_end",
+				isError: true,
+				result: "permission denied",
+			});
 			assert.equal(progress.errors.length, 1);
 			assert.ok(progress.errors[0].includes("permission denied"));
 			tracker.untrack("agent-5");

@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import type { TaskOutputSchema, TaskPacket } from "../../src/state/types.ts";
+import test from "node:test";
 import { renderOutputSchemaBlock } from "../../src/runtime/task-runner/prompt-builder.ts";
+import type { TaskOutputSchema, TaskPacket } from "../../src/state/types.ts";
 
 test("renderOutputSchemaBlock includes format instruction", () => {
 	const schema: TaskOutputSchema = { format: "text" };
@@ -11,7 +11,10 @@ test("renderOutputSchemaBlock includes format instruction", () => {
 });
 
 test("renderOutputSchemaBlock includes description when provided", () => {
-	const schema: TaskOutputSchema = { format: "text", description: "A summary of findings." };
+	const schema: TaskOutputSchema = {
+		format: "text",
+		description: "A summary of findings.",
+	};
 	const block = renderOutputSchemaBlock(schema);
 	assert.ok(block.includes("A summary of findings."));
 });
@@ -38,7 +41,10 @@ test("renderOutputSchemaBlock omits JSON schema block for markdown format", () =
 });
 
 test("renderOutputSchemaBlock includes example when provided", () => {
-	const schema: TaskOutputSchema = { format: "json", example: '{"name": "Alice"}' };
+	const schema: TaskOutputSchema = {
+		format: "json",
+		example: '{"name": "Alice"}',
+	};
 	const block = renderOutputSchemaBlock(schema);
 	assert.ok(block.includes("Example output:"));
 	assert.ok(block.includes('{"name": "Alice"}'));
@@ -62,13 +68,22 @@ test("TaskPacket accepts optional outputSchema field", () => {
 		escalationPolicy: "Stop and report",
 		constraints: ["Stay in scope"],
 		expectedArtifacts: ["result"],
-		verification: { requiredGreenLevel: "none", commands: [], allowManualEvidence: true },
+		verification: {
+			requiredGreenLevel: "none",
+			commands: [],
+			allowManualEvidence: true,
+		},
 	};
 	assert.equal(packet.outputSchema, undefined);
 
 	const packetWithSchema: TaskPacket = {
 		...packet,
-		outputSchema: { format: "json", schema: { type: "object" }, description: "JSON output", example: "{}" },
+		outputSchema: {
+			format: "json",
+			schema: { type: "object" },
+			description: "JSON output",
+			example: "{}",
+		},
 	};
 	assert.equal(packetWithSchema.outputSchema?.format, "json");
 	assert.equal(packetWithSchema.outputSchema?.description, "JSON output");

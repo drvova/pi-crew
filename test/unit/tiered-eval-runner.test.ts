@@ -1,11 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	TIER_CONFIGS,
-	TieredEvalRunner,
-	createRunner,
-	defaultRunner,
-} from "../../src/state/tiered-eval.ts";
+import test from "node:test";
+import { createRunner, defaultRunner, TIER_CONFIGS, TieredEvalRunner } from "../../src/state/tiered-eval.ts";
 import type { EvalTier } from "../../src/state/types-eval.ts";
 
 /**
@@ -40,7 +35,14 @@ test("TieredEvalRunner: timeoutMultiplier scales timeouts", () => {
 
 test("TieredEvalRunner: custom tier config overrides", () => {
 	const runner = new TieredEvalRunner({
-		tierConfigs: { 3: { tier: 3, name: "custom", description: "custom tier", timeoutMs: 120000 } },
+		tierConfigs: {
+			3: {
+				tier: 3,
+				name: "custom",
+				description: "custom tier",
+				timeoutMs: 120000,
+			},
+		},
 	});
 	assert.equal(runner.getTimeout(3), 120000);
 	// Other tiers unchanged
@@ -49,7 +51,14 @@ test("TieredEvalRunner: custom tier config overrides", () => {
 
 test("TieredEvalRunner: withConfig creates new runner with overrides", () => {
 	const base = new TieredEvalRunner({ timeoutMultiplier: 1.5 });
-	const derived = base.withConfig({ 1: { tier: 1, name: "fast", description: "fast checks", timeoutMs: 500 } });
+	const derived = base.withConfig({
+		1: {
+			tier: 1,
+			name: "fast",
+			description: "fast checks",
+			timeoutMs: 500,
+		},
+	});
 	assert.equal(derived.getTimeout(1), 500 * 1.5);
 	// Other tiers still use base multiplier
 	assert.equal(derived.getTimeout(2), 5000 * 1.5);
@@ -82,9 +91,27 @@ test("runTieredEval: sorts by tier by default (lower first)", async () => {
 	const order: number[] = [];
 	const runner = new TieredEvalRunner();
 	await runner.runTieredEval("task-2", [
-		{ tier: 3, check: () => { order.push(3); return true; } },
-		{ tier: 1, check: () => { order.push(1); return true; } },
-		{ tier: 2, check: () => { order.push(2); return true; } },
+		{
+			tier: 3,
+			check: () => {
+				order.push(3);
+				return true;
+			},
+		},
+		{
+			tier: 1,
+			check: () => {
+				order.push(1);
+				return true;
+			},
+		},
+		{
+			tier: 2,
+			check: () => {
+				order.push(2);
+				return true;
+			},
+		},
 	]);
 	assert.deepEqual(order, [1, 2, 3]);
 });
@@ -93,9 +120,27 @@ test("runTieredEval: does NOT sort when sortByTier is false", async () => {
 	const order: number[] = [];
 	const runner = new TieredEvalRunner({ sortByTier: false });
 	await runner.runTieredEval("task-3", [
-		{ tier: 3, check: () => { order.push(3); return true; } },
-		{ tier: 1, check: () => { order.push(1); return true; } },
-		{ tier: 2, check: () => { order.push(2); return true; } },
+		{
+			tier: 3,
+			check: () => {
+				order.push(3);
+				return true;
+			},
+		},
+		{
+			tier: 1,
+			check: () => {
+				order.push(1);
+				return true;
+			},
+		},
+		{
+			tier: 2,
+			check: () => {
+				order.push(2);
+				return true;
+			},
+		},
 	]);
 	assert.deepEqual(order, [3, 1, 2]);
 });
@@ -114,7 +159,13 @@ test("runTieredEval: continues through failures", async () => {
 test("runTieredEval: handles async checks", async () => {
 	const runner = new TieredEvalRunner();
 	const results = await runner.runTieredEval("task-5", [
-		{ tier: 1, check: async () => { await new Promise((r) => setTimeout(r, 10)); return true; } },
+		{
+			tier: 1,
+			check: async () => {
+				await new Promise((r) => setTimeout(r, 10));
+				return true;
+			},
+		},
 	]);
 	assert.equal(results.length, 1);
 	assert.equal(results[0]?.passed, true);
@@ -126,9 +177,15 @@ test("runTieredEval: synchronous throw propagates (known behavior)", async () =>
 	// known limitation. If this is fixed in the future, update this test.
 	const runner = new TieredEvalRunner();
 	await assert.rejects(
-		() => runner.runTieredEval("task-6", [
-			{ tier: 1, check: () => { throw new Error("boom"); } },
-		]),
+		() =>
+			runner.runTieredEval("task-6", [
+				{
+					tier: 1,
+					check: () => {
+						throw new Error("boom");
+					},
+				},
+			]),
 		/boom/,
 	);
 });
@@ -136,10 +193,18 @@ test("runTieredEval: synchronous throw propagates (known behavior)", async () =>
 test("runTieredEval: check timing out returns failure", async () => {
 	// Use a very short timeout so the check times out
 	const runner = new TieredEvalRunner({
-		tierConfigs: { 1: { tier: 1, name: "fast", description: "fast", timeoutMs: 10 } },
+		tierConfigs: {
+			1: { tier: 1, name: "fast", description: "fast", timeoutMs: 10 },
+		},
 	});
 	const results = await runner.runTieredEval("task-7", [
-		{ tier: 1, check: async () => { await new Promise((r) => setTimeout(r, 5000)); return true; } },
+		{
+			tier: 1,
+			check: async () => {
+				await new Promise((r) => setTimeout(r, 5000));
+				return true;
+			},
+		},
 	]);
 	assert.equal(results.length, 1);
 	assert.equal(results[0]?.passed, false);
@@ -152,9 +217,27 @@ test("runTieredEvalFailFast: stops at first failure", async () => {
 	const order: number[] = [];
 	const runner = new TieredEvalRunner();
 	const results = await runner.runTieredEvalFailFast("task-8", [
-		{ tier: 1, check: () => { order.push(1); return true; } },
-		{ tier: 1, check: () => { order.push(2); return false; } },
-		{ tier: 1, check: () => { order.push(3); return true; } },
+		{
+			tier: 1,
+			check: () => {
+				order.push(1);
+				return true;
+			},
+		},
+		{
+			tier: 1,
+			check: () => {
+				order.push(2);
+				return false;
+			},
+		},
+		{
+			tier: 1,
+			check: () => {
+				order.push(3);
+				return true;
+			},
+		},
 	]);
 	assert.equal(results.length, 2, "should stop after first failure");
 	assert.equal(order.length, 2, "should not execute third check");
@@ -189,11 +272,15 @@ test("runEval: returns structured result with passed=true when all pass", async 
 
 test("runEval: failFast=true returns structured failure info", async () => {
 	const runner = new TieredEvalRunner();
-	const result = await runner.runEval("task-11", [
-		{ tier: 1, check: () => true },
-		{ tier: 2, check: () => false },
-		{ tier: 2, check: () => true },
-	], true);
+	const result = await runner.runEval(
+		"task-11",
+		[
+			{ tier: 1, check: () => true },
+			{ tier: 2, check: () => false },
+			{ tier: 2, check: () => true },
+		],
+		true,
+	);
 	assert.equal(result.passed, false);
 	assert.equal(result.failedAtTier, 2);
 	assert.ok(result.failedAtIndex !== undefined);

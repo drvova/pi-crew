@@ -6,13 +6,12 @@
  * Uses visibleWidth() for ANSI-aware padding so borders align correctly.
  */
 
-import { Container, Text } from "@earendil-works/pi-tui";
-import { visibleWidth } from "@earendil-works/pi-tui";
-import type { CrewTheme } from "../theme-adapter.ts";
-import { truncLine, formatTokens, formatDuration } from "../tool-render.ts";
+import { Container, Text, visibleWidth } from "@earendil-works/pi-tui";
 import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
-import { isBrief, briefToolResult } from "./brief-mode.ts";
 import { truncateToWidth } from "../../utils/visual.ts";
+import type { CrewTheme } from "../theme-adapter.ts";
+import { formatDuration, formatTokens, truncLine } from "../tool-render.ts";
+import { briefToolResult, isBrief } from "./brief-mode.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -55,22 +54,30 @@ function truncVisual(str: string, maxWidth: number): string {
 /** Status icon with color */
 function statusBadge(status: string, theme: CrewTheme): string {
 	switch (status) {
-		case "completed": return theme.fg("success", "●");
+		case "completed":
+			return theme.fg("success", "●");
 		case "failed":
-		case "cancelled": return theme.fg("error", "✖");
-		case "running": return theme.fg("warning", "◉");
-		default: return theme.fg("dim", "○");
+		case "cancelled":
+			return theme.fg("error", "✖");
+		case "running":
+			return theme.fg("warning", "◉");
+		default:
+			return theme.fg("dim", "○");
 	}
 }
 
 /** Status icon — compact */
 export function statusIcon(status: string, theme: CrewTheme): string {
 	switch (status) {
-		case "completed": return theme.fg("success", "✓");
+		case "completed":
+			return theme.fg("success", "✓");
 		case "failed":
-		case "cancelled": return theme.fg("error", "✗");
-		case "running": return theme.fg("warning", "⟳");
-		default: return theme.fg("dim", "○");
+		case "cancelled":
+			return theme.fg("error", "✗");
+		case "running":
+			return theme.fg("warning", "⟳");
+		default:
+			return theme.fg("dim", "○");
 	}
 }
 
@@ -82,10 +89,13 @@ function shortId(id: string | undefined): string {
 /** Border color based on status */
 function borderColorForStatus(status: string): "success" | "error" | "border" {
 	switch (status) {
-		case "completed": return "success";
+		case "completed":
+			return "success";
 		case "failed":
-		case "cancelled": return "error";
-		default: return "border";
+		case "cancelled":
+			return "error";
+		default:
+			return "border";
 	}
 }
 
@@ -113,9 +123,15 @@ import { deriveCardBackground, padWithBackground } from "../card-colors.ts";
  *  When bgSlot is provided, the interior is filled with a subtle status-tinted
  *  background derived from the theme (mixBg at 8% intensity).
  */
-function buildFrame(contentLines: string[], totalWidth: number, theme: CrewTheme, borderSlot: "success" | "error" | "border" | "borderAccent" = "border", bgSlot?: "success" | "error" | "border" | "borderAccent"): string {
+function buildFrame(
+	contentLines: string[],
+	totalWidth: number,
+	theme: CrewTheme,
+	borderSlot: "success" | "error" | "border" | "borderAccent" = "border",
+	bgSlot?: "success" | "error" | "border" | "borderAccent",
+): string {
 	const frameW = totalWidth - 2; // available after Box(1,1) padding
-	const innerW = frameW - 2;    // │ chars
+	const innerW = frameW - 2; // │ chars
 	const top = theme.fg(borderSlot, `╭${"─".repeat(innerW)}╮`);
 	const bottom = theme.fg(borderSlot, `╰${"─".repeat(innerW)}╯`);
 	const v = theme.fg(borderSlot, "│");
@@ -132,7 +148,13 @@ function buildFrame(contentLines: string[], totalWidth: number, theme: CrewTheme
 
 /** Build frame TOP: top border + content lines, NO bottom border.
  *  Pairs with buildFrameBottom() so renderCall + renderResult merge into ONE frame. */
-function buildFrameTop(contentLines: string[], totalWidth: number, theme: CrewTheme, borderSlot: "success" | "error" | "border" | "borderAccent" = "border", bgSlot?: "success" | "error" | "border" | "borderAccent"): string {
+function buildFrameTop(
+	contentLines: string[],
+	totalWidth: number,
+	theme: CrewTheme,
+	borderSlot: "success" | "error" | "border" | "borderAccent" = "border",
+	bgSlot?: "success" | "error" | "border" | "borderAccent",
+): string {
 	const frameW = totalWidth - 2;
 	const innerW = frameW - 2;
 	const top = theme.fg(borderSlot, `╭${"─".repeat(innerW)}╮`);
@@ -148,7 +170,13 @@ function buildFrameTop(contentLines: string[], totalWidth: number, theme: CrewTh
 
 /** Build frame BOTTOM: content lines + bottom border, NO top border.
  *  Pairs with buildFrameTop() so renderCall + renderResult merge into ONE frame. */
-function buildFrameBottom(contentLines: string[], totalWidth: number, theme: CrewTheme, borderSlot: "success" | "error" | "border" | "borderAccent" = "border", bgSlot?: "success" | "error" | "border" | "borderAccent"): string {
+function buildFrameBottom(
+	contentLines: string[],
+	totalWidth: number,
+	theme: CrewTheme,
+	borderSlot: "success" | "error" | "border" | "borderAccent" = "border",
+	bgSlot?: "success" | "error" | "border" | "borderAccent",
+): string {
 	const frameW = totalWidth - 2;
 	const innerW = frameW - 2;
 	const v = theme.fg(borderSlot, "│");
@@ -174,10 +202,10 @@ function borderFromContext(ctx: ToolRenderContext): "success" | "error" | "borde
 
 export const teamToolRenderer: ToolRenderer = {
 	renderCall(args, theme, ctx) {
-		const action = args.action as string ?? "";
-		const goal = args.goal as string ?? "";
+		const action = (args.action as string) ?? "";
+		const goal = (args.goal as string) ?? "";
 		const team = args.team as string | undefined;
-		const w = (ctx.width || process.stdout.columns || 116);
+		const w = ctx.width || process.stdout.columns || 116;
 		const innerW = w - 4;
 
 		const contentLines: string[] = [];
@@ -215,7 +243,7 @@ function renderTeamResult(result: Record<string, unknown>, options: unknown, the
 	const action = typeof d.action === "string" ? d.action : "";
 	const status = typeof d.status === "string" ? d.status : "";
 	const runId = typeof d.runId === "string" ? d.runId : "";
-	const w = (ctx.width || process.stdout.columns || 116);
+	const w = ctx.width || process.stdout.columns || 116;
 	const innerW = w - 4;
 	const bColor = borderColorForStatus(status);
 	const contentLines: string[] = [];
@@ -238,7 +266,9 @@ function renderTeamResult(result: Record<string, unknown>, options: unknown, the
 				const barW = Math.min(innerW - 22, 30);
 				const bar = progressBar(ratio, barW, theme);
 				const count = theme.fg("muted", ` ${parsed.completed}/${parsed.total}`);
-				contentLines.push(padVisual(` ${spinner} ${theme.fg("toolTitle", theme.bold("crew run"))}  ${theme.fg("dim", elapsed)}`, innerW));
+				contentLines.push(
+					padVisual(` ${spinner} ${theme.fg("toolTitle", theme.bold("crew run"))}  ${theme.fg("dim", elapsed)}`, innerW),
+				);
 				contentLines.push(padVisual(`   ${bar}${count}`, innerW));
 				if (parsed.activeAgent) contentLines.push(padVisual(`   ${theme.fg("dim", parsed.activeAgent)}`, innerW));
 			} else {
@@ -300,9 +330,9 @@ function renderTeamResult(result: Record<string, unknown>, options: unknown, the
 
 export const agentToolRenderer: ToolRenderer = {
 	renderCall(args, theme, ctx) {
-		const agentName = args.agent as string ?? args.subagent_type as string ?? "";
+		const agentName = (args.agent as string) ?? (args.subagent_type as string) ?? "";
 		const prompt = (args.prompt ?? args.task ?? "") as string;
-		const w = (ctx.width || process.stdout.columns || 116);
+		const w = ctx.width || process.stdout.columns || 116;
 		const innerW = w - 4;
 
 		const contentLines: string[] = [];
@@ -333,7 +363,7 @@ export const agentToolRenderer: ToolRenderer = {
 function renderAgentResult(result: Record<string, unknown>, options: unknown, theme: CrewTheme, ctx: ToolRenderContext): string {
 	const d = (result.details ?? result) as Record<string, unknown>;
 	const results = d.results as Array<Record<string, unknown>> | undefined;
-	const w = (ctx.width || process.stdout.columns || 116);
+	const w = ctx.width || process.stdout.columns || 116;
 	const innerW = w - 4;
 	const status = ((d.status ?? (results?.[0] as Record<string, unknown>)?.status ?? "") as string) || "completed";
 	const bColor: "success" | "error" | "border" = status === "completed" ? "success" : status === "failed" ? "error" : "border";
@@ -359,7 +389,7 @@ function renderAgentResult(result: Record<string, unknown>, options: unknown, th
 	if (!ctx.expanded) {
 		// Collapsed: compact card
 		const badge = statusBadge(status, theme);
-		const agentId = (d.agentId as string) ?? (results?.[0] as Record<string, unknown>)?.agentId as string ?? "agent";
+		const agentId = (d.agentId as string) ?? ((results?.[0] as Record<string, unknown>)?.agentId as string) ?? "agent";
 		const nameTag = theme.fg("toolTitle", theme.bold(agentId));
 		contentLines.push(padVisual(` ${badge} ${nameTag}`, innerW));
 
@@ -378,7 +408,7 @@ function renderAgentResult(result: Record<string, unknown>, options: unknown, th
 		if (results?.length) {
 			for (let i = 0; i < results.length; i++) {
 				const item = results[i]!;
-				const icon = statusIcon(item.status as string ?? "", theme);
+				const icon = statusIcon((item.status as string) ?? "", theme);
 				const label = theme.fg("toolTitle", theme.bold((item.agentId as string) ?? "agent"));
 				contentLines.push(padVisual(` ${icon} ${label}`, innerW));
 
@@ -396,7 +426,7 @@ function renderAgentResult(result: Record<string, unknown>, options: unknown, th
 				}
 			}
 		} else if (d.agentId) {
-			const icon = statusIcon(d.status as string ?? "", theme);
+			const icon = statusIcon((d.status as string) ?? "", theme);
 			contentLines.push(padVisual(` ${icon} ${theme.fg("toolTitle", theme.bold(d.agentId as string))}`, innerW));
 			if (d.error) {
 				contentLines.push(padVisual(`   ${theme.fg("error", truncLine(String(d.error), innerW - 6))}`, innerW));
@@ -473,7 +503,15 @@ function appendSimpleCard(lines: string[], status: string, runId: string, theme:
 	lines.push(padVisual(` ${badge} ${theme.fg("text", parts.join(" · ") || "done")}`, innerW));
 }
 
-function appendExpandedRun(lines: string[], records: CrewAgentRecord[], status: string, runId: string, theme: CrewTheme, w: number, innerW: number): void {
+function appendExpandedRun(
+	lines: string[],
+	records: CrewAgentRecord[],
+	status: string,
+	runId: string,
+	theme: CrewTheme,
+	w: number,
+	innerW: number,
+): void {
 	const completed = records.filter((r) => r.status === "completed").length;
 	const total = records.length;
 	const ratio = total > 0 ? completed / total : 0;
@@ -491,10 +529,9 @@ function appendExpandedRun(lines: string[], records: CrewAgentRecord[], status: 
 	lines.push(padVisual(` ${theme.fg("muted", "Progress")} ${bar}${count}`, innerW));
 
 	// Metrics
-	const metricLine = [
-		theme.fg("muted", formatDuration(duration)),
-		theme.fg("muted", `${formatTokens(tokens)} tok`),
-	].join(theme.fg("dim", " · "));
+	const metricLine = [theme.fg("muted", formatDuration(duration)), theme.fg("muted", `${formatTokens(tokens)} tok`)].join(
+		theme.fg("dim", " · "),
+	);
 	lines.push(padVisual(` ${metricLine}`, innerW));
 	lines.push(padVisual(theme.fg("borderMuted", "─".repeat(innerW - 2)), innerW));
 
@@ -517,7 +554,15 @@ function appendExpandedRun(lines: string[], records: CrewAgentRecord[], status: 
 	}
 }
 
-function appendExpandedMetrics(lines: string[], m: Metrics | undefined, status: string, runId: string, theme: CrewTheme, w: number, innerW: number): void {
+function appendExpandedMetrics(
+	lines: string[],
+	m: Metrics | undefined,
+	status: string,
+	runId: string,
+	theme: CrewTheme,
+	w: number,
+	innerW: number,
+): void {
 	lines.push(padVisual(` ${theme.fg("toolTitle", theme.bold("CREW RUN RESULT"))}  ${theme.fg("dim", shortId(runId))}`, innerW));
 	lines.push(padVisual(theme.fg("borderMuted", "─".repeat(innerW - 2)), innerW));
 	if (m) {
@@ -538,8 +583,9 @@ function appendExpandedMetrics(lines: string[], m: Metrics | undefined, status: 
 function extractContentText(content: unknown): string {
 	if (!Array.isArray(content)) return typeof content === "string" ? content : "";
 	// onUpdate appends text blocks — only use the LAST one to avoid stacking
-	const texts = content
-		.filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text");
+	const texts = content.filter(
+		(c): c is Record<string, unknown> => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text",
+	);
 	if (texts.length === 0) return "";
 	return String((texts[texts.length - 1]! as Record<string, unknown>).text ?? "");
 }
@@ -573,17 +619,35 @@ function parseStreamingProgress(text: string): StreamingProgress | null {
 	const toolInfo = toolMatch ? ` · ${toolMatch[1]}` : "";
 
 	if (doneMatch) {
-		return { elapsedMs, completed: parseInt(doneMatch[1]!, 10), total: parseInt(doneMatch[2]!, 10), status: null, activeAgent: (activeAgent ?? "") + toolInfo };
+		return {
+			elapsedMs,
+			completed: parseInt(doneMatch[1]!, 10),
+			total: parseInt(doneMatch[2]!, 10),
+			status: null,
+			activeAgent: (activeAgent ?? "") + toolInfo,
+		};
 	}
 	if (taskMatch) {
 		const done = parseInt(taskMatch[1]!, 10);
 		const running = parseInt(taskMatch[2]!, 10);
 		const total = done + running;
-		return { elapsedMs, completed: done, total, status: null, activeAgent: (activeAgent ?? "") + toolInfo };
+		return {
+			elapsedMs,
+			completed: done,
+			total,
+			status: null,
+			activeAgent: (activeAgent ?? "") + toolInfo,
+		};
 	}
 	if (elapsedMs > 0) {
 		const statusMatch = text.match(/status=(\w+)/);
-		return { elapsedMs, completed: null, total: null, status: statusMatch?.[1] ?? null, activeAgent };
+		return {
+			elapsedMs,
+			completed: null,
+			total: null,
+			status: statusMatch?.[1] ?? null,
+			activeAgent,
+		};
 	}
 
 	return null;
@@ -617,7 +681,9 @@ function computeRecordDuration(r: CrewAgentRecord): number {
 
 function computeTotalCost(records: CrewAgentRecord[]): number {
 	let total = 0;
-	for (const r of records) { if (r.usage?.cost) total += r.usage.cost; }
+	for (const r of records) {
+		if (r.usage?.cost) total += r.usage.cost;
+	}
 	return total;
 }
 

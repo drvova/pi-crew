@@ -15,18 +15,33 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import { liveSystemPrompt } from "../../src/runtime/live-session-runtime.ts";
 import type { LiveSessionSpawnInput } from "../../src/runtime/live-session-runtime.ts";
+import { liveSystemPrompt } from "../../src/runtime/live-session-runtime.ts";
 
 function makeTmpDir(prefix: string): { dir: string; cleanup: () => void } {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-	return { dir, cleanup: () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ } } };
+	return {
+		dir,
+		cleanup: () => {
+			try {
+				fs.rmSync(dir, { recursive: true, force: true });
+			} catch {
+				/* best-effort */
+			}
+		},
+	};
 }
 
 // Build a minimal LiveSessionSpawnInput. Only the fields liveSystemPrompt
 // reads are populated; the rest are cast through `as never` to satisfy the
 // type without constructing a full manifest.
-function makeInput(overrides: Partial<LiveSessionSpawnInput> & { cwd: string; agentMemory?: string; roleName?: string }): LiveSessionSpawnInput {
+function makeInput(
+	overrides: Partial<LiveSessionSpawnInput> & {
+		cwd: string;
+		agentMemory?: string;
+		roleName?: string;
+	},
+): LiveSessionSpawnInput {
 	const cwd = overrides.cwd;
 	const memoryToken = overrides.agentMemory ?? "UNIQUE_MEMORY_TOKEN_G3";
 	// Write a MEMORY.md for the agent in the project-scoped memory dir so
@@ -37,8 +52,16 @@ function makeInput(overrides: Partial<LiveSessionSpawnInput> & { cwd: string; ag
 
 	return {
 		manifest: { runId: "run_g3", stateRoot: cwd } as never,
-		task: { id: "task_g3", role: overrides.roleName ?? "executor", cwd } as never,
-		step: { id: "execute", role: overrides.roleName ?? "executor", task: "do" } as never,
+		task: {
+			id: "task_g3",
+			role: overrides.roleName ?? "executor",
+			cwd,
+		} as never,
+		step: {
+			id: "execute",
+			role: overrides.roleName ?? "executor",
+			task: "do",
+		} as never,
 		agent: {
 			name: "test-agent",
 			description: "test",

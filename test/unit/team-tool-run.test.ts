@@ -6,12 +6,12 @@
  * state-store, team-runner). We test argument validation and early error paths.
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { handleRun } from "../../src/extension/team-tool/run.ts";
-import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
+import { describe, it } from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import { handleRun } from "../../src/extension/team-tool/run.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
+import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeCtx(cwd: string): TeamContext {
@@ -41,10 +41,7 @@ describe("handleRun", () => {
 	it("returns error for non-existent agent", async () => {
 		const tmp = createTrackedTempDir("run-test-");
 		try {
-			const res = await handleRun(
-				makeParams({ agent: "nonexistent-agent-xyz", goal: "test" }),
-				makeCtx(tmp),
-			);
+			const res = await handleRun(makeParams({ agent: "nonexistent-agent-xyz", goal: "test" }), makeCtx(tmp));
 
 			assert.strictEqual(res.isError, true);
 			const text = textFromToolResult(res);
@@ -78,10 +75,7 @@ describe("handleRun", () => {
 	it("returns error for non-existent team", async () => {
 		const tmp = createTrackedTempDir("run-test-");
 		try {
-			const res = await handleRun(
-				makeParams({ goal: "do work", team: "nonexistent-team-xyz" }),
-				makeCtx(tmp),
-			);
+			const res = await handleRun(makeParams({ goal: "do work", team: "nonexistent-team-xyz" }), makeCtx(tmp));
 
 			assert.strictEqual(res.isError, true);
 			const text = textFromToolResult(res);
@@ -113,10 +107,7 @@ describe("handleRun", () => {
 	it("includes action=run in details on error", async () => {
 		const tmp = createTrackedTempDir("run-test-");
 		try {
-			const res = await handleRun(
-				makeParams({ team: "nonexistent-team-xyz", goal: "test" }),
-				makeCtx(tmp),
-			);
+			const res = await handleRun(makeParams({ team: "nonexistent-team-xyz", goal: "test" }), makeCtx(tmp));
 
 			assert.strictEqual(res.details.action, "run");
 		} finally {

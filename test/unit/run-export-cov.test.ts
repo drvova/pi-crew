@@ -5,15 +5,16 @@
  * a proper artifacts directory and events file. These tests set up the
  * filesystem structure needed.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
-import { exportRunBundle, type ExportedRunBundle } from "../../src/extension/run-export.ts";
-import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
+import * as path from "node:path";
+import { describe, it } from "node:test";
+import { type ExportedRunBundle, exportRunBundle } from "../../src/extension/run-export.ts";
 import type { TeamTaskStatus } from "../../src/state/contracts.ts";
+import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeManifest(stateRoot: string, artifactsRoot: string, eventsPath: string): TeamRunManifest {
 	return {
@@ -33,7 +34,13 @@ function makeManifest(stateRoot: string, artifactsRoot: string, eventsPath: stri
 		tasksPath: path.join(stateRoot, "tasks.json"),
 		eventsPath,
 		artifacts: [
-			{ kind: "result", path: "result.txt", createdAt: "2026-01-01T00:30:00.000Z", producer: "worker", retention: "run" },
+			{
+				kind: "result",
+				path: "result.txt",
+				createdAt: "2026-01-01T00:30:00.000Z",
+				producer: "worker",
+				retention: "run",
+			},
 		],
 	} as TeamRunManifest;
 }
@@ -62,8 +69,19 @@ function setupExportWorkspace(): { dir: string; manifest: TeamRunManifest } {
 	const eventsPath = path.join(stateRoot, "events.jsonl");
 	// Write some events
 	const events = [
-		{ time: "2026-01-01T00:01:00.000Z", type: "run.started", runId: "export-test-run", message: "Run started" },
-		{ time: "2026-01-01T00:30:00.000Z", type: "task.completed", runId: "export-test-run", taskId: "01_task", message: "Task done" },
+		{
+			time: "2026-01-01T00:01:00.000Z",
+			type: "run.started",
+			runId: "export-test-run",
+			message: "Run started",
+		},
+		{
+			time: "2026-01-01T00:30:00.000Z",
+			type: "task.completed",
+			runId: "export-test-run",
+			taskId: "01_task",
+			message: "Task done",
+		},
 	];
 	fs.writeFileSync(eventsPath, events.map((e) => JSON.stringify(e)).join("\n") + "\n");
 	const manifest = makeManifest(stateRoot, artifactsRoot, eventsPath);
@@ -116,10 +134,7 @@ describe("exportRunBundle Markdown contains key fields", () => {
 	it("includes run ID, status, team, and tasks in markdown", () => {
 		const { dir, manifest } = setupExportWorkspace();
 		try {
-			const tasks = [
-				makeTask("01_task", "completed", "worker", "agent-a"),
-				makeTask("02_task", "failed", "reviewer", "agent-b"),
-			];
+			const tasks = [makeTask("01_task", "completed", "worker", "agent-a"), makeTask("02_task", "failed", "reviewer", "agent-b")];
 			// Add error to the failed task
 			tasks[1].error = "Something went wrong";
 

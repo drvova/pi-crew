@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import type { TeamRunManifest, TaskPacket, TaskScope, VerificationContract } from "../state/types.ts";
+import type { TaskPacket, TaskScope, TeamRunManifest, VerificationContract } from "../state/types.ts";
 import type { WorkflowStep } from "../workflows/workflow-config.ts";
 import { generateTaskHashId } from "./task-id.ts";
 
@@ -9,7 +9,6 @@ import { generateTaskHashId } from "./task-id.ts";
 // be user-controlled. Sanitize task text to prevent injection.
 // See: SECURITY-ISSUES.md SEC-007
 // ═══════════════════════════════════════════════════════════════════════════
-
 
 /**
  * Sanitize workflow step task text to reduce injection risk.
@@ -33,7 +32,7 @@ export function sanitizeTaskText(task: string): string {
 	// 2. Strip known prompt injection directive patterns
 	sanitized = sanitized.replace(
 		/^\s*(?:SYSTEM|INSTRUCTION|IGNORE(?:\s+ALL)?\s+INSTRUCTIONS|OVERRIDE|YOUR\s+ROLE\s+IS|MALICIOUS)\s*:.*$/gim,
-		""
+		"",
 	);
 
 	// 3. Strip base64/hex encoded command payloads
@@ -62,7 +61,7 @@ export interface TaskPacketValidationResult {
 }
 
 export function inferTaskScope(step: WorkflowStep): TaskScope {
-	const reads = step.reads === false ? [] : step.reads ?? [];
+	const reads = step.reads === false ? [] : (step.reads ?? []);
 	if (reads.length === 1) return "single_file";
 	if (reads.length > 1) return "module";
 	return "workspace";
@@ -78,7 +77,7 @@ export function defaultVerificationContract(step: WorkflowStep): VerificationCon
 
 export function buildTaskPacket(input: BuildTaskPacketInput): TaskPacket {
 	const scope = inferTaskScope(input.step);
-	const reads = input.step.reads === false ? [] : input.step.reads ?? [];
+	const reads = input.step.reads === false ? [] : (input.step.reads ?? []);
 	const scopePath = reads.length === 1 ? reads[0] : reads.length > 1 ? reads.join(", ") : undefined;
 	// SEC-007: Sanitize task text before inserting into task packet
 	const sanitizedTask = sanitizeTaskText(input.step.task);
@@ -87,11 +86,7 @@ export function buildTaskPacket(input: BuildTaskPacketInput): TaskPacket {
 	// Generate a deterministic hash-based task ID for traceability and logging.
 	// Uses goal + step ID + run ID as content parts.
 	// TODO: Once TaskPacket type gains a hashId field, include this in the packet.
-	const _taskHashId = generateTaskHashId([
-		input.manifest.goal,
-		input.step.id,
-		input.manifest.runId,
-	]);
+	const _taskHashId = generateTaskHashId([input.manifest.goal, input.step.id, input.manifest.runId]);
 
 	return {
 		objective: sanitizedTask.replaceAll("{goal}", sanitizedGoal),
@@ -99,11 +94,15 @@ export function buildTaskPacket(input: BuildTaskPacketInput): TaskPacket {
 		scopePath,
 		repo: path.basename(input.manifest.cwd) || input.manifest.cwd,
 		worktree: input.worktreePath,
-		branchPolicy: input.manifest.workspaceMode === "worktree" ? "Use the assigned task worktree and avoid modifying the leader checkout." : "Use the current checkout; do not create branches unless explicitly requested.",
+		branchPolicy:
+			input.manifest.workspaceMode === "worktree"
+				? "Use the assigned task worktree and avoid modifying the leader checkout."
+				: "Use the current checkout; do not create branches unless explicitly requested.",
 		acceptanceTests: [],
 		commitPolicy: "Do not commit unless explicitly requested by the user or workflow.",
 		reportingContract: "Report intended/changed files, verification evidence, blockers, conflict risks, and next recommended action.",
-		escalationPolicy: "Stop and report if scope is ambiguous, destructive action is needed, permissions are missing, verification cannot be completed, or edits may overlap with another worker/task.",
+		escalationPolicy:
+			"Stop and report if scope is ambiguous, destructive action is needed, permissions are missing, verification cannot be completed, or edits may overlap with another worker/task.",
 		constraints: [
 			"Stay within the assigned task scope.",
 			"Do not claim completion without verification evidence.",
@@ -265,12 +264,5 @@ export function parseHandoffFromOutput(output: string): ParsedHandoff {
 }
 
 export function renderTaskPacket(packet: TaskPacket): string {
-	return [
-		"# Task Packet",
-		"",
-		"```json",
-		JSON.stringify(packet, null, 2),
-		"```",
-		"",
-	].join("\n");
+	return ["# Task Packet", "", "```json", JSON.stringify(packet, null, 2), "```", ""].join("\n");
 }

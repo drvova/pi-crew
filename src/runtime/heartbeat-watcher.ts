@@ -5,8 +5,8 @@ import { appendEvent } from "../state/event-log.ts";
 import { loadRunManifestById } from "../state/state-store.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { DEFAULT_GRADIENT_THRESHOLDS, type GradientThresholds, type HeartbeatLevel, heartbeatAgeMs } from "./heartbeat-gradient.ts";
 import type { ManifestCache } from "./manifest-cache.ts";
-import { DEFAULT_GRADIENT_THRESHOLDS, heartbeatAgeMs, type GradientThresholds, type HeartbeatLevel } from "./heartbeat-gradient.ts";
 
 export interface HeartbeatWatcherRouter {
 	enqueue(notification: NotificationDescriptor): boolean;
@@ -126,18 +126,44 @@ export class HeartbeatWatcher {
 						// Process is dead
 					}
 				}
-				let level: HeartbeatLevel = elapsed > thresholds.deadMs ? "dead" : elapsed > thresholds.staleMs ? "stale" : elapsed > thresholds.warnMs ? "warn" : "healthy";
+				let level: HeartbeatLevel =
+					elapsed > thresholds.deadMs
+						? "dead"
+						: elapsed > thresholds.staleMs
+							? "stale"
+							: elapsed > thresholds.warnMs
+								? "warn"
+								: "healthy";
 				if (level === "dead" && isProcessAlive) {
 					level = "stale";
 				}
-				this.opts.registry.gauge("crew.heartbeat.staleness_ms", "Heartbeat elapsed since last seen, milliseconds").set({ runId: run.runId, taskId: task.id }, Number.isFinite(elapsed) ? elapsed : thresholds.deadMs);
-				this.opts.registry.counter("crew.heartbeat.level_total", "Heartbeat classifications by level").inc({ runId: run.runId, level });
+				this.opts.registry
+					.gauge("crew.heartbeat.staleness_ms", "Heartbeat elapsed since last seen, milliseconds")
+					.set({ runId: run.runId, taskId: task.id }, Number.isFinite(elapsed) ? elapsed : thresholds.deadMs);
+				this.opts.registry
+					.counter("crew.heartbeat.level_total", "Heartbeat classifications by level")
+					.inc({ runId: run.runId, level });
 				const previous = this.lastLevel.get(key);
 				this.lastLevel.set(key, level);
 				if (level === "dead" && previous !== "dead") {
 					this.opts.registry.counter("crew.heartbeat.dead_total", "Dead heartbeat detections").inc({ runId: run.runId });
-					appendEvent(loaded.manifest.eventsPath, { type: "crew.task.heartbeat_dead", runId: run.runId, taskId: task.id, message: `Task ${task.id} heartbeat dead.`, data: { elapsedMs: Number.isFinite(elapsed) ? elapsed : undefined } });
-					this.opts.router.enqueue({ id: `dead_${run.runId}_${task.id}`, severity: "warning", source: "heartbeat-watcher", runId: run.runId, title: `Task ${task.id} heartbeat dead`, body: "Background watcher detected a stuck worker." });
+					appendEvent(loaded.manifest.eventsPath, {
+						type: "crew.task.heartbeat_dead",
+						runId: run.runId,
+						taskId: task.id,
+						message: `Task ${task.id} heartbeat dead.`,
+						data: {
+							elapsedMs: Number.isFinite(elapsed) ? elapsed : undefined,
+						},
+					});
+					this.opts.router.enqueue({
+						id: `dead_${run.runId}_${task.id}`,
+						severity: "warning",
+						source: "heartbeat-watcher",
+						runId: run.runId,
+						title: `Task ${task.id} heartbeat dead`,
+						body: "Background watcher detected a stuck worker.",
+					});
 					this.opts.onDead?.(run.runId, task.id, Number.isFinite(elapsed) ? elapsed : thresholds.deadMs);
 				}
 				if (level === "dead") {

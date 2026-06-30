@@ -1,15 +1,10 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
-import {
-	assessGoalAchievement,
-	applyGoalAchievement,
-	workflowIsMutating,
-	MUTATING_ROLES,
-} from "../../src/runtime/goal-achievement.ts";
+import test from "node:test";
+import { applyGoalAchievement, assessGoalAchievement, MUTATING_ROLES, workflowIsMutating } from "../../src/runtime/goal-achievement.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
@@ -31,19 +26,53 @@ function plainTmp(prefix: string): string {
 
 function manifest(cwd: string, status: TeamRunManifest["status"] = "completed"): TeamRunManifest {
 	return {
-		schemaVersion: 1, runId: "run_ga_test", stateRoot: path.join(cwd, ".crew"), artifactsRoot: path.join(cwd, ".crew"),
-		tasksPath: path.join(cwd, ".crew", "tasks.json"), eventsPath: path.join(cwd, ".crew", "events.jsonl"),
-		cwd, team: "t", workflow: "w", goal: "g", workspaceMode: "single",
-		status, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), artifacts: [],
+		schemaVersion: 1,
+		runId: "run_ga_test",
+		stateRoot: path.join(cwd, ".crew"),
+		artifactsRoot: path.join(cwd, ".crew"),
+		tasksPath: path.join(cwd, ".crew", "tasks.json"),
+		eventsPath: path.join(cwd, ".crew", "events.jsonl"),
+		cwd,
+		team: "t",
+		workflow: "w",
+		goal: "g",
+		workspaceMode: "single",
+		status,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		artifacts: [],
 	};
 }
 
 function task(id: string, role: string, status: TeamTaskState["status"]): TeamTaskState {
-	return { id, runId: "run_ga_test", stepId: id, role, agent: role, title: id, status, dependsOn: [], cwd: "/", graph: { taskId: id, children: [], dependencies: [], queue: "done" } };
+	return {
+		id,
+		runId: "run_ga_test",
+		stepId: id,
+		role,
+		agent: role,
+		title: id,
+		status,
+		dependsOn: [],
+		cwd: "/",
+		graph: { taskId: id, children: [], dependencies: [], queue: "done" },
+	};
 }
 
-const mutatingWorkflow = { name: "impl", description: "", steps: [{ id: "exec", role: "executor" }], source: "test", filePath: "builtin" } as unknown as WorkflowConfig;
-const readOnlyWorkflow = { name: "review", description: "", steps: [{ id: "rev", role: "reviewer" }], source: "test", filePath: "builtin" } as unknown as WorkflowConfig;
+const mutatingWorkflow = {
+	name: "impl",
+	description: "",
+	steps: [{ id: "exec", role: "executor" }],
+	source: "test",
+	filePath: "builtin",
+} as unknown as WorkflowConfig;
+const readOnlyWorkflow = {
+	name: "review",
+	description: "",
+	steps: [{ id: "rev", role: "reviewer" }],
+	source: "test",
+	filePath: "builtin",
+} as unknown as WorkflowConfig;
 
 test("MUTATING_ROLES = executor + test-engineer (NOT writer/verifier — they write to gitignored .crew)", () => {
 	assert.ok(MUTATING_ROLES.has("executor"));
@@ -93,7 +122,10 @@ test("#2 mutating + CLEAN tree + FAILED task → false-green AND status downgrad
 	try {
 		const a = assessGoalAchievement(manifest(cwd), [task("exec", "executor", "failed")], mutatingWorkflow);
 		assert.equal(a.achieved, false);
-		assert.ok(a.signals.some((s) => s.startsWith("corroborating failed task")), "must surface corroborating signal");
+		assert.ok(
+			a.signals.some((s) => s.startsWith("corroborating failed task")),
+			"must surface corroborating signal",
+		);
 		const applied = applyGoalAchievement(manifest(cwd, "completed"), a);
 		assert.equal(applied.downgraded, true);
 		assert.equal(applied.manifest.status, "failed"); // the lie is corrected

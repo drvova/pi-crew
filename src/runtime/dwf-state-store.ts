@@ -15,7 +15,7 @@
  * are expected to be idempotent-ish.
  */
 
-import { mkdirSync, existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { atomicWriteJson } from "../state/atomic-write.ts";
 import { logInternalError } from "../utils/internal-error.ts";

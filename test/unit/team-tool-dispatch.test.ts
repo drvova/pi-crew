@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { createRunManifest, saveRunTasks } from "../../src/state/state-store.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
@@ -26,11 +26,38 @@ function cleanupCwd(cwd: string): void {
  * Returns the runId and manifest for use in tests.
  */
 function seedRun(cwd: string, sessionId?: string): { runId: string } {
-	const team = { name: "dispatch-test", description: "", roles: [{ name: "worker", agent: "worker" }], source: "test", filePath: "builtin" } as never;
-	const workflow = { name: "wf", description: "", steps: [{ id: "one", role: "worker" }], source: "test", filePath: "builtin" } as never;
-	const created = createRunManifest({ cwd, team, workflow, goal: "dispatch test", ownerSessionId: sessionId });
+	const team = {
+		name: "dispatch-test",
+		description: "",
+		roles: [{ name: "worker", agent: "worker" }],
+		source: "test",
+		filePath: "builtin",
+	} as never;
+	const workflow = {
+		name: "wf",
+		description: "",
+		steps: [{ id: "one", role: "worker" }],
+		source: "test",
+		filePath: "builtin",
+	} as never;
+	const created = createRunManifest({
+		cwd,
+		team,
+		workflow,
+		goal: "dispatch test",
+		ownerSessionId: sessionId,
+	});
 	saveRunTasks(created.manifest, [
-		{ id: "task-1", runId: created.manifest.runId, role: "worker", agent: "worker", title: "task", status: "running", dependsOn: [], cwd },
+		{
+			id: "task-1",
+			runId: created.manifest.runId,
+			role: "worker",
+			agent: "worker",
+			title: "task",
+			status: "running",
+			dependsOn: [],
+			cwd,
+		},
 	]);
 	return { runId: created.manifest.runId };
 }
@@ -120,10 +147,7 @@ test("handleTeamTool 'cancel' cancels a running run", async () => {
 	const cwd = makeTmpCwd();
 	try {
 		const { runId } = seedRun(cwd, "session-dispatch");
-		const out = await handleTeamTool(
-			{ action: "cancel", runId },
-			{ cwd, sessionId: "session-dispatch" },
-		);
+		const out = await handleTeamTool({ action: "cancel", runId }, { cwd, sessionId: "session-dispatch" });
 		assert.equal(out.isError, false);
 		assert.match(firstText(out), /Cancelled/);
 		assert.equal(out.details.action, "cancel");
@@ -212,16 +236,15 @@ test("handleTeamTool 'settings' returns settings list", async () => {
 // 8. Intent-gated actions reject without intent confirmation
 // ---------------------------------------------------------------------------
 
-const INTENT_POLICY_CONFIG = { policy: { requireIntentForDestructiveActions: true } };
+const INTENT_POLICY_CONFIG = {
+	policy: { requireIntentForDestructiveActions: true },
+};
 
 test("intent-gated 'cancel' rejects without config.intent", async () => {
 	const cwd = makeTmpCwd();
 	try {
 		const { runId } = seedRun(cwd, "session-intent");
-		const out = await handleTeamTool(
-			{ action: "cancel", runId },
-			{ cwd, sessionId: "session-intent", config: INTENT_POLICY_CONFIG },
-		);
+		const out = await handleTeamTool({ action: "cancel", runId }, { cwd, sessionId: "session-intent", config: INTENT_POLICY_CONFIG });
 		assert.equal(out.isError, true);
 		assert.match(firstText(out), /requires config\.intent/);
 	} finally {
@@ -232,10 +255,7 @@ test("intent-gated 'cancel' rejects without config.intent", async () => {
 test("intent-gated 'prune' rejects without config.intent", async () => {
 	const cwd = makeTmpCwd();
 	try {
-		const out = await handleTeamTool(
-			{ action: "prune", confirm: true },
-			{ cwd, config: INTENT_POLICY_CONFIG },
-		);
+		const out = await handleTeamTool({ action: "prune", confirm: true }, { cwd, config: INTENT_POLICY_CONFIG });
 		assert.equal(out.isError, true);
 		assert.match(firstText(out), /requires config\.intent/);
 	} finally {
@@ -247,10 +267,7 @@ test("intent-gated 'forget' rejects without config.intent", async () => {
 	const cwd = makeTmpCwd();
 	try {
 		const { runId } = seedRun(cwd);
-		const out = await handleTeamTool(
-			{ action: "forget", runId, confirm: true },
-			{ cwd, config: INTENT_POLICY_CONFIG },
-		);
+		const out = await handleTeamTool({ action: "forget", runId, confirm: true }, { cwd, config: INTENT_POLICY_CONFIG });
 		assert.equal(out.isError, true);
 		assert.match(firstText(out), /requires config\.intent/);
 	} finally {
@@ -262,10 +279,7 @@ test("intent-gated 'cleanup' with force rejects without config.intent", async ()
 	const cwd = makeTmpCwd();
 	try {
 		const { runId } = seedRun(cwd);
-		const out = await handleTeamTool(
-			{ action: "cleanup", runId, force: true },
-			{ cwd, config: INTENT_POLICY_CONFIG },
-		);
+		const out = await handleTeamTool({ action: "cleanup", runId, force: true }, { cwd, config: INTENT_POLICY_CONFIG });
 		assert.equal(out.isError, true);
 		assert.match(firstText(out), /requires config\.intent/);
 	} finally {

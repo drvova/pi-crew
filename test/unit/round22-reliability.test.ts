@@ -5,13 +5,14 @@
  *  - BUG 2: chain-parser parseStep() must reject pathological nesting instead
  *    of overflowing the stack.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { FileCheckpointStore, type Checkpoint } from "../../src/runtime/checkpoint.ts";
+import test from "node:test";
 import { parseChainDSL } from "../../src/runtime/chain-parser.ts";
+import { type Checkpoint, FileCheckpointStore } from "../../src/runtime/checkpoint.ts";
 
 // ---------------------------------------------------------------------------
 // BUG 1: unique temp file per concurrent checkpoint save

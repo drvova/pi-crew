@@ -20,7 +20,15 @@
  *  5. Otherwise → blocked with a reason telling the user what to pass.
  */
 
-export const DESTRUCTIVE_TEAM_ACTIONS = new Set(["delete", "forget", "prune", "cleanup", "workflow-create", "workflow-save", "workflow-delete"]);
+export const DESTRUCTIVE_TEAM_ACTIONS = new Set([
+	"delete",
+	"forget",
+	"prune",
+	"cleanup",
+	"workflow-create",
+	"workflow-save",
+	"workflow-delete",
+]);
 
 export interface TeamToolInputLike {
 	action?: unknown;
@@ -33,10 +41,7 @@ export interface TeamToolInputLike {
  * Decide whether a destructive team action should be blocked.
  * @returns block reason string, or `undefined` to allow.
  */
-export function shouldBlockDestructiveTeamAction(
-	action: string | undefined,
-	input: TeamToolInputLike,
-): string | undefined {
+export function shouldBlockDestructiveTeamAction(action: string | undefined, input: TeamToolInputLike): string | undefined {
 	if (!action || !DESTRUCTIVE_TEAM_ACTIONS.has(action)) return undefined;
 	// dryRun cleanup is a PREVIEW (no writes) — never needs confirm.
 	if (action === "cleanup" && input.dryRun === true) return undefined;

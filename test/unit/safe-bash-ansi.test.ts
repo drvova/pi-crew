@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { isDangerous } from "../../src/tools/safe-bash.ts";
 
 describe("safe-bash ANSI escape stripping", () => {

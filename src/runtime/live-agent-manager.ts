@@ -1,7 +1,7 @@
+import type { appendEvent } from "../state/event-log.ts";
+import { logInternalError } from "../utils/internal-error.ts";
 import type { CrewAgentRecord } from "./crew-agent-runtime.ts";
 import type { IrcMessage } from "./live-irc.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import type { appendEvent } from "../state/event-log.ts";
 
 const MAX_PENDING_MESSAGES = 1000;
 
@@ -12,7 +12,12 @@ type LiveSessionHandle = {
 	dispose?: () => void;
 	/** Upstream session stats (input/output/cacheWrite tokens, context %). */
 	getSessionStats?: () => {
-		tokens?: { input?: number; output?: number; cacheWrite?: number; cacheRead?: number };
+		tokens?: {
+			input?: number;
+			output?: number;
+			cacheWrite?: number;
+			cacheRead?: number;
+		};
 		contextUsage?: { percent?: number | null; window?: number };
 	};
 };
@@ -86,7 +91,13 @@ function listActiveLiveAgentsByWorkspace(workspaceId: string): LiveAgentHandle[]
 	return listActiveLiveAgents().filter((a) => a.workspaceId === workspaceId);
 }
 
-export function registerLiveAgent(input: Omit<LiveAgentHandle, "createdAt" | "updatedAt" | "pendingSteers" | "pendingFollowUps" | "pendingMessages" | "activity"> & { workspaceId: string }, eventLogFn?: typeof appendEvent, eventsPath?: string): LiveAgentHandle {
+export function registerLiveAgent(
+	input: Omit<LiveAgentHandle, "createdAt" | "updatedAt" | "pendingSteers" | "pendingFollowUps" | "pendingMessages" | "activity"> & {
+		workspaceId: string;
+	},
+	eventLogFn?: typeof appendEvent,
+	eventsPath?: string,
+): LiveAgentHandle {
 	const now = new Date().toISOString();
 	const existing = liveAgents.get(input.agentId);
 	const handle: LiveAgentHandle = {
@@ -124,16 +135,41 @@ export function registerLiveAgent(input: Omit<LiveAgentHandle, "createdAt" | "up
 		}
 	}
 	liveAgents.set(input.agentId, handle);
-	try { if (eventLogFn && eventsPath) eventLogFn(eventsPath, { type: "live_agent.registered", runId: input.runId, taskId: input.taskId, message: `Live agent registered: ${input.agent} (${input.role})`, data: { agentId: input.agentId, role: input.role, agent: input.agent, workspaceId: input.workspaceId } }); } catch { /* non-critical */ }
+	try {
+		if (eventLogFn && eventsPath)
+			eventLogFn(eventsPath, {
+				type: "live_agent.registered",
+				runId: input.runId,
+				taskId: input.taskId,
+				message: `Live agent registered: ${input.agent} (${input.role})`,
+				data: {
+					agentId: input.agentId,
+					role: input.role,
+					agent: input.agent,
+					workspaceId: input.workspaceId,
+				},
+			});
+	} catch {
+		/* non-critical */
+	}
 	if (handle.pendingSteers.length && typeof handle.session.steer === "function") {
 		const pending = [...handle.pendingSteers];
 		handle.pendingSteers.length = 0;
-		for (const message of pending) void handle.session.steer(message).catch((error) => logInternalError("live-agent-manager.steer", error, `agentId=${handle.agentId}`));
+		for (const message of pending)
+			void handle.session
+				.steer(message)
+				.catch((error) => logInternalError("live-agent-manager.steer", error, `agentId=${handle.agentId}`));
 	}
 	if (handle.pendingFollowUps.length && typeof handle.session.prompt === "function") {
 		const pending = [...handle.pendingFollowUps];
 		handle.pendingFollowUps.length = 0;
-		for (const message of pending) void handle.session.prompt(message, { source: "api", expandPromptTemplates: false }).catch((error) => logInternalError("live-agent-manager.prompt", error, `agentId=${handle.agentId}`));
+		for (const message of pending)
+			void handle.session
+				.prompt(message, {
+					source: "api",
+					expandPromptTemplates: false,
+				})
+				.catch((error) => logInternalError("live-agent-manager.prompt", error, `agentId=${handle.agentId}`));
 	}
 	return handle;
 }
@@ -146,7 +182,9 @@ export function updateLiveAgentStatus(agentId: string, status: CrewAgentRecord["
 }
 
 function safeDisposeLiveSession(handle: LiveAgentHandle): void {
-	try { handle.session.dispose?.(); } catch (error) {
+	try {
+		handle.session.dispose?.();
+	} catch (error) {
 		logInternalError("live-agent-manager.dispose", error, `agentId=${handle.agentId}`);
 	}
 }
@@ -166,22 +204,48 @@ export function disposeLiveAgentSession(agentIdOrTaskId: string): void {
 	safeDisposeLiveSession(handle);
 }
 
-export async function terminateLiveAgent(agentIdOrTaskId: string, status: CrewAgentRecord["status"] = "stopped", eventLogFn?: typeof appendEvent, eventsPath?: string): Promise<LiveAgentHandle | undefined> {
+export async function terminateLiveAgent(
+	agentIdOrTaskId: string,
+	status: CrewAgentRecord["status"] = "stopped",
+	eventLogFn?: typeof appendEvent,
+	eventsPath?: string,
+): Promise<LiveAgentHandle | undefined> {
 	const handle = getLiveAgent(agentIdOrTaskId);
 	if (!handle) return undefined;
 	handle.status = status;
 	handle.updatedAt = new Date().toISOString();
-	try { if (eventLogFn && eventsPath) eventLogFn(eventsPath, { type: "live_agent.terminated", runId: handle.runId, taskId: handle.taskId, message: `Live agent terminated: ${handle.agent} status=${status}`, data: { agentId: handle.agentId, status, role: handle.role, workspaceId: handle.workspaceId } }); } catch { /* non-critical */ }
+	try {
+		if (eventLogFn && eventsPath)
+			eventLogFn(eventsPath, {
+				type: "live_agent.terminated",
+				runId: handle.runId,
+				taskId: handle.taskId,
+				message: `Live agent terminated: ${handle.agent} status=${status}`,
+				data: {
+					agentId: handle.agentId,
+					status,
+					role: handle.role,
+					workspaceId: handle.workspaceId,
+				},
+			});
+	} catch {
+		/* non-critical */
+	}
 	try {
 		await handle.session.abort?.();
 	} finally {
 		safeDisposeLiveSession(handle);
-		liveAgents.delete(handle.agentId);  // Move AFTER abort completes to prevent race
+		liveAgents.delete(handle.agentId); // Move AFTER abort completes to prevent race
 	}
 	return handle;
 }
 
-export async function terminateLiveAgentsForRun(runId: string, status: CrewAgentRecord["status"] = "failed", eventLogFn?: typeof appendEvent, eventsPath?: string): Promise<number> {
+export async function terminateLiveAgentsForRun(
+	runId: string,
+	status: CrewAgentRecord["status"] = "failed",
+	eventLogFn?: typeof appendEvent,
+	eventsPath?: string,
+): Promise<number> {
 	const agents = [...liveAgents.values()].filter((agent) => agent.runId === runId);
 	await Promise.all(agents.map((agent) => terminateLiveAgent(agent.agentId, status, eventLogFn, eventsPath)));
 	return agents.length;
@@ -191,11 +255,11 @@ export function getLiveAgent(agentIdOrTaskId: string): LiveAgentHandle | undefin
 	return liveAgents.get(agentIdOrTaskId) ?? [...liveAgents.values()].find((entry) => entry.taskId === agentIdOrTaskId);
 }
 
-	/** Maximum time a terminal live agent handle stays in memory (10 minutes). */
-	const STALE_HANDLE_MS = 10 * 60 * 1000;
-	/** Maximum time a running/queued live agent handle stays without any update (30 minutes).
-	 * After this, the agent is presumed dead — the real process would have updated the handle. */
-	const STALE_RUNNING_HANDLE_MS = 30 * 60 * 1000;
+/** Maximum time a terminal live agent handle stays in memory (10 minutes). */
+const STALE_HANDLE_MS = 10 * 60 * 1000;
+/** Maximum time a running/queued live agent handle stays without any update (30 minutes).
+ * After this, the agent is presumed dead — the real process would have updated the handle. */
+const STALE_RUNNING_HANDLE_MS = 30 * 60 * 1000;
 
 /** Remove dead live agent handles.
  * Evicts: (1) terminal-status handles older than STALE_HANDLE_MS, and
@@ -262,7 +326,10 @@ export async function followUpLiveAgent(agentIdOrTaskId: string, prompt: string)
 		handle.pendingFollowUps.push(prompt);
 		return handle;
 	}
-	await handle.session.prompt(prompt, { source: "api", expandPromptTemplates: false });
+	await handle.session.prompt(prompt, {
+		source: "api",
+		expandPromptTemplates: false,
+	});
 	handle.updatedAt = new Date().toISOString();
 	return handle;
 }
@@ -278,7 +345,10 @@ export async function resumeLiveAgent(agentIdOrTaskId: string, prompt: string): 
 	if (!handle) throw new Error(`Live agent '${agentIdOrTaskId}' is not registered in this process.`);
 	if (typeof handle.session.prompt !== "function") throw new Error(`Live agent '${agentIdOrTaskId}' does not expose prompt().`);
 	handle.status = "running";
-	await handle.session.prompt(prompt, { source: "api", expandPromptTemplates: false });
+	await handle.session.prompt(prompt, {
+		source: "api",
+		expandPromptTemplates: false,
+	});
 	handle.status = "completed";
 	handle.updatedAt = new Date().toISOString();
 	return handle;
@@ -354,7 +424,11 @@ export function sendIrcMessage(targetAgentId: string, message: IrcMessage): void
 	if (typeof session.sendCustomMessage === "function") {
 		try {
 			(session.sendCustomMessage as (msg: unknown, opts?: unknown) => void)(
-				{ customType: "irc", content: `[DM from ${message.from}] ${message.content}`, display: "collapsed" },
+				{
+					customType: "irc",
+					content: `[DM from ${message.from}] ${message.content}`,
+					display: "collapsed",
+				},
 				{ deliverAs: "followUp", triggerTurn: false },
 			);
 			return;
@@ -365,7 +439,9 @@ export function sendIrcMessage(targetAgentId: string, message: IrcMessage): void
 	// Fallback: inject as prompt (blocking)
 	if (typeof handle.session.prompt === "function") {
 		const ircPrompt = `[Message from ${message.from}] ${message.content}`;
-		void handle.session.prompt(ircPrompt, { source: "api", expandPromptTemplates: false }).catch((error) => logInternalError("live-agent-manager.irc-deliver", error, `agentId=${handle.agentId}`));
+		void handle.session
+			.prompt(ircPrompt, { source: "api", expandPromptTemplates: false })
+			.catch((error) => logInternalError("live-agent-manager.irc-deliver", error, `agentId=${handle.agentId}`));
 	}
 }
 
@@ -388,7 +464,11 @@ export function broadcastIrcMessage(fromAgentId: string, message: IrcMessage): s
 		if (typeof session.sendCustomMessage === "function") {
 			try {
 				(session.sendCustomMessage as (msg: unknown, opts?: unknown) => void)(
-					{ customType: "irc", content: `[Broadcast from ${message.from}] ${message.content}`, display: "collapsed" },
+					{
+						customType: "irc",
+						content: `[Broadcast from ${message.from}] ${message.content}`,
+						display: "collapsed",
+					},
 					{ deliverAs: "followUp", triggerTurn: false },
 				);
 				recipients.push(handle.agentId);
@@ -400,7 +480,12 @@ export function broadcastIrcMessage(fromAgentId: string, message: IrcMessage): s
 		// Fallback: inject as prompt
 		if (typeof handle.session.prompt === "function") {
 			const ircPrompt = `[Broadcast from ${message.from}] ${message.content}`;
-			void handle.session.prompt(ircPrompt, { source: "api", expandPromptTemplates: false }).catch((error) => logInternalError("live-agent-manager.irc-broadcast", error, `agentId=${handle.agentId}`));
+			void handle.session
+				.prompt(ircPrompt, {
+					source: "api",
+					expandPromptTemplates: false,
+				})
+				.catch((error) => logInternalError("live-agent-manager.irc-broadcast", error, `agentId=${handle.agentId}`));
 		}
 		recipients.push(handle.agentId);
 	}
@@ -491,7 +576,12 @@ export async function respondAsBackground(
 	if (typeof session.sendCustomMessage === "function") {
 		try {
 			(session.sendCustomMessage as (msg: unknown, o?: unknown) => void)(
-				{ customType: "irc", content: deliveredTag, display: "collapsed", corrId },
+				{
+					customType: "irc",
+					content: deliveredTag,
+					display: "collapsed",
+					corrId,
+				},
 				{ deliverAs: "followUp", triggerTurn: false },
 			);
 			delivered = true;
@@ -501,10 +591,16 @@ export async function respondAsBackground(
 	}
 	if (!delivered && typeof handle.session.prompt === "function") {
 		const promptText = `${deliveredTag}${awaitReply ? ` (reply correlation: ${corrId})` : ""}`;
-		void handle.session.prompt(promptText, { source: "api", expandPromptTemplates: false }).catch((error) => logInternalError("live-agent-manager.respondAsBackground", error, `agentId=${handle.agentId}`));
+		void handle.session
+			.prompt(promptText, { source: "api", expandPromptTemplates: false })
+			.catch((error) => logInternalError("live-agent-manager.respondAsBackground", error, `agentId=${handle.agentId}`));
 		delivered = true;
 	}
-	if (!delivered) return { ok: false, error: `Target '${targetAgentId}' has no message channel.` };
+	if (!delivered)
+		return {
+			ok: false,
+			error: `Target '${targetAgentId}' has no message channel.`,
+		};
 	handle.updatedAt = new Date().toISOString();
 
 	if (!awaitReply) return { ok: true, corrId };
@@ -555,7 +651,14 @@ export function awaitPendingReply(
 			signal.addEventListener("abort", signalListener, { once: true });
 		}
 
-		pendingReplies.set(corrId, { corrId, targetAgentId, fromId, deadline, resolve: finish, timer });
+		pendingReplies.set(corrId, {
+			corrId,
+			targetAgentId,
+			fromId,
+			deadline,
+			resolve: finish,
+			timer,
+		});
 		const set = pendingRepliesByTarget.get(targetAgentId) ?? new Set<string>();
 		set.add(corrId);
 		pendingRepliesByTarget.set(targetAgentId, set);

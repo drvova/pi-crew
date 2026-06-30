@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { renderCancellationPane } from "../../src/ui/dashboard-panes/cancellation-pane.ts";
+import test from "node:test";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
+import { renderCancellationPane } from "../../src/ui/dashboard-panes/cancellation-pane.ts";
 
 function makeManifest(overrides: Partial<TeamRunManifest> = {}): TeamRunManifest {
 	return {
@@ -31,7 +31,17 @@ test("cancellation pane shows no cancellations for running run", () => {
 test("cancellation pane shows cancelled tasks", () => {
 	const manifest = makeManifest({ status: "cancelled" });
 	const tasks: TeamTaskState[] = [
-		{ id: "01_explore", role: "explorer", agent: "explorer", title: "explore", status: "cancelled", error: "user cancel", dependsOn: [], cwd: "/tmp", runId: "test-run-1" } as TeamTaskState,
+		{
+			id: "01_explore",
+			role: "explorer",
+			agent: "explorer",
+			title: "explore",
+			status: "cancelled",
+			error: "user cancel",
+			dependsOn: [],
+			cwd: "/tmp",
+			runId: "test-run-1",
+		} as TeamTaskState,
 	];
 	const lines = renderCancellationPane(manifest, tasks);
 	assert.ok(lines.some((l) => l.includes("01_explore")));

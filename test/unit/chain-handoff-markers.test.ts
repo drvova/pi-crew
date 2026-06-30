@@ -13,9 +13,10 @@
  * @see src/runtime/chain-runner.ts enrichContextFromHandoffs
  * @see research-findings/output-handling-deep-dive.md §F
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { ChainRunner, createChainRunner, type ChainTaskRunner } from "../../src/runtime/chain-runner.ts";
+import { test } from "node:test";
+import { ChainRunner, type ChainTaskRunner, createChainRunner } from "../../src/runtime/chain-runner.ts";
 import { HandoffManager, type HandoffSummary } from "../../src/runtime/handoff-manager.ts";
 
 /** Build a HandoffSummary with sensible defaults + overrides. */
@@ -39,7 +40,9 @@ function makeHandoff(overrides: Partial<HandoffSummary> = {}): HandoffSummary {
 }
 
 function makeRunner(): ChainRunner {
-	const noopRunner: ChainTaskRunner = { runTask: async () => ({ outcome: "success" }) as never };
+	const noopRunner: ChainTaskRunner = {
+		runTask: async () => ({ outcome: "success" }) as never,
+	};
 	return createChainRunner(noopRunner, new HandoffManager());
 }
 
@@ -47,9 +50,11 @@ function makeRunner(): ChainRunner {
  *  reads `.handoff` off each ChainStepResult, so a minimal cast is sufficient. */
 function enrich(runner: ChainRunner, handoffs: HandoffSummary[]): Record<string, unknown> {
 	const previousResults = handoffs.map((h) => ({ handoff: h })) as never[];
-	return (runner as unknown as {
-		enrichContextFromHandoffs: (ctx: Record<string, unknown>, prev: never[]) => Record<string, unknown>;
-	}).enrichContextFromHandoffs({}, previousResults);
+	return (
+		runner as unknown as {
+			enrichContextFromHandoffs: (ctx: Record<string, unknown>, prev: never[]) => Record<string, unknown>;
+		}
+	).enrichContextFromHandoffs({}, previousResults);
 }
 
 test("no handoffs → context unchanged, no notes", () => {
@@ -78,7 +83,10 @@ test("oversized handoff (>5000 bytes) is dropped AND a marker is emitted", () =>
 	assert.equal(history[0]!.step, "small", "only the normal handoff survives");
 	const notes = out.__chainHistoryNotes as string[] | undefined;
 	assert.ok(notes, "a __chainHistoryNotes marker must be present");
-	assert.ok(notes!.some((n) => /omitted \(> 5000 bytes/.test(n)), `notes must mention the oversized drop: ${notes}`);
+	assert.ok(
+		notes!.some((n) => /omitted \(> 5000 bytes/.test(n)),
+		`notes must mention the oversized drop: ${notes}`,
+	);
 });
 
 test("handoff with >50 filesCreated keeps 50 in history AND records the full count", () => {
@@ -88,7 +96,10 @@ test("handoff with >50 filesCreated keeps 50 in history AND records the full cou
 	const history = out.__chainHistory as Array<{ filesCreated: string[] }>;
 	assert.equal(history[0]!.filesCreated.length, 50, "filesCreated must be capped at 50 in history");
 	const notes = out.__chainHistoryNotes as string[] | undefined;
-	assert.ok(notes?.some((n) => /filesCreated=60/.test(n)), `notes must record the full filesCreated count: ${notes}`);
+	assert.ok(
+		notes?.some((n) => /filesCreated=60/.test(n)),
+		`notes must record the full filesCreated count: ${notes}`,
+	);
 });
 
 test("more than 100 handoffs keeps last 100 AND emits the history-limit marker", () => {
@@ -99,15 +110,23 @@ test("more than 100 handoffs keeps last 100 AND emits the history-limit marker",
 	assert.equal(history.length, 100, "history must be limited to the last 100 entries");
 	assert.equal(history[0]!.step, "s1", "must keep the LAST 100 (s1..s100), dropping s0");
 	const notes = out.__chainHistoryNotes as string[] | undefined;
-	assert.ok(notes?.some((n) => /limited to last 100/.test(n)), `notes must mention the history limit: ${notes}`);
+	assert.ok(
+		notes?.some((n) => /limited to last 100/.test(n)),
+		`notes must mention the history limit: ${notes}`,
+	);
 });
 
 test("decisions/nextSteps array caps are recorded in notes", () => {
 	const runner = makeRunner();
-	const manyDecisions = Array.from({ length: 25 }, (_, i) => ({ rationale: `d${i}` }));
+	const manyDecisions = Array.from({ length: 25 }, (_, i) => ({
+		rationale: `d${i}`,
+	}));
 	const out = enrich(runner, [makeHandoff({ taskId: "s1", decisions: manyDecisions as never[] })]);
 	const history = out.__chainHistory as Array<{ decisions: unknown[] }>;
 	assert.equal(history[0]!.decisions.length, 20, "decisions capped at 20");
 	const notes = out.__chainHistoryNotes as string[] | undefined;
-	assert.ok(notes?.some((n) => /decisions=25/.test(n)), `notes must record the full decisions count: ${notes}`);
+	assert.ok(
+		notes?.some((n) => /decisions=25/.test(n)),
+		`notes must record the full decisions count: ${notes}`,
+	);
 });

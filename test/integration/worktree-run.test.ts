@@ -1,9 +1,9 @@
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { loadRunManifestById } from "../../src/state/state-store.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
@@ -44,12 +44,34 @@ test("worktree mode supports setup hook metadata and diff stat artifacts", async
 		// Use .hooks/ relative path (required by isAllowedSetupHook security fix)
 		fs.mkdirSync(path.join(cwd, ".hooks"));
 		const hook = path.join(cwd, ".hooks", "setup.cjs");
-		fs.writeFileSync(hook, "const fs=require('fs'); fs.writeFileSync('generated.txt','x'); console.log(JSON.stringify({syntheticPaths:['generated.txt']}))\n");
+		fs.writeFileSync(
+			hook,
+			"const fs=require('fs'); fs.writeFileSync('generated.txt','x'); console.log(JSON.stringify({syntheticPaths:['generated.txt']}))\n",
+		);
 		fs.chmodSync(hook, 0o755);
 		const userConfigDir = path.join(home, ".pi", "agent", "extensions", "pi-crew");
 		fs.mkdirSync(userConfigDir, { recursive: true });
-		fs.writeFileSync(path.join(userConfigDir, "config.json"), JSON.stringify({ requireCleanWorktreeLeader: false, worktree: { setupHook: ".hooks/setup.cjs", linkNodeModules: true } }), "utf-8");
-		const run = await handleTeamTool({ action: "run", config: { runtime: { mode: "scaffold" } }, team: "fast-fix", goal: "Worktree hook smoke", workspaceMode: "worktree" }, { cwd });
+		fs.writeFileSync(
+			path.join(userConfigDir, "config.json"),
+			JSON.stringify({
+				requireCleanWorktreeLeader: false,
+				worktree: {
+					setupHook: ".hooks/setup.cjs",
+					linkNodeModules: true,
+				},
+			}),
+			"utf-8",
+		);
+		const run = await handleTeamTool(
+			{
+				action: "run",
+				config: { runtime: { mode: "scaffold" } },
+				team: "fast-fix",
+				goal: "Worktree hook smoke",
+				workspaceMode: "worktree",
+			},
+			{ cwd },
+		);
 		assert.equal(run.isError, false);
 		const loaded = loadRunManifestById(cwd, run.details.runId!);
 		const diffStat = loaded?.manifest.artifacts.find((artifact) => artifact.path.endsWith(".diff-stat.json"));
@@ -78,11 +100,24 @@ test("worktree mode creates task worktrees and exposes them", async (t) => {
 		git(cwd, ["config", "user.email", "pi-crew@example.invalid"]);
 		git(cwd, ["config", "user.name", "pi Teams Test"]);
 		fs.writeFileSync(path.join(cwd, "README.md"), "test\n", "utf-8");
-		fs.writeFileSync(path.join(cwd, ".gitignore"), ".pi/\n.crew/\n/.crew/\n/.crew\n!.crew/artifacts/\n!.crew/graphs/\n!.crew/artifacts/.gitkeep\n!.crew/graphs/.gitkeep\n", "utf-8");
+		fs.writeFileSync(
+			path.join(cwd, ".gitignore"),
+			".pi/\n.crew/\n/.crew/\n/.crew\n!.crew/artifacts/\n!.crew/graphs/\n!.crew/artifacts/.gitkeep\n!.crew/graphs/.gitkeep\n",
+			"utf-8",
+		);
 		git(cwd, ["add", "README.md", ".gitignore"]);
 		git(cwd, ["commit", "-m", "initial"]);
 
-		const run = await handleTeamTool({ action: "run", config: { runtime: { mode: "scaffold" } }, team: "fast-fix", goal: "Worktree smoke", workspaceMode: "worktree" }, { cwd });
+		const run = await handleTeamTool(
+			{
+				action: "run",
+				config: { runtime: { mode: "scaffold" } },
+				team: "fast-fix",
+				goal: "Worktree smoke",
+				workspaceMode: "worktree",
+			},
+			{ cwd },
+		);
 		assert.equal(run.isError, false);
 		const runId = run.details.runId;
 		assert.ok(runId);
@@ -107,4 +142,3 @@ test("worktree mode creates task worktrees and exposes them", async (t) => {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });
-

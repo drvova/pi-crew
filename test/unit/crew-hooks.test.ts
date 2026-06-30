@@ -9,9 +9,10 @@
  * - duplicate registration is idempotent
  * - unregister of non-existent hook is a no-op
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
-import { crewHooks, type CrewHookEvent, type CrewHookEventType } from "../../src/runtime/crew-hooks.ts";
+import test from "node:test";
+import { type CrewHookEvent, type CrewHookEventType, crewHooks } from "../../src/runtime/crew-hooks.ts";
 
 const makeEvent = (type: CrewHookEventType): CrewHookEvent => ({
 	type,
@@ -22,7 +23,9 @@ const makeEvent = (type: CrewHookEventType): CrewHookEvent => ({
 
 test("crewHooks.register then emit fires the hook", () => {
 	const received: string[] = [];
-	const hook = (event: CrewHookEvent): void => { received.push(event.type); };
+	const hook = (event: CrewHookEvent): void => {
+		received.push(event.type);
+	};
 	crewHooks.register("task_started", hook);
 	try {
 		crewHooks.emit(makeEvent("task_started"));
@@ -43,7 +46,9 @@ test("crewHooks synchronous hook error does not block other hooks", () => {
 	const erroringHook = (): void => {
 		throw new Error("hook intentionally broken");
 	};
-	const goodHook = (event: CrewHookEvent): void => { received.push(event.type); };
+	const goodHook = (event: CrewHookEvent): void => {
+		received.push(event.type);
+	};
 	crewHooks.register("task_completed", erroringHook);
 	crewHooks.register("task_completed", goodHook);
 	try {
@@ -75,7 +80,9 @@ test("crewHooks async hook rejection is caught", async () => {
 
 test("crewHooks duplicate registration is idempotent", () => {
 	const received: string[] = [];
-	const hook = (event: CrewHookEvent): void => { received.push(event.type); };
+	const hook = (event: CrewHookEvent): void => {
+		received.push(event.type);
+	};
 	crewHooks.register("run_completed", hook);
 	crewHooks.register("run_completed", hook);
 	try {
@@ -95,8 +102,12 @@ test("crewHooks unregister of non-existent hook is a no-op", () => {
 
 test("crewHooks emits to multiple subscribers", () => {
 	const received: string[] = [];
-	const hookA = (event: CrewHookEvent): void => { received.push(`A:${event.type}`); };
-	const hookB = (event: CrewHookEvent): void => { received.push(`B:${event.type}`); };
+	const hookA = (event: CrewHookEvent): void => {
+		received.push(`A:${event.type}`);
+	};
+	const hookB = (event: CrewHookEvent): void => {
+		received.push(`B:${event.type}`);
+	};
 	crewHooks.register("run_failed", hookA);
 	crewHooks.register("run_failed", hookB);
 	try {

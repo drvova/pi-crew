@@ -1,6 +1,6 @@
 import { isTeamRunStatus, isTeamTaskStatus } from "../state/contracts.ts";
-import type { TeamRunManifest, TeamTaskState, ArtifactDescriptor } from "../state/types.ts";
 import type { TeamEvent } from "../state/event-log.ts";
+import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import type { ExportedRunBundle } from "./run-export.ts";
 
 export interface BundleValidationResult {
@@ -22,7 +22,8 @@ function validateArtifact(value: unknown, index: number, errors: string[]): valu
 	if (typeof value.path !== "string") errors.push(`manifest.artifacts[${index}].path must be a string.`);
 	if (typeof value.createdAt !== "string") errors.push(`manifest.artifacts[${index}].createdAt must be a string.`);
 	if (typeof value.producer !== "string") errors.push(`manifest.artifacts[${index}].producer must be a string.`);
-	if (value.retention !== "run" && value.retention !== "project" && value.retention !== "temporary") errors.push(`manifest.artifacts[${index}].retention is invalid.`);
+	if (value.retention !== "run" && value.retention !== "project" && value.retention !== "temporary")
+		errors.push(`manifest.artifacts[${index}].retention is invalid.`);
 	return errors.length === before;
 }
 
@@ -33,11 +34,23 @@ function validateManifest(value: unknown, errors: string[]): value is TeamRunMan
 	}
 	const before = errors.length;
 	if (value.schemaVersion !== 1) errors.push("manifest.schemaVersion must be 1.");
-	for (const field of ["runId", "team", "goal", "createdAt", "updatedAt", "cwd", "stateRoot", "artifactsRoot", "tasksPath", "eventsPath"] as const) {
+	for (const field of [
+		"runId",
+		"team",
+		"goal",
+		"createdAt",
+		"updatedAt",
+		"cwd",
+		"stateRoot",
+		"artifactsRoot",
+		"tasksPath",
+		"eventsPath",
+	] as const) {
 		if (typeof value[field] !== "string") errors.push(`manifest.${field} must be a string.`);
 	}
 	if (!isTeamRunStatus(value.status)) errors.push("manifest.status is invalid.");
-	if (value.workspaceMode !== "single" && value.workspaceMode !== "worktree") errors.push("manifest.workspaceMode must be single or worktree.");
+	if (value.workspaceMode !== "single" && value.workspaceMode !== "worktree")
+		errors.push("manifest.workspaceMode must be single or worktree.");
 	if (!Array.isArray(value.artifacts)) errors.push("manifest.artifacts must be an array.");
 	else value.artifacts.forEach((artifact, index) => validateArtifact(artifact, index, errors));
 	return errors.length === before;
@@ -79,11 +92,13 @@ export function validateRunBundle(value: unknown): BundleValidationResult {
 	else value.tasks.forEach((task, index) => validateTask(task, index, errors));
 	if (!Array.isArray(value.events)) errors.push("events must be an array.");
 	else value.events.forEach((event, index) => validateEvent(event, index, errors));
-	if (!Array.isArray(value.artifactPaths) || !value.artifactPaths.every((item) => typeof item === "string")) errors.push("artifactPaths must be an array of strings.");
+	if (!Array.isArray(value.artifactPaths) || !value.artifactPaths.every((item) => typeof item === "string"))
+		errors.push("artifactPaths must be an array of strings.");
 	return { ok: errors.length === 0, errors };
 }
 
 export function assertRunBundle(value: unknown): asserts value is ExportedRunBundle {
 	const validation = validateRunBundle(value);
-	if (!validation.ok) throw new Error(`File is not a valid pi-crew exported run bundle:\n${validation.errors.map((error) => `- ${error}`).join("\n")}`);
+	if (!validation.ok)
+		throw new Error(`File is not a valid pi-crew exported run bundle:\n${validation.errors.map((error) => `- ${error}`).join("\n")}`);
 }

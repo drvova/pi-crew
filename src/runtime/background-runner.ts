@@ -3,26 +3,16 @@ import * as path from "node:path";
 import { allAgents, discoverAgents } from "../agents/discover-agents.ts";
 import { loadConfig } from "../config/config.ts";
 import { appendEvent } from "../state/event-log.ts";
-import {
-	withRunLockSync,
-} from "../state/locks.ts";
-import {
-	createRunPaths,
-	loadRunManifestById,
-	saveRunManifest,
-	updateRunStatus,
-} from "../state/state-store.ts";
+import { withRunLockSync } from "../state/locks.ts";
+import { createRunPaths, loadRunManifestById, saveRunManifest, updateRunStatus } from "../state/state-store.ts";
+import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { allTeams, discoverTeams } from "../teams/discover-teams.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
-import {
-	allWorkflows,
-	discoverWorkflows,
-} from "../workflows/discover-workflows.ts";
+import { allWorkflows, discoverWorkflows } from "../workflows/discover-workflows.ts";
 // Heavy runtime — lazy-loaded to avoid pulling team-runner into background-runner
 // at module load time. Only needed when a background run actually starts.
 import { primePeerDep } from "./peer-dep.ts";
 import type { executeTeamRun as ExecuteTeamRunFn } from "./team-runner.ts";
-import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 
 let _cachedExecuteTeamRun: typeof ExecuteTeamRunFn | undefined;
 
@@ -38,9 +28,7 @@ const MAX_BACKGROUND_RUN_MS = (() => {
 	const env = Number.parseInt(process.env.PI_CREW_MAX_RUN_MS ?? "", 10);
 	return Number.isFinite(env) && env > 0 ? env : 2 * 60 * 60 * 1000;
 })();
-async function executeTeamRun(
-	...args: Parameters<typeof ExecuteTeamRunFn>
-): Promise<Awaited<ReturnType<typeof ExecuteTeamRunFn>>> {
+async function executeTeamRun(...args: Parameters<typeof ExecuteTeamRunFn>): Promise<Awaited<ReturnType<typeof ExecuteTeamRunFn>>> {
 	if (!_cachedExecuteTeamRun) {
 		// FIX (split-scope install): prime the ESM peer dep BEFORE team-runner is
 		// imported, so its transitive skill-instructions.ts can read getAgentDir()
@@ -56,14 +44,11 @@ async function executeTeamRun(
 import { logInternalError } from "../utils/internal-error.ts";
 import { writeAsyncStartMarker } from "./async-marker.ts";
 import { terminateActiveChildPiProcesses } from "./child-pi.ts";
-import { unregisterWorker } from "./orphan-worker-registry.ts";
 import { directTeamAndWorkflowFromRun } from "./direct-run.ts";
+import { unregisterWorker } from "./orphan-worker-registry.ts";
 import { expandParallelResearchWorkflow } from "./parallel-research.ts";
 import { startParentGuard, stopParentGuard } from "./parent-guard.ts";
-import {
-	resolveCrewRuntime,
-	runtimeResolutionState,
-} from "./runtime-resolver.ts";
+import { resolveCrewRuntime, runtimeResolutionState } from "./runtime-resolver.ts";
 
 /**
  * Debug logger gated behind PI_CREW_DEBUG env var. Writes to background.log
@@ -80,11 +65,7 @@ function debugLog(message: string): void {
  * Without this, the reconciler relies solely on process.kill(pid, 0) which can
  * false-positive when a process is SIGKILLed and the PID hasn't been recycled yet.
  */
-function startHeartbeat(
-	stateRoot: string,
-	eventsPath: string,
-	runId: string,
-): () => void {
+function startHeartbeat(stateRoot: string, eventsPath: string, runId: string): () => void {
 	const heartbeatPath = path.join(stateRoot, "heartbeat.json");
 	const writeHeartbeat = (): void => {
 		try {
@@ -133,36 +114,29 @@ function startInterruptGuard(
 	abortController: AbortController,
 	stopParentGuard: () => void,
 ): () => void {
-	const controlPath = path.join(
-		manifest.stateRoot,
-		"foreground-control.json",
-	);
+	const controlPath = path.join(manifest.stateRoot, "foreground-control.json");
 	// FIX: Made configurable via PI_CREW_INTERRUPT_GUARD_INTERVAL_MS env var.
 	// Default 250ms balances fast SIGINT response against filesystem overhead.
-	const interruptGuardInterval =
-		Number(process.env.PI_CREW_INTERRUPT_GUARD_INTERVAL_MS) || 250;
+	const interruptGuardInterval = Number(process.env.PI_CREW_INTERRUPT_GUARD_INTERVAL_MS) || 250;
 	const interval = setInterval(() => {
 		try {
 			if (!fs.existsSync(controlPath)) return;
-			const parsed = JSON.parse(
-				fs.readFileSync(controlPath, "utf-8"),
-			) as { requests?: Array<{ type: string; acknowledged?: boolean }> };
+			const parsed = JSON.parse(fs.readFileSync(controlPath, "utf-8")) as {
+				requests?: Array<{ type: string; acknowledged?: boolean }>;
+			};
 			const last = parsed.requests?.at(-1);
 			if (last?.type === "interrupt" && last?.acknowledged !== true) {
 				appendEvent(manifest.eventsPath, {
 					type: "async.interrupt_detected",
 					runId: manifest.runId,
-					message:
-						"Background runner detected foreground interrupt — killing child processes and exiting.",
+					message: "Background runner detected foreground interrupt — killing child processes and exiting.",
 				});
 				// FIX: Terminate ALL child-pi processes IMMEDIATELY before exiting.
 				// Previously this was missing, causing orphaned child processes to run forever
 				// after the background-runner exited. terminateActiveChildPiProcesses sends
 				// SIGTERM then SIGKILL (after HARD_KILL_MS=3s) to every active child.
 				const killed = terminateActiveChildPiProcesses();
-				console.log(
-					`[background-runner] interrupt: killed ${killed} child processes`,
-				);
+				console.log(`[background-runner] interrupt: killed ${killed} child processes`);
 				// Also abort the run signal so executeTeamRun exits quickly via its signal check.
 				abortController.abort();
 				// FIX Issue #1: Call stopParentGuard() here since process.exit(130) bypasses
@@ -201,13 +175,9 @@ function setupUnhandledRejectionGuard(
 	setExitFlag: () => void,
 ): void {
 	process.on("unhandledRejection", (reason, promise) => {
-		const message =
-			reason instanceof Error ? reason.message : String(reason);
+		const message = reason instanceof Error ? reason.message : String(reason);
 		console.error("[background-runner] UNHANDLED REJECTION:", reason);
-		console.error(
-			"[background-runner] Stack:",
-			reason instanceof Error ? reason.stack : "N/A",
-		);
+		console.error("[background-runner] Stack:", reason instanceof Error ? reason.stack : "N/A");
 		try {
 			if (state.eventsPath && state.runId) {
 				appendEvent(state.eventsPath, {
@@ -216,17 +186,13 @@ function setupUnhandledRejectionGuard(
 					message: `Unhandled rejection: ${message}`,
 					data: {
 						reason: String(reason),
-						stack:
-							reason instanceof Error ? reason.stack : undefined,
+						stack: reason instanceof Error ? reason.stack : undefined,
 						handled: false,
 					},
 				});
 			}
 		} catch (appendErr) {
-			console.error(
-				"[background-runner] Failed to write async.failed event:",
-				appendErr,
-			);
+			console.error("[background-runner] Failed to write async.failed event:", appendErr);
 		}
 		// FIX Issues #2& #4: Signal child processes to terminate via abortController,
 		// set the exit flag so main() exits after the finally block runs cleanup.
@@ -251,8 +217,7 @@ function runCleanup(
 	exitDueToRejection: boolean,
 	eventsPath?: string,
 ): void {
-	console.log(`[background-runner] runCleanup, exitDueToRejection=${exitDueToRejection}`,
-	);
+	console.log(`[background-runner] runCleanup, exitDueToRejection=${exitDueToRejection}`);
 	stopInterruptGuard();
 	stopParentGuard();
 	stopHeartbeat();
@@ -280,9 +245,7 @@ function runCleanup(
 	try {
 		unregisterWorker(process.pid);
 	} catch (error) {
-		console.log(
-			`[background-runner] runCleanup: unregisterWorker error: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		console.log(`[background-runner] runCleanup: unregisterWorker error: ${error instanceof Error ? error.message : String(error)}`);
 		if (eventsPath) {
 			try {
 				appendEvent(eventsPath, {
@@ -330,13 +293,7 @@ async function main(): Promise<void> {
 			// Use projectCrewRoot() so the background log lives next to the
 			// manifest in either .crew/state/runs/ or .pi/teams/state/runs/
 			// depending on the project's chosen layout (issue #29).
-			const logPath = path.join(
-				projectCrewRoot(_cwd),
-				"state",
-				"runs",
-				_runId,
-				"background.log",
-			);
+			const logPath = path.join(projectCrewRoot(_cwd), "state", "runs", _runId, "background.log");
 			logFd = fs.openSync(logPath, "a");
 			const origWrite =
 				(_prefix: string) =>
@@ -398,23 +355,14 @@ async function main(): Promise<void> {
 		const runId = argValue("--run-id");
 		if (!cwd || !runId) return undefined;
 		// Use projectCrewRoot() to honour the .pi/teams/ fallback (issue #29).
-		return path.join(
-			projectCrewRoot(cwd),
-			"state",
-			"runs",
-			runId,
-			"exit-code.txt",
-		);
+		return path.join(projectCrewRoot(cwd), "state", "runs", runId, "exit-code.txt");
 	})();
 	if (exitCodePath) {
 		process.on("exit", (code) => {
 			// Only log non-zero exit codes to avoid noise in exit-code.txt
 			if (code === 0 || code === undefined) return;
 			try {
-				fs.appendFileSync(
-					exitCodePath,
-					`${new Date().toISOString()} exit_code=${code} pid=${process.pid}\n`,
-				);
+				fs.appendFileSync(exitCodePath, `${new Date().toISOString()} exit_code=${code} pid=${process.pid}\n`);
 			} catch {}
 		});
 	}
@@ -423,10 +371,7 @@ async function main(): Promise<void> {
 	// are installed, since the handlers reference manifest.eventsPath and abortController.
 	const cwd = argValue("--cwd");
 	const runId = argValue("--run-id");
-	if (!cwd || !runId)
-		throw new Error(
-			"Usage: background-runner.ts --cwd <cwd> --run-id <runId>",
-		);
+	if (!cwd || !runId) throw new Error("Usage: background-runner.ts --cwd <cwd> --run-id <runId>");
 	// FIX Issue #3: Wrap in withRunLockSync to prevent concurrent background-runners
 	// for the same runId from reading stale manifest state. If lock cannot be
 	// be acquired within 5s, fail immediately rather than proceeding with stale data.
@@ -442,11 +387,9 @@ async function main(): Promise<void> {
 	const bootstrapStateRoot = createRunPaths(cwd, runId).stateRoot;
 	let loaded: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined;
 	try {
-		loaded = withRunLockSync(
-			{ stateRoot: bootstrapStateRoot, runId, cwd } as TeamRunManifest,
-			() => loadRunManifestById(cwd, runId),
-			{ staleMs: 30_000 },
-		);
+		loaded = withRunLockSync({ stateRoot: bootstrapStateRoot, runId, cwd } as TeamRunManifest, () => loadRunManifestById(cwd, runId), {
+			staleMs: 30_000,
+		});
 	} catch (lockErr) {
 		throw new Error(`Failed to acquire lock for run '${runId}': ${lockErr instanceof Error ? lockErr.message : String(lockErr)}`);
 	}
@@ -560,17 +503,12 @@ async function main(): Promise<void> {
 		runId: manifest.runId,
 		data: { pid: process.pid },
 	});
-	debugLog(`[background-runner] async.started written, pid=${process.pid}`,
-	);
+	debugLog(`[background-runner] async.started written, pid=${process.pid}`);
 	writeAsyncStartMarker(manifest, {
 		pid: process.pid,
 		startedAt: new Date().toISOString(),
 	});
-	const stopHeartbeat = startHeartbeat(
-		manifest.stateRoot,
-		manifest.eventsPath,
-		manifest.runId,
-	);
+	const stopHeartbeat = startHeartbeat(manifest.stateRoot, manifest.eventsPath, manifest.runId);
 	const stopInterruptGuard = startInterruptGuard(manifest, abortController, stopParentGuard);
 	debugLog(`[background-runner] heartbeat+interrupt guard started`);
 	// NOTE: Keep-alive interval is NOT unref'd (unlike heartbeat and interrupt
@@ -594,7 +532,9 @@ async function main(): Promise<void> {
 				message: `Run exceeded ${MAX_BACKGROUND_RUN_MS}ms and was force-aborted to prevent a zombie background-runner process.`,
 				data: { maxRunMs: MAX_BACKGROUND_RUN_MS },
 			});
-		} catch { /* best-effort event log */ }
+		} catch {
+			/* best-effort event log */
+		}
 		// Signal the finally block to exit(1) after cleanup.
 		exitDueToRejection = true;
 		// Abort the in-flight team run via the shared signal (propagates to
@@ -605,7 +545,11 @@ async function main(): Promise<void> {
 		const forceExit = setTimeout(() => {
 			console.error(`[background-runner] WATCHDOG: abort did not propagate within grace period — force-exiting`);
 			stopParentGuard();
-			try { terminateActiveChildPiProcesses(); } catch { /* best-effort */ }
+			try {
+				terminateActiveChildPiProcesses();
+			} catch {
+				/* best-effort */
+			}
 			process.exit(1);
 		}, 15_000);
 		forceExit.unref();
@@ -614,15 +558,24 @@ async function main(): Promise<void> {
 	try {
 		debugLog(`[background-runner] about to call discoverAgents`);
 		const agents = allAgents(discoverAgents(cwd));
-		debugLog(`[background-runner] discoverAgents done, ${agents.length} agents`,
-		);
+		debugLog(`[background-runner] discoverAgents done, ${agents.length} agents`);
 		// Round 27 (BUG 2): openSync returned an fd that was never closed → FD
 		// leak per background runner startup. Close it in a finally (matches the
 		// canonical pattern in checkpoint.ts:83 and event-log.ts:582).
 		try {
 			const fd = fs.openSync(manifest.eventsPath, "a");
-			try { fs.fsyncSync(fd); } finally { try { fs.closeSync(fd); } catch { /* best-effort */ } }
-		} catch { /* best-effort */ } // FORCE flush so we see this before death
+			try {
+				fs.fsyncSync(fd);
+			} finally {
+				try {
+					fs.closeSync(fd);
+				} catch {
+					/* best-effort */
+				}
+			}
+		} catch {
+			/* best-effort */
+		} // FORCE flush so we see this before death
 		// Fix round-4 CRITICAL: goal-loop and dynamic-workflow manifests use SYNTHETIC
 		// team/workflow names not in discoverTeams/discoverWorkflows. The team+workflow
 		// lookup below would throw "Team not found" BEFORE the runKind switch, making the
@@ -631,37 +584,64 @@ async function main(): Promise<void> {
 		let earlyResult: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined;
 		let result: { manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined;
 		if (manifest.runKind === "goal-loop" || manifest.runKind === "dynamic-workflow") {
-			debugLog(`[background-runner] short-circuiting ${manifest.runKind} (synthetic team/workflow)`,
-			);
+			debugLog(`[background-runner] short-circuiting ${manifest.runKind} (synthetic team/workflow)`);
 			if (manifest.runKind === "goal-loop") {
-		// LAZY: defer dynamic import of ./goal-loop-runner.ts to its call site.
+				// LAZY: defer dynamic import of ./goal-loop-runner.ts to its call site.
 				const { runGoalLoop } = await import("./goal-loop-runner.ts");
-		// LAZY: defer dynamic import of ./goal-state-store.ts to its call site.
+				// LAZY: defer dynamic import of ./goal-state-store.ts to its call site.
 				const { GoalStore } = await import("./goal-state-store.ts");
-		// LAZY: defer dynamic import of ../agents/discover-agents.ts to its call site.
+				// LAZY: defer dynamic import of ../agents/discover-agents.ts to its call site.
 				const { discoverAgents, allAgents } = await import("../agents/discover-agents.ts");
 				const store = new GoalStore(manifest.cwd);
 				const goalState = store.load(manifest.runId);
-				if (!goalState) throw new Error(`runKind="goal-loop" but GoalLoopState '${manifest.runId}' not found (cwd=${manifest.cwd})`);
-				const goalResult = await runGoalLoop({ goalState, manifest, signal: abortController.signal, deps: { discoverAgents: (c: string) => allAgents(discoverAgents(c)) } });
+				if (!goalState)
+					throw new Error(`runKind="goal-loop" but GoalLoopState '${manifest.runId}' not found (cwd=${manifest.cwd})`);
+				const goalResult = await runGoalLoop({
+					goalState,
+					manifest,
+					signal: abortController.signal,
+					deps: {
+						discoverAgents: (c: string) => allAgents(discoverAgents(c)),
+					},
+				});
 				// Fix P1-1 + round-6 #5: persist terminal status reflecting the goal's actual outcome,
 				// not a blanket 'completed'. Map goal state → manifest status.
 				const goalStatusToRunStatus: Record<string, TeamRunManifest["status"]> = {
-					achieved: "completed", max_turns: "completed", budget_exceeded: "completed",
-					blocked: "blocked", cancelled: "cancelled", paused: "blocked", running: "running",
+					achieved: "completed",
+					max_turns: "completed",
+					budget_exceeded: "completed",
+					blocked: "blocked",
+					cancelled: "cancelled",
+					paused: "blocked",
+					running: "running",
 				};
 				const runStatus = goalStatusToRunStatus[goalResult.goalState.state] ?? "completed";
-				const finalGoalManifest: TeamRunManifest = { ...goalResult.manifest, status: runStatus, updatedAt: new Date().toISOString() };
+				const finalGoalManifest: TeamRunManifest = {
+					...goalResult.manifest,
+					status: runStatus,
+					updatedAt: new Date().toISOString(),
+				};
 				saveRunManifest(finalGoalManifest);
-				earlyResult = { manifest: finalGoalManifest, tasks: goalResult.tasks };
+				earlyResult = {
+					manifest: finalGoalManifest,
+					tasks: goalResult.tasks,
+				};
 			} else {
-		// LAZY: defer dynamic import of ./dynamic-workflow-runner.ts to its call site.
+				// LAZY: defer dynamic import of ./dynamic-workflow-runner.ts to its call site.
 				const { runDynamicWorkflow } = await import("./dynamic-workflow-runner.ts");
-		// LAZY: defer dynamic import of ../workflows/discover-workflows.ts to its call site.
+				// LAZY: defer dynamic import of ../workflows/discover-workflows.ts to its call site.
 				const { allWorkflows, discoverWorkflows } = await import("../workflows/discover-workflows.ts");
 				const wf = allWorkflows(discoverWorkflows(manifest.cwd)).find((w) => w.name === manifest.workflow);
-				if (!wf || wf.runtime !== "dynamic" || !wf.dynamicScript) throw new Error(`runKind="dynamic-workflow" but workflow '${manifest.workflow}' is not dynamic (runId=${manifest.runId})`);
-				const dwfResult = await runDynamicWorkflow({ manifest, workflow: wf as import("../workflows/workflow-config.ts").DynamicWorkflowConfig, signal: abortController.signal, tokenBudget: wf.maxTokenBudget });
+				if (!wf || wf.runtime !== "dynamic" || !wf.dynamicScript)
+					throw new Error(
+						`runKind="dynamic-workflow" but workflow '${manifest.workflow}' is not dynamic (runId=${manifest.runId})`,
+					);
+				const dwfResult = await runDynamicWorkflow({
+					manifest,
+					workflow: wf as import("../workflows/workflow-config.ts").DynamicWorkflowConfig,
+					signal: abortController.signal,
+					tokenBudget: wf.maxTokenBudget,
+				});
 				saveRunManifest(dwfResult.manifest);
 				earlyResult = dwfResult;
 			}
@@ -669,115 +649,97 @@ async function main(): Promise<void> {
 			result = earlyResult;
 		}
 		if (!earlyResult) {
-		debugLog(`[background-runner] calling directTeamAndWorkflowFromRun`,
-		);
-		const direct = directTeamAndWorkflowFromRun(manifest, tasks, agents);
-		debugLog(`[background-runner] direct done, finding team`);
-		const team =
-			direct?.team ??
-			allTeams(discoverTeams(cwd)).find(
-				(candidate) => candidate.name === manifest.team,
-			);
-		if (!team) throw new Error(`Team '${manifest.team}' not found.`);
-		debugLog(`[background-runner] team=${team.name}, finding workflow`,
-		);
-		const baseWorkflow =
-			direct?.workflow ??
-			allWorkflows(discoverWorkflows(cwd)).find(
-				(candidate) => candidate.name === manifest.workflow,
-			);
-		if (!baseWorkflow)
-			throw new Error(`Workflow '${manifest.workflow ?? ""}' not found.`);
-		debugLog(`[background-runner] workflow=${baseWorkflow.name}`);
-		const workflow = expandParallelResearchWorkflow(baseWorkflow, cwd);
-		debugLog(`[background-runner] loading config`);
-		const loadedConfig = loadConfig(cwd);
-		const runConfig =
-			manifest.runConfig &&
-			typeof manifest.runConfig === "object" &&
-			!Array.isArray(manifest.runConfig)
-				? (manifest.runConfig as typeof loadedConfig.config)
-				: loadedConfig.config;
-		const runtime = manifest.runtimeResolution
-			? {
-					kind: manifest.runtimeResolution.kind,
-					requestedMode: manifest.runtimeResolution.requestedMode,
-					available: manifest.runtimeResolution.available,
-					fallback: manifest.runtimeResolution.fallback,
-					steer: manifest.runtimeResolution.kind === "live-session",
-					resume: manifest.runtimeResolution.kind === "live-session",
-					liveToolActivity:
-						manifest.runtimeResolution.kind === "live-session",
-					transcript: manifest.runtimeResolution.kind !== "scaffold",
-					reason: manifest.runtimeResolution.reason,
-					safety: manifest.runtimeResolution.safety,
-				}
-			: await resolveCrewRuntime(runConfig);
-		const runtimeResolution =
-			manifest.runtimeResolution ?? runtimeResolutionState(runtime);
-		manifest = {
-			...manifest,
-			runtimeResolution,
-			runConfig,
-			updatedAt: new Date().toISOString(),
-		};
-		saveRunManifest(manifest);
-		appendEvent(manifest.eventsPath, {
-			type: "runtime.resolved",
-			runId: manifest.runId,
-			message: `Runtime resolved: ${runtime.kind} safety=${runtime.safety}`,
-			data: { runtimeResolution, async: true },
-		});
-		if (runtime.safety === "blocked")
-			throw new Error(
-				runtime.reason ??
-					"Child worker execution is disabled; refusing to create no-op scaffold subagents.",
-			);
-		const executeWorkers = runtime.kind !== "scaffold";
-		// Use ownerSessionId for workspaceId to ensure agents are only visible to the session that spawned them.
-		// manifest.cwd would cause cross-session visibility since all sessions share the same project directory.
-		// Mark this as background mode so task-runner writes events to background.log for debugging.
-		process.env.PI_CREW_BACKGROUND_MODE = "1";
-		// BUG #17: Keep-alive interval (NOT unref'd) prevents event loop from exiting
-		// during jiti compilation of team-runner.ts. Without this, the event loop
-		// can drain when import() blocks, causing the process to exit prematurely.
-		// NOTE: abortController is already created above (before heartbeat/interrupt guard start)
-		// so it is available here and its signal is passed through to executeTeamRun → child-pi.
+			debugLog(`[background-runner] calling directTeamAndWorkflowFromRun`);
+			const direct = directTeamAndWorkflowFromRun(manifest, tasks, agents);
+			debugLog(`[background-runner] direct done, finding team`);
+			const team = direct?.team ?? allTeams(discoverTeams(cwd)).find((candidate) => candidate.name === manifest.team);
+			if (!team) throw new Error(`Team '${manifest.team}' not found.`);
+			debugLog(`[background-runner] team=${team.name}, finding workflow`);
+			const baseWorkflow =
+				direct?.workflow ?? allWorkflows(discoverWorkflows(cwd)).find((candidate) => candidate.name === manifest.workflow);
+			if (!baseWorkflow) throw new Error(`Workflow '${manifest.workflow ?? ""}' not found.`);
+			debugLog(`[background-runner] workflow=${baseWorkflow.name}`);
+			const workflow = expandParallelResearchWorkflow(baseWorkflow, cwd);
+			debugLog(`[background-runner] loading config`);
+			const loadedConfig = loadConfig(cwd);
+			const runConfig =
+				manifest.runConfig && typeof manifest.runConfig === "object" && !Array.isArray(manifest.runConfig)
+					? (manifest.runConfig as typeof loadedConfig.config)
+					: loadedConfig.config;
+			const runtime = manifest.runtimeResolution
+				? {
+						kind: manifest.runtimeResolution.kind,
+						requestedMode: manifest.runtimeResolution.requestedMode,
+						available: manifest.runtimeResolution.available,
+						fallback: manifest.runtimeResolution.fallback,
+						steer: manifest.runtimeResolution.kind === "live-session",
+						resume: manifest.runtimeResolution.kind === "live-session",
+						liveToolActivity: manifest.runtimeResolution.kind === "live-session",
+						transcript: manifest.runtimeResolution.kind !== "scaffold",
+						reason: manifest.runtimeResolution.reason,
+						safety: manifest.runtimeResolution.safety,
+					}
+				: await resolveCrewRuntime(runConfig);
+			const runtimeResolution = manifest.runtimeResolution ?? runtimeResolutionState(runtime);
+			manifest = {
+				...manifest,
+				runtimeResolution,
+				runConfig,
+				updatedAt: new Date().toISOString(),
+			};
+			saveRunManifest(manifest);
+			appendEvent(manifest.eventsPath, {
+				type: "runtime.resolved",
+				runId: manifest.runId,
+				message: `Runtime resolved: ${runtime.kind} safety=${runtime.safety}`,
+				data: { runtimeResolution, async: true },
+			});
+			if (runtime.safety === "blocked")
+				throw new Error(runtime.reason ?? "Child worker execution is disabled; refusing to create no-op scaffold subagents.");
+			const executeWorkers = runtime.kind !== "scaffold";
+			// Use ownerSessionId for workspaceId to ensure agents are only visible to the session that spawned them.
+			// manifest.cwd would cause cross-session visibility since all sessions share the same project directory.
+			// Mark this as background mode so task-runner writes events to background.log for debugging.
+			process.env.PI_CREW_BACKGROUND_MODE = "1";
+			// BUG #17: Keep-alive interval (NOT unref'd) prevents event loop from exiting
+			// during jiti compilation of team-runner.ts. Without this, the event loop
+			// can drain when import() blocks, causing the process to exit prematurely.
+			// NOTE: abortController is already created above (before heartbeat/interrupt guard start)
+			// so it is available here and its signal is passed through to executeTeamRun → child-pi.
 
-		debugLog(`[background-runner] dispatching runKind=${manifest.runKind ?? "team-run"}`);
-		try {
-			// Fix round-4: goal-loop/dynamic-workflow handled by the short-circuit above.
-			// This switch now only carries the traditional team-run path.
-			switch (manifest.runKind ?? "team-run") {
-				default: {
-					// Existing "team-run" path — unchanged behavior.
-					result = await executeTeamRun({
-						manifest,
-						tasks,
-						team,
-						workflow,
-						agents,
-						executeWorkers,
-						limits: runConfig.limits,
-						runtime,
-						runtimeConfig: runConfig.runtime,
-						skillOverride: manifest.skillOverride,
-						reliability: runConfig.reliability,
-						workspaceId: manifest.ownerSessionId ?? manifest.cwd,
-						signal: abortController.signal,
-					});
-					break;
+			debugLog(`[background-runner] dispatching runKind=${manifest.runKind ?? "team-run"}`);
+			try {
+				// Fix round-4: goal-loop/dynamic-workflow handled by the short-circuit above.
+				// This switch now only carries the traditional team-run path.
+				switch (manifest.runKind ?? "team-run") {
+					default: {
+						// Existing "team-run" path — unchanged behavior.
+						result = await executeTeamRun({
+							manifest,
+							tasks,
+							team,
+							workflow,
+							agents,
+							executeWorkers,
+							limits: runConfig.limits,
+							runtime,
+							runtimeConfig: runConfig.runtime,
+							skillOverride: manifest.skillOverride,
+							reliability: runConfig.reliability,
+							workspaceId: manifest.ownerSessionId ?? manifest.cwd,
+							signal: abortController.signal,
+						});
+						break;
+					}
 				}
+				console.log(`[background-runner] executeTeamRun returned, status=${result.manifest.status}`);
+			} catch (execError) {
+				console.log(
+					`[background-runner] executeTeamRun THREW: ${execError instanceof Error ? execError.message : String(execError)}`,
+				);
+				console.log(`[background-runner] stack: ${execError instanceof Error ? execError.stack : "N/A"}`);
+				throw execError;
 			}
-			console.log(`[background-runner] executeTeamRun returned, status=${result.manifest.status}`,
-			);
-		} catch (execError) {
-			console.log(`[background-runner] executeTeamRun THREW: ${execError instanceof Error ? execError.message : String(execError)}`,
-			);
-			console.log(`[background-runner] stack: ${execError instanceof Error ? execError.stack : "N/A"}`,
-			);
-			throw execError;
-		}
 		} // close if (!earlyResult) — team-run setup+execute done; earlyResult path skips to here
 		manifest = result!.manifest;
 		tasks = result!.tasks;
@@ -786,40 +748,19 @@ async function main(): Promise<void> {
 			runId: manifest.runId,
 			data: { status: manifest.status, tasks: tasks.length },
 		});
-		console.log(`[background-runner] async.completed written, status=${manifest.status}`,
-		);
-		if (
-			manifest.status === "failed" ||
-			manifest.status === "cancelled" ||
-			manifest.status === "blocked"
-		)
-			process.exitCode = 1;
+		console.log(`[background-runner] async.completed written, status=${manifest.status}`);
+		if (manifest.status === "failed" || manifest.status === "cancelled" || manifest.status === "blocked") process.exitCode = 1;
 	} catch (error) {
 		// Terminate live agents on failure too — agents are done when the run fails
 		try {
-			const loaded = withRunLockSync(
-				manifest,
-				() => loadRunManifestById(cwd, runId),
-				{ staleMs: 30_000 },
-			); // Use withRunLockSync to prevent race with concurrent writers (e.g., stale reconciler)
+			const loaded = withRunLockSync(manifest, () => loadRunManifestById(cwd, runId), { staleMs: 30_000 }); // Use withRunLockSync to prevent race with concurrent writers (e.g., stale reconciler)
 			// between the read and the subsequent save.
 			const manifestToUse = loaded?.manifest ?? manifest;
 			if (manifestToUse) {
 				// LAZY: live-agent-manager only needed on failure cleanup path; avoid module load at hot path.
-				const { terminateLiveAgentsForRun } = await import(
-					"./live-agent-manager.ts"
-				);
-				void terminateLiveAgentsForRun(
-					manifestToUse.runId,
-					"failed",
-					appendEvent,
-					manifestToUse.eventsPath,
-				).catch((error) =>
-					logInternalError(
-						"background-runner.terminate",
-						error,
-						`runId=${manifestToUse.runId}`,
-					),
+				const { terminateLiveAgentsForRun } = await import("./live-agent-manager.ts");
+				void terminateLiveAgentsForRun(manifestToUse.runId, "failed", appendEvent, manifestToUse.eventsPath).catch((error) =>
+					logInternalError("background-runner.terminate", error, `runId=${manifestToUse.runId}`),
 				);
 			}
 		} catch {
@@ -833,8 +774,7 @@ async function main(): Promise<void> {
 			message,
 		});
 		process.exitCode = 1;
-		console.log(`[background-runner] catch block, error=${error instanceof Error ? error.message : String(error)}`,
-		);
+		console.log(`[background-runner] catch block, error=${error instanceof Error ? error.message : String(error)}`);
 	} finally {
 		// FIX Issue #4: Use shared runCleanup() function for consistent cleanup
 		// across all exit paths (normal, unhandled rejection, main() exception).
@@ -872,9 +812,7 @@ async function main(): Promise<void> {
 try {
 	await main();
 } catch (err) {
-	console.error(
-		`[background-runner] DEBUG: main() uncaught: ${err instanceof Error ? err.message : String(err)}`,
-	);
+	console.error(`[background-runner] DEBUG: main() uncaught: ${err instanceof Error ? err.message : String(err)}`);
 	// FIX Issue #1: Set the flag so the finally block's runCleanup() call
 	// will trigger process.exit(1) after cleanup completes. Previously this
 	// called process.exit(1) directly, bypassing the finally block and leaving

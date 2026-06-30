@@ -1,12 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
+import type { AgentConfig } from "../../src/agents/agent-config.ts";
+import { rewriteTeamWorkerPrompt } from "../../src/prompt/prompt-runtime.ts";
 import { runChildPi } from "../../src/runtime/child-pi.ts";
 import { buildPiWorkerArgs, checkCrewDepth } from "../../src/runtime/pi-args.ts";
-import { rewriteTeamWorkerPrompt } from "../../src/prompt/prompt-runtime.ts";
-import type { AgentConfig } from "../../src/agents/agent-config.ts";
 
 const agent: AgentConfig = {
 	name: "phase6",
@@ -25,7 +25,13 @@ function restoreEnv(name: string, previous: string | undefined): void {
 }
 
 test("buildPiWorkerArgs writes long tasks to private @file and emits canonical depth env", () => {
-	const result = buildPiWorkerArgs({ task: "x".repeat(9000), agent, sessionEnabled: false, maxDepth: 5, env: { PI_CREW_DEPTH: "1" } as NodeJS.ProcessEnv });
+	const result = buildPiWorkerArgs({
+		task: "x".repeat(9000),
+		agent,
+		sessionEnabled: false,
+		maxDepth: 5,
+		env: { PI_CREW_DEPTH: "1" } as NodeJS.ProcessEnv,
+	});
 	try {
 		const taskArg = result.args.find((arg) => arg.startsWith("@"));
 		assert.ok(taskArg);
@@ -50,10 +56,19 @@ test("crew depth guard blocks child workers at max depth before mock execution",
 	process.env.PI_CREW_ALLOW_MOCK = "1";
 	process.env.PI_TEAMS_MOCK_CHILD_PI = "success";
 	try {
-		assert.deepEqual(checkCrewDepth(2), { depth: 2, maxDepth: 2, blocked: true });
+		assert.deepEqual(checkCrewDepth(2), {
+			depth: 2,
+			maxDepth: 2,
+			blocked: true,
+		});
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-depth-"));
 		try {
-			const result = await runChildPi({ cwd: dir, task: "hi", agent, maxDepth: 2 });
+			const result = await runChildPi({
+				cwd: dir,
+				task: "hi",
+				agent,
+				maxDepth: 2,
+			});
 			assert.equal(result.exitCode, 1);
 			assert.match(result.stderr, /depth guard/);
 		} finally {
@@ -67,5 +82,11 @@ test("crew depth guard blocks child workers at max depth before mock execution",
 
 test("prompt runtime supports canonical pi-crew inherit env behavior", () => {
 	const prompt = "Base\n\n# Project Context\n\nProject-specific instructions and guidelines:\n\nsecret\nCurrent date: now";
-	assert.equal(rewriteTeamWorkerPrompt(prompt, { inheritProjectContext: false, inheritSkills: true }).includes("secret"), false);
+	assert.equal(
+		rewriteTeamWorkerPrompt(prompt, {
+			inheritProjectContext: false,
+			inheritSkills: true,
+		}).includes("secret"),
+		false,
+	);
 });

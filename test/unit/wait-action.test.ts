@@ -4,10 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
 
 function restoreEnv(name: string, previous: string | undefined): void {
@@ -37,10 +34,7 @@ test("wait returns immediately for already-completed run", async () => {
 		const runId = run.details.runId!;
 
 		// wait should return immediately since run is already completed
-		const waitResult = await handleTeamTool(
-			{ action: "wait", runId, config: { timeoutMs: 5000 } },
-			{ cwd },
-		);
+		const waitResult = await handleTeamTool({ action: "wait", runId, config: { timeoutMs: 5000 } }, { cwd });
 		assert.equal(waitResult.isError, false);
 		assert.match(firstText(waitResult), /finished: completed/);
 	} finally {
@@ -53,10 +47,7 @@ test("wait returns immediately for already-completed run", async () => {
 test("wait returns error for missing runId", async () => {
 	const cwd = createTrackedTempDir("pi-crew-wait-noid-");
 	try {
-		const waitResult = await handleTeamTool(
-			{ action: "wait", config: { timeoutMs: 1000 } },
-			{ cwd },
-		);
+		const waitResult = await handleTeamTool({ action: "wait", config: { timeoutMs: 1000 } }, { cwd });
 		assert.equal(waitResult.isError, true);
 		assert.match(firstText(waitResult), /wait requires runId/);
 	} finally {
@@ -115,14 +106,44 @@ test("wait finds run in child directory when ctx.cwd is parent", async () => {
 			artifacts: [],
 		};
 		const tasks = [
-			{ id: "01_explore", runId: "cross-cwd-run-001", role: "explorer", agent: "explorer", title: "Explore", status: "completed" as const, dependsOn: [], cwd: childDir, createdAt: Date.now(), startedAt: Date.now(), completedAt: Date.now(), attempts: 1 },
-			{ id: "02_execute", runId: "cross-cwd-run-001", role: "executor", agent: "executor", title: "Execute", status: "completed" as const, dependsOn: [], cwd: childDir, createdAt: Date.now(), startedAt: Date.now(), completedAt: Date.now(), attempts: 1 },
+			{
+				id: "01_explore",
+				runId: "cross-cwd-run-001",
+				role: "explorer",
+				agent: "explorer",
+				title: "Explore",
+				status: "completed" as const,
+				dependsOn: [],
+				cwd: childDir,
+				createdAt: Date.now(),
+				startedAt: Date.now(),
+				completedAt: Date.now(),
+				attempts: 1,
+			},
+			{
+				id: "02_execute",
+				runId: "cross-cwd-run-001",
+				role: "executor",
+				agent: "executor",
+				title: "Execute",
+				status: "completed" as const,
+				dependsOn: [],
+				cwd: childDir,
+				createdAt: Date.now(),
+				startedAt: Date.now(),
+				completedAt: Date.now(),
+				attempts: 1,
+			},
 		];
 		fs.writeFileSync(path.join(stateRoot, "manifest.json"), JSON.stringify(manifest));
 		fs.writeFileSync(path.join(stateRoot, "tasks.json"), JSON.stringify(tasks));
 		// Call wait from the parent directory — locateRunCwd should scan children and find it
 		const waitResult = await handleTeamTool(
-			{ action: "wait", runId: "cross-cwd-run-001", config: { timeoutMs: 2000 } },
+			{
+				action: "wait",
+				runId: "cross-cwd-run-001",
+				config: { timeoutMs: 2000 },
+			},
 			{ cwd: parentDir },
 		);
 		assert.equal(waitResult.isError, false);
@@ -160,10 +181,7 @@ test("wait returns task breakdown for live-session run", async () => {
 		assert.equal(run.isError, false);
 		const runId = run.details.runId!;
 		// Wait for completion
-		const waitResult = await handleTeamTool(
-			{ action: "wait", runId, config: { timeoutMs: 10000 } },
-			{ cwd },
-		);
+		const waitResult = await handleTeamTool({ action: "wait", runId, config: { timeoutMs: 10000 } }, { cwd });
 		assert.equal(waitResult.isError, false);
 		const text = firstText(waitResult);
 		assert.match(text, /finished: completed/, `Expected 'finished: completed' in: ${text}`);
@@ -206,10 +224,7 @@ test("e2e wait from parent directory for live-session run in child", async () =>
 		assert.equal(run.isError, false);
 		const runId = run.details.runId!;
 		// Wait from the parent directory — locateRunCwd scans children to find the run
-		const waitResult = await handleTeamTool(
-			{ action: "wait", runId, config: { timeoutMs: 10000 } },
-			{ cwd: parentDir },
-		);
+		const waitResult = await handleTeamTool({ action: "wait", runId, config: { timeoutMs: 10000 } }, { cwd: parentDir });
 		assert.equal(waitResult.isError, false);
 		const text = firstText(waitResult);
 		assert.match(text, /finished: completed/, `Expected 'finished: completed' in: ${text}`);

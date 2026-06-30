@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseHandoffFromOutput, HANDOFF_TEMPLATE } from "../../src/runtime/task-packet.ts";
+import { describe, it } from "node:test";
+import { HANDOFF_TEMPLATE, parseHandoffFromOutput } from "../../src/runtime/task-packet.ts";
 
 const SAMPLE_OUTPUT = `Some preamble text here.
 
@@ -53,17 +53,32 @@ describe("parseHandoffFromOutput", () => {
 
 	it("returns empty arrays for missing handoff section", () => {
 		const result = parseHandoffFromOutput("Just some random output without handoff");
-		assert.deepEqual(result, { summary: [], filesChanged: [], tests: [], followups: [] });
+		assert.deepEqual(result, {
+			summary: [],
+			filesChanged: [],
+			tests: [],
+			followups: [],
+		});
 	});
 
 	it("returns empty arrays for empty string input", () => {
 		const result = parseHandoffFromOutput("");
-		assert.deepEqual(result, { summary: [], filesChanged: [], tests: [], followups: [] });
+		assert.deepEqual(result, {
+			summary: [],
+			filesChanged: [],
+			tests: [],
+			followups: [],
+		});
 	});
 
 	it("returns empty arrays for null input", () => {
 		const result = parseHandoffFromOutput(null as any);
-		assert.deepEqual(result, { summary: [], filesChanged: [], tests: [], followups: [] });
+		assert.deepEqual(result, {
+			summary: [],
+			filesChanged: [],
+			tests: [],
+			followups: [],
+		});
 	});
 
 	it("handles handoff with empty sections", () => {

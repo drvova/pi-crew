@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { snapshotTaskState, createSessionSnapshot } from "../../src/runtime/session-snapshot.ts";
-import type { TeamTaskState, TeamRunManifest } from "../../src/state/types.ts";
+import { describe, it } from "node:test";
+import { createSessionSnapshot, snapshotTaskState } from "../../src/runtime/session-snapshot.ts";
+import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
 const baseTask: TeamTaskState = {
 	id: "task-1",
@@ -13,7 +13,13 @@ const baseTask: TeamTaskState = {
 	dependsOn: ["dep-1"],
 	cwd: "/tmp",
 	usage: { input: 100, output: 50 },
-	agentProgress: { activityState: "active", currentTool: "bash", recentTools: [], recentOutput: [], toolCount: 0 },
+	agentProgress: {
+		activityState: "active",
+		currentTool: "bash",
+		recentTools: [],
+		recentOutput: [],
+		toolCount: 0,
+	},
 };
 
 describe("snapshotTaskState", () => {

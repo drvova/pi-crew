@@ -1,8 +1,8 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execFileSync } from "node:child_process";
+import { describe, it } from "node:test";
 
 /** Resolve through realpathSync.native for consistent long-name path comparison.
  *  On Windows CI, regular realpathSync preserves short-name form (RUNNER~1)
@@ -12,21 +12,28 @@ function tryRealpath(p: string): string {
 		const r = fs.realpathSync.native(p);
 		return r.startsWith("\\\\?\\") ? r.slice(4) : r;
 	} catch {
-		try { return fs.realpathSync(p); } catch { return p; }
+		try {
+			return fs.realpathSync(p);
+		} catch {
+			return p;
+		}
 	}
 }
+
 import {
+	captureWorktreeDiff,
+	captureWorktreeDiffStat,
+	findGitRoot,
 	normalizeSeedPaths,
 	overlaySeedPaths,
-	findGitRoot,
-	captureWorktreeDiffStat,
-	captureWorktreeDiff,
 } from "../../src/worktree/worktree-manager.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function initGitRepo(dir: string) {
 	try {
-		execFileSync("git", ["init", "-q", "--initial-branch=main"], { cwd: dir });
+		execFileSync("git", ["init", "-q", "--initial-branch=main"], {
+			cwd: dir,
+		});
 	} catch {
 		// Older git versions don't support --initial-branch
 		execFileSync("git", ["init", "-q"], { cwd: dir });
@@ -48,17 +55,11 @@ describe("normalizeSeedPaths", () => {
 	});
 
 	it("rejects path traversal with ..", () => {
-		assert.throws(
-			() => normalizeSeedPaths(["../etc/passwd"], "/repo"),
-			/stay inside repoRoot/,
-		);
+		assert.throws(() => normalizeSeedPaths(["../etc/passwd"], "/repo"), /stay inside repoRoot/);
 	});
 
 	it("rejects absolute paths", () => {
-		assert.throws(
-			() => normalizeSeedPaths(["/etc/passwd"], "/repo"),
-			/stay inside repoRoot/,
-		);
+		assert.throws(() => normalizeSeedPaths(["/etc/passwd"], "/repo"), /stay inside repoRoot/);
 	});
 
 	it("filters empty strings", () => {

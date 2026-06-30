@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { parseConfigResilient } from "../../src/config/resilient-parser.ts";
 
 test("parseConfigResilient: returns valid for empty object", () => {
@@ -56,7 +56,7 @@ test("parseConfigResilient: non-object input returns error", () => {
 test("parseConfigResilient: multiple unknown keys each get suggestions", () => {
 	const result = parseConfigResilient({
 		limts: { maxConcurrentWorkers: 2 }, // typo
-		runtim: { mode: "auto" },           // typo
+		runtim: { mode: "auto" }, // typo
 	});
 	assert.equal(result.valid, false);
 	assert.equal(result.errors.length, 2);

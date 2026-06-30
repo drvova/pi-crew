@@ -1,12 +1,19 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { DEFAULT_CHILD_PI } from "../../src/config/defaults.ts";
-import { buildPiWorkerArgs, checkCrewDepth, currentCrewDepth, resolveCrewMaxDepth, applyThinkingSuffix, cleanupTempDir } from "../../src/runtime/pi-args.ts";
-import { ChildPiLineObserver } from "../../src/runtime/child-pi.ts";
+import test from "node:test";
 import type { AgentConfig } from "../../src/agents/agent-config.ts";
+import { DEFAULT_CHILD_PI } from "../../src/config/defaults.ts";
+import { ChildPiLineObserver } from "../../src/runtime/child-pi.ts";
+import {
+	applyThinkingSuffix,
+	buildPiWorkerArgs,
+	checkCrewDepth,
+	cleanupTempDir,
+	currentCrewDepth,
+	resolveCrewMaxDepth,
+} from "../../src/runtime/pi-args.ts";
 
 const minimalAgent: AgentConfig = {
 	name: "test-agent",
@@ -17,13 +24,19 @@ const minimalAgent: AgentConfig = {
 };
 
 test("child Pi response timeout allows normal provider think time", () => {
-	assert.ok(DEFAULT_CHILD_PI.responseTimeoutMs >= 2 * 60_000, `expected child response timeout to be at least 2 minutes, got ${DEFAULT_CHILD_PI.responseTimeoutMs}ms`);
+	assert.ok(
+		DEFAULT_CHILD_PI.responseTimeoutMs >= 2 * 60_000,
+		`expected child response timeout to be at least 2 minutes, got ${DEFAULT_CHILD_PI.responseTimeoutMs}ms`,
+	);
 });
 
 // --- New tests ---
 
 test("buildPiWorkerArgs includes task in args", () => {
-	const result = buildPiWorkerArgs({ task: "Do the thing", agent: minimalAgent });
+	const result = buildPiWorkerArgs({
+		task: "Do the thing",
+		agent: minimalAgent,
+	});
 	assert.ok(result.args.includes("Task: Do the thing"));
 	assert.ok(result.args.includes("--mode"));
 	assert.ok(result.args.includes("json"));
@@ -31,7 +44,10 @@ test("buildPiWorkerArgs includes task in args", () => {
 });
 
 test("buildPiWorkerArgs includes model from agent config", () => {
-	const agentWithModel: AgentConfig = { ...minimalAgent, model: "claude-sonnet-4" };
+	const agentWithModel: AgentConfig = {
+		...minimalAgent,
+		model: "claude-sonnet-4",
+	};
 	const result = buildPiWorkerArgs({ task: "test", agent: agentWithModel });
 	const modelIdx = result.args.indexOf("--model");
 	assert.ok(modelIdx !== -1, "--model flag missing");
@@ -39,7 +55,10 @@ test("buildPiWorkerArgs includes model from agent config", () => {
 });
 
 test("buildPiWorkerArgs creates temp file for system prompt", () => {
-	const agentWithPrompt: AgentConfig = { ...minimalAgent, systemPrompt: "You are a specialist." };
+	const agentWithPrompt: AgentConfig = {
+		...minimalAgent,
+		systemPrompt: "You are a specialist.",
+	};
 	const result = buildPiWorkerArgs({ task: "test", agent: agentWithPrompt });
 	assert.ok(result.tempDir, "expected tempDir to be created");
 	const promptFlagIdx = result.args.indexOf("--system-prompt");
@@ -52,14 +71,24 @@ test("buildPiWorkerArgs creates temp file for system prompt", () => {
 });
 
 test("buildPiWorkerArgs increments depth in env vars", () => {
-	const env = { PI_CREW_DEPTH: "1", PI_TEAMS_DEPTH: "1" } as NodeJS.ProcessEnv;
-	const result = buildPiWorkerArgs({ task: "test", agent: minimalAgent, env });
+	const env = {
+		PI_CREW_DEPTH: "1",
+		PI_TEAMS_DEPTH: "1",
+	} as NodeJS.ProcessEnv;
+	const result = buildPiWorkerArgs({
+		task: "test",
+		agent: minimalAgent,
+		env,
+	});
 	assert.equal(result.env.PI_CREW_DEPTH, "2");
 	assert.equal(result.env.PI_TEAMS_DEPTH, "2");
 });
 
 test("checkCrewDepth blocks when at max depth", () => {
-	const env = { PI_CREW_DEPTH: "2", PI_CREW_MAX_DEPTH: "2" } as NodeJS.ProcessEnv;
+	const env = {
+		PI_CREW_DEPTH: "2",
+		PI_CREW_MAX_DEPTH: "2",
+	} as NodeJS.ProcessEnv;
 	const result = checkCrewDepth(undefined, env);
 	assert.equal(result.blocked, true);
 	assert.equal(result.depth, 2);
@@ -67,7 +96,10 @@ test("checkCrewDepth blocks when at max depth", () => {
 });
 
 test("checkCrewDepth allows when below max depth", () => {
-	const env = { PI_CREW_DEPTH: "1", PI_CREW_MAX_DEPTH: "3" } as NodeJS.ProcessEnv;
+	const env = {
+		PI_CREW_DEPTH: "1",
+		PI_CREW_MAX_DEPTH: "3",
+	} as NodeJS.ProcessEnv;
 	const result = checkCrewDepth(undefined, env);
 	assert.equal(result.blocked, false);
 	assert.equal(result.depth, 1);
@@ -84,7 +116,13 @@ test("checkCrewDepth respects inputMaxDepth when env not set", () => {
 test("currentCrewDepth parses depth from env", () => {
 	assert.equal(currentCrewDepth({ PI_CREW_DEPTH: "3" } as NodeJS.ProcessEnv), 3);
 	assert.equal(currentCrewDepth({ PI_TEAMS_DEPTH: "4" } as NodeJS.ProcessEnv), 4);
-	assert.equal(currentCrewDepth({ PI_CREW_DEPTH: "3", PI_TEAMS_DEPTH: "4" } as NodeJS.ProcessEnv), 3);
+	assert.equal(
+		currentCrewDepth({
+			PI_CREW_DEPTH: "3",
+			PI_TEAMS_DEPTH: "4",
+		} as NodeJS.ProcessEnv),
+		3,
+	);
 	assert.equal(currentCrewDepth({} as NodeJS.ProcessEnv), 0);
 	assert.equal(currentCrewDepth({ PI_CREW_DEPTH: "abc" } as NodeJS.ProcessEnv), 0);
 	assert.equal(currentCrewDepth({ PI_CREW_DEPTH: "-1" } as NodeJS.ProcessEnv), 0);

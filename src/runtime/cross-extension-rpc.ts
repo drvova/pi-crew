@@ -5,9 +5,7 @@ export interface EventBus {
 	emit(event: string, data: unknown): void;
 }
 
-export type RpcReply<T = void> =
-	| { success: true; data?: T }
-	| { success: false; error: string };
+export type RpcReply<T = void> = { success: true; data?: T } | { success: false; error: string };
 
 export const PROTOCOL_VERSION = 1;
 
@@ -84,39 +82,43 @@ export function registerCrewRpcHandlers(deps: RpcDeps): RpcHandle {
 		if (params.token !== EXPECTED_TOKEN) {
 			console.warn(
 				`[pi-crew SECURITY] RPC invocation rejected: missing/invalid token (source=${params.source ?? "(none)"}). ` +
-				`Privileged RPC requires the in-process token. Request may be from an untrusted extension.`,
+					`Privileged RPC requires the in-process token. Request may be from an untrusted extension.`,
 			);
 			return false;
 		}
 		if (!params.source || params.source !== CREW_RPC_SOURCE) {
 			console.warn(
 				`[pi-crew SECURITY] RPC invocation from unexpected source: ${params.source ?? "(none)"}. ` +
-				`Expected '${CREW_RPC_SOURCE}'. Request may be from an untrusted extension.`,
+					`Expected '${CREW_RPC_SOURCE}'. Request may be from an untrusted extension.`,
 			);
 			return false;
 		}
 		return true;
 	}
 
-	const unsubSpawn = handleRpc<{ requestId: string; type: string; prompt: string; options?: Record<string, unknown>; source?: string; token?: string }>(
-		events,
-		"crew:rpc:spawn",
-		(params) => {
-			if (!validateRpcSource(params)) throw new Error("Unauthorized: RPC spawn requires valid token and source='pi-crew'");
-			const ctx = getCtx();
-			if (!ctx) throw new Error("No active session");
-			return { id: spawn(params.type, params.prompt, params.options ?? {}) };
-		},
-	);
+	const unsubSpawn = handleRpc<{
+		requestId: string;
+		type: string;
+		prompt: string;
+		options?: Record<string, unknown>;
+		source?: string;
+		token?: string;
+	}>(events, "crew:rpc:spawn", (params) => {
+		if (!validateRpcSource(params)) throw new Error("Unauthorized: RPC spawn requires valid token and source='pi-crew'");
+		const ctx = getCtx();
+		if (!ctx) throw new Error("No active session");
+		return { id: spawn(params.type, params.prompt, params.options ?? {}) };
+	});
 
-	const unsubStop = handleRpc<{ requestId: string; agentId: string; source?: string; token?: string }>(
-		events,
-		"crew:rpc:stop",
-		(params) => {
-			if (!validateRpcSource(params)) throw new Error("Unauthorized: RPC stop requires valid token and source='pi-crew'");
-			if (!abort(params.agentId)) throw new Error("Agent not found");
-		},
-	);
+	const unsubStop = handleRpc<{
+		requestId: string;
+		agentId: string;
+		source?: string;
+		token?: string;
+	}>(events, "crew:rpc:stop", (params) => {
+		if (!validateRpcSource(params)) throw new Error("Unauthorized: RPC stop requires valid token and source='pi-crew'");
+		if (!abort(params.agentId)) throw new Error("Agent not found");
+	});
 
 	return { unsubPing, unsubSpawn, unsubStop };
 }

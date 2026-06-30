@@ -1,31 +1,20 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import {
-	createFileCoalescer,
-	clearReadCache,
-	readJsonFileCoalesced,
-} from "../../src/utils/file-coalescer.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { clearReadCache, createFileCoalescer, readJsonFileCoalesced } from "../../src/utils/file-coalescer.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 describe("createFileCoalescer", () => {
 	it("schedules a file and invokes handler after delay", () => {
 		const calls: string[] = [];
-		const coalescer = createFileCoalescer(
-			(file) => calls.push(file),
-			10,
-			{
-				setTimeout: (handler, _ms) => {
-					handler();
-					return 1;
-				},
-				clearTimeout: () => {},
+		const coalescer = createFileCoalescer((file) => calls.push(file), 10, {
+			setTimeout: (handler, _ms) => {
+				handler();
+				return 1;
 			},
-		);
+			clearTimeout: () => {},
+		});
 		coalescer.schedule("test.txt");
 		assert.deepEqual(calls, ["test.txt"]);
 	});
@@ -52,17 +41,13 @@ describe("createFileCoalescer", () => {
 	it("allows scheduling a file again after it fires", () => {
 		const calls: string[] = [];
 		const timers: Array<() => void> = [];
-		const coalescer = createFileCoalescer(
-			(file) => calls.push(file),
-			0,
-			{
-				setTimeout: (handler) => {
-					timers.push(handler);
-					return timers.length;
-				},
-				clearTimeout: () => {},
+		const coalescer = createFileCoalescer((file) => calls.push(file), 0, {
+			setTimeout: (handler) => {
+				timers.push(handler);
+				return timers.length;
 			},
-		);
+			clearTimeout: () => {},
+		});
 		coalescer.schedule("a.txt");
 		// Fire the first timer manually (simulates delay elapsing)
 		timers[0]!();
@@ -75,7 +60,9 @@ describe("createFileCoalescer", () => {
 		let cleared = 0;
 		const coalescer = createFileCoalescer(() => {}, 10000, {
 			setTimeout: () => Symbol("timer"),
-			clearTimeout: () => { cleared++; },
+			clearTimeout: () => {
+				cleared++;
+			},
 		});
 		coalescer.schedule("a.txt");
 		coalescer.schedule("b.txt");

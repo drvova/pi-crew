@@ -1,11 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	invalidateAgentDiscoveryCache,
 	discoverAgents,
+	getCacheVersion,
+	invalidateAgentDiscoveryCache,
 	registerDynamicAgent,
 	unregisterDynamicAgent,
-	getCacheVersion,
 } from "../../src/agents/discover-agents.ts";
 
 const CWD = process.cwd();
@@ -32,7 +32,9 @@ test("cacheVersion increments on registerDynamicAgent (SEC-005)", () => {
 	} finally {
 		try {
 			unregisterDynamicAgent("cache-test-agent");
-		} catch { /* ok */ }
+		} catch {
+			/* ok */
+		}
 	}
 });
 
@@ -49,7 +51,9 @@ test("cacheVersion increments on unregisterDynamicAgent (SEC-005)", () => {
 		unregisterDynamicAgent("cache-unreg-test");
 		const after = getCacheVersion();
 		assert.ok(after > before, "Cache version should increment after dynamic agent unregistration");
-	} catch { /* ignore if not found */ }
+	} catch {
+		/* ignore if not found */
+	}
 });
 
 test("discoverAgents returns fresh result after explicit invalidation (SEC-005)", () => {
@@ -63,7 +67,9 @@ test("discoverAgents returns fresh result after explicit invalidation (SEC-005)"
 test("registerDynamicAgent invalidates cache (SEC-005)", () => {
 	try {
 		unregisterDynamicAgent("cache-race-test");
-	} catch { /* ok */ }
+	} catch {
+		/* ok */
+	}
 
 	const result1 = discoverAgents(CWD);
 	assert.ok(result1, "Initial discovery should succeed");
@@ -81,7 +87,9 @@ test("registerDynamicAgent invalidates cache (SEC-005)", () => {
 
 	try {
 		unregisterDynamicAgent("cache-race-test");
-	} catch { /* ok */ }
+	} catch {
+		/* ok */
+	}
 });
 
 test("pruneDiscoveryCache removes entries with outdated version (SEC-005)", () => {

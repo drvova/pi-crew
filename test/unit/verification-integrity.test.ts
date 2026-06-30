@@ -5,16 +5,12 @@
  * compareSnapshot reports drifted/added/removed files.
  */
 
-import { afterEach, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-	MANIFEST_FILES,
-	snapshotManifests,
-	compareSnapshot,
-} from "../../src/runtime/verification-integrity.ts";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { compareSnapshot, MANIFEST_FILES, snapshotManifests } from "../../src/runtime/verification-integrity.ts";
 
 let tmpDir = "";
 
@@ -49,7 +45,7 @@ describe("snapshotManifests", () => {
 	});
 
 	it("produces stable hashes for identical content", () => {
-		fs.writeFileSync(path.join(tmpDir, "package.json"), "{ \"name\": \"stable\" }");
+		fs.writeFileSync(path.join(tmpDir, "package.json"), '{ "name": "stable" }');
 		const a = snapshotManifests(tmpDir);
 		const b = snapshotManifests(tmpDir);
 		assert.deepEqual(a, b);
@@ -108,8 +104,16 @@ describe("compareSnapshot", () => {
 	});
 
 	it("reports multiple drifts in sorted order", () => {
-		const a = { "package.json": "aaa", "tsconfig.json": "bbb", "go.mod": "ccc" };
-		const b = { "package.json": "CHANGED", "tsconfig.json": "bbb", "Cargo.toml": "new" };
+		const a = {
+			"package.json": "aaa",
+			"tsconfig.json": "bbb",
+			"go.mod": "ccc",
+		};
+		const b = {
+			"package.json": "CHANGED",
+			"tsconfig.json": "bbb",
+			"Cargo.toml": "new",
+		};
 		// package.json changed; go.mod removed; Cargo.toml added
 		assert.deepEqual(compareSnapshot(a, b), ["Cargo.toml", "go.mod", "package.json"]);
 	});

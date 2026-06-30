@@ -1,20 +1,17 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 import {
-	MARKER_START,
-	MARKER_END,
-	injectGuidance,
-	removeGuidance,
-	standardGuidanceBlocks,
 	extractGuidanceIds,
+	injectGuidance,
+	MARKER_END,
+	MARKER_START,
+	removeGuidance,
 	sanitizeGuidanceContent,
+	standardGuidanceBlocks,
 } from "../../src/config/markers.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 // ─── injectGuidance ──────────────────────────────────────────────────────
 
@@ -24,7 +21,11 @@ describe("injectGuidance", () => {
 		const filePath = path.join(dir, "AGENTS.md");
 		try {
 			const result = injectGuidance(filePath, [
-				{ id: "overview", content: "## Overview\nHello world", priority: 10 },
+				{
+					id: "overview",
+					content: "## Overview\nHello world",
+					priority: 10,
+				},
 			]);
 			assert.equal(result.modified, true);
 			assert.deepEqual(result.added, ["overview"]);
@@ -43,9 +44,7 @@ describe("injectGuidance", () => {
 		const filePath = path.join(dir, "AGENTS.md");
 		try {
 			fs.writeFileSync(filePath, "# Project Info\nSome description\n", "utf-8");
-			const result = injectGuidance(filePath, [
-				{ id: "commands", content: "### Commands\n| cmd | desc |" },
-			]);
+			const result = injectGuidance(filePath, [{ id: "commands", content: "### Commands\n| cmd | desc |" }]);
 			assert.equal(result.modified, true);
 			assert.deepEqual(result.added, ["commands"]);
 			const content = fs.readFileSync(filePath, "utf-8");
@@ -62,13 +61,9 @@ describe("injectGuidance", () => {
 		const filePath = path.join(dir, "AGENTS.md");
 		try {
 			// First injection
-			injectGuidance(filePath, [
-				{ id: "block-a", content: "Content A" },
-			]);
+			injectGuidance(filePath, [{ id: "block-a", content: "Content A" }]);
 			// Second injection: add block-b
-			const result = injectGuidance(filePath, [
-				{ id: "block-b", content: "Content B" },
-			]);
+			const result = injectGuidance(filePath, [{ id: "block-b", content: "Content B" }]);
 			assert.equal(result.modified, true);
 			assert.deepEqual(result.added, ["block-b"]);
 			const content = fs.readFileSync(filePath, "utf-8");
@@ -152,10 +147,7 @@ describe("injectGuidance", () => {
 		const dir = createTrackedTempDir("pi-crew-markers-");
 		const filePath = path.join(dir, "AGENTS.md");
 		try {
-			assert.throws(
-				() => injectGuidance(filePath, [{ id: "bad id!", content: "x" }]),
-				/Invalid guidance block ID/,
-			);
+			assert.throws(() => injectGuidance(filePath, [{ id: "bad id!", content: "x" }]), /Invalid guidance block ID/);
 		} finally {
 			removeTrackedTempDir(dir);
 		}
@@ -166,7 +158,10 @@ describe("injectGuidance", () => {
 		const filePath = path.join(dir, "AGENTS.md");
 		try {
 			injectGuidance(filePath, [
-				{ id: "safe", content: "Good\nSYSTEM: evil directive\nMore good" },
+				{
+					id: "safe",
+					content: "Good\nSYSTEM: evil directive\nMore good",
+				},
 			]);
 			const content = fs.readFileSync(filePath, "utf-8");
 			assert.ok(!content.includes("SYSTEM: evil directive"));

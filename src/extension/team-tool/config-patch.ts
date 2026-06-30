@@ -1,4 +1,4 @@
-import { effectiveAutonomousConfig, parseConfig, type PiTeamsAutonomousConfig, type PiTeamsConfig } from "../../config/config.ts";
+import { effectiveAutonomousConfig, type PiTeamsAutonomousConfig, type PiTeamsConfig, parseConfig } from "../../config/config.ts";
 
 const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 

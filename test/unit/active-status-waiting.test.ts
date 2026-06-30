@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { isActiveRunStatus } from "../../src/runtime/process-status.ts";
+import { describe, it } from "node:test";
 import { taskStatusToAgentStatus } from "../../src/runtime/crew-agent-runtime.ts";
+import { isActiveRunStatus } from "../../src/runtime/process-status.ts";
 
 describe("Active run status includes waiting", () => {
 	it("waiting is an active run status", () => {

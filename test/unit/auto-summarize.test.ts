@@ -3,14 +3,14 @@
  * @see src/runtime/auto-summarize.ts
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
+	type AutoSummarizeConfig,
+	type AutoSummarizeDecision,
 	AutoSummarizeService,
 	createAutoSummarizeService,
 	DEFAULT_AUTO_SUMMARIZE_CONFIG,
-	type AutoSummarizeConfig,
-	type AutoSummarizeDecision,
 } from "../../src/runtime/auto-summarize.ts";
 import type { TaskPacket, TaskResult } from "../../src/runtime/handoff-manager.ts";
 
@@ -239,7 +239,9 @@ test("AutoSummarizeService - getAutoSummarizeDecision returns reason for below t
 });
 
 test("AutoSummarizeService - getConfig returns current config", () => {
-	const service = new AutoSummarizeService({ config: { enabled: true, threshold: 3000 } });
+	const service = new AutoSummarizeService({
+		config: { enabled: true, threshold: 3000 },
+	});
 
 	const config = service.getConfig();
 
@@ -264,7 +266,7 @@ test("AutoSummarizeService - updateConfig emits event when enabled changes", () 
 
 	service.updateConfig({ enabled: true });
 
-	assert.ok(emittedEvents.some(e => e.event === "auto-summarize:toggled"));
+	assert.ok(emittedEvents.some((e) => e.event === "auto-summarize:toggled"));
 });
 
 test("AutoSummarizeService - getThreshold returns configured threshold", () => {
@@ -314,7 +316,9 @@ test("AutoSummarizeService - shouldCollapseContext returns true by default", () 
 });
 
 test("AutoSummarizeService - shouldCollapseContext reflects config", () => {
-	const service = new AutoSummarizeService({ config: { collapseContext: false } });
+	const service = new AutoSummarizeService({
+		config: { collapseContext: false },
+	});
 
 	assert.strictEqual(service.shouldCollapseContext(), false);
 });
@@ -325,16 +329,19 @@ test("AutoSummarizeService - toggle emits event", () => {
 
 	service.toggle();
 
-	assert.ok(emittedEvents.some(e => e.event === "auto-summarize:toggled"));
+	assert.ok(emittedEvents.some((e) => e.event === "auto-summarize:toggled"));
 });
 
 test("AutoSummarizeService - toggle event includes previous state", () => {
 	const { emitter, emittedEvents } = createMockEventEmitter();
-	const service = new AutoSummarizeService({ eventEmitter: emitter, config: { enabled: true } });
+	const service = new AutoSummarizeService({
+		eventEmitter: emitter,
+		config: { enabled: true },
+	});
 
 	service.toggle();
 
-	const event = emittedEvents.find(e => e.event === "auto-summarize:toggled");
+	const event = emittedEvents.find((e) => e.event === "auto-summarize:toggled");
 	assert.ok(event !== undefined);
 	assert.strictEqual((event!.data as { previousEnabled: boolean }).previousEnabled, true);
 });
@@ -378,7 +385,10 @@ test("AutoSummarizeService - handles missing toolsUsed in result", () => {
 	service.enable();
 	const packet = createTaskPacket();
 	// Use 0 tokens and undefined tools to test edge case
-	const result = createTaskResult({ usage: { totalTokens: 0 }, toolsUsed: undefined });
+	const result = createTaskResult({
+		usage: { totalTokens: 0 },
+		toolsUsed: undefined,
+	});
 
 	const decision = service.getAutoSummarizeDecision(packet, result);
 

@@ -11,7 +11,17 @@ import type { TeamEvent } from "./event-log.ts";
 import { readEvents } from "./event-log.ts";
 
 /** Task status values that can be reconstructed from lifecycle events. */
-const RECONSTRUCTABLE_STATUSES = new Set(["created", "queued", "running", "completed", "failed", "cancelled", "skipped", "waiting", "needs_attention"]);
+const RECONSTRUCTABLE_STATUSES = new Set([
+	"created",
+	"queued",
+	"running",
+	"completed",
+	"failed",
+	"cancelled",
+	"skipped",
+	"waiting",
+	"needs_attention",
+]);
 
 /** Event types that carry task lifecycle state transitions. */
 const TASK_LIFECYCLE_EVENT_TYPES = new Set([

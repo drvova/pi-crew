@@ -1,8 +1,8 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { importRunBundle } from "../../src/extension/run-import.ts";
 
 function isUsableDirectoryLink(linkPath: string): boolean {
@@ -14,7 +14,11 @@ function isUsableDirectoryLink(linkPath: string): boolean {
 		try {
 			fs.unlinkSync(linkPath);
 		} catch {
-			try { fs.rmSync(linkPath, { recursive: true, force: true }); } catch { /* ignore cleanup failure */ }
+			try {
+				fs.rmSync(linkPath, { recursive: true, force: true });
+			} catch {
+				/* ignore cleanup failure */
+			}
 		}
 		return false;
 	}

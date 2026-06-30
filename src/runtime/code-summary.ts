@@ -23,17 +23,21 @@ export interface SummaryResult {
 }
 
 export interface SummaryOptions {
-	minBodyLines?: number;    // default 4
+	minBodyLines?: number; // default 4
 	minCommentLines?: number; // default 6
 }
 
 // ── Language detection ──
 
 const EXT_MAP: ReadonlyMap<string, string> = new Map([
-	[".ts", "typescript"], [".tsx", "typescript"],
-	[".js", "javascript"], [".jsx", "javascript"],
-	[".mjs", "javascript"], [".cjs", "javascript"],
-	[".py", "python"], [".rs", "rust"],
+	[".ts", "typescript"],
+	[".tsx", "typescript"],
+	[".js", "javascript"],
+	[".jsx", "javascript"],
+	[".mjs", "javascript"],
+	[".cjs", "javascript"],
+	[".py", "python"],
+	[".rs", "rust"],
 ]);
 
 export function detectLanguage(filePath: string): string | null {
@@ -44,7 +48,10 @@ export function detectLanguage(filePath: string): string | null {
 
 // ── Internal range helpers ──
 
-interface Range { start: number; end: number; }
+interface Range {
+	start: number;
+	end: number;
+}
 
 function mergeRanges(ranges: Range[]): Range[] {
 	if (ranges.length === 0) return [];
@@ -73,8 +80,12 @@ function findBraceRanges(lines: string[], openPattern: RegExp, minBody: number):
 		const start = i;
 		for (let j = i; j < lines.length; j++) {
 			for (const ch of lines[j]) {
-				if (ch === "{") { depth++; foundOpen = true; }
-				else if (ch === "}") { depth--; }
+				if (ch === "{") {
+					depth++;
+					foundOpen = true;
+				} else if (ch === "}") {
+					depth--;
+				}
 			}
 			if (foundOpen && depth <= 0) {
 				if (j - start - 1 >= minBody) ranges.push({ start: start + 1, end: j - 1 });
@@ -107,12 +118,14 @@ function blockCommentRanges(lines: string[], minComment: number): Range[] {
 	let i = 0;
 	while (i < lines.length) {
 		const idx = lines[i].indexOf("/*");
-		if (idx === -1 || lines[i].includes("*/", idx + 2)) { i++; continue; }
+		if (idx === -1 || lines[i].includes("*/", idx + 2)) {
+			i++;
+			continue;
+		}
 		const openLine = i;
 		let j = i + 1;
 		while (j < lines.length && !lines[j].includes("*/")) j++;
-		if (j < lines.length && j - openLine - 1 >= minComment)
-			ranges.push({ start: openLine + 1, end: j - 1 });
+		if (j < lines.length && j - openLine - 1 >= minComment) ranges.push({ start: openLine + 1, end: j - 1 });
 		i = j + 1;
 	}
 	return ranges;
@@ -125,10 +138,17 @@ const PY_IMPORT_RE = /^\s*(import\s|from\s+\S+\s+import\s)/;
 
 function importGroupRanges(lines: string[], pattern: RegExp): Range[] {
 	const groups: Array<{ start: number; end: number }> = [];
-	let gs = -1, last = -1;
+	let gs = -1,
+		last = -1;
 	for (let i = 0; i < lines.length; i++) {
-		if (pattern.test(lines[i])) { if (gs === -1) gs = i; last = i; }
-		else if (gs !== -1 && i > last) { groups.push({ start: gs, end: last }); gs = -1; last = -1; }
+		if (pattern.test(lines[i])) {
+			if (gs === -1) gs = i;
+			last = i;
+		} else if (gs !== -1 && i > last) {
+			groups.push({ start: gs, end: last });
+			gs = -1;
+			last = -1;
+		}
 	}
 	if (gs !== -1) groups.push({ start: gs, end: last });
 	const ranges: Range[] = [];
@@ -146,7 +166,8 @@ function pythonRanges(lines: string[], minBody: number): Range[] {
 		const m = /^(\s*)(async\s+)?def\s/.exec(lines[i]) || /^(\s*)class\s/.exec(lines[i]);
 		if (!m) continue;
 		const base = m[1].length;
-		let bs = -1, be = -1;
+		let bs = -1,
+			be = -1;
 		for (let j = i + 1; j < lines.length; j++) {
 			if (lines[j].trim() === "") continue;
 			const indent = lines[j].length - lines[j].trimStart().length;
@@ -180,22 +201,26 @@ function rustRanges(lines: string[], minBody: number): Range[] {
 
 function fullResult(language: string | null, totalLines: number, code: string): SummaryResult {
 	return {
-		language, totalLines, elided: false,
+		language,
+		totalLines,
+		elided: false,
 		segments: [{ kind: "kept", startLine: 1, endLine: totalLines, text: code }],
 		rendered: code,
 	};
 }
 
-export function summarizeCode(
-	code: string,
-	language: string | null,
-	options?: SummaryOptions,
-): SummaryResult {
+export function summarizeCode(code: string, language: string | null, options?: SummaryOptions): SummaryResult {
 	const minBody = options?.minBodyLines ?? 4;
 	const minComment = options?.minCommentLines ?? 6;
 
 	if (!code || code.trim() === "") {
-		return { language, totalLines: 0, elided: false, segments: [], rendered: "" };
+		return {
+			language,
+			totalLines: 0,
+			elided: false,
+			segments: [],
+			rendered: "",
+		};
 	}
 
 	const lines = code.split("\n");
@@ -227,13 +252,27 @@ export function summarizeCode(
 	let cursor = 0;
 	for (const r of ranges) {
 		if (cursor < r.start) {
-			segments.push({ kind: "kept", startLine: cursor + 1, endLine: r.start, text: lines.slice(cursor, r.start).join("\n") });
+			segments.push({
+				kind: "kept",
+				startLine: cursor + 1,
+				endLine: r.start,
+				text: lines.slice(cursor, r.start).join("\n"),
+			});
 		}
-		segments.push({ kind: "elided", startLine: r.start + 1, endLine: r.end + 1 });
+		segments.push({
+			kind: "elided",
+			startLine: r.start + 1,
+			endLine: r.end + 1,
+		});
 		cursor = r.end + 1;
 	}
 	if (cursor < totalLines) {
-		segments.push({ kind: "kept", startLine: cursor + 1, endLine: totalLines, text: lines.slice(cursor).join("\n") });
+		segments.push({
+			kind: "kept",
+			startLine: cursor + 1,
+			endLine: totalLines,
+			text: lines.slice(cursor).join("\n"),
+		});
 	}
 
 	// Render
@@ -243,5 +282,11 @@ export function summarizeCode(
 		else parts.push(`  ... ${seg.endLine - seg.startLine + 1} lines elided ...`);
 	}
 
-	return { language, totalLines, elided: true, segments, rendered: parts.join("\n") };
+	return {
+		language,
+		totalLines,
+		elided: true,
+		segments,
+		rendered: parts.join("\n"),
+	};
 }

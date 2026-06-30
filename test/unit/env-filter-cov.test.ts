@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { sanitizeEnvSecrets } from "../../src/utils/env-filter.ts";
 
 describe("sanitizeEnvSecrets (default deny-list)", () => {
@@ -87,20 +87,14 @@ describe("sanitizeEnvSecrets (allow-list mode)", () => {
 	});
 
 	it("handles multiple allow-list entries", () => {
-		const result = sanitizeEnvSecrets(
-			{ A: "1", B: "2", C: "3" },
-			{ allowList: ["A", "C"] },
-		);
+		const result = sanitizeEnvSecrets({ A: "1", B: "2", C: "3" }, { allowList: ["A", "C"] });
 		assert.equal(result.A, "1");
 		assert.equal(result.B, undefined);
 		assert.equal(result.C, "3");
 	});
 
 	it("handles empty allow-list (falls through to deny-list)", () => {
-		const result = sanitizeEnvSecrets(
-			{ PATH: "/bin", TOKEN: "secret" },
-			{ allowList: [] },
-		);
+		const result = sanitizeEnvSecrets({ PATH: "/bin", TOKEN: "secret" }, { allowList: [] });
 		// Empty allowList should fall through to default deny-list mode
 		assert.equal(result.PATH, "/bin");
 		assert.equal(result.TOKEN, undefined);

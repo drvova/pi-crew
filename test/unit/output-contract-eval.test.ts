@@ -12,13 +12,13 @@
  * Honest delta = contract vs terse (NOT contract vs baseline).
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
-	validateWorkerOutput,
-	parseReviewerFindings,
 	parseExplorerResults,
+	parseReviewerFindings,
 	validateCompressionPreservation,
+	validateWorkerOutput,
 } from "../../src/runtime/output-validator.ts";
 import { compressProse } from "../../src/runtime/prose-compressor.ts";
 
@@ -40,11 +40,7 @@ interface ArmResult {
 	parseAccuracy: number;
 }
 
-function evaluateArm(
-	role: string,
-	outputs: Array<{ text: string; expectedValid: boolean }>,
-	armLabel: string,
-): ArmResult {
+function evaluateArm(role: string, outputs: Array<{ text: string; expectedValid: boolean }>, armLabel: string): ArmResult {
 	let formatOk = 0;
 	let structureOk = 0;
 	let overallOk = 0;
@@ -86,16 +82,31 @@ function evaluateArm(
 
 describe("output-contract-eval: explorer", () => {
 	const contractOutputs = [
-		{ text: "src/auth.ts:42 — `validateToken` — JWT expiry check\nsrc/auth.ts:87 — `hashPassword` — bcrypt hash\nrefs: src/api.ts:15, src/api.ts:30\ntotals: 2 defs, 2 refs.", expectedValid: true },
+		{
+			text: "src/auth.ts:42 — `validateToken` — JWT expiry check\nsrc/auth.ts:87 — `hashPassword` — bcrypt hash\nrefs: src/api.ts:15, src/api.ts:30\ntotals: 2 defs, 2 refs.",
+			expectedValid: true,
+		},
 		{ text: "No match.", expectedValid: true },
-		{ text: "Defs:\n- src/utils.ts:10 — `debounce` — delay wrapper\nSites: src/search.ts:3\ntotals: 1 defs, 1 sites.", expectedValid: true },
+		{
+			text: "Defs:\n- src/utils.ts:10 — `debounce` — delay wrapper\nSites: src/search.ts:3\ntotals: 1 defs, 1 sites.",
+			expectedValid: true,
+		},
 	];
 	const baselineOutputs = [
-		{ text: "I'll help you find the definitions. After searching through the codebase, I found that the validateToken function is defined at line 42 in src/auth.ts. It handles JWT expiry checking.", expectedValid: false },
-		{ text: "Found validateToken in src/auth.ts and hashPassword in the same file. Also referenced in api.ts.", expectedValid: false },
+		{
+			text: "I'll help you find the definitions. After searching through the codebase, I found that the validateToken function is defined at line 42 in src/auth.ts. It handles JWT expiry checking.",
+			expectedValid: false,
+		},
+		{
+			text: "Found validateToken in src/auth.ts and hashPassword in the same file. Also referenced in api.ts.",
+			expectedValid: false,
+		},
 	];
 	const terseOutputs = [
-		{ text: "validateToken @ src/auth.ts:42, hashPassword @ src/auth.ts:87. Refs: api.ts:15, api.ts:30.", expectedValid: false },
+		{
+			text: "validateToken @ src/auth.ts:42, hashPassword @ src/auth.ts:87. Refs: api.ts:15, api.ts:30.",
+			expectedValid: false,
+		},
 	];
 
 	it("contract arm: 100% format compliance", () => {
@@ -124,7 +135,10 @@ describe("output-contract-eval: explorer", () => {
 	it("honest delta: contract beats terse", () => {
 		const contract = evaluateArm("explorer", contractOutputs, "contract");
 		const terse = evaluateArm("explorer", terseOutputs, "__terse__");
-		assert.ok(contract.formatCompliance > terse.formatCompliance, `Contract ${contract.formatCompliance}% vs terse ${terse.formatCompliance}%`);
+		assert.ok(
+			contract.formatCompliance > terse.formatCompliance,
+			`Contract ${contract.formatCompliance}% vs terse ${terse.formatCompliance}%`,
+		);
 	});
 });
 
@@ -134,13 +148,25 @@ describe("output-contract-eval: explorer", () => {
 
 describe("output-contract-eval: executor", () => {
 	const contractOutputs = [
-		{ text: "src/auth.ts:42-48 — Fixed token expiry off-by-one.\nverified: re-read OK.", expectedValid: true },
+		{
+			text: "src/auth.ts:42-48 — Fixed token expiry off-by-one.\nverified: re-read OK.",
+			expectedValid: true,
+		},
 		{ text: "too-big. split: 3 one-line tasks.", expectedValid: true },
-		{ text: "needs-confirm. Changes billing logic in src/payment.ts:100-115.", expectedValid: true },
-		{ text: "ambiguous. 3 possible targets match the description.", expectedValid: true },
+		{
+			text: "needs-confirm. Changes billing logic in src/payment.ts:100-115.",
+			expectedValid: true,
+		},
+		{
+			text: "ambiguous. 3 possible targets match the description.",
+			expectedValid: true,
+		},
 	];
 	const baselineOutputs = [
-		{ text: "I fixed the token expiry bug by changing the comparison operator from < to <= on line 42 of src/auth.ts. The change is minimal and I've verified it works correctly.", expectedValid: false },
+		{
+			text: "I fixed the token expiry bug by changing the comparison operator from < to <= on line 42 of src/auth.ts. The change is minimal and I've verified it works correctly.",
+			expectedValid: false,
+		},
 	];
 
 	it("contract arm: 100% format compliance", () => {
@@ -167,11 +193,17 @@ describe("output-contract-eval: executor", () => {
 
 describe("output-contract-eval: reviewer", () => {
 	const contractOutputs = [
-		{ text: "src/auth.ts:42: 🔴 bug: token expiry uses < not <=. Fix: use <=.\nsrc/utils.ts:7: 🟡 risk: pool not closed on error. Fix: add try/finally.\ntotals: 1 bug, 1 risk.", expectedValid: true },
+		{
+			text: "src/auth.ts:42: 🔴 bug: token expiry uses < not <=. Fix: use <=.\nsrc/utils.ts:7: 🟡 risk: pool not closed on error. Fix: add try/finally.\ntotals: 1 bug, 1 risk.",
+			expectedValid: true,
+		},
 		{ text: "No issues.", expectedValid: true },
 	];
 	const baselineOutputs = [
-		{ text: "I found a few issues in the code. The token expiry check on line 42 of auth.ts is using a less-than comparison instead of less-than-or-equal, which could cause tokens to be accepted one second later than intended.", expectedValid: false },
+		{
+			text: "I found a few issues in the code. The token expiry check on line 42 of auth.ts is using a less-than comparison instead of less-than-or-equal, which could cause tokens to be accepted one second later than intended.",
+			expectedValid: false,
+		},
 	];
 
 	it("contract arm: 100% format compliance", () => {
@@ -203,11 +235,20 @@ describe("output-contract-eval: reviewer", () => {
 
 describe("output-contract-eval: verifier", () => {
 	const contractOutputs = [
-		{ text: "PASS: typecheck — tsc --noEmit clean.\nPASS: lint — biome check passed.\nPASS: tests — 1044/0/3 pass/fail/skipped.", expectedValid: true },
-		{ text: "FAIL: test suite — 3 tests failed. Expected 0 failures.", expectedValid: true },
+		{
+			text: "PASS: typecheck — tsc --noEmit clean.\nPASS: lint — biome check passed.\nPASS: tests — 1044/0/3 pass/fail/skipped.",
+			expectedValid: true,
+		},
+		{
+			text: "FAIL: test suite — 3 tests failed. Expected 0 failures.",
+			expectedValid: true,
+		},
 	];
 	const baselineOutputs = [
-		{ text: "I ran the verification commands and everything looks good. The TypeScript compiler reported no errors, the linter passed, and all 1044 tests passed successfully.", expectedValid: false },
+		{
+			text: "I ran the verification commands and everything looks good. The TypeScript compiler reported no errors, the linter passed, and all 1044 tests passed successfully.",
+			expectedValid: false,
+		},
 	];
 
 	it("contract arm: 100% format compliance", () => {
@@ -240,14 +281,17 @@ describe("output-contract-eval: compression", () => {
 	});
 
 	it("achieves >= 15% savings on verbose text", () => {
-		const verbose = "I'll just basically help you fix the really very simple bug. Perhaps we could potentially use a different approach. Basically, just update the file and verify the changes.";
+		const verbose =
+			"I'll just basically help you fix the really very simple bug. Perhaps we could potentially use a different approach. Basically, just update the file and verify the changes.";
 		const compressed = compressProse(verbose);
 		assert.ok(compressed.savingsPercent >= 15, `Savings: ${compressed.savingsPercent}%`);
 	});
 
 	it("achieves >= 30% savings on baseline output vs contract", () => {
-		const baseline = "I found a few issues in the code. The token expiry check on line 42 of auth.ts is using a less-than comparison instead of less-than-or-equal, which could cause tokens to be accepted one second later than intended. Also, the connection pool in utils.ts isn't properly closed when an error occurs.";
-		const contract = "src/auth.ts:42: 🔴 bug: token expiry uses < not <=. Fix: use <=.\nsrc/utils.ts:7: 🟡 risk: pool not closed on error. Fix: add try/finally.";
+		const baseline =
+			"I found a few issues in the code. The token expiry check on line 42 of auth.ts is using a less-than comparison instead of less-than-or-equal, which could cause tokens to be accepted one second later than intended. Also, the connection pool in utils.ts isn't properly closed when an error occurs.";
+		const contract =
+			"src/auth.ts:42: 🔴 bug: token expiry uses < not <=. Fix: use <=.\nsrc/utils.ts:7: 🟡 risk: pool not closed on error. Fix: add try/finally.";
 		const baselineTokens = estimateTokens(baseline);
 		const contractTokens = estimateTokens(contract);
 		const savings = Math.round(((baselineTokens - contractTokens) / baselineTokens) * 100);

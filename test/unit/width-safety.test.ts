@@ -1,21 +1,37 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 import { createRunManifest } from "../../src/state/state-store.ts";
-import { buildCrewWidgetLines } from "../../src/ui/widget/index.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
+import { buildCrewWidgetLines } from "../../src/ui/widget/index.ts";
 
 function createTestRun(cwd: string, teamName = "width-test"): TeamRunManifest {
 	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-	const team = { name: teamName, description: "", roles: [{ name: "worker", agent: "worker" }], source: "test", filePath: "builtin" } as never;
-	const workflow = { name: "wf", description: "", steps: [{ id: "one", role: "worker" }], source: "test", filePath: "builtin" } as never;
+	const team = {
+		name: teamName,
+		description: "",
+		roles: [{ name: "worker", agent: "worker" }],
+		source: "test",
+		filePath: "builtin",
+	} as never;
+	const workflow = {
+		name: "wf",
+		description: "",
+		steps: [{ id: "one", role: "worker" }],
+		source: "test",
+		filePath: "builtin",
+	} as never;
 	return createRunManifest({ cwd, team, workflow, goal: "width safety test" }).manifest;
 }
 
 function toWidgetRuns(runs: TeamRunManifest[]) {
-	return runs.map((run) => ({ run, agents: [] as never[], snapshot: undefined as never }));
+	return runs.map((run) => ({
+		run,
+		agents: [] as never[],
+		snapshot: undefined as never,
+	}));
 }
 
 describe("crew-widget width safety", () => {

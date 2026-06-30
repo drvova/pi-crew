@@ -1,13 +1,10 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 import { createMetricRegistry } from "../../src/observability/metric-registry.ts";
 import { createMetricFileSink } from "../../src/observability/metric-sink.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 describe("createMetricFileSink", () => {
 	it("writes a snapshot to a JSONL file", () => {
@@ -15,7 +12,11 @@ describe("createMetricFileSink", () => {
 		try {
 			const registry = createMetricRegistry();
 			registry.registerCounter("crew.sink.count", "test counter").inc({}, 1);
-			const sink = createMetricFileSink({ crewRoot: dir, registry, intervalMs: 60_000 });
+			const sink = createMetricFileSink({
+				crewRoot: dir,
+				registry,
+				intervalMs: 60_000,
+			});
 			sink.writeSnapshot(registry.snapshot());
 			sink.dispose();
 
@@ -35,7 +36,11 @@ describe("createMetricFileSink", () => {
 		try {
 			const registry = createMetricRegistry();
 			registry.counter("crew.sink.count", "test").inc({ api_key: "super-secret-123" }, 1);
-			const sink = createMetricFileSink({ crewRoot: dir, registry, intervalMs: 60_000 });
+			const sink = createMetricFileSink({
+				crewRoot: dir,
+				registry,
+				intervalMs: 60_000,
+			});
 			sink.writeSnapshot(registry.snapshot());
 			sink.dispose();
 
@@ -54,7 +59,11 @@ describe("createMetricFileSink", () => {
 		try {
 			const registry = createMetricRegistry();
 			const counter = registry.registerCounter("crew.multi.count", "multi");
-			const sink = createMetricFileSink({ crewRoot: dir, registry, intervalMs: 60_000 });
+			const sink = createMetricFileSink({
+				crewRoot: dir,
+				registry,
+				intervalMs: 60_000,
+			});
 
 			counter.inc({}, 1);
 			sink.writeSnapshot(registry.snapshot());
@@ -99,7 +108,10 @@ describe("createMetricFileSink", () => {
 
 			const files = fs.readdirSync(metricsDir);
 			assert.ok(!files.includes("2020-01-01.jsonl"), "old file should be rotated");
-			assert.ok(files.some((f) => f !== "2020-01-01.jsonl"), "new file should exist");
+			assert.ok(
+				files.some((f) => f !== "2020-01-01.jsonl"),
+				"new file should exist",
+			);
 		} finally {
 			removeTrackedTempDir(dir);
 		}
@@ -110,7 +122,11 @@ describe("createMetricFileSink", () => {
 		try {
 			const registry = createMetricRegistry();
 			registry.registerCounter("crew.mkdir.count", "mkdir");
-			const sink = createMetricFileSink({ crewRoot: dir, registry, intervalMs: 60_000 });
+			const sink = createMetricFileSink({
+				crewRoot: dir,
+				registry,
+				intervalMs: 60_000,
+			});
 			sink.writeSnapshot(registry.snapshot());
 			sink.dispose();
 
@@ -125,7 +141,11 @@ describe("createMetricFileSink", () => {
 		const dir = createTrackedTempDir("pi-crew-sink-");
 		try {
 			const registry = createMetricRegistry();
-			const sink = createMetricFileSink({ crewRoot: dir, registry, intervalMs: 60_000 });
+			const sink = createMetricFileSink({
+				crewRoot: dir,
+				registry,
+				intervalMs: 60_000,
+			});
 			sink.writeSnapshot(registry.snapshot());
 			sink.dispose();
 			// Second dispose should not throw

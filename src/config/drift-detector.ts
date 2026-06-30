@@ -1,5 +1,5 @@
-import type { PiTeamsConfig } from "./config.ts";
 import { PiTeamsConfigSchema } from "../schema/config-schema.ts";
+import type { PiTeamsConfig } from "./config.ts";
 
 /**
  * A single drift finding between discovered resources and config expectations.
@@ -53,9 +53,7 @@ export interface ConfigReferences {
 /**
  * Known top-level config keys allowed by the schema.
  */
-const SCHEMA_KEYS: ReadonlySet<string> = new Set<string>(
-	Object.keys(PiTeamsConfigSchema.properties ?? {}),
-);
+const SCHEMA_KEYS: ReadonlySet<string> = new Set<string>(Object.keys(PiTeamsConfigSchema.properties ?? {}));
 
 /**
  * Extract all agent, team, and workflow names referenced in a raw config object.
@@ -70,13 +68,15 @@ function extractConfigReferences(config: Record<string, unknown>): ConfigReferen
 	const workflows = new Set<string>();
 
 	// agents.overrides keys are explicit agent references
-	const agentsObj = typeof config.agents === "object" && config.agents !== null && !Array.isArray(config.agents)
-		? config.agents as Record<string, unknown>
-		: undefined;
-	if (agentsObj) {
-		const overrides = typeof agentsObj.overrides === "object" && agentsObj.overrides !== null && !Array.isArray(agentsObj.overrides)
-			? agentsObj.overrides as Record<string, unknown>
+	const agentsObj =
+		typeof config.agents === "object" && config.agents !== null && !Array.isArray(config.agents)
+			? (config.agents as Record<string, unknown>)
 			: undefined;
+	if (agentsObj) {
+		const overrides =
+			typeof agentsObj.overrides === "object" && agentsObj.overrides !== null && !Array.isArray(agentsObj.overrides)
+				? (agentsObj.overrides as Record<string, unknown>)
+				: undefined;
 		if (overrides) {
 			for (const name of Object.keys(overrides)) {
 				agents.add(name);
@@ -103,10 +103,7 @@ function extractConfigReferences(config: Record<string, unknown>): ConfigReferen
  * For teams/workflows: the config currently doesn't have explicit team/workflow references,
  * so missing/extra checks rely solely on what resources reference each other.
  */
-export function detectDrift(
-	discovered: DiscoveredResources,
-	config: PiTeamsConfig,
-): DriftReport {
+export function detectDrift(discovered: DiscoveredResources, config: PiTeamsConfig): DriftReport {
 	const items: DriftItem[] = [];
 
 	const configRaw = config as Record<string, unknown>;

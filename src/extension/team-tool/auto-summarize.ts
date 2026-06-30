@@ -3,14 +3,10 @@
  * Provides on/off/status commands for auto-summarization.
  */
 
+import { AutoSummarizeService, createAutoSummarizeService, DEFAULT_AUTO_SUMMARIZE_CONFIG } from "../../runtime/auto-summarize.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
 import { result, type TeamContext } from "./context.ts";
-import {
-	AutoSummarizeService,
-	createAutoSummarizeService,
-	DEFAULT_AUTO_SUMMARIZE_CONFIG,
-} from "../../runtime/auto-summarize.ts";
 
 // Global auto-summarize service instance for CLI usage
 let globalAutoSummarize: AutoSummarizeService | null = null;
@@ -22,10 +18,7 @@ function getAutoSummarize(): AutoSummarizeService {
 	return globalAutoSummarize;
 }
 
-export function handleAutoSummarizeOn(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleAutoSummarizeOn(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const service = getAutoSummarize();
 	const cfg = params.config ?? {};
 
@@ -61,24 +54,18 @@ export function handleAutoSummarizeOn(
 	);
 }
 
-export function handleAutoSummarizeOff(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleAutoSummarizeOff(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const service = getAutoSummarize();
 
 	service.disable();
 
-	return result(
-		"Auto-summarize disabled.",
-		{ action: "auto-summarize", status: "ok" },
-	);
+	return result("Auto-summarize disabled.", {
+		action: "auto-summarize",
+		status: "ok",
+	});
 }
 
-export function handleAutoSummarizeStatus(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleAutoSummarizeStatus(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const service = getAutoSummarize();
 	const config = service.getConfig();
 	const isEnabled = service.isEnabled();
@@ -103,15 +90,16 @@ export function handleAutoSummarizeStatus(
 	);
 }
 
-export function handleAutoSummarizeConfig(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleAutoSummarizeConfig(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const service = getAutoSummarize();
 	const cfg = params.config ?? {};
 
 	// Parse config options
-	const updates: { threshold?: number; minTools?: number; collapseContext?: boolean } = {};
+	const updates: {
+		threshold?: number;
+		minTools?: number;
+		collapseContext?: boolean;
+	} = {};
 
 	if (cfg.threshold !== undefined) {
 		const threshold = typeof cfg.threshold === "number" ? cfg.threshold : parseInt(String(cfg.threshold), 10);

@@ -1,11 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	applyThinkingSuffix,
-	currentCrewDepth,
-	resolveCrewMaxDepth,
-	checkCrewDepth,
-} from "../../src/runtime/pi-args.ts";
+import test from "node:test";
+import { applyThinkingSuffix, checkCrewDepth, currentCrewDepth, resolveCrewMaxDepth } from "../../src/runtime/pi-args.ts";
 
 /**
  * Round 26 (test coverage gaps): `pi-args.ts` provides depth tracking,
@@ -89,7 +84,13 @@ test("resolveCrewMaxDepth: falls back to PI_TEAMS_MAX_DEPTH", () => {
 });
 
 test("resolveCrewMaxDepth: prefers PI_CREW_MAX_DEPTH over PI_TEAMS_MAX_DEPTH", () => {
-	assert.equal(resolveCrewMaxDepth(undefined, { PI_CREW_MAX_DEPTH: "4", PI_TEAMS_MAX_DEPTH: "8" }), 4);
+	assert.equal(
+		resolveCrewMaxDepth(undefined, {
+			PI_CREW_MAX_DEPTH: "4",
+			PI_TEAMS_MAX_DEPTH: "8",
+		}),
+		4,
+	);
 });
 
 test("resolveCrewMaxDepth: uses inputMaxDepth when env is not set", () => {
@@ -123,21 +124,30 @@ test("checkCrewDepth: not blocked at depth 0, maxDepth 2", () => {
 });
 
 test("checkCrewDepth: blocked when depth equals maxDepth", () => {
-	const result = checkCrewDepth(undefined, { PI_CREW_DEPTH: "2", PI_CREW_MAX_DEPTH: "2" });
+	const result = checkCrewDepth(undefined, {
+		PI_CREW_DEPTH: "2",
+		PI_CREW_MAX_DEPTH: "2",
+	});
 	assert.equal(result.blocked, true);
 	assert.equal(result.depth, 2);
 	assert.equal(result.maxDepth, 2);
 });
 
 test("checkCrewDepth: blocked when depth exceeds maxDepth", () => {
-	const result = checkCrewDepth(undefined, { PI_CREW_DEPTH: "5", PI_CREW_MAX_DEPTH: "3" });
+	const result = checkCrewDepth(undefined, {
+		PI_CREW_DEPTH: "5",
+		PI_CREW_MAX_DEPTH: "3",
+	});
 	assert.equal(result.blocked, true);
 	assert.equal(result.depth, 5);
 	assert.equal(result.maxDepth, 3);
 });
 
 test("checkCrewDepth: not blocked when depth is below maxDepth", () => {
-	const result = checkCrewDepth(undefined, { PI_CREW_DEPTH: "1", PI_CREW_MAX_DEPTH: "3" });
+	const result = checkCrewDepth(undefined, {
+		PI_CREW_DEPTH: "1",
+		PI_CREW_MAX_DEPTH: "3",
+	});
 	assert.equal(result.blocked, false);
 	assert.equal(result.depth, 1);
 	assert.equal(result.maxDepth, 3);

@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { extractDwfPhaseState, renderDwfPhaseLines } from "../../src/ui/dwf-phase-display.ts";
+import test from "node:test";
 import type { TeamEvent } from "../../src/state/event-log.ts";
 import { renderProgressPane } from "../../src/ui/dashboard-panes/progress-pane.ts";
+import { extractDwfPhaseState, renderDwfPhaseLines } from "../../src/ui/dwf-phase-display.ts";
 import type { RunUiSnapshot } from "../../src/ui/snapshot-types.ts";
 
 // ---------------------------------------------------------------------------
@@ -10,15 +10,33 @@ import type { RunUiSnapshot } from "../../src/ui/snapshot-types.ts";
 // ---------------------------------------------------------------------------
 
 function phaseStarted(phase: string, seq = 0): TeamEvent {
-	return { time: "2026-06-23T00:00:00Z", type: "dwf.phase_started", runId: "run", data: { phase }, metadata: { seq, provenance: "test" } };
+	return {
+		time: "2026-06-23T00:00:00Z",
+		type: "dwf.phase_started",
+		runId: "run",
+		data: { phase },
+		metadata: { seq, provenance: "test" },
+	};
 }
 
 function phaseCompleted(phase: string, seq = 0): TeamEvent {
-	return { time: "2026-06-23T00:00:00Z", type: "dwf.phase_completed", runId: "run", data: { phase }, metadata: { seq, provenance: "test" } };
+	return {
+		time: "2026-06-23T00:00:00Z",
+		type: "dwf.phase_completed",
+		runId: "run",
+		data: { phase },
+		metadata: { seq, provenance: "test" },
+	};
 }
 
 function taskEvent(seq = 0): TeamEvent {
-	return { time: "2026-06-23T00:00:00Z", type: "task.completed", runId: "run", taskId: "t1", metadata: { seq, provenance: "test" } };
+	return {
+		time: "2026-06-23T00:00:00Z",
+		type: "task.completed",
+		runId: "run",
+		taskId: "t1",
+		metadata: { seq, provenance: "test" },
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -26,11 +44,7 @@ function taskEvent(seq = 0): TeamEvent {
 // ---------------------------------------------------------------------------
 
 test("extractDwfPhaseState: tracks current + completed phases from event sequence", () => {
-	const events = [
-		phaseStarted("Scan", 1),
-		phaseCompleted("Scan", 2),
-		phaseStarted("Plan", 3),
-	];
+	const events = [phaseStarted("Scan", 1), phaseCompleted("Scan", 2), phaseStarted("Plan", 3)];
 	const state = extractDwfPhaseState(events);
 	assert.ok(state, "expected non-null state for a DWF run");
 	assert.equal(state!.currentPhase, "Plan");
@@ -42,12 +56,7 @@ test("extractDwfPhaseState: tracks current + completed phases from event sequenc
 });
 
 test("extractDwfPhaseState: all completed when every phase is closed", () => {
-	const events = [
-		phaseStarted("Scan", 1),
-		phaseCompleted("Scan", 2),
-		phaseStarted("Plan", 3),
-		phaseCompleted("Plan", 4),
-	];
+	const events = [phaseStarted("Scan", 1), phaseCompleted("Scan", 2), phaseStarted("Plan", 3), phaseCompleted("Plan", 4)];
 	const state = extractDwfPhaseState(events);
 	assert.equal(state!.currentPhase, null);
 	assert.equal(state!.phases[0]?.status, "completed");
@@ -64,10 +73,7 @@ test("extractDwfPhaseState: single running phase", () => {
 
 test("extractDwfPhaseState: recovers a phase whose started event scrolled off", () => {
 	// Only the completed event for "Scan" is visible (started scrolled off window).
-	const events = [
-		phaseCompleted("Scan", 2),
-		phaseStarted("Plan", 3),
-	];
+	const events = [phaseCompleted("Scan", 2), phaseStarted("Plan", 3)];
 	const state = extractDwfPhaseState(events);
 	assert.equal(state!.phases.length, 2);
 	assert.equal(state!.phases[0]?.name, "Scan");
@@ -79,11 +85,7 @@ test("extractDwfPhaseState: recovers a phase whose started event scrolled off", 
 
 test("extractDwfPhaseState: phase started but completion scrolled off is pending", () => {
 	// "Scan" started; its completion scrolled off; "Plan" started after.
-	const events = [
-		phaseStarted("Scan", 1),
-		phaseStarted("Plan", 3),
-		phaseCompleted("Plan", 4),
-	];
+	const events = [phaseStarted("Scan", 1), phaseStarted("Plan", 3), phaseCompleted("Plan", 4)];
 	const state = extractDwfPhaseState(events);
 	const scan = state!.phases.find((p) => p.name === "Scan");
 	assert.equal(scan?.status, "pending");
@@ -159,7 +161,23 @@ test("renderProgressPane: no DWF phase lines for a non-DWF snapshot", () => {
 		cwd: process.cwd(),
 		fetchedAt: 0,
 		signature: "s",
-		manifest: { schemaVersion: 1, runId: "run", cwd: process.cwd(), team: "t", workflow: "w", goal: "g", status: "running", createdAt: "", updatedAt: "", stateRoot: "", artifactsRoot: "", tasksPath: "", eventsPath: "", artifacts: [], workspaceMode: "single" },
+		manifest: {
+			schemaVersion: 1,
+			runId: "run",
+			cwd: process.cwd(),
+			team: "t",
+			workflow: "w",
+			goal: "g",
+			status: "running",
+			createdAt: "",
+			updatedAt: "",
+			stateRoot: "",
+			artifactsRoot: "",
+			tasksPath: "",
+			eventsPath: "",
+			artifacts: [],
+			workspaceMode: "single",
+		},
 		tasks: [],
 		agents: [],
 		progress: { total: 0, completed: 0, running: 0, failed: 0, queued: 0 },
@@ -179,17 +197,29 @@ test("renderProgressPane: renders DWF phase markers when phase state is present"
 		cwd: process.cwd(),
 		fetchedAt: 0,
 		signature: "s",
-		manifest: { schemaVersion: 1, runId: "run", cwd: process.cwd(), team: "t", workflow: "w", goal: "g", status: "running", createdAt: "", updatedAt: "", stateRoot: "", artifactsRoot: "", tasksPath: "", eventsPath: "", artifacts: [], workspaceMode: "single" },
+		manifest: {
+			schemaVersion: 1,
+			runId: "run",
+			cwd: process.cwd(),
+			team: "t",
+			workflow: "w",
+			goal: "g",
+			status: "running",
+			createdAt: "",
+			updatedAt: "",
+			stateRoot: "",
+			artifactsRoot: "",
+			tasksPath: "",
+			eventsPath: "",
+			artifacts: [],
+			workspaceMode: "single",
+		},
 		tasks: [],
 		agents: [],
 		progress: { total: 0, completed: 0, running: 0, failed: 0, queued: 0 },
 		usage: { tokensIn: 0, tokensOut: 0, toolUses: 0 },
 		mailbox: { inboxUnread: 0, outboxPending: 0, needsAttention: 0 },
-		dwfPhaseState: extractDwfPhaseState([
-			phaseStarted("Scan", 1),
-			phaseCompleted("Scan", 2),
-			phaseStarted("Plan", 3),
-		]),
+		dwfPhaseState: extractDwfPhaseState([phaseStarted("Scan", 1), phaseCompleted("Scan", 2), phaseStarted("Plan", 3)]),
 		recentEvents: [],
 		recentOutputLines: [],
 	};

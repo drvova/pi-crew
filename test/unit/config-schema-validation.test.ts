@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { parseConfig } from "../../src/config/config.ts";
-import { configPatchFromConfig } from "../../src/extension/team-tool/config-patch.ts";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { configPath, loadConfig } from "../../src/config/config.ts";
+import test from "node:test";
 import { Value } from "@sinclair/typebox/value";
+import { configPath, loadConfig, parseConfig } from "../../src/config/config.ts";
+import { configPatchFromConfig } from "../../src/extension/team-tool/config-patch.ts";
 import { PiTeamsConfigSchema } from "../../src/schema/config-schema.ts";
 
 test("parseConfig accepts valid values and drops invalid siblings using TypeBox validation", () => {
@@ -60,7 +59,14 @@ test("parseConfig enforces public UI schema ranges", () => {
 	assert.equal(parsed.ui, undefined);
 	const tooSmall = parseConfig({ ui: { transcriptTailBytes: 1023 } });
 	assert.equal(tooSmall.ui, undefined);
-	const valid = parseConfig({ ui: { widgetMaxLines: 50, dashboardWidth: 32, dashboardLiveRefreshMs: 250, transcriptTailBytes: 1024 } });
+	const valid = parseConfig({
+		ui: {
+			widgetMaxLines: 50,
+			dashboardWidth: 32,
+			dashboardLiveRefreshMs: 250,
+			transcriptTailBytes: 1024,
+		},
+	});
 	assert.equal(valid.ui?.widgetMaxLines, 50);
 	assert.equal(valid.ui?.dashboardWidth, 32);
 	assert.equal(valid.ui?.dashboardLiveRefreshMs, 250);
@@ -72,7 +78,12 @@ test("PiTeamsConfigSchema rejects unknown keys and allows runtime notifier numbe
 	assert.equal(Value.Check(PiTeamsConfigSchema, { ui: { unknown: true } }), false);
 	assert.equal(Value.Check(PiTeamsConfigSchema, { autonomous: { unknown: true } }), false);
 	assert.equal(Value.Check(PiTeamsConfigSchema, { limits: { unknown: true } }), false);
-	assert.equal(Value.Check(PiTeamsConfigSchema, { reliability: { retryPolicy: { unknown: true } } }), false);
+	assert.equal(
+		Value.Check(PiTeamsConfigSchema, {
+			reliability: { retryPolicy: { unknown: true } },
+		}),
+		false,
+	);
 	assert.equal(Value.Check(PiTeamsConfigSchema, { notifierIntervalMs: 1000.5 }), true);
 	assert.equal(parseConfig({ notifierIntervalMs: 1000.5 }).notifierIntervalMs, 1000.5);
 });
@@ -113,12 +124,19 @@ test("loadConfig surfaces schema warnings without failing config load", () => {
 	try {
 		const filePath = configPath();
 		fs.mkdirSync(path.dirname(filePath), { recursive: true });
-		fs.writeFileSync(filePath, JSON.stringify({ notifierIntervalMs: 100, runtime: { mode: "invalid-mode", unknown: true } }), "utf-8");
+		fs.writeFileSync(
+			filePath,
+			JSON.stringify({
+				notifierIntervalMs: 100,
+				runtime: { mode: "invalid-mode", unknown: true },
+			}),
+			"utf-8",
+		);
 		const loaded = loadConfig();
 		assert.equal(typeof loaded.config.notifierIntervalMs, "undefined");
 		assert.equal((loaded.warnings?.length ?? 0) > 0, true);
 		assert.match(loaded.warnings?.[0] ?? "", /notifierIntervalMs/);
-		assert.match((loaded.warnings?.[1] ?? loaded.warnings?.[0] ?? ""), /runtime/);
+		assert.match(loaded.warnings?.[1] ?? loaded.warnings?.[0] ?? "", /runtime/);
 	} finally {
 		if (previousHome === undefined) delete process.env.PI_TEAMS_HOME;
 		else process.env.PI_TEAMS_HOME = previousHome;

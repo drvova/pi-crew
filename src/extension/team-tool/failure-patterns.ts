@@ -61,9 +61,7 @@ export function normalizeErrorSignature(error: string | undefined): string {
  *               considered failures for aggregation purposes).
  */
 export function aggregateFailurePatterns(tasks: FailurePatternInput[]): FailurePattern[] {
-	const failed = tasks.filter(
-		(t) => t.status === "failed" || t.status === "cancelled",
-	);
+	const failed = tasks.filter((t) => t.status === "failed" || t.status === "cancelled");
 	if (failed.length === 0) return [];
 	const buckets = new Map<string, FailurePattern>();
 	for (const t of failed) {
@@ -86,9 +84,7 @@ export function aggregateFailurePatterns(tasks: FailurePatternInput[]): FailureP
 		}
 	}
 	// Only patterns with >=2 members (repeated root causes).
-	return [...buckets.values()]
-		.filter((b) => b.count >= 2)
-		.sort((a, b) => b.count - a.count);
+	return [...buckets.values()].filter((b) => b.count >= 2).sort((a, b) => b.count - a.count);
 }
 
 /**
@@ -106,9 +102,7 @@ export function aggregateFailurePatterns(tasks: FailurePatternInput[]): FailureP
 export function formatFailurePatterns(tasks: FailurePatternInput[]): string[] {
 	const patterns = aggregateFailurePatterns(tasks);
 	if (patterns.length === 0) return [];
-	const failedCount = tasks.filter(
-		(t) => t.status === "failed" || t.status === "cancelled",
-	).length;
+	const failedCount = tasks.filter((t) => t.status === "failed" || t.status === "cancelled").length;
 	const groupedCount = patterns.reduce((sum, p) => sum + p.count, 0);
 	const lines = [
 		`Common failure patterns (${groupedCount} of ${failedCount} failures share ${patterns.length} root cause${patterns.length === 1 ? "" : "s"}):`,

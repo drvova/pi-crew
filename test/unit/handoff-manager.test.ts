@@ -3,17 +3,17 @@
  * @see src/runtime/handoff-manager.ts
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	HandoffManager,
 	createHandoffManager,
+	type Decision,
+	HandoffManager,
+	type HandoffManagerOptions,
+	type HandoffSummary,
+	type SummarizeDecision,
 	type TaskPacket,
 	type TaskResult,
-	type HandoffSummary,
-	type HandoffManagerOptions,
-	type SummarizeDecision,
-	type Decision,
 } from "../../src/runtime/handoff-manager.ts";
 
 // Test helpers
@@ -63,10 +63,10 @@ test("HandoffManager - shouldSummarize returns false for short tasks", () => {
 
 	const packet = createTaskPacket({ summarizeThreshold: 5000 });
 	// Use fewer than 3 tools and no files to ensure it's below threshold
-	const result = createTaskResult({ 
+	const result = createTaskResult({
 		usage: { totalTokens: 500 },
 		toolsUsed: ["read"], // Fewer than 3 tools
-		filesCreated: [] // No files
+		filesCreated: [], // No files
 	});
 
 	const decision = manager.shouldSummarize(packet, result);
@@ -107,9 +107,9 @@ test("HandoffManager - shouldSummarize returns true when forceSummarize is set",
 
 	const packet = createTaskPacket({ forceSummarize: true });
 	// Even with minimal usage and no tools/files, forceSummarize should work
-	const result = createTaskResult({ 
+	const result = createTaskResult({
 		usage: { totalTokens: 100 },
-		toolsUsed: ["read"] // Minimal
+		toolsUsed: ["read"], // Minimal
 	});
 
 	const decision = manager.shouldSummarize(packet, result);
@@ -205,10 +205,10 @@ test("HandoffManager - onAgentEnd skips summary for short tasks", async () => {
 
 	// Use minimal tools and files to ensure short task doesn't trigger summary
 	const packet = createTaskPacket();
-	const result = createTaskResult({ 
+	const result = createTaskResult({
 		usage: { totalTokens: 100 },
 		toolsUsed: ["read"], // Fewer than 3
-		filesCreated: [] // No files
+		filesCreated: [], // No files
 	});
 
 	const summary = await manager.onAgentEnd(packet, result);
@@ -313,7 +313,7 @@ test("HandoffManager - options allow custom event emitter", async () => {
 
 	await manager.onAgentEnd(packet, result);
 
-	assert.ok(emittedEvents.some(e => e.event === "handoff:generated"));
+	assert.ok(emittedEvents.some((e) => e.event === "handoff:generated"));
 });
 
 test("HandoffManager - extractArtifacts handles all artifact types", async () => {
@@ -371,12 +371,12 @@ test("HandoffManager - partial outcome is handled correctly", async () => {
 	const packet = createTaskPacket();
 	// Partial outcome (non-success) triggers summarization
 	// Override ALL fields that could trigger summarization to test partial specifically
-	const result = createTaskResult({ 
+	const result = createTaskResult({
 		outcome: "partial",
 		usage: { totalTokens: 100 },
 		toolsUsed: ["read"], // Fewer than 3
 		filesCreated: [], // No files
-		decisions: [] // No decisions
+		decisions: [], // No decisions
 	});
 
 	const decision = manager.shouldSummarize(packet, result);
@@ -403,9 +403,9 @@ test("HandoffManager - handles missing usage in result", async () => {
 
 	const packet = createTaskPacket({ summarizeThreshold: 100 });
 	// Need outcome to be non-success since usage is undefined/0
-	const result = createTaskResult({ 
+	const result = createTaskResult({
 		usage: undefined,
-		outcome: "partial" // non-success triggers summary
+		outcome: "partial", // non-success triggers summary
 	});
 
 	const decision = manager.shouldSummarize(packet, result);
@@ -419,9 +419,9 @@ test("HandoffManager - handles missing tools in result", async () => {
 
 	const packet = createTaskPacket();
 	// Outcome is success but with missing tools, should summarize via partial outcome check
-	const result = createTaskResult({ 
+	const result = createTaskResult({
 		toolsUsed: undefined,
-		outcome: "partial" // non-success triggers summary
+		outcome: "partial", // non-success triggers summary
 	});
 
 	// Should not throw, defaults to 0 tools
@@ -481,11 +481,17 @@ test("HandoffManager - onAgentEnd without session does not store pending", async
 test("HandoffManager - multiple sessions can have pending handoffs", async () => {
 	const manager = new HandoffManager();
 
-	const packet1 = createTaskPacket({ sessionId: "session-A", taskId: "task-A" });
+	const packet1 = createTaskPacket({
+		sessionId: "session-A",
+		taskId: "task-A",
+	});
 	const result1 = createTaskResult({ usage: { totalTokens: 10000 } });
 	await manager.onAgentEnd(packet1, result1);
 
-	const packet2 = createTaskPacket({ sessionId: "session-B", taskId: "task-B" });
+	const packet2 = createTaskPacket({
+		sessionId: "session-B",
+		taskId: "task-B",
+	});
 	const result2 = createTaskResult({ usage: { totalTokens: 10000 } });
 	await manager.onAgentEnd(packet2, result2);
 

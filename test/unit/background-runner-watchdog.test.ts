@@ -11,8 +11,9 @@
  *
  * @see src/runtime/background-runner.ts MAX_BACKGROUND_RUN_MS + watchdogTimer
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
+import { test } from "node:test";
 
 // The constant is module-scoped (not exported). We verify the ENV-OVERRIDE
 // resolution by re-importing the module under different env values.
@@ -49,9 +50,15 @@ test("watchdog semantics: a hung run that exceeds the timeout must be abortable,
 	//
 	// Simulate: a timer that would represent the "hung" state.
 	// Verify the cleanup clears BOTH timers (the anti-zombie guarantee).
-	const timers: { keepAlive: NodeJS.Timeout; watchdog: NodeJS.Timeout; cleared: boolean } = {
+	const timers: {
+		keepAlive: NodeJS.Timeout;
+		watchdog: NodeJS.Timeout;
+		cleared: boolean;
+	} = {
 		keepAlive: setTimeout(() => {}, 5000),
-		watchdog: setTimeout(() => { timers.cleared = false; }, 999_999), // would fire on timeout
+		watchdog: setTimeout(() => {
+			timers.cleared = false;
+		}, 999_999), // would fire on timeout
 		cleared: true,
 	};
 	// runCleanup equivalent:
@@ -72,7 +79,9 @@ test("watchdog design: abort signal propagates to terminate the hung run", () =>
 	// Consumers of ac.signal check .aborted or listen for 'abort' event.
 	let listenerFired = false;
 	const ac2 = new AbortController();
-	ac2.signal.addEventListener("abort", () => { listenerFired = true; });
+	ac2.signal.addEventListener("abort", () => {
+		listenerFired = true;
+	});
 	ac2.abort();
 	assert.equal(listenerFired, true, "abort listener fires — executeTeamRun can react");
 });

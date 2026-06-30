@@ -1,5 +1,5 @@
-import * as fs from "node:fs";
 import type { FSWatcher, WatchListener } from "node:fs";
+import * as fs from "node:fs";
 
 /**
  * Filesystem watcher helpers (slimmed down — pts/2 hang fix 2026-06-16).
@@ -25,11 +25,7 @@ export function closeWatcher(watcher: FSWatcher | null | undefined): void {
 	}
 }
 
-export function watchWithErrorHandler(
-	path: string,
-	listener: WatchListener<string>,
-	onError: (error?: unknown) => void,
-): FSWatcher | null {
+export function watchWithErrorHandler(path: string, listener: WatchListener<string>, onError: (error?: unknown) => void): FSWatcher | null {
 	try {
 		const watcher = fs.watch(path, listener);
 		watcher.on("error", onError);

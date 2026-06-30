@@ -68,9 +68,7 @@ export function validateJson(content: string, _filePath: string): ValidationResu
  * ONLY zero-cost synchronous validators belong here. Process-spawning
  * validators must be registered via a future opt-in path (see module doc).
  */
-const DEFAULT_VALIDATORS: ReadonlyMap<string, PerWriteValidator> = new Map([
-	["json", validateJson],
-]);
+const DEFAULT_VALIDATORS: ReadonlyMap<string, PerWriteValidator> = new Map([["json", validateJson]]);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Dedup cache (path → last-validated content). Bounded; small.

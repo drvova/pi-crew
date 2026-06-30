@@ -2,23 +2,24 @@
  * Unit tests for crew-errors.ts
  * Based on oh-my-pi pattern from compaction/errors.ts
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import {
-	CrewError,
-	CrewCancelledError,
-	CrewTimeoutError,
-	CrewDeadletterError,
 	CrewAbortError,
-	CrewManifestError,
-	CrewLockError,
-	CrewTurnLimitError,
+	CrewCancelledError,
+	CrewDeadletterError,
+	CrewError,
 	CrewGateError,
-	CrewSessionError,
-	classifyError,
-	isInterruptError,
-	isAgentError,
+	CrewLockError,
+	CrewManifestError,
 	type CrewRunOutcome,
+	CrewSessionError,
+	CrewTimeoutError,
+	CrewTurnLimitError,
+	classifyError,
+	isAgentError,
+	isInterruptError,
 } from "../../src/runtime/errors/crew-errors.ts";
 
 describe("CrewError hierarchy", () => {

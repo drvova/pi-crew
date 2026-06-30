@@ -4,19 +4,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
-import {
-	clearLiveAgentsForTest,
-	listLiveAgents,
-} from "../../src/runtime/live-agent-manager.ts";
+import { clearLiveAgentsForTest, listLiveAgents } from "../../src/runtime/live-agent-manager.ts";
 import { runLiveSessionTask } from "../../src/runtime/live-session-runtime.ts";
 import { runLiveTask } from "../../src/runtime/task-runner/live-executor.ts";
 import { createRunManifest } from "../../src/state/state-store.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
 
 function restoreEnv(name: string, previous: string | undefined): void {
@@ -52,13 +46,7 @@ test("mock live-session suppresses owner callbacks when stale", async () => {
 		const result = await runLiveSessionTask({
 			manifest: {
 				runId: "run_stale",
-				stateRoot: path.join(
-					cwd,
-					".crew",
-					"state",
-					"runs",
-					"run_stale",
-				),
+				stateRoot: path.join(cwd, ".crew", "state", "runs", "run_stale"),
 			} as never,
 			task: { id: "task_stale", role: "executor", cwd } as never,
 			step: { id: "execute", role: "executor", task: "do" } as never,
@@ -129,13 +117,7 @@ test("mock live-session keeps terminal live agents for resume but excludes them 
 		const result = await runLiveSessionTask({
 			manifest: {
 				runId: "run_cleanup",
-				stateRoot: path.join(
-					cwd,
-					".crew",
-					"state",
-					"runs",
-					"run_cleanup",
-				),
+				stateRoot: path.join(cwd, ".crew", "state", "runs", "run_cleanup"),
 			} as never,
 			task: { id: "task_cleanup", role: "executor", cwd } as never,
 			step: { id: "execute", role: "executor", task: "do" } as never,
@@ -178,15 +160,9 @@ test("run can use experimental live-session runtime with durable transcript hook
 			{ cwd },
 		);
 		assert.equal(run.isError, false);
-		assert.match(
-			firstText(run),
-			/Experimental live-session worker execution was enabled/,
-		);
+		assert.match(firstText(run), /Experimental live-session worker execution was enabled/);
 		const runId = run.details.runId!;
-		const agentsResult = await handleTeamTool(
-			{ action: "api", runId, config: { operation: "list-agents" } },
-			{ cwd },
-		);
+		const agentsResult = await handleTeamTool({ action: "api", runId, config: { operation: "list-agents" } }, { cwd });
 		const agents = JSON.parse(firstText(agentsResult));
 		assert.equal(agents[0].runtime, "live-session");
 		assert.equal(agents[0].status, "completed");
@@ -202,25 +178,10 @@ test("run can use experimental live-session runtime with durable transcript hook
 			{ cwd },
 		);
 		assert.match(firstText(transcript), /Mock live-session success/);
-		const liveAgents = await handleTeamTool(
-			{ action: "api", runId, config: { operation: "list-live-agents" } },
-			{ cwd },
-		);
+		const liveAgents = await handleTeamTool({ action: "api", runId, config: { operation: "list-live-agents" } }, { cwd });
 		assert.equal(firstText(liveAgents), "[]");
-		const sidechainPath = path.join(
-			cwd,
-			".crew",
-			"state",
-			"runs",
-			runId,
-			"agents",
-			agents[0].taskId,
-			"sidechain.output.jsonl",
-		);
-		assert.match(
-			fs.readFileSync(sidechainPath, "utf-8"),
-			/"isSidechain":true/,
-		);
+		const sidechainPath = path.join(cwd, ".crew", "state", "runs", runId, "agents", agents[0].taskId, "sidechain.output.jsonl");
+		assert.match(fs.readFileSync(sidechainPath, "utf-8"), /"isSidechain":true/);
 	} finally {
 		restoreEnv("PI_CREW_ENABLE_EXPERIMENTAL_LIVE_SESSION", previousEnable);
 		restoreEnv("PI_CREW_MOCK_LIVE_SESSION", previousMock);

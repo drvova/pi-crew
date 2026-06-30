@@ -106,7 +106,14 @@ export class SharedScanCache {
 			if (cached && cached.mtimeMs >= stat.mtimeMs && cached.sizeBytes === stat.size) return cached;
 			const content = fs.readFileSync(filePath, "utf-8");
 			const raw = parseJson ? JSON.parse(content) : content;
-			const entry: ScanEntry = { key, path: filePath, raw, mtimeMs: stat.mtimeMs, sizeBytes: stat.size, loadedAtMs: this.#now() };
+			const entry: ScanEntry = {
+				key,
+				path: filePath,
+				raw,
+				mtimeMs: stat.mtimeMs,
+				sizeBytes: stat.size,
+				loadedAtMs: this.#now(),
+			};
 			this.set(bucket, entry);
 			return entry;
 		} catch {

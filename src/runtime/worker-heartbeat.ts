@@ -12,7 +12,11 @@ export function createWorkerHeartbeat(workerId: string, pid?: number, now = new 
 	return { workerId, pid, lastSeenAt: now.toISOString(), alive: true };
 }
 
-export function touchWorkerHeartbeat(heartbeat: WorkerHeartbeatState, updates: Partial<Omit<WorkerHeartbeatState, "workerId">> = {}, now = new Date()): WorkerHeartbeatState {
+export function touchWorkerHeartbeat(
+	heartbeat: WorkerHeartbeatState,
+	updates: Partial<Omit<WorkerHeartbeatState, "workerId">> = {},
+	now = new Date(),
+): WorkerHeartbeatState {
 	return { ...heartbeat, ...updates, lastSeenAt: now.toISOString() };
 }
 

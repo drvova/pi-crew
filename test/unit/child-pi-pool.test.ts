@@ -1,6 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { acquirePooledChild, DEFAULT_WARM_POOL_OPTIONS, disposeWarmPool, releasePooledChild, resolveWarmPoolSize } from "../../src/runtime/child-pi-pool.ts";
+import test from "node:test";
+import {
+	acquirePooledChild,
+	DEFAULT_WARM_POOL_OPTIONS,
+	disposeWarmPool,
+	releasePooledChild,
+	resolveWarmPoolSize,
+} from "../../src/runtime/child-pi-pool.ts";
 
 test("DEFAULT_WARM_POOL_OPTIONS keeps the pool off (2.6)", () => {
 	assert.equal(DEFAULT_WARM_POOL_OPTIONS.size, 0);

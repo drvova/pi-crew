@@ -5,9 +5,19 @@
  * `../../runtime/compact-stages/`) rather than reaching into individual
  * stage files, so internal refactors do not break the public surface.
  */
-export { AnsiStripStage, ANSI_STRIP_STAGE } from "./ansi-strip-stage.ts";
-export { BlankCollapseStage, BLANK_COLLAPSE_STAGE } from "./blank-collapse-stage.ts";
-export { DeduplicateStage, DEDUPLICATE_STAGE } from "./deduplicate-stage.ts";
-export { TruncationStage, type TruncationMarkerConfig } from "./truncation-stage.ts";
+export { ANSI_STRIP_STAGE, AnsiStripStage } from "./ansi-strip-stage.ts";
+export {
+	BLANK_COLLAPSE_STAGE,
+	BlankCollapseStage,
+} from "./blank-collapse-stage.ts";
+export { DEDUPLICATE_STAGE, DeduplicateStage } from "./deduplicate-stage.ts";
 export { HeadSnapStage, type HeadSnapStageConfig } from "./head-snap-stage.ts";
-export { TailCaptureStage, TAIL_CAPTURE_STREAM_STAGE, type TailCaptureStageConfig } from "./tail-capture-stage.ts";
+export {
+	TAIL_CAPTURE_STREAM_STAGE,
+	TailCaptureStage,
+	type TailCaptureStageConfig,
+} from "./tail-capture-stage.ts";
+export {
+	type TruncationMarkerConfig,
+	TruncationStage,
+} from "./truncation-stage.ts";

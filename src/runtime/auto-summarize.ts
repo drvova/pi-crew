@@ -1,11 +1,11 @@
 /**
  * AutoSummarizeService - Enables auto-summarization with token/tool thresholds.
- * 
+ *
  * Based on pi-boomerang's autoBoomerang pattern:
  * - toggle() enables/disables auto-summarization
  * - shouldAutoSummarize() checks if task should auto-summarize
  * - Token and tool thresholds control when summarization triggers
- * 
+ *
  * @see docs/pi-boomerang-integration-plan.md
  */
 
@@ -72,11 +72,7 @@ export interface AutoSummarizeTriggeredEventData {
 /**
  * What triggered the auto-summarize.
  */
-export type AutoSummarizeTrigger =
-	| "token_threshold"
-	| "tools_threshold"
-	| "manual"
-	| "high_usage";
+export type AutoSummarizeTrigger = "token_threshold" | "tools_threshold" | "manual" | "high_usage";
 
 /**
  * AutoSummarizeService enables automatic summarization based on configurable thresholds.
@@ -143,7 +139,7 @@ export class AutoSummarizeService {
 
 	/**
 	 * Check if a task should auto-summarize.
-	 * 
+	 *
 	 * @param packet - The task packet
 	 * @param result - The task result
 	 * @returns True if the task should auto-summarize
@@ -180,7 +176,7 @@ export class AutoSummarizeService {
 
 	/**
 	 * Get the reason why a task should (or should not) auto-summarize.
-	 * 
+	 *
 	 * @param packet - The task packet
 	 * @param result - The task result
 	 * @returns Object with shouldSummarize flag and reason
@@ -343,8 +339,6 @@ export interface AutoSummarizeDecision {
 /**
  * Create an AutoSummarizeService with default options.
  */
-export function createAutoSummarizeService(
-	options?: AutoSummarizeServiceOptions,
-): AutoSummarizeService {
+export function createAutoSummarizeService(options?: AutoSummarizeServiceOptions): AutoSummarizeService {
 	return new AutoSummarizeService(options);
 }

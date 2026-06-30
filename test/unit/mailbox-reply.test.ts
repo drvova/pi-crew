@@ -1,15 +1,27 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { appendMailboxMessage, readMailbox, readAllMailboxMessages, updateMailboxMessageReply } from "../../src/state/mailbox.ts";
+import { appendMailboxMessage, readAllMailboxMessages, readMailbox, updateMailboxMessageReply } from "../../src/state/mailbox.ts";
 import { createRunManifest } from "../../src/state/state-store.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
-const team: TeamConfig = { name: "reply", description: "reply test", source: "builtin", filePath: "reply.team.md", roles: [{ name: "explorer", agent: "explorer" }] };
-const workflow: WorkflowConfig = { name: "reply", description: "reply test", source: "builtin", filePath: "reply.workflow.md", steps: [{ id: "explore", role: "explorer", task: "Explore" }] };
+const team: TeamConfig = {
+	name: "reply",
+	description: "reply test",
+	source: "builtin",
+	filePath: "reply.team.md",
+	roles: [{ name: "explorer", agent: "explorer" }],
+};
+const workflow: WorkflowConfig = {
+	name: "reply",
+	description: "reply test",
+	source: "builtin",
+	filePath: "reply.workflow.md",
+	steps: [{ id: "explore", role: "explorer", task: "Explore" }],
+};
 
 function findMessageById(manifest: ReturnType<typeof createRunManifest>["manifest"], id: string) {
 	return readAllMailboxMessages(manifest).find((m) => m.id === id);
@@ -24,7 +36,12 @@ function setupCwd(): string {
 test("mailbox message can have replyTo field", () => {
 	const cwd = setupCwd();
 	try {
-		const { manifest } = createRunManifest({ cwd, team, workflow, goal: "reply fields" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "reply fields",
+		});
 		const original = appendMailboxMessage(manifest, {
 			direction: "outbox",
 			from: "01_explore",
@@ -53,7 +70,12 @@ test("mailbox message can have replyTo field", () => {
 test("updateMailboxMessageReply sets repliedAt and replyContent on original", () => {
 	const cwd = setupCwd();
 	try {
-		const { manifest } = createRunManifest({ cwd, team, workflow, goal: "reply update" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "reply update",
+		});
 		const original = appendMailboxMessage(manifest, {
 			direction: "outbox",
 			from: "01_explore",
@@ -79,7 +101,12 @@ test("updateMailboxMessageReply sets repliedAt and replyContent on original", ()
 test("replyDeadline is preserved on reply messages", () => {
 	const cwd = setupCwd();
 	try {
-		const { manifest } = createRunManifest({ cwd, team, workflow, goal: "deadline" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "deadline",
+		});
 		const deadline = Date.now() + 60_000;
 		const reply = appendMailboxMessage(manifest, {
 			direction: "inbox",
@@ -102,7 +129,12 @@ test("replyDeadline is preserved on reply messages", () => {
 test("messages without reply fields remain backward compatible", () => {
 	const cwd = setupCwd();
 	try {
-		const { manifest } = createRunManifest({ cwd, team, workflow, goal: "backward compat" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "backward compat",
+		});
 		const msg = appendMailboxMessage(manifest, {
 			direction: "inbox",
 			from: "leader",
@@ -129,7 +161,12 @@ test("messages without reply fields remain backward compatible", () => {
 test("updateMailboxMessageReply is non-fatal for missing message", () => {
 	const cwd = setupCwd();
 	try {
-		const { manifest } = createRunManifest({ cwd, team, workflow, goal: "missing original" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "missing original",
+		});
 		// Should not throw when the original message doesn't exist
 		updateMailboxMessageReply(manifest, "msg_nonexistent", "reply content");
 	} finally {
@@ -140,7 +177,12 @@ test("updateMailboxMessageReply is non-fatal for missing message", () => {
 test("reply message with all fields round-trips through disk", () => {
 	const cwd = setupCwd();
 	try {
-		const { manifest } = createRunManifest({ cwd, team, workflow, goal: "full round-trip" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "full round-trip",
+		});
 		const deadline = Date.now() + 120_000;
 		const original = appendMailboxMessage(manifest, {
 			direction: "outbox",

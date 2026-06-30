@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { appendEventAsync, appendEvent, appendEventFireAndForget, readEvents } from "../../src/state/event-log.ts";
+import test from "node:test";
+import { appendEvent, appendEventAsync, appendEventFireAndForget, readEvents } from "../../src/state/event-log.ts";
 
 test("appendEventAsync writes events correctly", async () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-event-async-"));
@@ -99,14 +99,27 @@ test("appendEventAsync and sync appendEvent share seq sequence", async () => {
 	const eventsPath = path.join(dir, "events.jsonl");
 	try {
 		// Sync write first
-		const sync = appendEvent(eventsPath, { type: "run.created", runId: "run-mix" });
+		const sync = appendEvent(eventsPath, {
+			type: "run.created",
+			runId: "run-mix",
+		});
 		// Async write second
-		const async = await appendEventAsync(eventsPath, { type: "task.started", runId: "run-mix", taskId: "t1" });
+		const async = await appendEventAsync(eventsPath, {
+			type: "task.started",
+			runId: "run-mix",
+			taskId: "t1",
+		});
 		// Sync write third
-		const sync2 = appendEvent(eventsPath, { type: "run.completed", runId: "run-mix" });
+		const sync2 = appendEvent(eventsPath, {
+			type: "run.completed",
+			runId: "run-mix",
+		});
 
 		const seqs = [sync.metadata?.seq, async.metadata?.seq, sync2.metadata?.seq];
-		assert.ok(seqs.every((s) => typeof s === "number"), `all seqs must be numbers: ${seqs}`);
+		assert.ok(
+			seqs.every((s) => typeof s === "number"),
+			`all seqs must be numbers: ${seqs}`,
+		);
 		assert.equal(new Set(seqs).size, seqs.length, `seqs must be unique: ${seqs}`);
 
 		// Events on disk must have all 3

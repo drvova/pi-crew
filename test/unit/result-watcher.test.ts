@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { createResultWatcher } from "../../src/extension/result-watcher.ts";
 
 function wait(ms: number): Promise<void> {
@@ -108,7 +108,11 @@ test("result watcher polls when fs.watch hits resource limits", async () => {
 	try {
 		const watcher = createResultWatcher({ emit: (_event, data) => emitted.push(data) }, dir, {
 			watch: (_resultsDir, _listener, onError) => {
-				onError(Object.assign(new Error("too many watchers"), { code: "EMFILE" }));
+				onError(
+					Object.assign(new Error("too many watchers"), {
+						code: "EMFILE",
+					}),
+				);
 				return null;
 			},
 		});

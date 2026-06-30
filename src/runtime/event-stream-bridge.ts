@@ -1,5 +1,5 @@
 import { runEventBus } from "../ui/run-event-bus.ts";
-import { subprocessToolRegistry, type SubprocessToolEvent } from "./subprocess-tool-registry.ts";
+import { type SubprocessToolEvent, subprocessToolRegistry } from "./subprocess-tool-registry.ts";
 
 export interface StreamBridgeEvent {
 	runId: string;
@@ -15,10 +15,16 @@ export interface StreamBridgeEvent {
 
 const activeBridges = new Map<string, (event: StreamBridgeEvent) => void>();
 
-export function registerStreamBridge(runId: string): { handler: (event: StreamBridgeEvent) => void; dispose: () => void } {
+export function registerStreamBridge(runId: string): {
+	handler: (event: StreamBridgeEvent) => void;
+	dispose: () => void;
+} {
 	const existing = activeBridges.get(runId);
 	if (existing) {
-		return { handler: existing, dispose: () => unregisterStreamBridge(runId) };
+		return {
+			handler: existing,
+			dispose: () => unregisterStreamBridge(runId),
+		};
 	}
 
 	const handler = (event: StreamBridgeEvent) => {

@@ -7,18 +7,19 @@
  * algorithm drifting from the shipped implementation (the bug that
  * output-handling-l4.test.ts had, fixed in Sprint 1).
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { test } from "node:test";
+import { compactString } from "../../src/runtime/child-pi.ts";
 import {
 	extractImportantLines,
 	IMPORTANT_LINE_PATTERNS,
 	isImportantLine,
 	splitWithImportantLines,
 } from "../../src/runtime/important-line-classifier.ts";
-import { compactString } from "../../src/runtime/child-pi.ts";
 import { readIfSmall } from "../../src/runtime/task-output-context.ts";
 
 // --- isImportantLine unit tests (each pattern) ---
@@ -115,7 +116,9 @@ test("splitWithImportantLines returns input verbatim when value <= maxChars", ()
 test("splitWithImportantLines returns head(75%)/tail(25%) with no important lines when preserveImportant:false", () => {
 	const value = "A".repeat(100) + "Error: in middle\n" + "B".repeat(100);
 	const maxChars = 80;
-	const r = splitWithImportantLines(value, maxChars, { preserveImportant: false });
+	const r = splitWithImportantLines(value, maxChars, {
+		preserveImportant: false,
+	});
 	assert.equal(r.head.length, 60);
 	assert.equal(r.tail.length, 20);
 	assert.deepEqual(r.importantLines, []);
@@ -201,14 +204,21 @@ test("compactString (real) under-threshold returns input unchanged (with or with
 
 // --- readIfSmall integration (REAL function, via temp file) ---
 
-function writeTempFile(content: string): { filePath: string; cleanup: () => void } {
+function writeTempFile(content: string): {
+	filePath: string;
+	cleanup: () => void;
+} {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p0b-readifsmall-"));
 	const filePath = path.join(dir, "input.txt");
 	fs.writeFileSync(filePath, content, "utf-8");
 	return {
 		filePath,
 		cleanup: () => {
-			try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ }
+			try {
+				fs.rmSync(dir, { recursive: true, force: true });
+			} catch {
+				/* best-effort */
+			}
 		},
 	};
 }

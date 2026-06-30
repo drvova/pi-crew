@@ -1,10 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	detectLanguage,
-	summarizeCode,
-	type SummaryResult,
-} from "../../src/runtime/code-summary.ts";
+import { describe, it } from "node:test";
+import { detectLanguage, type SummaryResult, summarizeCode } from "../../src/runtime/code-summary.ts";
 
 // ── detectLanguage ─────────────────────────────────────────────────────
 
@@ -48,11 +44,7 @@ describe("TypeScript function elision", () => {
 	});
 
 	it("keeps a short function intact", () => {
-		const code = [
-			"function add(a: number, b: number) {",
-			"  return a + b;",
-			"}",
-		].join("\n");
+		const code = ["function add(a: number, b: number) {", "  return a + b;", "}"].join("\n");
 		const result = summarizeCode(code, "typescript", { minBodyLines: 4 });
 		assert.ok(!result.elided, "short function should not be elided");
 		assert.equal(result.rendered, code);
@@ -81,17 +73,7 @@ describe("Class body elision", () => {
 
 describe("Block comment elision", () => {
 	it("elides long block comments", () => {
-		const comment = [
-			"/*",
-			" * line 1",
-			" * line 2",
-			" * line 3",
-			" * line 4",
-			" * line 5",
-			" * line 6",
-			" * line 7",
-			" */",
-		].join("\n");
+		const comment = ["/*", " * line 1", " * line 2", " * line 3", " * line 4", " * line 5", " * line 6", " * line 7", " */"].join("\n");
 		const result = summarizeCode(comment, "typescript");
 		assert.ok(result.elided, "block comment should be elided");
 		assert.ok(result.rendered.includes("lines elided"));
@@ -124,7 +106,7 @@ describe("Edge cases", () => {
 
 describe("Unknown language", () => {
 	it("returns full code when language is null", () => {
-		const code = "fn main() { println!(\"hello\"); }";
+		const code = 'fn main() { println!("hello"); }';
 		const result = summarizeCode(code, null);
 		assert.equal(result.language, null);
 		assert.ok(!result.elided);
@@ -143,14 +125,7 @@ describe("Unknown language", () => {
 
 describe("Python function elision", () => {
 	it("elides a long Python function body", () => {
-		const code = [
-			"def process(data):",
-			"    x = 1",
-			"    y = 2",
-			"    z = 3",
-			"    w = 4",
-			"    return x + y + z + w",
-		].join("\n");
+		const code = ["def process(data):", "    x = 1", "    y = 2", "    z = 3", "    w = 4", "    return x + y + z + w"].join("\n");
 		const result = summarizeCode(code, "python");
 		assert.equal(result.language, "python");
 		assert.ok(result.elided, "python function should be elided");
@@ -175,7 +150,7 @@ describe("Rust fn elision", () => {
 			"    let b = 2;",
 			"    let c = 3;",
 			"    let d = 4;",
-			"    println!(\"{}\", a + b + c + d);",
+			'    println!("{}", a + b + c + d);',
 			"}",
 		].join("\n");
 		const result = summarizeCode(code, "rust");

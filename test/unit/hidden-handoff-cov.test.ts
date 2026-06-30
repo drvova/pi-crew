@@ -1,16 +1,13 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	HiddenHandoffService,
-	createHiddenHandoffService,
-} from "../../src/runtime/hidden-handoff.ts";
+import { describe, it } from "node:test";
+import type { HandoffSummary } from "../../src/runtime/handoff-manager.ts";
 import type {
 	HiddenHandoff,
-	HiddenHandoffMailbox,
 	HiddenHandoffEventEmitter,
+	HiddenHandoffMailbox,
 	SendHandoffOptions,
 } from "../../src/runtime/hidden-handoff.ts";
-import type { HandoffSummary } from "../../src/runtime/handoff-manager.ts";
+import { createHiddenHandoffService, HiddenHandoffService } from "../../src/runtime/hidden-handoff.ts";
 
 function makeSummary(overrides: Partial<HandoffSummary> = {}): HandoffSummary {
 	return {
@@ -25,7 +22,12 @@ function makeSummary(overrides: Partial<HandoffSummary> = {}): HandoffSummary {
 		decisions: [],
 		blockers: [],
 		nextSteps: [],
-		metrics: { tokensUsed: 500, duration: 1000, iterations: 1, toolsUsed: ["bash"] },
+		metrics: {
+			tokensUsed: 500,
+			duration: 1000,
+			iterations: 1,
+			toolsUsed: ["bash"],
+		},
 		contextSnapshot: "ctx",
 		...overrides,
 	};
@@ -54,7 +56,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 	it("does nothing when disabled", () => {
 		const sent: HiddenHandoff[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (_r, m) => { sent.push(m); } },
+			mailbox: {
+				send: (_r, m) => {
+					sent.push(m);
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.setEnabled(false);
@@ -65,7 +71,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 	it("sends handoff to parent agent via mailbox", () => {
 		const sent: { recipient: string; message: HiddenHandoff }[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (recipient, message) => { sent.push({ recipient, message }); } },
+			mailbox: {
+				send: (recipient, message) => {
+					sent.push({ recipient, message });
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.sendHandoff(makeSummary());
@@ -80,7 +90,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 	it("sends to explicit recipient when specified", () => {
 		const sent: { recipient: string }[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (r, _m) => { sent.push({ recipient: r }); } },
+			mailbox: {
+				send: (r, _m) => {
+					sent.push({ recipient: r });
+				},
+			},
 		});
 		svc.sendHandoff(makeSummary(), { to: "other-agent" });
 		assert.strictEqual(sent.length, 1);
@@ -90,7 +104,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 	it("emits handoff:sent_no_recipient when no parent and no recipient", () => {
 		const events: { event: string }[] = [];
 		const svc = new HiddenHandoffService({
-			eventEmitter: { emit: (e, _d) => { events.push({ event: e }); } },
+			eventEmitter: {
+				emit: (e, _d) => {
+					events.push({ event: e });
+				},
+			},
 		});
 		svc.sendHandoff(makeSummary());
 		assert.ok(events.some((e) => e.event === "handoff:sent_no_recipient"));
@@ -100,7 +118,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 		const events: { event: string }[] = [];
 		const svc = new HiddenHandoffService({
 			mailbox: { send: () => {} },
-			eventEmitter: { emit: (e, _d) => { events.push({ event: e }); } },
+			eventEmitter: {
+				emit: (e, _d) => {
+					events.push({ event: e });
+				},
+			},
 		});
 		svc.sendHandoff(makeSummary(), { to: "invalid recipient!" });
 		assert.ok(events.some((e) => e.event === "handoff:invalid_recipient"));
@@ -109,7 +131,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 	it("sets high priority for failure outcomes", () => {
 		const sent: { message: HiddenHandoff }[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (_r, m) => { sent.push({ message: m }); } },
+			mailbox: {
+				send: (_r, m) => {
+					sent.push({ message: m });
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.sendHandoff(makeSummary({ outcome: "failure" }));
@@ -119,7 +145,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 	it("sets normal priority when blockers exist", () => {
 		const sent: { message: HiddenHandoff }[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (_r, m) => { sent.push({ message: m }); } },
+			mailbox: {
+				send: (_r, m) => {
+					sent.push({ message: m });
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.sendHandoff(makeSummary({ blockers: ["blocked on X"] }));
@@ -129,7 +159,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 	it("uses custom handoff type when specified", () => {
 		const sent: { message: HiddenHandoff }[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (_r, m) => { sent.push({ message: m }); } },
+			mailbox: {
+				send: (_r, m) => {
+					sent.push({ message: m });
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.sendHandoff(makeSummary(), { customType: "task-complete" });
@@ -140,7 +174,11 @@ describe("HiddenHandoffService.sendHandoff", () => {
 		const events: { event: string }[] = [];
 		const svc = new HiddenHandoffService({
 			mailbox: { send: () => {} },
-			eventEmitter: { emit: (e, _d) => { events.push({ event: e }); } },
+			eventEmitter: {
+				emit: (e, _d) => {
+					events.push({ event: e });
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.sendHandoff(makeSummary());
@@ -155,7 +193,11 @@ describe("HiddenHandoffService rate limiting", () => {
 		const events: { event: string }[] = [];
 		const svc = new HiddenHandoffService({
 			mailbox: { send: () => {} },
-			eventEmitter: { emit: (e, _d) => { events.push({ event: e }); } },
+			eventEmitter: {
+				emit: (e, _d) => {
+					events.push({ event: e });
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		// Send 10 times (the max)
@@ -176,7 +218,11 @@ describe("HiddenHandoffService.sendHandoffAsync", () => {
 	it("sends handoff without throwing", () => {
 		const sent: HiddenHandoff[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (_r, m) => { sent.push(m); } },
+			mailbox: {
+				send: (_r, m) => {
+					sent.push(m);
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.sendHandoffAsync(makeSummary());
@@ -191,13 +237,21 @@ describe("HiddenHandoffService setters", () => {
 		const sent1: HiddenHandoff[] = [];
 		const sent2: HiddenHandoff[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (_r, m) => { sent1.push(m); } },
+			mailbox: {
+				send: (_r, m) => {
+					sent1.push(m);
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.sendHandoff(makeSummary());
 		assert.strictEqual(sent1.length, 1);
 
-		svc.setMailbox({ send: (_r, m) => { sent2.push(m); } });
+		svc.setMailbox({
+			send: (_r, m) => {
+				sent2.push(m);
+			},
+		});
 		svc.sendHandoff(makeSummary());
 		assert.strictEqual(sent2.length, 1);
 	});
@@ -206,13 +260,21 @@ describe("HiddenHandoffService setters", () => {
 		const events1: string[] = [];
 		const events2: string[] = [];
 		const svc = new HiddenHandoffService({
-			eventEmitter: { emit: (e, _d) => { events1.push(e); } },
+			eventEmitter: {
+				emit: (e, _d) => {
+					events1.push(e);
+				},
+			},
 			getParentAgentId: () => "parent-001",
 		});
 		svc.sendHandoff(makeSummary());
 		assert.strictEqual(events1.length, 1);
 
-		svc.setEventEmitter({ emit: (e, _d) => { events2.push(e); } });
+		svc.setEventEmitter({
+			emit: (e, _d) => {
+				events2.push(e);
+			},
+		});
 		svc.sendHandoff(makeSummary());
 		assert.strictEqual(events2.length, 1);
 	});
@@ -220,7 +282,11 @@ describe("HiddenHandoffService setters", () => {
 	it("setGetParentAgentId updates the callback", () => {
 		const sent: string[] = [];
 		const svc = new HiddenHandoffService({
-			mailbox: { send: (r, _m) => { sent.push(r); } },
+			mailbox: {
+				send: (r, _m) => {
+					sent.push(r);
+				},
+			},
 			getParentAgentId: () => "old-parent",
 		});
 		svc.sendHandoff(makeSummary());

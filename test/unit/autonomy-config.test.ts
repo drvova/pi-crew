@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { configPath } from "../../src/config/config.ts";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
@@ -24,14 +24,27 @@ test("autonomy action shows and toggles autonomous config", async () => {
 		assert.equal(off.isError, false);
 		assert.match(firstText(off), /Enabled: false/);
 
-		const on = await handleTeamTool({ action: "autonomy", config: { enabled: true, injectPolicy: true, preferAsyncForLongTasks: true, allowWorktreeSuggestion: false } }, { cwd: tmp });
+		const on = await handleTeamTool(
+			{
+				action: "autonomy",
+				config: {
+					enabled: true,
+					injectPolicy: true,
+					preferAsyncForLongTasks: true,
+					allowWorktreeSuggestion: false,
+				},
+			},
+			{ cwd: tmp },
+		);
 		assert.equal(on.isError, false);
 		const text = firstText(on);
 		assert.match(text, /Enabled: true/);
 		assert.match(text, /Prefer async for long tasks: true/);
 		assert.match(text, /Allow worktree suggestion: false/);
 
-		const raw = JSON.parse(fs.readFileSync(configPath(), "utf-8")) as { autonomous?: { enabled?: boolean } };
+		const raw = JSON.parse(fs.readFileSync(configPath(), "utf-8")) as {
+			autonomous?: { enabled?: boolean };
+		};
 		assert.equal(raw.autonomous?.enabled, true);
 	} finally {
 		if (oldHome === undefined) delete process.env.HOME;
@@ -43,4 +56,3 @@ test("autonomy action shows and toggles autonomous config", async () => {
 		fs.rmSync(tmp, { recursive: true, force: true });
 	}
 });
-

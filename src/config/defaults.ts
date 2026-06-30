@@ -30,7 +30,7 @@ export const DEFAULT_CHILD_PI: Readonly<{
 
 export const DEFAULT_LIVE_SESSION = {
 	/** Maximum wall-clock time for a single live-session task before abort (ms). */
-	responseTimeoutMs: 10 * 60_000,  // 10 minutes - increased from 5min for complex verification
+	responseTimeoutMs: 10 * 60_000, // 10 minutes - increased from 5min for complex verification
 	/** Maximum yield reminder attempts before accepting no-yield. */
 	maxYieldRetries: 3,
 	/** Polling interval for session idle check during yield enforcement (ms). */
@@ -56,7 +56,17 @@ export const DEFAULT_CONCURRENCY = {
 };
 
 export const DEFAULT_EVENT_LOG = {
-	terminalEventTypes: ["run.blocked", "run.completed", "run.failed", "run.cancelled", "task.completed", "task.failed", "task.skipped", "task.cancelled", "task.needs_attention"],
+	terminalEventTypes: [
+		"run.blocked",
+		"run.completed",
+		"run.failed",
+		"run.cancelled",
+		"task.completed",
+		"task.failed",
+		"task.skipped",
+		"task.cancelled",
+		"task.needs_attention",
+	],
 };
 
 export const DEFAULT_ARTIFACT_CLEANUP = {

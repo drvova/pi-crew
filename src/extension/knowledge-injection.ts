@@ -22,8 +22,8 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { BeforeAgentStartEvent, ExtensionAPI } from "./pi-api.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
+import type { BeforeAgentStartEvent, ExtensionAPI } from "./pi-api.ts";
 
 /** The knowledge file, relative to the project crew root. */
 export const KNOWLEDGE_FILENAME = "knowledge.md";
@@ -73,10 +73,45 @@ interface KnowledgeSection {
 }
 
 const STOPWORDS = new Set([
-	"the", "a", "an", "is", "are", "of", "to", "in", "for", "and", "or", "not",
-	"with", "this", "that", "it", "be", "on", "at", "by", "do", "does", "how",
-	"what", "when", "from", "fix", "fixes", "fixed", "v0", "v1", "released",
-	"progress", "uncommitted", "not", "pushed", "published", "session", "post",
+	"the",
+	"a",
+	"an",
+	"is",
+	"are",
+	"of",
+	"to",
+	"in",
+	"for",
+	"and",
+	"or",
+	"not",
+	"with",
+	"this",
+	"that",
+	"it",
+	"be",
+	"on",
+	"at",
+	"by",
+	"do",
+	"does",
+	"how",
+	"what",
+	"when",
+	"from",
+	"fix",
+	"fixes",
+	"fixed",
+	"v0",
+	"v1",
+	"released",
+	"progress",
+	"uncommitted",
+	"not",
+	"pushed",
+	"published",
+	"session",
+	"post",
 ]);
 
 /** Tokenize header text into a Set of lowercased non-stopword tokens. */
@@ -91,20 +126,33 @@ function tokenizeHeader(header: string): Set<string> {
 }
 
 /** Parse knowledge.md into (conventions, sessionLog) sections by H2 header. */
-function parseKnowledgeSections(content: string): { conventions: KnowledgeSection[]; sessionLog: KnowledgeSection[] } {
+function parseKnowledgeSections(content: string): {
+	conventions: KnowledgeSection[];
+	sessionLog: KnowledgeSection[];
+} {
 	const lines = content.split(/\r?\n/);
 	const sections: KnowledgeSection[] = [];
 	let current: { header: string; lines: string[] } | null = null;
 	for (const line of lines) {
 		const m = /^##\s+(.+?)\s*$/.exec(line);
 		if (m) {
-			if (current) sections.push({ header: current.header, body: current.lines.join("\n"), headerTokens: tokenizeHeader(current.header) });
+			if (current)
+				sections.push({
+					header: current.header,
+					body: current.lines.join("\n"),
+					headerTokens: tokenizeHeader(current.header),
+				});
 			current = { header: m[1]!, lines: [line] };
 		} else if (current) {
 			current.lines.push(line);
 		}
 	}
-	if (current) sections.push({ header: current.header, body: current.lines.join("\n"), headerTokens: tokenizeHeader(current.header) });
+	if (current)
+		sections.push({
+			header: current.header,
+			body: current.lines.join("\n"),
+			headerTokens: tokenizeHeader(current.header),
+		});
 
 	// Classify: a section is a CONVENTION if its header starts-with one of the
 	// known convention titles. Once we leave the convention run (first non-
@@ -168,7 +216,12 @@ function selectSessionLog(query: string, sessionLog: KnowledgeSection[], budgetB
 	const scored = sessionLog
 		.map((sec, idx) => {
 			const overlap = [...queryTokens].filter((t) => sec.headerTokens.has(t));
-			return { sec, score: overlap.reduce((sum, t) => sum + (idf.get(t) ?? 0), 0), idx, hasOverlap: overlap.length > 0 };
+			return {
+				sec,
+				score: overlap.reduce((sum, t) => sum + (idf.get(t) ?? 0), 0),
+				idx,
+				hasOverlap: overlap.length > 0,
+			};
 		})
 		.filter((x) => x.hasOverlap);
 	if (scored.length === 0) return [];
@@ -188,7 +241,10 @@ function selectSessionLog(query: string, sessionLog: KnowledgeSection[], budgetB
 	// a head-sliced copy of the single best match so the query isn't empty.
 	if (selected.length === 0 && bestMatch) {
 		const sliced = bestMatch.sec.body.slice(0, Math.max(0, budgetBytes));
-		selected.push({ ...bestMatch.sec, body: `${sliced}\n\n<!-- section truncated (session-log budget ${budgetBytes} bytes). Full file: use \`read\`. -->` });
+		selected.push({
+			...bestMatch.sec,
+			body: `${sliced}\n\n<!-- section truncated (session-log budget ${budgetBytes} bytes). Full file: use \`read\`. -->`,
+		});
 	}
 	return selected;
 }
@@ -225,13 +281,23 @@ export function readKnowledge(cwd: string, query?: KnowledgeQuery): string {
 
 		// Section-aware path: cache parsed sections, select per-query.
 		const cachedSections = sectionCache.get(p);
-		let parsed: { conventions: KnowledgeSection[]; sessionLog: KnowledgeSection[] };
+		let parsed: {
+			conventions: KnowledgeSection[];
+			sessionLog: KnowledgeSection[];
+		};
 		if (cachedSections && cachedSections.key === cacheKey) {
-			parsed = { conventions: cachedSections.conventions, sessionLog: cachedSections.sessionLog };
+			parsed = {
+				conventions: cachedSections.conventions,
+				sessionLog: cachedSections.sessionLog,
+			};
 		} else {
 			const content = fs.readFileSync(p, "utf8").trim();
 			parsed = parseKnowledgeSections(content);
-			sectionCache.set(p, { key: cacheKey, conventions: parsed.conventions, sessionLog: parsed.sessionLog });
+			sectionCache.set(p, {
+				key: cacheKey,
+				conventions: parsed.conventions,
+				sessionLog: parsed.sessionLog,
+			});
 		}
 
 		const queryText = [query.goal, query.taskText].filter(Boolean).join(" \n ");
@@ -245,7 +311,9 @@ export function readKnowledge(cwd: string, query?: KnowledgeQuery): string {
 		// Always: section-index of ALL session-log headers (recovery safety net).
 		if (parsed.sessionLog.length > 0) {
 			const indexLines = parsed.sessionLog.map((s) => `  - ${s.header}`);
-			parts.push(`<!-- Session-log sections in knowledge.md (not injected unless matched above — use \`read\` for detail):\n${indexLines.join("\n")}\nFull file: ${p} -->`);
+			parts.push(
+				`<!-- Session-log sections in knowledge.md (not injected unless matched above — use \`read\` for detail):\n${indexLines.join("\n")}\nFull file: ${p} -->`,
+			);
 		}
 		return parts.join("\n").trim();
 	} catch {
@@ -311,7 +379,12 @@ export function buildKnowledgeFragment(cwd: string, query?: KnowledgeQuery): str
  */
 export function registerKnowledgeInjection(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", (event: BeforeAgentStartEvent) => {
-		const options = (event as BeforeAgentStartEvent & { systemPromptOptions?: { cwd?: unknown } }).systemPromptOptions ?? {};
+		const options =
+			(
+				event as BeforeAgentStartEvent & {
+					systemPromptOptions?: { cwd?: unknown };
+				}
+			).systemPromptOptions ?? {};
 		const cwd = typeof options.cwd === "string" ? options.cwd : process.cwd();
 		const fragment = buildKnowledgeFragment(cwd);
 		if (!fragment) return undefined;

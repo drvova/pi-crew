@@ -43,10 +43,7 @@ export function computeLiveDurationMs(activity: LiveActivity, nowMs: number = Da
 	const completedMs = rawCompleted > 0 ? toMs(rawCompleted) : 0;
 	// A valid start is positive, not more than 1 minute in the future, and not
 	// more than ~1000 years in the past (guards against 0 / garbage / clock skew).
-	const isValidStarted =
-		startedMs > 0 &&
-		startedMs < nowMs + 60_000 &&
-		startedMs > nowMs - 31_556_926_000_000;
+	const isValidStarted = startedMs > 0 && startedMs < nowMs + 60_000 && startedMs > nowMs - 31_556_926_000_000;
 	const end = completedMs > 0 && completedMs < nowMs + 60_000 ? completedMs : nowMs;
 	const ms = end - (isValidStarted ? startedMs : nowMs);
 	return Number.isFinite(ms) && ms >= 0 ? ms : 0;

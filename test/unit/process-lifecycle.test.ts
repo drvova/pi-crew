@@ -1,15 +1,15 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as cp from "node:child_process";
+import { test } from "node:test";
 import {
-	spawnOwnedProcess,
 	disposeAllOwnedProcesses,
-	liveOwnedProcessCount,
-	registerResourceOwner,
-	resourceOwnerCount,
 	disposeAllOwners,
 	disposeOwner,
+	liveOwnedProcessCount,
 	type OwnedProcess,
+	registerResourceOwner,
+	resourceOwnerCount,
+	spawnOwnedProcess,
 } from "../../src/runtime/process-lifecycle.ts";
 
 const isPosix = process.platform !== "win32";
@@ -57,7 +57,10 @@ test("spawnOwnedProcess: non-zero exit code observed", async () => {
 
 test("dispose: SIGTERM kills a sleep process within grace period", async () => {
 	const { cmd, args } = sleepScript(30);
-	const owner = spawnOwnedProcess(cmd, args, { name: "sleep-sigterm", gracefulMs: 1000 });
+	const owner = spawnOwnedProcess(cmd, args, {
+		name: "sleep-sigterm",
+		gracefulMs: 1000,
+	});
 	// Give the child a moment to actually start.
 	await delay(100);
 	assert.equal(owner.isDisposed, false);
@@ -97,7 +100,10 @@ test("dispose: escalates to SIGKILL when process ignores SIGTERM", async () => {
 
 test("dispose: idempotent — repeated calls return the same promise", async () => {
 	const { cmd, args } = sleepScript(30);
-	const owner = spawnOwnedProcess(cmd, args, { name: "idempotent", gracefulMs: 500 });
+	const owner = spawnOwnedProcess(cmd, args, {
+		name: "idempotent",
+		gracefulMs: 500,
+	});
 	await delay(100);
 	const p1 = owner.dispose();
 	const p2 = owner.dispose();
@@ -152,7 +158,10 @@ test("onExit: callback fires on natural exit", async () => {
 
 test("onExit: callback fires on dispose kill", async () => {
 	const { cmd, args } = sleepScript(30);
-	const owner = spawnOwnedProcess(cmd, args, { name: "onexit-kill", gracefulMs: 500 });
+	const owner = spawnOwnedProcess(cmd, args, {
+		name: "onexit-kill",
+		gracefulMs: 500,
+	});
 	let fired = false;
 	owner.onExit(() => {
 		fired = true;
@@ -192,8 +201,14 @@ test("liveOwnedProcessCount: increments on spawn, decrements after exit", async 
 test("disposeAllOwnedProcesses: disposes every live owner", async () => {
 	const before = liveOwnedProcessCount();
 	const { cmd, args } = sleepScript(30);
-	const a = spawnOwnedProcess(cmd, args, { name: "disposeall-a", gracefulMs: 500 });
-	const b = spawnOwnedProcess(cmd, args, { name: "disposeall-b", gracefulMs: 500 });
+	const a = spawnOwnedProcess(cmd, args, {
+		name: "disposeall-a",
+		gracefulMs: 500,
+	});
+	const b = spawnOwnedProcess(cmd, args, {
+		name: "disposeall-b",
+		gracefulMs: 500,
+	});
 	await delay(100);
 	assert.equal(liveOwnedProcessCount(), before + 2);
 	await disposeAllOwnedProcesses();
@@ -312,7 +327,11 @@ test("abort signal: pre-aborted signal disposes on spawn", async () => {
 	const ac = new AbortController();
 	ac.abort();
 	const { cmd, args } = sleepScript(30);
-	const owner = spawnOwnedProcess(cmd, args, { name: "pre-aborted", signal: ac.signal, gracefulMs: 500 });
+	const owner = spawnOwnedProcess(cmd, args, {
+		name: "pre-aborted",
+		signal: ac.signal,
+		gracefulMs: 500,
+	});
 	// Pre-aborted: dispose fires immediately.
 	await owner.dispose();
 	assert.equal(owner.isDisposed, true);
@@ -322,7 +341,11 @@ test("abort signal: pre-aborted signal disposes on spawn", async () => {
 test("abort signal: aborting after spawn triggers dispose", async () => {
 	const ac = new AbortController();
 	const { cmd, args } = sleepScript(30);
-	const owner = spawnOwnedProcess(cmd, args, { name: "abort-after", signal: ac.signal, gracefulMs: 500 });
+	const owner = spawnOwnedProcess(cmd, args, {
+		name: "abort-after",
+		signal: ac.signal,
+		gracefulMs: 500,
+	});
 	await delay(100);
 	ac.abort();
 	await owner.awaitExit();

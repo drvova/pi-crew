@@ -1,16 +1,17 @@
 #!/usr/bin/env node
+
 /**
  * Check All Skills Script
- * 
+ *
  * Runs verify-skill.ts against all skills and produces a summary report.
- * 
+ *
  * Usage:
  *   node scripts/check-all-skills.ts
  */
 
+import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { spawnSync } from "child_process";
 
 interface SkillSummary {
 	name: string;
@@ -39,10 +40,10 @@ function getSkillDirs(): string[] {
 		console.error("Skills directory not found: " + SKILLS_DIR);
 		return [];
 	}
-	
+
 	const dirs: string[] = [];
 	const entries = fs.readdirSync(SKILLS_DIR, { withFileTypes: true });
-	
+
 	for (const entry of entries) {
 		if (entry.isDirectory()) {
 			const skillPath = path.join(SKILLS_DIR, entry.name, "SKILL.md");
@@ -51,38 +52,42 @@ function getSkillDirs(): string[] {
 			}
 		}
 	}
-	
+
 	return dirs.sort();
 }
 
 /**
  * Run verify-skill.ts for a single skill
  */
-function verifySingleSkill(skillName: string): { passed: boolean; warnings: string[]; errors: string[] } {
+function verifySingleSkill(skillName: string): {
+	passed: boolean;
+	warnings: string[];
+	errors: string[];
+} {
 	const skillPath = path.join(SKILLS_DIR, skillName, "SKILL.md");
-	
+
 	const result = spawnSync("node", ["scripts/verify-skill.ts", skillPath], {
 		cwd: process.cwd(),
 		encoding: "utf-8",
 	});
-	
+
 	const output = result.stdout + result.stderr;
 	const warnings: string[] = [];
 	const errors: string[] = [];
-	
+
 	// Parse output
 	const warningMatches = output.match(/[^\n]*⚠️[^\n]*/g);
 	const errorMatches = output.match(/[^\n]+FAIL[^\n]+/g);
-	
+
 	if (warningMatches) {
 		warnings.push(...warningMatches.map((w) => w.trim()));
 	}
 	if (errorMatches) {
 		errors.push(...errorMatches.map((e) => e.trim()));
 	}
-	
+
 	const passed = result.status === 0;
-	
+
 	return { passed, warnings, errors };
 }
 
@@ -91,12 +96,12 @@ function verifySingleSkill(skillName: string): { passed: boolean; warnings: stri
  */
 function generateMarkdownReport(report: Report): string {
 	const lines: string[] = [];
-	
+
 	lines.push("# Skill Verification Report");
 	lines.push("");
 	lines.push("Generated: " + report.timestamp);
 	lines.push("");
-	
+
 	// Summary table
 	lines.push("## Summary");
 	lines.push("");
@@ -107,11 +112,11 @@ function generateMarkdownReport(report: Report): string {
 	lines.push("| Warnings | " + report.warningsOnly + " |");
 	lines.push("| **Total** | **" + report.total + "** |");
 	lines.push("");
-	
+
 	// Skill list by status
 	lines.push("## Skills by Status");
 	lines.push("");
-	
+
 	// Passed skills
 	const passedSkills = report.skills.filter((s) => s.status === "pass");
 	if (passedSkills.length > 0) {
@@ -122,7 +127,7 @@ function generateMarkdownReport(report: Report): string {
 		}
 		lines.push("");
 	}
-	
+
 	// Failed skills
 	const failedSkills = report.skills.filter((s) => s.status === "fail");
 	if (failedSkills.length > 0) {
@@ -136,7 +141,7 @@ function generateMarkdownReport(report: Report): string {
 		}
 		lines.push("");
 	}
-	
+
 	// Warning skills
 	const warningSkills = report.skills.filter((s) => s.status === "warning");
 	if (warningSkills.length > 0) {
@@ -150,7 +155,7 @@ function generateMarkdownReport(report: Report): string {
 		}
 		lines.push("");
 	}
-	
+
 	// Recommendations
 	lines.push("## Recommendations");
 	lines.push("");
@@ -163,7 +168,7 @@ function generateMarkdownReport(report: Report): string {
 	if (warningSkills.length > 0) {
 		lines.push("4. Review " + warningSkills.length + " skills with warnings for improvements");
 	}
-	
+
 	return lines.join("\n");
 }
 
@@ -179,10 +184,10 @@ function generateJsonReport(report: Report): string {
  */
 async function main() {
 	console.log("Checking all skills...\n");
-	
+
 	const skillNames = getSkillDirs();
 	console.log("Found " + skillNames.length + " skills\n");
-	
+
 	const report: Report = {
 		total: skillNames.length,
 		passed: 0,
@@ -191,12 +196,12 @@ async function main() {
 		skills: [],
 		timestamp: new Date().toISOString(),
 	};
-	
+
 	for (const skillName of skillNames) {
 		process.stdout.write(".");
-		
+
 		const result = verifySingleSkill(skillName);
-		
+
 		let status: "pass" | "fail" | "warning" = "pass";
 		if (!result.passed && result.errors.length > 0) {
 			status = "fail";
@@ -207,7 +212,7 @@ async function main() {
 		} else {
 			report.passed++;
 		}
-		
+
 		report.skills.push({
 			name: skillName,
 			path: path.join("skills", skillName, "SKILL.md"),
@@ -216,9 +221,9 @@ async function main() {
 			errors: result.errors,
 		});
 	}
-	
+
 	console.log("\n\n");
-	
+
 	// Print summary
 	console.log("=== Skill Verification Summary ===");
 	console.log("Total: " + report.total);
@@ -226,7 +231,7 @@ async function main() {
 	console.log("Failed: " + report.failed);
 	console.log("Warnings only: " + report.warningsOnly);
 	console.log("");
-	
+
 	// List failed skills
 	if (report.failed > 0) {
 		console.log("Failing skills:");
@@ -238,7 +243,7 @@ async function main() {
 		}
 		console.log("");
 	}
-	
+
 	// List skills with warnings
 	if (report.warningsOnly > 0) {
 		console.log("Skills with warnings:");
@@ -250,30 +255,30 @@ async function main() {
 		}
 		console.log("");
 	}
-	
+
 	// Write reports
 	const reportDir = path.join(process.cwd(), "reports");
 	if (!fs.existsSync(reportDir)) {
 		fs.mkdirSync(reportDir, { recursive: true });
 	}
-	
+
 	const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 	const mdReportPath = path.join(reportDir, "skill-verification-" + timestamp + ".md");
 	const jsonReportPath = path.join(reportDir, "skill-verification-" + timestamp + ".json");
 	const latestMdPath = path.join(reportDir, "skill-verification-latest.md");
 	const latestJsonPath = path.join(reportDir, "skill-verification-latest.json");
-	
+
 	fs.writeFileSync(mdReportPath, generateMarkdownReport(report));
 	fs.writeFileSync(jsonReportPath, generateJsonReport(report));
 	fs.writeFileSync(latestMdPath, generateMarkdownReport(report));
 	fs.writeFileSync(latestJsonPath, generateJsonReport(report));
-	
+
 	console.log("Reports written to:");
 	console.log("  - " + mdReportPath);
 	console.log("  - " + jsonReportPath);
 	console.log("  - " + latestMdPath + " (latest)");
 	console.log("  - " + latestJsonPath + " (latest)");
-	
+
 	// Exit with appropriate code
 	if (report.failed > 0) {
 		process.exit(1);

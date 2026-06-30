@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { sanitizeObject } from "../../src/extension/team-tool/config-patch.ts";
-import { addTranslations, __test__resetI18n } from "../../src/i18n.ts";
+import { __test__resetI18n, addTranslations } from "../../src/i18n.ts";
 
 /**
  * Tests for prototype-pollution prevention (MEDIUM #1 and MEDIUM #2 fixes).
@@ -97,11 +97,7 @@ test("addTranslations: strips __proto__ key from translation bundle", () => {
 		"agent.requiresPrompt": "Test prompt",
 	} as any);
 	// The dangerous key should not have polluted anything
-	assert.equal(
-		(typeof (globalThis as any).__proto__?.polluted === "undefined"),
-		true,
-		"__proto__ should not pollute global prototype",
-	);
+	assert.equal(typeof (globalThis as any).__proto__?.polluted === "undefined", true, "__proto__ should not pollute global prototype");
 });
 
 test("addTranslations: strips constructor and prototype keys", () => {

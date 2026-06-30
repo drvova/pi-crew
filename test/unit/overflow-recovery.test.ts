@@ -8,8 +8,9 @@
  * - terminal-state TTL eviction
  * - MAX_TRACKED_STATES cap with evictOldestTerminalState
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { OverflowRecoveryTracker } from "../../src/runtime/overflow-recovery.ts";
 
 test("OverflowRecoveryTracker.feedEvent initial state is 'none'", () => {
@@ -70,7 +71,9 @@ test("OverflowRecoveryTracker onPhaseChange callback fires on transition", () =>
 
 test("OverflowRecoveryTracker onPhaseChange errors do not break feedEvent", () => {
 	const tracker = new OverflowRecoveryTracker({
-		onPhaseChange: () => { throw new Error("callback broken"); },
+		onPhaseChange: () => {
+			throw new Error("callback broken");
+		},
 	});
 	// Should not throw
 	assert.equal(tracker.feedEvent("t1", "r1", "compaction_start"), "compaction");

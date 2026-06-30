@@ -60,9 +60,7 @@ export function resolveModel(input: string, registry: ModelRegistry): Model | st
 		} else if (name.includes(query)) {
 			score = 40 + (query.length / name.length) * 20;
 		} else if (
-			query
-				.split(/[\s\-/]+/)
-				.every((part) => id.includes(part) || name.includes(part) || m.provider.toLowerCase().includes(part))
+			query.split(/[\s\-/]+/).every((part) => id.includes(part) || name.includes(part) || m.provider.toLowerCase().includes(part))
 		) {
 			score = 20;
 		}
@@ -113,9 +111,7 @@ export function fuzzyResolveModelId(input: string, models: SimpleModelEntry[]): 
 		} else if (name.includes(query)) {
 			score = 40 + (query.length / (name.length || 1)) * 20;
 		} else if (
-			query
-				.split(/[\s\-/]+/)
-				.every((part) => id.includes(part) || name.includes(part) || m.provider.toLowerCase().includes(part))
+			query.split(/[\s\-/]+/).every((part) => id.includes(part) || name.includes(part) || m.provider.toLowerCase().includes(part))
 		) {
 			score = 20;
 		}

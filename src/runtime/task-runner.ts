@@ -2,6 +2,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentConfig } from "../agents/agent-config.ts";
 import type { CrewLimitsConfig, CrewRuntimeConfig } from "../config/config.ts";
+import { loadConfig } from "../config/config.ts";
+import { errors } from "../errors.ts";
+import { appendHookEvent, executeHook } from "../hooks/registry.ts";
+import { writeArtifact } from "../state/artifact-store.ts";
+import { appendEventAsync, appendEventFireAndForget } from "../state/event-log.ts";
+import { saveRunManifest } from "../state/state-store.ts";
+import { createTaskClaim } from "../state/task-claims.ts";
 import type {
 	ArtifactDescriptor,
 	OperationTerminalEvidence,
@@ -12,49 +19,14 @@ import type {
 } from "../state/types.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { errors } from "../errors.ts";
-import { writeArtifact } from "../state/artifact-store.ts";
-import { appendEventAsync, appendEventFireAndForget } from "../state/event-log.ts";
-import { saveRunManifest } from "../state/state-store.ts";
-import { createTaskClaim } from "../state/task-claims.ts";
-import {
-	createWorkerHeartbeat,
-	touchWorkerHeartbeat,
-} from "./worker-heartbeat.ts";
 import type { WorkflowStep } from "../workflows/workflow-config.ts";
-import {
-	captureWorktreeDiff,
-	captureWorktreeDiffStat,
-	prepareTaskWorkspace,
-} from "../worktree/worktree-manager.ts";
-import {
-	buildConfiguredModelRouting,
-	formatModelAttemptNote,
-	isRetryableModelFailure,
-	type ModelAttemptSummary,
-} from "./model-fallback.ts";
-import { readEnabledModelsPatterns } from "./model-scope.ts";
-import { loadConfig } from "../config/config.ts";
-import { tailReadWithLineSnap } from "./task-runner/tail-read.ts";
-import {
-	parsePiJsonOutput,
-	type ParsedPiJsonOutput,
-} from "./pi-json-output.ts";
-import { runChildPi, type ChildPiLifecycleEvent } from "./child-pi.ts";
-import { awaitRuntimeWarmup } from "./runtime-warmup.ts";
-import { buildTaskPacket } from "./task-packet.ts";
-import { executeHook, appendHookEvent } from "../hooks/registry.ts";
-import { createVerificationEvidence } from "./green-contract.ts";
-import { executeVerificationCommands, computeGreenLevelFromResults } from "./verification-gates.ts";
-import { createStartupEvidence } from "./worker-startup.ts";
-import { permissionForRole } from "./role-permission.ts";
-import { crewHooks } from "./crew-hooks.ts";
-import {
-	collectDependencyOutputContext,
-	renderDependencyOutputContext,
-	writeTaskInputsArtifact,
-	writeTaskSharedOutput,
-} from "./task-output-context.ts";
+import { captureWorktreeDiff, captureWorktreeDiffStat, prepareTaskWorkspace } from "../worktree/worktree-manager.ts";
+import { reserveControlChannel } from "./agent-control.ts";
+import { appendTaskAttentionEvent } from "./attention-events.ts";
+import { buildSyntheticTerminalEvidence, cancellationReasonFromSignal } from "./cancellation.ts";
+import { type ChildPiLifecycleEvent, runChildPi } from "./child-pi.ts";
+import { extractCommandTrace } from "./command-trace.ts";
+import { evaluateCompletionMutationGuard } from "./completion-guard.ts";
 import {
 	appendCrewAgentEvent,
 	appendCrewAgentOutput,
@@ -62,53 +34,42 @@ import {
 	recordFromTask,
 	upsertCrewAgent,
 } from "./crew-agent-records.ts";
-import { reserveControlChannel } from "./agent-control.ts";
+import type { CrewAgentProgress, CrewRuntimeKind } from "./crew-agent-runtime.ts";
+import { crewHooks } from "./crew-hooks.ts";
+import { bridgeEventFromJsonEvent, registerStreamBridge } from "./event-stream-bridge.ts";
+import { createVerificationEvidence } from "./green-contract.ts";
+import {
+	buildConfiguredModelRouting,
+	formatModelAttemptNote,
+	isRetryableModelFailure,
+	type ModelAttemptSummary,
+} from "./model-fallback.ts";
+import { readEnabledModelsPatterns } from "./model-scope.ts";
+import { type OutputValidationResult, validateWorkerOutput } from "./output-validator.ts";
+import { type ParsedPiJsonOutput, parsePiJsonOutput } from "./pi-json-output.ts";
+import { type ProgressEventSummary, shouldAppendProgressEventUpdate } from "./progress-event-coalescer.ts";
+import { permissionForRole } from "./role-permission.ts";
+import { awaitRuntimeWarmup } from "./runtime-warmup.ts";
 import { parseSessionUsage } from "./session-usage.ts";
-import type {
-	CrewAgentProgress,
-	CrewRuntimeKind,
-} from "./crew-agent-runtime.ts";
-import {
-	shouldAppendProgressEventUpdate,
-	type ProgressEventSummary,
-} from "./progress-event-coalescer.ts";
-import {
-	coordinationBridgeInstructions,
-	renderTaskPrompt,
-} from "./task-runner/prompt-builder.ts";
-import { buildWorkerPromptPipeline } from "./task-runner/prompt-pipeline.ts";
-import { buildWorkerCapabilityInventory } from "./task-runner/capabilities.ts";
-import {
-	applyAgentProgressEvent,
-	applyUsageToProgress,
-	progressEventSummary,
-	shouldFlushProgressEvent,
-} from "./task-runner/progress.ts";
-import { extractCommandTrace } from "./command-trace.ts";
-import {
-	checkpointTask,
-	persistSingleTaskUpdate,
-	updateTask,
-} from "./task-runner/state-helpers.ts";
-import {
-	cleanResultText,
-	isFinalChildEvent,
-} from "./task-runner/result-utils.ts";
-import { evaluateCompletionMutationGuard } from "./completion-guard.ts";
-import {
-	cancellationReasonFromSignal,
-	buildSyntheticTerminalEvidence,
-} from "./cancellation.ts";
-import { appendTaskAttentionEvent } from "./attention-events.ts";
-import {
-	parseSupervisorContactFromLine,
-	recordSupervisorContact,
-} from "./supervisor-contact.ts";
-import {
-	registerStreamBridge,
-	bridgeEventFromJsonEvent,
-} from "./event-stream-bridge.ts";
 import { renderSkillInstructions } from "./skill-instructions.ts";
+import { parseSupervisorContactFromLine, recordSupervisorContact } from "./supervisor-contact.ts";
+import {
+	collectDependencyOutputContext,
+	renderDependencyOutputContext,
+	writeTaskInputsArtifact,
+	writeTaskSharedOutput,
+} from "./task-output-context.ts";
+import { buildTaskPacket } from "./task-packet.ts";
+import { buildWorkerCapabilityInventory } from "./task-runner/capabilities.ts";
+import { applyAgentProgressEvent, applyUsageToProgress, progressEventSummary, shouldFlushProgressEvent } from "./task-runner/progress.ts";
+import { coordinationBridgeInstructions, renderTaskPrompt } from "./task-runner/prompt-builder.ts";
+import { buildWorkerPromptPipeline } from "./task-runner/prompt-pipeline.ts";
+import { cleanResultText, isFinalChildEvent } from "./task-runner/result-utils.ts";
+import { checkpointTask, persistSingleTaskUpdate, updateTask } from "./task-runner/state-helpers.ts";
+import { tailReadWithLineSnap } from "./task-runner/tail-read.ts";
+import { computeGreenLevelFromResults, executeVerificationCommands } from "./verification-gates.ts";
+import { createWorkerHeartbeat, touchWorkerHeartbeat } from "./worker-heartbeat.ts";
+import { createStartupEvidence } from "./worker-startup.ts";
 import {
 	DEFAULT_YIELD_CONFIG,
 	extractYieldResult,
@@ -117,10 +78,6 @@ import {
 	registerYieldTool,
 	type YieldResult,
 } from "./yield-handler.ts";
-import {
-	validateWorkerOutput,
-	type OutputValidationResult,
-} from "./output-validator.ts";
 
 // Register the submit_result tool handler so subprocess events can extract yield data.
 registerYieldTool();
@@ -155,9 +112,7 @@ export interface TaskRunnerInput {
 	onJsonEvent?: (taskId: string, runId: string, event: unknown) => void;
 }
 
-export async function runTeamTask(
-	input: TaskRunnerInput,
-): Promise<{ manifest: TeamRunManifest; tasks: TeamTaskState[] }> {
+export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: TeamRunManifest; tasks: TeamTaskState[] }> {
 	// Cold-start race fix: ensure the hot module graph is warm before touching
 	// any module. Under tsx, concurrent first-imports race module-record
 	// instantiation; awaiting the registration-time warmup eliminates the window.
@@ -183,15 +138,8 @@ export async function runTeamTask(
 			cwd: workspace.cwd,
 			worktreePath: worktree?.path,
 		});
-		const dependencyContext = collectDependencyOutputContext(
-			manifest,
-			input.tasks,
-			input.task,
-			input.step,
-		);
-		const dependencyContextText =
-			input.dependencyContextText ??
-			renderDependencyOutputContext(dependencyContext);
+		const dependencyContext = collectDependencyOutputContext(manifest, input.tasks, input.task, input.step);
+		const dependencyContextText = input.dependencyContextText ?? renderDependencyOutputContext(dependencyContext);
 		let task: TeamTaskState = {
 			...input.task,
 			cwd: workspace.cwd,
@@ -206,16 +154,10 @@ export async function runTeamTask(
 			lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 			...(dependencyContextText ? { dependencyContextText } : {}),
 			// Reserve control channel before spawn so cancel/steer can target this task immediately
-			controlReservation: reserveControlChannel(
-				input.task.id,
-				manifest.runId,
-			),
+			controlReservation: reserveControlChannel(input.task.id, manifest.runId),
 		} as TeamTaskState;
 		let tasks = updateTask(input.tasks, task);
-		const runtimeKind =
-			input.taskRuntimeOverride ??
-			input.runtimeKind ??
-			(input.executeWorkers ? "child-process" : "scaffold");
+		const runtimeKind = input.taskRuntimeOverride ?? input.runtimeKind ?? (input.executeWorkers ? "child-process" : "scaffold");
 		// FIX: Check signal before persisting state — if cancelled, skip the write.
 		if (input.signal?.aborted) {
 			const cancelReason = cancellationReasonFromSignal(input.signal);
@@ -231,13 +173,7 @@ export async function runTeamTask(
 			};
 		}
 		tasks = persistSingleTaskUpdate(manifest, tasks, task, "started");
-		if (runtimeKind === "child-process")
-			({ task, tasks } = checkpointTask(
-				manifest,
-				tasks,
-				task,
-				"started",
-			));
+		if (runtimeKind === "child-process") ({ task, tasks } = checkpointTask(manifest, tasks, task, "started"));
 		upsertCrewAgent(manifest, recordFromTask(manifest, task, runtimeKind));
 		await appendEventAsync(manifest.eventsPath, {
 			type: "task.started",
@@ -271,7 +207,7 @@ export async function runTeamTask(
 						teamRole: { skills: input.teamRoleSkills },
 						step: input.step,
 						override: input.skillOverride,
-						runId: manifest.runId,  
+						runId: manifest.runId,
 					})
 				: undefined;
 		const skillBlock = input.skillBlock ?? renderedSkills?.block;
@@ -289,7 +225,7 @@ export async function runTeamTask(
 			// follow it and execute a script outside cwd. Throws on escape.
 			resolveRealContainedPath(manifest.cwd, input.step.preStepScript);
 			try {
-		// LAZY: defer dynamic import of node:child_process to its call site.
+				// LAZY: defer dynamic import of node:child_process to its call site.
 				const { execFileSync } = await import("node:child_process");
 				preStepOutput = execFileSync(input.step.preStepScript, scriptArgs, {
 					timeout: scriptTimeout,
@@ -307,7 +243,20 @@ export async function runTeamTask(
 				// pre-step output rather than aborting the task (advisory hooks).
 				if (input.step.preStepOptional) {
 					const warnMsg = `[preStepOptional] pre-step hook '${input.step.preStepScript}' failed (exit ${exitCode ?? "?"}) but preStepOptional=true; continuing without its output.`;
-					try { appendEventFireAndForget(manifest.eventsPath, { type: "hook.pre_step_optional_failed", runId: manifest.runId, taskId: task.id, message: warnMsg, data: { script: input.step.preStepScript, exitCode: exitCode ?? null } }); } catch { /* best-effort event log */ }
+					try {
+						appendEventFireAndForget(manifest.eventsPath, {
+							type: "hook.pre_step_optional_failed",
+							runId: manifest.runId,
+							taskId: task.id,
+							message: warnMsg,
+							data: {
+								script: input.step.preStepScript,
+								exitCode: exitCode ?? null,
+							},
+						});
+					} catch {
+						/* best-effort event log */
+					}
 					preStepOutput = undefined;
 				} else {
 					throw errors.preStepFailed(input.step.preStepScript, exitCode, msg);
@@ -315,18 +264,15 @@ export async function runTeamTask(
 			}
 		}
 
-		const promptResult = await renderTaskPrompt(
-			manifest,
-			input.step,
-			task,
-			input.agent,
-			skillBlock,
-		);
+		const promptResult = await renderTaskPrompt(manifest, input.step, task, input.agent, skillBlock);
 		let prompt = promptResult.full;
 
 		// Inject deterministic pre-step output into prompt
 		if (preStepOutput) {
-			prompt += "\n\n---\n## Pre-Step Script Output\n\nThe following data was produced by a pre-step script. Use it as context for your task:\n\n<output>\n" + preStepOutput + "\n</output>\n";
+			prompt +=
+				"\n\n---\n## Pre-Step Script Output\n\nThe following data was produced by a pre-step script. Use it as context for your task:\n\n<output>\n" +
+				preStepOutput +
+				"\n</output>\n";
 		}
 		const promptArtifact = writeArtifact(manifest.artifactsRoot, {
 			kind: "prompt",
@@ -342,7 +288,7 @@ export async function runTeamTask(
 		let error: string | undefined;
 		let modelAttempts: ModelAttemptSummary[] | undefined;
 		let parsedOutput: ParsedPiJsonOutput | undefined;
-	let rawFinalText: string | undefined;
+		let rawFinalText: string | undefined;
 		let intermediateFindings: string | undefined;
 		let finalStdout = "";
 		let transcriptPath: string | undefined;
@@ -350,23 +296,14 @@ export async function runTeamTask(
 		const collectedJsonEvents: Record<string, unknown>[] = [];
 
 		let startupEvidence = createStartupEvidence({
-			command:
-				runtimeKind === "child-process"
-					? "pi"
-					: runtimeKind === "live-session"
-						? "live-session"
-						: "safe-scaffold",
+			command: runtimeKind === "child-process" ? "pi" : runtimeKind === "live-session" ? "live-session" : "safe-scaffold",
 			startedAt: new Date(task.startedAt ?? new Date().toISOString()),
 			finishedAt: new Date(),
 			promptSentAt: new Date(task.startedAt ?? new Date().toISOString()),
 			promptAccepted: true,
 			exitCode: 0,
 		});
-		const inputsArtifact = writeTaskInputsArtifact(
-			manifest,
-			task,
-			dependencyContext,
-		);
+		const inputsArtifact = writeTaskInputsArtifact(manifest, task, dependencyContext);
 		const skillArtifact = skillBlock
 			? writeArtifact(manifest.artifactsRoot, {
 					kind: "metadata",
@@ -400,8 +337,7 @@ export async function runTeamTask(
 				scopeModelsPatterns: await resolveTaskScopeModelsPatterns(task.cwd),
 			});
 			const candidates = modelRoutingPlan.candidates;
-			const attemptModels =
-				candidates.length > 0 ? candidates : [undefined];
+			const attemptModels = candidates.length > 0 ? candidates : [undefined];
 			const logs: string[] = [];
 			let finalStderr = "";
 			modelAttempts = [];
@@ -431,26 +367,14 @@ export async function runTeamTask(
 				// Now update in-memory heartbeat so it is always >= persisted state.
 				task = {
 					...task,
-					heartbeat: touchWorkerHeartbeat(
-						task.heartbeat ?? createWorkerHeartbeat(task.id),
-					),
+					heartbeat: touchWorkerHeartbeat(task.heartbeat ?? createWorkerHeartbeat(task.id)),
 				};
 				lastHeartbeatPersistedAt = now;
 			};
-			const persistChildProgress = (
-				event: unknown,
-				force = false,
-			): void => {
+			const persistChildProgress = (event: unknown, force = false): void => {
 				const now = Date.now();
-				if (
-					force ||
-					shouldFlushProgressEvent(event) ||
-					now - lastAgentRecordPersistedAt >= 500
-				) {
-					upsertCrewAgent(
-						manifest,
-						recordFromTask(manifest, task, "child-process"),
-					);
+				if (force || shouldFlushProgressEvent(event) || now - lastAgentRecordPersistedAt >= 500) {
+					upsertCrewAgent(manifest, recordFromTask(manifest, task, "child-process"));
 					lastAgentRecordPersistedAt = now;
 				}
 				const summary = progressEventSummary(task, event);
@@ -482,7 +406,9 @@ export async function runTeamTask(
 				// Ensure transcripts/ subdirectory exists before child-pi appends
 				// to it. appendTranscript uses O_APPEND (no mkdir) for security,
 				// so the caller must create the directory.
-				fs.mkdirSync(path.join(manifest.artifactsRoot, "transcripts"), { recursive: true });
+				fs.mkdirSync(path.join(manifest.artifactsRoot, "transcripts"), {
+					recursive: true,
+				});
 				const model = attemptModels[i];
 				const attemptStartedAt = new Date();
 				const pendingAttempt: ModelAttemptSummary = {
@@ -494,11 +420,14 @@ export async function runTeamTask(
 					modelAttempts: [...modelAttempts, pendingAttempt],
 				};
 				tasks = updateTask(tasks, task);
-				crewHooks.emit({ type: "task_started", timestamp: new Date().toISOString(), runId: manifest.runId, taskId: task.id, data: { role: task.role, model: model ?? "default" } });
-				upsertCrewAgent(
-					manifest,
-					recordFromTask(manifest, task, "child-process"),
-				);
+				crewHooks.emit({
+					type: "task_started",
+					timestamp: new Date().toISOString(),
+					runId: manifest.runId,
+					taskId: task.id,
+					data: { role: task.role, model: model ?? "default" },
+				});
+				upsertCrewAgent(manifest, recordFromTask(manifest, task, "child-process"));
 				const childResult = await runChildPi({
 					cwd: task.cwd,
 					task: prompt,
@@ -520,19 +449,20 @@ export async function runTeamTask(
 					artifactsRoot: manifest.artifactsRoot,
 					onSpawn: (pid) => {
 						try {
-							({ task, tasks } = checkpointTask(
-								manifest,
-								tasks,
-								task,
-								"child-spawned",
-								pid,
-							));
+							({ task, tasks } = checkpointTask(manifest, tasks, task, "child-spawned", pid));
 							if (task.pendingSteers?.length) {
 								const steeringDir = `${manifest.artifactsRoot}/steering`;
 								fs.mkdirSync(steeringDir, { recursive: true });
 								const steeringPath = `${steeringDir}/${task.id}.jsonl`;
 								for (const msg of task.pendingSteers) {
-									fs.appendFileSync(steeringPath, JSON.stringify({ type: "steer", message: msg, ts: new Date().toISOString() }) + "\n");
+									fs.appendFileSync(
+										steeringPath,
+										JSON.stringify({
+											type: "steer",
+											message: msg,
+											ts: new Date().toISOString(),
+										}) + "\n",
+									);
 								}
 								task.pendingSteers = [];
 								tasks = persistSingleTaskUpdate(manifest, tasks, task);
@@ -548,7 +478,9 @@ export async function runTeamTask(
 							taskId: task.id,
 							message: `Worker lifecycle: ${event.type}${event.error ? ` error=${event.error}` : ""}${event.exitCode != null ? ` exit=${event.exitCode}` : ""}`,
 							data: { ...event },
-						}).catch((error) => logInternalError("task-runner.lifecycle-event", error, `taskId=${task.id}, type=${event.type}`));
+						}).catch((error) =>
+							logInternalError("task-runner.lifecycle-event", error, `taskId=${task.id}, type=${event.type}`),
+						);
 					},
 					onStdoutLine: (line) => {
 						appendCrewAgentOutput(manifest, task.id, line);
@@ -567,17 +499,11 @@ export async function runTeamTask(
 						// Errors are logged but processing continues so subsequent events still update state.
 						try {
 							appendCrewAgentEvent(manifest, task.id, event);
-							if (
-								event &&
-								typeof event === "object" &&
-								!Array.isArray(event)
-							)
-								collectedJsonEvents.push(
-									event as Record<string, unknown>,
-								);
-								if (collectedJsonEvents.length > 1000) {
-									collectedJsonEvents.splice(0, collectedJsonEvents.length - 1000);
-								}
+							if (event && typeof event === "object" && !Array.isArray(event))
+								collectedJsonEvents.push(event as Record<string, unknown>);
+							if (collectedJsonEvents.length > 1000) {
+								collectedJsonEvents.splice(0, collectedJsonEvents.length - 1000);
+							}
 							// Accumulate lifetime usage via message_end events (survives compaction)
 							if (event && typeof event === "object" && (event as Record<string, unknown>).type === "message_end") {
 								const msg = (event as Record<string, unknown>).message as Record<string, unknown> | undefined;
@@ -597,7 +523,8 @@ export async function runTeamTask(
 							// This supplements the event log so developers can see what the child Pi worker produced.
 							if (process.env.PI_CREW_BACKGROUND_MODE === "1" && event) {
 								const bgLogPath = `${manifest.stateRoot}/background.log`;
-								const eventLine = typeof event === "object" && !Array.isArray(event) ? JSON.stringify(event) : String(event);
+								const eventLine =
+									typeof event === "object" && !Array.isArray(event) ? JSON.stringify(event) : String(event);
 								fs.appendFileSync(bgLogPath, `${eventLine}\n`);
 							}
 							// Always keep in-memory agentProgress fresh (cheap) so the UI/events see
@@ -618,31 +545,15 @@ export async function runTeamTask(
 								lastTaskProgressPersistedAt = progressNow;
 							}
 							// Bridge event to UI event bus for near-instant updates
-							const bridgeEvent = bridgeEventFromJsonEvent(
-								manifest.runId,
-								task.id,
-								event,
-							);
+							const bridgeEvent = bridgeEventFromJsonEvent(manifest.runId, task.id, event);
 							if (bridgeEvent) streamBridge?.handler(bridgeEvent);
 							// Feed overflow recovery tracker
 							if (input.onJsonEvent) {
-								input.onJsonEvent(
-									task.id,
-									manifest.runId,
-									event,
-								);
+								input.onJsonEvent(task.id, manifest.runId, event);
 							}
-							if (
-								!finalCheckpointWritten &&
-								isFinalChildEvent(event)
-							) {
+							if (!finalCheckpointWritten && isFinalChildEvent(event)) {
 								finalCheckpointWritten = true;
-								({ task, tasks } = checkpointTask(
-									manifest,
-									tasks,
-									task,
-									"child-stdout-final",
-								));
+								({ task, tasks } = checkpointTask(manifest, tasks, task, "child-stdout-final"));
 							}
 							persistChildProgress(event);
 						} catch (err) {
@@ -652,8 +563,7 @@ export async function runTeamTask(
 				});
 				const evidenceStatus = childResult.exitStatus?.cancelled
 					? "cancelled"
-					: childResult.error ||
-							(childResult.exitCode && childResult.exitCode !== 0)
+					: childResult.error || (childResult.exitCode && childResult.exitCode !== 0)
 						? "failed"
 						: "completed";
 				terminalEvidence = [
@@ -665,14 +575,10 @@ export async function runTeamTask(
 						finishedAt: new Date().toISOString(),
 						...(input.signal?.aborted
 							? {
-									reason: cancellationReasonFromSignal(
-										input.signal,
-									),
+									reason: cancellationReasonFromSignal(input.signal),
 								}
 							: {}),
-						...(childResult.exitStatus
-							? { exitStatus: childResult.exitStatus }
-							: {}),
+						...(childResult.exitStatus ? { exitStatus: childResult.exitStatus } : {}),
 					},
 				];
 				if (evidenceStatus === "cancelled") {
@@ -682,13 +588,7 @@ export async function runTeamTask(
 								code: "caller_cancelled" as const,
 								message: "Worker cancelled.",
 							};
-					terminalEvidence.push(
-						buildSyntheticTerminalEvidence(
-							"tool",
-							cancelReason,
-							attemptStartedAt.toISOString(),
-						),
-					);
+					terminalEvidence.push(buildSyntheticTerminalEvidence("tool", cancelReason, attemptStartedAt.toISOString()));
 					await appendEventAsync(manifest.eventsPath, {
 						type: "worker.cancelled",
 						runId: manifest.runId,
@@ -702,8 +602,7 @@ export async function runTeamTask(
 					startedAt: attemptStartedAt,
 					finishedAt: new Date(),
 					promptSentAt: attemptStartedAt,
-					promptAccepted:
-						childResult.exitCode === 0 && !childResult.error,
+					promptAccepted: childResult.exitCode === 0 && !childResult.error,
 					stderr: childResult.stderr,
 					error: childResult.error,
 					exitCode: childResult.exitCode,
@@ -713,19 +612,14 @@ export async function runTeamTask(
 				finalStderr = childResult.stderr;
 				// Cap transcript read to MAX_TRANSCRIPT_BYTES to avoid OOM on huge transcripts.
 				const MAX_TRANSCRIPT_PARSE_BYTES = 5 * 1024 * 1024;
-				const transcriptText = tailReadWithLineSnap(
-					transcriptPath,
-					MAX_TRANSCRIPT_PARSE_BYTES,
-					childResult.stdout,
-				);
+				const transcriptText = tailReadWithLineSnap(transcriptPath, MAX_TRANSCRIPT_PARSE_BYTES, childResult.stdout);
 				parsedOutput = parsePiJsonOutput(transcriptText);
 				rawFinalText = childResult.rawFinalText;
 				intermediateFindings = childResult.intermediateFindings;
 				error =
 					childResult.error ||
 					(childResult.exitCode && childResult.exitCode !== 0
-						? childResult.stderr ||
-							`Child Pi exited with ${childResult.exitCode}`
+						? childResult.stderr || `Child Pi exited with ${childResult.exitCode}`
 						: undefined);
 				// E1/E7 (Round 15): when the child timed out, surface a structured
 				// CrewError (E007) so users get a code + actionable help hint instead
@@ -802,31 +696,21 @@ export async function runTeamTask(
 			if (error && modelAttempts.length > 1) {
 				// E2/E1 (Round 15): structured CrewError (E008). Build via the factory so
 				// the error carries a code + help hint; keep its .message as the task error.
-				error = errors.modelExhausted(modelAttempts.map((a) => a.model), error).message;
+				error = errors.modelExhausted(
+					modelAttempts.map((a) => a.model),
+					error,
+				).message;
 			}
 			// NEW-8 fix: register all attempt transcripts as artifacts, not just the used one.
 			// Earlier failed attempts' transcripts exist on disk but were invisible to the artifact system.
-			const successfulAttemptIndex = modelAttempts.findIndex(
-				(attempt) => attempt.success,
-			);
-			const usedAttempt =
-				successfulAttemptIndex === -1
-					? Math.max(0, modelAttempts.length - 1)
-					: successfulAttemptIndex;
-			for (
-				let attemptIdx = 0;
-				attemptIdx < modelAttempts.length;
-				attemptIdx++
-			) {
+			const successfulAttemptIndex = modelAttempts.findIndex((attempt) => attempt.success);
+			const usedAttempt = successfulAttemptIndex === -1 ? Math.max(0, modelAttempts.length - 1) : successfulAttemptIndex;
+			for (let attemptIdx = 0; attemptIdx < modelAttempts.length; attemptIdx++) {
 				if (attemptIdx === usedAttempt) continue;
 				const tPath = `${manifest.artifactsRoot}/transcripts/${task.id}.attempt-${attemptIdx}.jsonl`;
 				if (!fs.existsSync(tPath)) continue;
 				const MAX_ATTEMPT_TRANSCRIPT = 5 * 1024 * 1024;
-				const tContent = tailReadWithLineSnap(
-					tPath,
-					MAX_ATTEMPT_TRANSCRIPT,
-					"",
-				);
+				const tContent = tailReadWithLineSnap(tPath, MAX_ATTEMPT_TRANSCRIPT, "");
 				if (tContent) {
 					writeArtifact(manifest.artifactsRoot, {
 						kind: "log",
@@ -862,9 +746,7 @@ export async function runTeamTask(
 					...logs,
 					`finalExitCode=${exitCode ?? "null"}`,
 					`jsonEvents=${parsedOutput?.jsonEvents ?? 0}`,
-					parsedOutput?.usage
-						? `usage=${JSON.stringify(parsedOutput.usage)}`
-						: "",
+					parsedOutput?.usage ? `usage=${JSON.stringify(parsedOutput.usage)}` : "",
 					"",
 					"STDOUT:",
 					finalStdout,
@@ -874,12 +756,8 @@ export async function runTeamTask(
 				].join("\n"),
 				producer: task.id,
 			});
-			const resolvedModel =
-				modelAttempts[usedAttempt]?.model ?? candidates[0] ?? "default";
-			const fallbackReason =
-				usedAttempt > 0
-					? modelAttempts[usedAttempt - 1]?.error
-					: undefined;
+			const resolvedModel = modelAttempts[usedAttempt]?.model ?? candidates[0] ?? "default";
+			const fallbackReason = usedAttempt > 0 ? modelAttempts[usedAttempt - 1]?.error : undefined;
 			task = {
 				...task,
 				modelRouting: {
@@ -895,9 +773,7 @@ export async function runTeamTask(
 			// Safety net: transcriptPath may be undefined in edge cases (e.g., early exit before loop).
 			// In practice it is always set inside the for loop above.
 			const attemptFallback = `${manifest.artifactsRoot}/transcripts/${task.id}.attempt-${usedAttempt}.jsonl`;
-			const sessionUsage = parseSessionUsage(
-				transcriptPath ?? attemptFallback,
-			);
+			const sessionUsage = parseSessionUsage(transcriptPath ?? attemptFallback);
 			const effectiveUsage = parsedOutput?.usage ?? sessionUsage;
 			if (effectiveUsage) {
 				parsedOutput = {
@@ -907,25 +783,15 @@ export async function runTeamTask(
 				task = {
 					...task,
 					usage: effectiveUsage,
-					agentProgress: applyUsageToProgress(
-						task.agentProgress,
-						effectiveUsage,
-					),
+					agentProgress: applyUsageToProgress(task.agentProgress, effectiveUsage),
 				};
 				tasks = updateTask(tasks, task);
-				upsertCrewAgent(
-					manifest,
-					recordFromTask(manifest, task, "child-process"),
-				);
+				upsertCrewAgent(manifest, recordFromTask(manifest, task, "child-process"));
 			}
 			// M2 fix: use attempt-relative path; cap content at MAX_TRANSCRIPT_ARTIFACT_BYTES.
 			const MAX_TRANSCRIPT_ARTIFACT_BYTES = 5 * 1024 * 1024; // 5MB cap
 			const attemptTranscriptPath = `${manifest.artifactsRoot}/transcripts/${task.id}.attempt-${usedAttempt}.jsonl`;
-			const transcriptContent = tailReadWithLineSnap(
-				attemptTranscriptPath,
-				MAX_TRANSCRIPT_ARTIFACT_BYTES,
-				"",
-			);
+			const transcriptContent = tailReadWithLineSnap(attemptTranscriptPath, MAX_TRANSCRIPT_ARTIFACT_BYTES, "");
 			if (transcriptContent) {
 				transcriptArtifact = writeArtifact(manifest.artifactsRoot, {
 					kind: "log",
@@ -941,17 +807,10 @@ export async function runTeamTask(
 				...(transcriptArtifact ? { transcriptArtifact } : {}),
 			};
 			tasks = updateTask(tasks, task);
-			({ task, tasks } = checkpointTask(
-				manifest,
-				tasks,
-				task,
-				"artifact-written",
-			));
+			({ task, tasks } = checkpointTask(manifest, tasks, task, "artifact-written"));
 		} else if (runtimeKind === "live-session") {
 			// LAZY: live-executor is only needed for live-session runtime branches.
-			const { runLiveTask } = await import(
-				"./task-runner/live-executor.ts"
-			);
+			const { runLiveTask } = await import("./task-runner/live-executor.ts");
 			const live = await runLiveTask({
 				manifest,
 				tasks,
@@ -1016,14 +875,10 @@ export async function runTeamTask(
 		// only applies to live-session workers where submit_result is injected by the
 		// runtime. Skipping yield detection for child-process prevents every child
 		// worker from incorrectly being marked needs_attention.
-		const yieldEnabled =
-			runtimeKind !== "child-process" &&
-			(input.runtimeConfig?.yield?.enabled ?? DEFAULT_YIELD_CONFIG.enabled);
+		const yieldEnabled = runtimeKind !== "child-process" && (input.runtimeConfig?.yield?.enabled ?? DEFAULT_YIELD_CONFIG.enabled);
 		if (yieldEnabled && collectedJsonEvents.length > 0) {
 			if (hasYieldInOutput(collectedJsonEvents)) {
-				const yieldEvent = collectedJsonEvents.find((e) =>
-					isYieldEvent(e),
-				);
+				const yieldEvent = collectedJsonEvents.find((e) => isYieldEvent(e));
 				if (yieldEvent) {
 					_yieldResult = extractYieldResult(yieldEvent);
 				}
@@ -1033,8 +888,7 @@ export async function runTeamTask(
 					type: "task.needs_attention",
 					runId: manifest.runId,
 					taskId: task.id,
-					message:
-						"Worker completed without calling submit_result tool.",
+					message: "Worker completed without calling submit_result tool.",
 					data: {
 						activityState: "needs_attention",
 						reason: "no_yield",
@@ -1072,17 +926,13 @@ export async function runTeamTask(
 				})
 			: undefined;
 
-		const mutationGuardMode =
-			input.runtimeConfig?.completionMutationGuard ?? "warn";
+		const mutationGuardMode = input.runtimeConfig?.completionMutationGuard ?? "warn";
 		const mutationGuard =
 			!error && mutationGuardMode !== "off"
 				? evaluateCompletionMutationGuard({
 						role: task.role,
 						taskText: `${task.title}\n${input.step.task}`,
-						transcriptPath:
-							runtimeKind === "child-process"
-								? transcriptPath
-								: transcriptArtifact?.path,
+						transcriptPath: runtimeKind === "child-process" ? transcriptPath : transcriptArtifact?.path,
 						stdout: finalStdout,
 					})
 				: undefined;
@@ -1090,8 +940,7 @@ export async function runTeamTask(
 			appendTaskAttentionEvent({
 				manifest,
 				taskId: task.id,
-				message:
-					"Implementation-style task completed without an observed mutation tool call.",
+				message: "Implementation-style task completed without an observed mutation tool call.",
 				data: {
 					activityState: "needs_attention",
 					reason: "completion_guard",
@@ -1112,14 +961,11 @@ export async function runTeamTask(
 				},
 			};
 			if (mutationGuardMode === "fail") {
-				error =
-					"Completion mutation guard failed: implementation-style task completed without an observed mutation tool call.";
+				error = "Completion mutation guard failed: implementation-style task completed without an observed mutation tool call.";
 				exitCode = exitCode === 0 ? 1 : exitCode;
 				if (modelAttempts?.length) {
 					modelAttempts = modelAttempts.map((attempt, index) =>
-						index === modelAttempts!.length - 1
-							? { ...attempt, success: false, exitCode, error }
-							: attempt,
+						index === modelAttempts!.length - 1 ? { ...attempt, success: false, exitCode, error } : attempt,
 					);
 				}
 			}
@@ -1142,8 +988,7 @@ export async function runTeamTask(
 						data: {
 							valid: false,
 							formatMatch: outputValidation.formatMatch,
-							structurePreserved:
-								outputValidation.structurePreserved,
+							structurePreserved: outputValidation.structurePreserved,
 							issues: outputValidation.issues,
 						},
 					});
@@ -1188,22 +1033,23 @@ export async function runTeamTask(
 				);
 
 				// Compute observed green level from results
-				const observedGreenLevel = computeGreenLevelFromResults(
-					commandResults,
-					taskPacket.verification.requiredGreenLevel,
-				);
+				const observedGreenLevel = computeGreenLevelFromResults(commandResults, taskPacket.verification.requiredGreenLevel);
 
 				// Determine satisfaction based on green level
 				const requiredLevel = taskPacket.verification.requiredGreenLevel;
 				const satisfied =
-					observedGreenLevel === "none" ? false :
-					observedGreenLevel === "targeted" ? requiredLevel === "targeted" :
-					observedGreenLevel === "package" ? ["targeted", "package"].includes(requiredLevel) :
-					observedGreenLevel === "workspace" ? ["targeted", "package", "workspace"].includes(requiredLevel) :
-					observedGreenLevel === "merge_ready";
+					observedGreenLevel === "none"
+						? false
+						: observedGreenLevel === "targeted"
+							? requiredLevel === "targeted"
+							: observedGreenLevel === "package"
+								? ["targeted", "package"].includes(requiredLevel)
+								: observedGreenLevel === "workspace"
+									? ["targeted", "package", "workspace"].includes(requiredLevel)
+									: observedGreenLevel === "merge_ready";
 
-				const allPassed = commandResults.every(r => r.status === "passed");
-				const failedCount = commandResults.filter(r => r.status === "failed").length;
+				const allPassed = commandResults.every((r) => r.status === "passed");
+				const failedCount = commandResults.filter((r) => r.status === "failed").length;
 
 				verificationEvidence = {
 					requiredGreenLevel: taskPacket.verification.requiredGreenLevel,
@@ -1242,14 +1088,9 @@ export async function runTeamTask(
 			verification: verificationEvidence,
 			resultArtifact,
 			claim: undefined,
-			heartbeat: touchWorkerHeartbeat(
-				task.heartbeat ?? createWorkerHeartbeat(task.id),
-				{ alive: false },
-			),
+			heartbeat: touchWorkerHeartbeat(task.heartbeat ?? createWorkerHeartbeat(task.id), { alive: false }),
 			workerExitStatus: terminalEvidence.at(-1)?.exitStatus,
-			terminalEvidence: terminalEvidence.length
-				? [...(task.terminalEvidence ?? []), ...terminalEvidence]
-				: task.terminalEvidence,
+			terminalEvidence: terminalEvidence.length ? [...(task.terminalEvidence ?? []), ...terminalEvidence] : task.terminalEvidence,
 			...(logArtifact ? { logArtifact } : {}),
 			...(transcriptArtifact ? { transcriptArtifact } : {}),
 		};
@@ -1266,7 +1107,14 @@ export async function runTeamTask(
 			timestamp: task.finishedAt ?? new Date().toISOString(),
 			runId: manifest.runId,
 			taskId: task.id,
-			data: { status: task.status, role: task.role, error: task.error, exitCode: task.exitCode, usage: task.usage, commandTrace },
+			data: {
+				status: task.status,
+				role: task.role,
+				error: task.error,
+				exitCode: task.exitCode,
+				usage: task.usage,
+				commandTrace,
+			},
 		});
 
 		const packetArtifact = writeArtifact(manifest.artifactsRoot, {
@@ -1281,11 +1129,7 @@ export async function runTeamTask(
 			content: `${JSON.stringify(task.verification, null, 2)}\n`,
 			producer: task.id,
 		});
-		const sharedOutputArtifact = writeTaskSharedOutput(
-			manifest,
-			input.step,
-			task,
-		);
+		const sharedOutputArtifact = writeTaskSharedOutput(manifest, input.step, task);
 		const startupArtifact = writeArtifact(manifest.artifactsRoot, {
 			kind: "metadata",
 			relativePath: `metadata/${task.id}.startup-evidence.json`,
@@ -1361,7 +1205,12 @@ export async function runTeamTask(
 		});
 
 		// Execute after_task_complete lifecycle hook (non-blocking)
-		const afterTaskReport = await executeHook("after_task_complete", { runId: manifest.runId, taskId: task.id, cwd: manifest.cwd, status: error ? "failed" : noYield ? "needs_attention" : "completed" });
+		const afterTaskReport = await executeHook("after_task_complete", {
+			runId: manifest.runId,
+			taskId: task.id,
+			cwd: manifest.cwd,
+			status: error ? "failed" : noYield ? "needs_attention" : "completed",
+		});
 		appendHookEvent(manifest, afterTaskReport);
 
 		return { manifest, tasks };
@@ -1443,7 +1292,10 @@ export function detectRetryableModelFailureFromOutput(parsed: ParsedPiJsonOutput
 	if (!eventSource || eventSource.length === 0) return undefined;
 	for (const candidate of eventSource) {
 		if (!candidate || typeof candidate !== "object") continue;
-		const event = candidate as { stopReason?: unknown; errorMessage?: unknown };
+		const event = candidate as {
+			stopReason?: unknown;
+			errorMessage?: unknown;
+		};
 		if (event.stopReason !== "error") continue;
 		if (typeof event.errorMessage !== "string" || event.errorMessage.length === 0) continue;
 		if (!isRetryableModelFailure(event.errorMessage)) continue;

@@ -1,10 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	createCrewAutocompleteProvider,
-	suggestCrewPhrases,
-} from "../../src/extension/crew-autocomplete.ts";
+import { describe, it } from "node:test";
 import type { AutocompleteItem, AutocompleteProvider } from "@earendil-works/pi-tui";
+import { createCrewAutocompleteProvider, suggestCrewPhrases } from "../../src/extension/crew-autocomplete.ts";
 
 /** A stub provider that records delegation and returns a fixed marker. */
 function makeStubProvider(captured: { delegated: boolean }): AutocompleteProvider {
@@ -14,7 +11,11 @@ function makeStubProvider(captured: { delegated: boolean }): AutocompleteProvide
 			return { items: [{ value: "STUB", label: "stub" }], prefix: "" };
 		},
 		applyCompletion(lines, _cl, _cc, item) {
-			return { lines: [...lines], cursorLine: 0, cursorCol: item.value.length };
+			return {
+				lines: [...lines],
+				cursorLine: 0,
+				cursorCol: item.value.length,
+			};
 		},
 	};
 }
@@ -33,7 +34,10 @@ describe("suggestCrewPhrases", () => {
 	it("filters by keyword prefix", () => {
 		const items = suggestCrewPhrases("da");
 		// "da" matches "dashboard" keyword
-		assert.ok(items.some((i) => i.value === "crew dashboard"), "should include crew dashboard");
+		assert.ok(
+			items.some((i) => i.value === "crew dashboard"),
+			"should include crew dashboard",
+		);
 		for (const item of items) {
 			// keyword is the part after "crew " — must start with "da"
 			const keyword = item.value.split(/\s+/).slice(1).join(" ") || item.value;
@@ -48,7 +52,10 @@ describe("suggestCrewPhrases", () => {
 
 	it("includes the bare 'teams' phrase", () => {
 		const items = suggestCrewPhrases("tea");
-		assert.ok(items.some((i) => i.value === "teams"), "should include teams");
+		assert.ok(
+			items.some((i) => i.value === "teams"),
+			"should include teams",
+		);
 	});
 
 	it("respects the MAX_PHRASES ceiling (bounded)", () => {
@@ -63,7 +70,9 @@ describe("createCrewAutocompleteProvider", () => {
 	it("returns phrase suggestions for a crew trigger", async () => {
 		const captured = { delegated: false };
 		const provider = createCrewAutocompleteProvider(makeStubProvider(captured));
-		const result = await provider.getSuggestions(["crew da"], 0, 7, { signal: new AbortController().signal });
+		const result = await provider.getSuggestions(["crew da"], 0, 7, {
+			signal: new AbortController().signal,
+		});
 		assert.ok(result, "expected suggestions");
 		assert.ok(!captured.delegated, "should NOT delegate on a crew trigger");
 		assert.ok(result.items.length > 0, "should have phrase items");
@@ -74,7 +83,9 @@ describe("createCrewAutocompleteProvider", () => {
 	it("delegates to the wrapped provider for non-crew input", async () => {
 		const captured = { delegated: false };
 		const provider = createCrewAutocompleteProvider(makeStubProvider(captured));
-		const result = await provider.getSuggestions(["hello world"], 0, 5, { signal: new AbortController().signal });
+		const result = await provider.getSuggestions(["hello world"], 0, 5, {
+			signal: new AbortController().signal,
+		});
 		assert.ok(captured.delegated, "should delegate non-crew input");
 		assert.ok(result, "delegated result returned");
 		assert.equal(result?.items[0]?.value, "STUB");
@@ -83,28 +94,36 @@ describe("createCrewAutocompleteProvider", () => {
 	it("delegates slash-command input (does not shadow /commands)", async () => {
 		const captured = { delegated: false };
 		const provider = createCrewAutocompleteProvider(makeStubProvider(captured));
-		await provider.getSuggestions(["/team-st"], 0, 8, { signal: new AbortController().signal });
+		await provider.getSuggestions(["/team-st"], 0, 8, {
+			signal: new AbortController().signal,
+		});
 		assert.ok(captured.delegated, "slash commands must be delegated to built-in");
 	});
 
 	it("delegates file-mention input (@)", async () => {
 		const captured = { delegated: false };
 		const provider = createCrewAutocompleteProvider(makeStubProvider(captured));
-		await provider.getSuggestions(["@sr"], 0, 4, { signal: new AbortController().signal });
+		await provider.getSuggestions(["@sr"], 0, 4, {
+			signal: new AbortController().signal,
+		});
 		assert.ok(captured.delegated, "@-mentions must be delegated");
 	});
 
 	it("does not trigger on a bare keyword without trailing space (e.g. 'cre')", async () => {
 		const captured = { delegated: false };
 		const provider = createCrewAutocompleteProvider(makeStubProvider(captured));
-		await provider.getSuggestions(["cre"], 0, 3, { signal: new AbortController().signal });
+		await provider.getSuggestions(["cre"], 0, 3, {
+			signal: new AbortController().signal,
+		});
 		assert.ok(captured.delegated, "partial keyword 'cre' is not a trigger — delegate");
 	});
 
 	it("triggers on 'crew ' (bare keyword + space, empty query)", async () => {
 		const captured = { delegated: false };
 		const provider = createCrewAutocompleteProvider(makeStubProvider(captured));
-		const result = await provider.getSuggestions(["crew "], 0, 5, { signal: new AbortController().signal });
+		const result = await provider.getSuggestions(["crew "], 0, 5, {
+			signal: new AbortController().signal,
+		});
 		assert.ok(!captured.delegated, "should handle the crew trigger");
 		assert.ok(result, "expected suggestions");
 		assert.ok(result.items.length > 0, "empty query → all phrases");
@@ -124,7 +143,9 @@ describe("createCrewAutocompleteProvider", () => {
 		const provider = createCrewAutocompleteProvider(makeStubProvider(captured));
 		// Multi-line input, cursor on line 1 (not 0) — should delegate even
 		// though the text looks like a crew phrase.
-		await provider.getSuggestions(["something", "crew da"], 1, 7, { signal: new AbortController().signal });
+		await provider.getSuggestions(["something", "crew da"], 1, 7, {
+			signal: new AbortController().signal,
+		});
 		assert.ok(captured.delegated, "crew trigger only applies on line 0");
 	});
 
@@ -142,11 +163,19 @@ describe("createCrewAutocompleteProvider", () => {
 	it("applyCompletion delegates to the wrapped provider", () => {
 		const calls: AutocompleteItem[] = [];
 		const stub: AutocompleteProvider = {
-			async getSuggestions() { return { items: [], prefix: "" }; },
-			applyCompletion(lines, cl, cc, item) { calls.push(item); return { lines, cursorLine: cl, cursorCol: cc }; },
+			async getSuggestions() {
+				return { items: [], prefix: "" };
+			},
+			applyCompletion(lines, cl, cc, item) {
+				calls.push(item);
+				return { lines, cursorLine: cl, cursorCol: cc };
+			},
 		};
 		const provider = createCrewAutocompleteProvider(stub);
-		const item: AutocompleteItem = { value: "crew status", label: "crew status" };
+		const item: AutocompleteItem = {
+			value: "crew status",
+			label: "crew status",
+		};
 		provider.applyCompletion(["crew st"], 0, 7, item, "crew st");
 		assert.equal(calls.length, 1, "wrapped applyCompletion should be invoked");
 		assert.equal(calls[0]?.value, "crew status");

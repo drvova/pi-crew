@@ -9,18 +9,21 @@
  *
  * This test sets BOTH and asserts the result is structured + matches the schema.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { Type } from "@sinclair/typebox";
 import { runChildPi } from "../../src/runtime/child-pi.ts";
-import { SMOKE_ENABLED, SKIP_REASON, makeTmpCwd, fakeExecutorAgent } from "./_helpers.ts";
+import { fakeExecutorAgent, makeTmpCwd, SKIP_REASON, SMOKE_ENABLED } from "./_helpers.ts";
 
 const VerdictSchema = Type.Object({
 	ok: Type.Boolean(),
 	label: Type.String(),
 });
 
-test("smoke: ctx.agent({schema, systemPrompt}) returns structured JSON matching schema", { skip: SMOKE_ENABLED ? false : SKIP_REASON }, async () => {
+test("smoke: ctx.agent({schema, systemPrompt}) returns structured JSON matching schema", {
+	skip: SMOKE_ENABLED ? false : SKIP_REASON,
+}, async () => {
 	const { cwd, cleanup } = makeTmpCwd("agent-schema");
 	try {
 		const ac = new AbortController();

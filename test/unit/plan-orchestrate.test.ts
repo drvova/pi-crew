@@ -1,18 +1,19 @@
 /**
  * Tests for plan-orchestrate.ts
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import test from "node:test";
 import {
-	parsePlanDocument,
-	parsePlanDocumentSimple,
 	buildAgentChain,
 	buildChainData,
 	formatPlanOverview,
 	orchestratePlan,
+	parsePlanDocument,
+	parsePlanDocumentSimple,
 	TAG_TO_CHAIN,
 } from "../../src/extension/plan-orchestrate.ts";
 
@@ -21,10 +22,7 @@ import {
 test("TAG_TO_CHAIN maps all expected tags to agent chains", () => {
 	assert.deepStrictEqual(TAG_TO_CHAIN.design, ["planner", "architect"]);
 	assert.deepStrictEqual(TAG_TO_CHAIN.impl, ["tdd-guide", "lang-reviewer"]);
-	assert.deepStrictEqual(TAG_TO_CHAIN.security, [
-		"security-reviewer",
-		"lang-reviewer",
-	]);
+	assert.deepStrictEqual(TAG_TO_CHAIN.security, ["security-reviewer", "lang-reviewer"]);
 	assert.deepStrictEqual(TAG_TO_CHAIN.build, ["build-error-resolver"]);
 	assert.deepStrictEqual(TAG_TO_CHAIN.test, ["test-engineer", "verifier"]);
 	assert.deepStrictEqual(TAG_TO_CHAIN.review, ["reviewer"]);
@@ -57,10 +55,7 @@ Write unit tests for the auth middleware.
 	assert.strictEqual(steps[0].tag, "design");
 	assert.deepStrictEqual(steps[0].chain, ["planner", "architect"]);
 	assert.strictEqual(steps[0].stepId, "step-01-design");
-	assert.strictEqual(
-		steps[0].prompt,
-		"Design the authentication system with OAuth2 and JWT tokens.",
-	);
+	assert.strictEqual(steps[0].prompt, "Design the authentication system with OAuth2 and JWT tokens.");
 	assert.strictEqual(steps[0].heading, "Design Phase");
 
 	assert.strictEqual(steps[1].tag, "impl");
@@ -99,10 +94,7 @@ Second design section.
 });
 
 test("parsePlanDocument throws when file not found", () => {
-	assert.throws(
-		() => parsePlanDocument("/nonexistent/plan.md"),
-		/Plan document not found/,
-	);
+	assert.throws(() => parsePlanDocument("/nonexistent/plan.md"), /Plan document not found/);
 });
 
 test("parsePlanDocument handles unknown tags gracefully", () => {
@@ -231,14 +223,8 @@ test("buildAgentChain builds command strings for steps", () => {
 	const commands = buildAgentChain(steps);
 
 	assert.strictEqual(commands.length, 2);
-	assert.strictEqual(
-		commands[0],
-		"team action='run' agent='planner,architect' goal='Design the auth system'",
-	);
-	assert.strictEqual(
-		commands[1],
-		"team action='run' agent='tdd-guide,lang-reviewer' goal='Implement JWT auth'",
-	);
+	assert.strictEqual(commands[0], "team action='run' agent='planner,architect' goal='Design the auth system'");
+	assert.strictEqual(commands[1], "team action='run' agent='tdd-guide,lang-reviewer' goal='Implement JWT auth'");
 });
 
 test("buildAgentChain escapes single quotes in prompts", () => {
@@ -253,10 +239,7 @@ test("buildAgentChain escapes single quotes in prompts", () => {
 
 	const commands = buildAgentChain(steps);
 
-	assert.strictEqual(
-		commands[0],
-		"team action='run' agent='planner' goal='Design the system'\\''s architecture'",
-	);
+	assert.strictEqual(commands[0], "team action='run' agent='planner' goal='Design the system'\\''s architecture'");
 });
 
 // ─── buildChainData ──────────────────────────────────────────────────────────

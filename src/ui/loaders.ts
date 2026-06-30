@@ -1,7 +1,7 @@
 import { pad, truncate } from "../utils/visual.ts";
+import { DynamicCrewBorder } from "./dynamic-border.ts";
 import type { CrewTheme } from "./theme-adapter.ts";
 import { asCrewTheme } from "./theme-adapter.ts";
-import { DynamicCrewBorder } from "./dynamic-border.ts";
 
 export interface BorderedLoaderOptions {
 	message: string;
@@ -79,13 +79,7 @@ export class CrewBorderedLoader {
 		const bottom = `${leftRightPad}${this.theme.fg("border", "└")}${border}${this.theme.fg("border", "┘")}`;
 		const lineWithHint = optionsHint(this.theme, this.message, widthAwareInner);
 		this.width = width;
-		const lines = [
-			top,
-			line,
-			`${leftRightPad}│ ${pad(lineWithHint, widthAwareInner)} │`,
-			hint,
-			bottom,
-		];
+		const lines = [top, line, `${leftRightPad}│ ${pad(lineWithHint, widthAwareInner)} │`, hint, bottom];
 		this.lineCache = lines.join("\n");
 		return lines;
 	}

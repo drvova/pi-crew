@@ -42,7 +42,9 @@ export class TailCaptureStage implements ICompactStage {
 		const hasChars = typeof config.maxChars === "number";
 		const hasBytes = typeof config.maxBytes === "number";
 		if (hasChars === hasBytes) {
-			throw new Error(`TailCaptureStage requires exactly one of maxChars or maxBytes (got chars=${config.maxChars} bytes=${config.maxBytes})`);
+			throw new Error(
+				`TailCaptureStage requires exactly one of maxChars or maxBytes (got chars=${config.maxChars} bytes=${config.maxBytes})`,
+			);
 		}
 		if (hasChars && (config.maxChars as number) <= 0) throw new Error(`TailCaptureStage: maxChars must be > 0, got ${config.maxChars}`);
 		if (hasBytes && (config.maxBytes as number) <= 0) throw new Error(`TailCaptureStage: maxBytes must be > 0, got ${config.maxBytes}`);
@@ -69,4 +71,7 @@ export class TailCaptureStage implements ICompactStage {
 }
 
 /** Singleton: char-cap tail capture with no marker (for `stream-preview.ts` textBuffer). */
-export const TAIL_CAPTURE_STREAM_STAGE = new TailCaptureStage({ maxChars: 16_384, id: "tail-capture-stream" });
+export const TAIL_CAPTURE_STREAM_STAGE = new TailCaptureStage({
+	maxChars: 16_384,
+	id: "tail-capture-stream",
+});

@@ -6,18 +6,19 @@
  * "passed" even if every security check failed. This rewrite makes each check
  * a real, CI-enforceable test. (Round 19 test-health audit, HIGH severity.)
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import test from "node:test";
 import {
-	registerDynamicAgent,
-	unregisterDynamicAgent,
 	allAgents,
-	getCacheVersion,
-	sanitizeAgentSystemPrompt,
-	discoverAgents,
-	getSecurityEventLog,
 	clearSecurityEventLog,
+	discoverAgents,
+	getCacheVersion,
+	getSecurityEventLog,
+	registerDynamicAgent,
+	sanitizeAgentSystemPrompt,
+	unregisterDynamicAgent,
 } from "../../src/agents/discover-agents.ts";
 import { sanitizeTaskText } from "../../src/runtime/task-packet.ts";
 
@@ -26,7 +27,14 @@ test("SEC-001: protected agent names are blocked from dynamic registration", () 
 	const protectedNames = ["executor", "test-engineer", "planner", "reviewer"];
 	for (const name of protectedNames) {
 		assert.throws(
-			() => registerDynamicAgent({ name, systemPrompt: "test", description: "test", source: "dynamic" as const, filePath: "dynamic://" + name }),
+			() =>
+				registerDynamicAgent({
+					name,
+					systemPrompt: "test",
+					description: "test",
+					source: "dynamic" as const,
+					filePath: "dynamic://" + name,
+				}),
 			{ message: /protected|reserved|blocked|already/i },
 			`${name} should be blocked from dynamic registration`,
 		);
@@ -52,7 +60,13 @@ test("SEC-003: skill-instructions checks package skills before user skills", () 
 
 // SEC-004: Dynamic agent source attribution.
 test("SEC-004: dynamically registered agents carry source='dynamic'", () => {
-	registerDynamicAgent({ name: "source-test-agent", systemPrompt: "test", description: "test", source: "dynamic" as const, filePath: "dynamic://source-test-agent" });
+	registerDynamicAgent({
+		name: "source-test-agent",
+		systemPrompt: "test",
+		description: "test",
+		source: "dynamic" as const,
+		filePath: "dynamic://source-test-agent",
+	});
 	try {
 		const discovery = discoverAgents(process.cwd());
 		const dynamicAgents = allAgents(discovery);
@@ -75,8 +89,14 @@ test("SEC-005: cache version is monotonic across discovery", () => {
 // SEC-006: Security events are logged when a protection fires.
 test("SEC-006: a blocked registration logs a security event", () => {
 	clearSecurityEventLog();
-	assert.throws(
-		() => registerDynamicAgent({ name: "executor", systemPrompt: "test", description: "test", source: "dynamic" as const, filePath: "dynamic://executor" }),
+	assert.throws(() =>
+		registerDynamicAgent({
+			name: "executor",
+			systemPrompt: "test",
+			description: "test",
+			source: "dynamic" as const,
+			filePath: "dynamic://executor",
+		}),
 	);
 	const events = getSecurityEventLog();
 	assert.ok(events.length > 0, "blocking a protected name must log a security event");

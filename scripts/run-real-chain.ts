@@ -7,8 +7,9 @@
  *
  * Usage: npx tsx scripts/run-real-chain.ts
  */
-import { handleRun } from "../src/extension/team-tool/run.ts";
+
 import type { TeamContext } from "../src/extension/team-tool/context.ts";
+import { handleRun } from "../src/extension/team-tool/run.ts";
 
 const chain = '"Say the numbers 1, 2, 3" -> "What was the last number in the previous step? Add 2 to it."';
 const ctx: TeamContext = { cwd: process.cwd() };
@@ -17,10 +18,7 @@ console.log("[run-real-chain] Executing chain:", chain);
 console.log("[run-real-chain] Working directory:", process.cwd());
 console.log("[run-real-chain] This will spawn REAL team runs. Please wait...\n");
 
-const result = await handleRun(
-	{ action: "run", chain },
-	ctx,
-);
+const result = await handleRun({ action: "run", chain }, ctx);
 
 console.log("\n=== CHAIN RESULT (details) ===");
 console.log(JSON.stringify(result.details, null, 2));

@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { reserveControlChannel } from "../../src/runtime/agent-control.ts";
 
 test("reserveControlChannel creates a reservation with controller ID", () => {

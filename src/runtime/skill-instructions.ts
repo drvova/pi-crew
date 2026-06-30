@@ -3,30 +3,19 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentConfig } from "../agents/agent-config.ts";
 import type { TeamRole } from "../teams/team-config.ts";
-import {
-	isSafePathId,
-	resolveContainedPath,
-	resolveRealContainedPath,
-} from "../utils/safe-paths.ts";
+import { isSafePathId, resolveContainedPath, resolveRealContainedPath } from "../utils/safe-paths.ts";
 import type { WorkflowStep } from "../workflows/workflow-config.ts";
-import {
-	CONFIDENCE_THRESHOLDS,
-	getWeightedSkillsForRole,
-	registerSkillEffectivenessHooks,
-} from "./skill-effectiveness.ts";
+import { CONFIDENCE_THRESHOLDS, getWeightedSkillsForRole, registerSkillEffectivenessHooks } from "./skill-effectiveness.ts";
 
-const PACKAGE_SKILLS_DIR = path.resolve(
-	path.dirname(fileURLToPath(import.meta.url)),
-	"..",
-	"..",
-	"skills",
-);
+const PACKAGE_SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "skills");
+
 import * as os from "node:os";
 // peer-dep.ts resolves @earendil-works/pi-coding-agent robustly across install
 // layouts (extension-under-~/.pi + pi-under-global). A static `import { getAgentDir }`
 // here crashes detached child processes when pi-crew and pi live in separate
 // node_modules trees. See src/runtime/peer-dep.ts.
 import { getAgentDir } from "../runtime/peer-dep.ts";
+
 const MAX_SKILL_CHARS = 1500;
 const MAX_TOTAL_CHARS = 6000;
 const MAX_SKILL_NAME_CHARS = 80;
@@ -38,11 +27,7 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
 	analyst: ["read-only-explorer", "requirements-to-task-packet"],
 	planner: ["delegation-patterns", "requirements-to-task-packet"],
 	critic: ["read-only-explorer", "multi-perspective-review"],
-	executor: [
-		"state-mutation-locking",
-		"safe-bash",
-		"verification-before-done",
-	],
+	executor: ["state-mutation-locking", "safe-bash", "verification-before-done"],
 	reviewer: ["read-only-explorer", "multi-perspective-review"],
 	// SECURITY NOTE: The following skill names are trusted package-level skills.
 	// If a project has a skills/ directory containing subdirectories with these names,
@@ -50,10 +35,7 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
 	// project dir before package dir) and their content injected verbatim into prompts.
 	// The "Applicable Skills" block will add an untrusted-content warning for project skills,
 	// but be aware this is a potential supply-chain risk in multi-contributor projects.
-	"security-reviewer": [
-		"secure-agent-orchestration-review",
-		"ownership-session-security",
-	],
+	"security-reviewer": ["secure-agent-orchestration-review", "ownership-session-security"],
 	"test-engineer": ["verification-before-done", "safe-bash"],
 	verifier: ["verification-before-done", "runtime-state-reader"],
 	writer: ["context-artifact-hygiene", "verification-before-done"],
@@ -72,18 +54,11 @@ export interface RenderSkillInstructionsInput extends ResolveTaskSkillsInput {
 }
 
 function isValidSkillName(name: string): boolean {
-	return (
-		name.length > 0 &&
-		name.length <= MAX_SKILL_NAME_CHARS &&
-		isSafePathId(name)
-	);
+	return name.length > 0 && name.length <= MAX_SKILL_NAME_CHARS && isSafePathId(name);
 }
 
 function sanitizeSkillName(name: string): string {
-	return (
-		name.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, MAX_SKILL_NAME_CHARS) ||
-		"invalid"
-	);
+	return name.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, MAX_SKILL_NAME_CHARS) || "invalid";
 }
 
 function unique(items: string[]): string[] {
@@ -98,9 +73,7 @@ function unique(items: string[]): string[] {
 	return result;
 }
 
-export function normalizeSkillOverride(
-	value: string | string[] | boolean | undefined,
-): string[] | false | undefined {
+export function normalizeSkillOverride(value: string | string[] | boolean | undefined): string[] | false | undefined {
 	if (value === false) return false;
 	if (typeof value === "string")
 		return value
@@ -108,8 +81,7 @@ export function normalizeSkillOverride(
 			.map((entry) => entry.trim())
 			.filter(Boolean);
 	if (value === true) return undefined;
-	if (Array.isArray(value))
-		return value.map((entry) => entry.trim()).filter(Boolean);
+	if (Array.isArray(value)) return value.map((entry) => entry.trim()).filter(Boolean);
 	return undefined;
 }
 
@@ -117,17 +89,13 @@ export function defaultSkillsForRole(role: string): string[] {
 	return DEFAULT_ROLE_SKILLS[role] ?? [];
 }
 
-function collectTaskSkillNames(
-	input: ResolveTaskSkillsInput | undefined,
-): string[] {
+function collectTaskSkillNames(input: ResolveTaskSkillsInput | undefined): string[] {
 	if (!input) return [];
 	if (input.override === false) return [];
-	const roleDefaultsDisabled =
-		input.teamRole?.skills === false || input.step?.skills === false;
+	const roleDefaultsDisabled = input.teamRole?.skills === false || input.step?.skills === false;
 	const names = roleDefaultsDisabled ? [] : defaultSkillsForRole(input.role);
 	if (input.agent?.skills?.length) names.push(...input.agent.skills);
-	if (Array.isArray(input.teamRole?.skills))
-		names.push(...input.teamRole.skills);
+	if (Array.isArray(input.teamRole?.skills)) names.push(...input.teamRole.skills);
 	if (Array.isArray(input.step?.skills)) names.push(...input.step.skills);
 	if (Array.isArray(input.override)) names.push(...input.override);
 	return unique(names);
@@ -143,19 +111,26 @@ export function resolveTaskSkillNames(input: ResolveTaskSkillsInput): string[] {
 // See: SECURITY-ISSUES.md SEC-003
 // ═══════════════════════════════════════════════════════════════════════════
 
-function candidateSkillDirs(
-	cwd: string,
-): Array<{ root: string; source: "project" | "package" | "project-pi" | "user-pi" | "project-agents" | "user-agents" }> {
+function candidateSkillDirs(cwd: string): Array<{
+	root: string;
+	source: "project" | "package" | "project-pi" | "user-pi" | "project-agents" | "user-agents";
+}> {
 	return [
 		{ root: PACKAGE_SKILLS_DIR, source: "package" }, // ✓ Trusted first
 		// F6 (v0.7.9): same five roots as discover-skills, in the same precedence
 		// order. The first hit wins, so a project `.pi/skills/foo/SKILL.md`
 		// overrides both the bundled `foo` and any legacy `<cwd>/skills/foo`.
 		{ root: path.resolve(cwd, ".pi", "skills"), source: "project-pi" },
-		{ root: path.resolve(cwd, ".agents", "skills"), source: "project-agents" },
+		{
+			root: path.resolve(cwd, ".agents", "skills"),
+			source: "project-agents",
+		},
 		{ root: path.resolve(cwd, "skills"), source: "project" },
 		{ root: path.join(getAgentDir(), "skills"), source: "user-pi" },
-		{ root: path.join(os.homedir(), ".agents", "skills"), source: "user-agents" },
+		{
+			root: path.join(os.homedir(), ".agents", "skills"),
+			source: "user-agents",
+		},
 		{ root: path.join(os.homedir(), ".pi", "skills"), source: "user-pi" },
 	];
 }
@@ -170,10 +145,7 @@ interface CachedSkillMarkdown {
 
 const skillReadCache = new Map<string, CachedSkillMarkdown>();
 
-function rememberSkill(
-	key: string,
-	value: CachedSkillMarkdown,
-): CachedSkillMarkdown {
+function rememberSkill(key: string, value: CachedSkillMarkdown): CachedSkillMarkdown {
 	if (skillReadCache.has(key)) skillReadCache.delete(key);
 	skillReadCache.set(key, value);
 	while (skillReadCache.size > SKILL_CACHE_MAX_ENTRIES) {
@@ -201,7 +173,11 @@ function readSkillMarkdown(
 	cwd: string,
 	name: string,
 ):
-	| { path: string; source: "project" | "package" | "project-pi" | "user-pi" | "project-agents" | "user-agents"; content: string }
+	| {
+			path: string;
+			source: "project" | "package" | "project-pi" | "user-pi" | "project-agents" | "user-agents";
+			content: string;
+	  }
 	| undefined {
 	if (!isValidSkillName(name)) return undefined;
 	const cacheKey = `${path.resolve(cwd)}:${name}`;
@@ -231,9 +207,7 @@ function readSkillMarkdown(
 function frontmatterDescription(content: string): string | undefined {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
 	if (!match) return undefined;
-	const line = match[1]
-		.split(/\r?\n/)
-		.find((entry) => entry.startsWith("description:"));
+	const line = match[1].split(/\r?\n/).find((entry) => entry.startsWith("description:"));
 	return line?.slice("description:".length).trim();
 }
 
@@ -244,12 +218,8 @@ function stripFrontmatter(content: string): string {
 function compactSkillContent(content: string): string {
 	const body = stripFrontmatter(content);
 	if (body.length <= MAX_SKILL_CHARS) return body;
-	const preferred =
-		body.split(/\r?\n## Verification\r?\n/)[0]?.trim() ?? body;
-	const truncated =
-		preferred.length > MAX_SKILL_CHARS
-			? preferred.slice(0, MAX_SKILL_CHARS - 40).trimEnd()
-			: preferred;
+	const preferred = body.split(/\r?\n## Verification\r?\n/)[0]?.trim() ?? body;
+	const truncated = preferred.length > MAX_SKILL_CHARS ? preferred.slice(0, MAX_SKILL_CHARS - 40).trimEnd() : preferred;
 	return `${truncated}\n\n[skill instructions truncated]`;
 }
 
@@ -285,13 +255,7 @@ export function renderSkillInstructions(
 	if (input.runId) {
 		// Register effectiveness hooks once per process
 		registerSkillEffectivenessHooks();
-		const weighted = getWeightedSkillsForRole(
-			input.cwd,
-			input.role,
-			names,
-			input.runId,
-			CONFIDENCE_THRESHOLDS.TENTATIVE,
-		);
+		const weighted = getWeightedSkillsForRole(input.cwd, input.role, names, input.runId, CONFIDENCE_THRESHOLDS.TENTATIVE);
 		weightedSkills = weighted.map((w) => ({
 			skillId: w.skillId,
 			confidence: w.confidence,
@@ -316,22 +280,15 @@ export function renderSkillInstructions(
 		}
 		skillPaths.push(path.dirname(loaded.path));
 		const description = frontmatterDescription(loaded.content);
-		const source =
-			loaded.source === "project"
-				? `project:skills/${safeName}`
-				: `package:skills/${safeName}`;
+		const source = loaded.source === "project" ? `project:skills/${safeName}` : `package:skills/${safeName}`;
 
 		// ECC INSTINCT: Add confidence annotation from weighted skills
 		const weighted = weightedSkills?.find((w) => w.skillId === name);
-		const confidenceNote = weighted
-			? ` [Confidence: ${(weighted.confidence * 100).toFixed(0)}% — ${weighted.threshold}]`
-			: "";
+		const confidenceNote = weighted ? ` [Confidence: ${(weighted.confidence * 100).toFixed(0)}% — ${weighted.threshold}]` : "";
 
 		const header = [
 			`## ${safeName}`,
-			description
-				? `Description: ${description}${confidenceNote}`
-				: undefined,
+			description ? `Description: ${description}${confidenceNote}` : undefined,
 			`Source: ${source}`,
 			// Path: pointer to the skill directory so the agent can deterministically
 			// `ls <Path>/references/` and `read` a co-located reference corpus.

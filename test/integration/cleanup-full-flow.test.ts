@@ -15,29 +15,30 @@
  * in new session) require multi-process coordination and are handled
  * separately in the e2e test suite.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { spawn } from "node:child_process";
+import test from "node:test";
+import { __test_setRegistryPath, cleanupOrphanWorkers, registerWorker } from "../../src/runtime/orphan-worker-registry.ts";
 import {
-	cleanupOrphanTempDirs,
+	__test_getTrackedTempDirs,
+	__test_resetTrackedTempDirs,
 	cleanupLegacyOrphanTempDirs,
+	cleanupOrphanTempDirs,
 	cleanupTempDir,
 	createSafeTempDir,
-	__test_resetTrackedTempDirs,
-	__test_getTrackedTempDirs,
 } from "../../src/runtime/pi-args.ts";
-import {
-	cleanupOrphanWorkers,
-	registerWorker,
-	__test_setRegistryPath,
-} from "../../src/runtime/orphan-worker-registry.ts";
 
 function mkdtemp(prefix: string): string {
 	let dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-	try { dir = fs.realpathSync(dir); } catch { /* keep */ }
+	try {
+		dir = fs.realpathSync(dir);
+	} catch {
+		/* keep */
+	}
 	return dir;
 }
 
@@ -53,7 +54,11 @@ function rmrf(p: string): void {
 const spawnedPids: number[] = [];
 test.after(() => {
 	for (const pid of spawnedPids) {
-		try { process.kill(pid, 9); } catch { /* already dead */ }
+		try {
+			process.kill(pid, 9);
+		} catch {
+			/* already dead */
+		}
 	}
 });
 
@@ -86,7 +91,12 @@ function runFullCleanup(
 ): {
 	tempResult: { scanned: number; cleaned: number; failed: number };
 	legacyResult: { scanned: number; cleaned: number; failed: number };
-	workerResult: { scanned: number; killed: number; pruned: number; kept: number };
+	workerResult: {
+		scanned: number;
+		killed: number;
+		pruned: number;
+		kept: number;
+	};
 } {
 	const now = Date.now();
 	const tempResult = cleanupOrphanTempDirs(now, userTmpDir);
@@ -133,7 +143,9 @@ test("full cleanup flow: orphan temp dirs + legacy /tmp + orphan workers", () =>
 	spawnedPids.push(workerPid);
 
 	// Register with dead parent (registered 2 hours ago so it's stale)
-	registerWorker(workerPid, "session-DEAD", "run-dead", 999999, { registeredAt: Date.now() - 2 * 60 * 60 * 1000 });
+	registerWorker(workerPid, "session-DEAD", "run-dead", 999999, {
+		registeredAt: Date.now() - 2 * 60 * 60 * 1000,
+	});
 
 	// Run full cleanup with custom paths
 	const result = runFullCleanup(userTmp, legacyTmp, "session-NEW");
@@ -158,7 +170,11 @@ test("full cleanup flow: orphan temp dirs + legacy /tmp + orphan workers", () =>
 	assert.equal(result.workerResult.killed, 1, "stale worker killed");
 
 	// Cleanup worker process
-	try { worker.kill(); } catch { /* ignore */ }
+	try {
+		worker.kill();
+	} catch {
+		/* ignore */
+	}
 	rmrf(userTmp);
 	rmrf(legacyTmp);
 	rmrf(fakeWorkerDir);
@@ -188,7 +204,11 @@ test("full cleanup flow: concurrent session protection", () => {
 	assert.equal(result.pruned, 0, "no workers pruned");
 
 	// Cleanup
-	try { worker.kill(); } catch { /* ignore */ }
+	try {
+		worker.kill();
+	} catch {
+		/* ignore */
+	}
 	rmrf(fakeWorkerDir);
 });
 

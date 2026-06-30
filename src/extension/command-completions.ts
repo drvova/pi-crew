@@ -10,19 +10,20 @@
  * requiring the user to memorize long generated IDs.
  */
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
-import { listRecentRuns } from "./run-index.ts";
-import { discoverTeams, allTeams } from "../teams/discover-teams.ts";
-import { discoverWorkflows, allWorkflows } from "../workflows/discover-workflows.ts";
-import { discoverAgents, allAgents } from "../agents/discover-agents.ts";
+import { allAgents, discoverAgents } from "../agents/discover-agents.ts";
 import type { TeamRunManifest } from "../state/types.ts";
+import { allTeams, discoverTeams } from "../teams/discover-teams.ts";
+import { allWorkflows, discoverWorkflows } from "../workflows/discover-workflows.ts";
+import { listRecentRuns } from "./run-index.ts";
 
 const MAX_RUN_SUGGESTIONS = 15;
 
 function filterByPrefix(items: AutocompleteItem[], prefix: string): AutocompleteItem[] | null {
 	const trimmed = prefix.trim();
-	const filtered = trimmed === ""
-		? items
-		: items.filter((item) => item.value.startsWith(trimmed) || item.label.toLowerCase().includes(trimmed.toLowerCase()));
+	const filtered =
+		trimmed === ""
+			? items
+			: items.filter((item) => item.value.startsWith(trimmed) || item.label.toLowerCase().includes(trimmed.toLowerCase()));
 	return filtered.length > 0 ? filtered.slice(0, MAX_RUN_SUGGESTIONS) : null;
 }
 
@@ -67,7 +68,7 @@ export function suggestRunIds(_prefix: string, cwd?: string): AutocompleteItem[]
 export async function suggestTaskIds(runId: string, prefix: string, cwd?: string): Promise<AutocompleteItem[] | null> {
 	const resolvedCwd = cwd ?? process.cwd();
 	// Dynamic import to avoid pulling state-store into the hot command-registration path.
-		// LAZY: defer dynamic import of ../state/state-store.ts to its call site.
+	// LAZY: defer dynamic import of ../state/state-store.ts to its call site.
 	const { loadRunManifestById } = await import("../state/state-store.ts");
 	const loaded = loadRunManifestById(resolvedCwd, runId);
 	if (!loaded) return null;

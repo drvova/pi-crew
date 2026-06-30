@@ -2,13 +2,10 @@
  * Complementary tests for src/extension/crew-cleanup.ts
  * Focuses on ChildProcessRegistry edge cases and registerChildProcess/unregisterChildProcess.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
-import {
-	childProcessRegistry,
-	registerChildProcess,
-	unregisterChildProcess,
-} from "../../src/extension/crew-cleanup.ts";
+import { describe, it } from "node:test";
+import { childProcessRegistry, registerChildProcess, unregisterChildProcess } from "../../src/extension/crew-cleanup.ts";
 
 describe("ChildProcessRegistry register overwrites existing pid", () => {
 	it("overwrites previous entry when same pid is re-registered", () => {

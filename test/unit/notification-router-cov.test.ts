@@ -3,13 +3,14 @@
  * Focuses on parseHHMMRange, isInQuietHours, and edge cases not covered by
  * the primary notification-router.test.ts.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
-	NotificationRouter,
-	parseHHMMRange,
 	isInQuietHours,
 	type NotificationDescriptor,
+	NotificationRouter,
+	parseHHMMRange,
 } from "../../src/extension/notification-router.ts";
 
 // ─── parseHHMMRange ─────────────────────────────────────────────────────────
@@ -100,7 +101,11 @@ describe("NotificationRouter enqueue with id-based dedup", () => {
 	it("deduplicates notifications with the same id", () => {
 		const delivered: NotificationDescriptor[] = [];
 		const router = new NotificationRouter(
-			{ severityFilter: ["info", "warning", "error", "critical"], dedupWindowMs: 60_000, now: () => 1000 },
+			{
+				severityFilter: ["info", "warning", "error", "critical"],
+				dedupWindowMs: 60_000,
+				now: () => 1000,
+			},
 			(n) => delivered.push(n),
 		);
 		const n: NotificationDescriptor = {
@@ -117,22 +122,49 @@ describe("NotificationRouter enqueue with id-based dedup", () => {
 	it("treats different ids as separate notifications", () => {
 		const delivered: NotificationDescriptor[] = [];
 		const router = new NotificationRouter(
-			{ severityFilter: ["info", "warning", "error", "critical"], now: () => 1000 },
+			{
+				severityFilter: ["info", "warning", "error", "critical"],
+				now: () => 1000,
+			},
 			(n) => delivered.push(n),
 		);
-		router.enqueue({ id: "a", severity: "warning", source: "test", title: "A" });
-		router.enqueue({ id: "b", severity: "warning", source: "test", title: "B" });
+		router.enqueue({
+			id: "a",
+			severity: "warning",
+			source: "test",
+			title: "A",
+		});
+		router.enqueue({
+			id: "b",
+			severity: "warning",
+			source: "test",
+			title: "B",
+		});
 		assert.equal(delivered.length, 2);
 	});
 
 	it("uses source:runId:title as fallback key when id is absent", () => {
 		const delivered: NotificationDescriptor[] = [];
 		const router = new NotificationRouter(
-			{ severityFilter: ["info", "warning", "error", "critical"], dedupWindowMs: 60_000, now: () => 1000 },
+			{
+				severityFilter: ["info", "warning", "error", "critical"],
+				dedupWindowMs: 60_000,
+				now: () => 1000,
+			},
 			(n) => delivered.push(n),
 		);
-		router.enqueue({ severity: "warning", source: "src", runId: "r1", title: "T" });
-		router.enqueue({ severity: "warning", source: "src", runId: "r1", title: "T" });
+		router.enqueue({
+			severity: "warning",
+			source: "src",
+			runId: "r1",
+			title: "T",
+		});
+		router.enqueue({
+			severity: "warning",
+			source: "src",
+			runId: "r1",
+			title: "T",
+		});
 		assert.equal(delivered.length, 1, "fallback key should dedupe");
 	});
 });
@@ -141,7 +173,10 @@ describe("NotificationRouter batch flush with single item", () => {
 	it("delivers single item directly on flush (no batch wrapping)", () => {
 		const delivered: NotificationDescriptor[] = [];
 		const router = new NotificationRouter(
-			{ severityFilter: ["info", "warning", "error", "critical"], batchWindowMs: 1000 },
+			{
+				severityFilter: ["info", "warning", "error", "critical"],
+				batchWindowMs: 1000,
+			},
 			(n) => delivered.push(n),
 		);
 		router.enqueue({ severity: "error", source: "test", title: "Solo" });
@@ -156,12 +191,21 @@ describe("NotificationRouter evictSeenIfNeeded", () => {
 	it("does not crash when seen map exceeds max size", () => {
 		const delivered: NotificationDescriptor[] = [];
 		const router = new NotificationRouter(
-			{ severityFilter: ["info", "warning", "error", "critical"], dedupWindowMs: 0, now: () => 1000 },
+			{
+				severityFilter: ["info", "warning", "error", "critical"],
+				dedupWindowMs: 0,
+				now: () => 1000,
+			},
 			(n) => delivered.push(n),
 		);
 		// Enqueue many unique notifications to trigger eviction
 		for (let i = 0; i < 10050; i++) {
-			router.enqueue({ id: `msg-${i}`, severity: "warning", source: "test", title: `T${i}` });
+			router.enqueue({
+				id: `msg-${i}`,
+				severity: "warning",
+				source: "test",
+				title: `T${i}`,
+			});
 		}
 		// Should have delivered all (no crash) and seen map should have been pruned
 		assert.equal(delivered.length, 10050);
@@ -172,13 +216,27 @@ describe("NotificationRouter dispose and re-enqueue", () => {
 	it("allows re-enqueue after dispose clears dedup state", () => {
 		const delivered: NotificationDescriptor[] = [];
 		const router = new NotificationRouter(
-			{ severityFilter: ["info", "warning", "error", "critical"], dedupWindowMs: 60_000, now: () => 1000 },
+			{
+				severityFilter: ["info", "warning", "error", "critical"],
+				dedupWindowMs: 60_000,
+				now: () => 1000,
+			},
 			(n) => delivered.push(n),
 		);
-		router.enqueue({ id: "x", severity: "warning", source: "test", title: "T" });
+		router.enqueue({
+			id: "x",
+			severity: "warning",
+			source: "test",
+			title: "T",
+		});
 		assert.equal(delivered.length, 1);
 		router.dispose();
-		router.enqueue({ id: "x", severity: "warning", source: "test", title: "T" });
+		router.enqueue({
+			id: "x",
+			severity: "warning",
+			source: "test",
+			title: "T",
+		});
 		assert.equal(delivered.length, 2, "after dispose, same notification should be allowed");
 	});
 });

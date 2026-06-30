@@ -2,14 +2,11 @@
  * Per-field resilient config parsing — continues on error, collects all field-level issues.
  */
 
-import { PiTeamsConfigSchema } from "../schema/config-schema.ts";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+import { PiTeamsConfigSchema } from "../schema/config-schema.ts";
+import { type PiTeamsConfig, parseConfig } from "./config.ts";
 import { suggestConfigKey } from "./suggestions.ts";
-import {
-	parseConfig,
-	type PiTeamsConfig,
-} from "./config.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,7 +53,18 @@ export function parseConfigResilient(raw: unknown): ResilientParseResult {
 	const warnings: string[] = [];
 
 	if (!isObject(raw)) {
-		return { config: {}, errors: [{ field: "config", message: "config must be an object", value: raw }], warnings, valid: false };
+		return {
+			config: {},
+			errors: [
+				{
+					field: "config",
+					message: "config must be an object",
+					value: raw,
+				},
+			],
+			warnings,
+			valid: false,
+		};
 	}
 
 	// Collect unknown top-level keys with suggestions

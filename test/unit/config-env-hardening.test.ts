@@ -4,38 +4,46 @@
  * - TIMEOUT: PI_TEAMS_CHILD_RESPONSE_TIMEOUT_MS bounded
  * - PI_TEAMS_HOME: validated against user home in production
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { Value } from "@sinclair/typebox/value";
 import { PiTeamsOtlpConfigSchema } from "../../src/schema/config-schema.ts";
 
 test("H8: OTLP endpoint accepts http://", () => {
-	const result = Value.Parse(PiTeamsOtlpConfigSchema, { endpoint: "http://localhost:4318" });
+	const result = Value.Parse(PiTeamsOtlpConfigSchema, {
+		endpoint: "http://localhost:4318",
+	});
 	assert.equal(result.endpoint, "http://localhost:4318");
 });
 
 test("H8: OTLP endpoint accepts https://", () => {
-	const result = Value.Parse(PiTeamsOtlpConfigSchema, { endpoint: "https://otel.example.com" });
+	const result = Value.Parse(PiTeamsOtlpConfigSchema, {
+		endpoint: "https://otel.example.com",
+	});
 	assert.equal(result.endpoint, "https://otel.example.com");
 });
 
 test("H8: OTLP endpoint rejects javascript: URL", () => {
 	assert.throws(
-		() => Value.Parse(PiTeamsOtlpConfigSchema, { endpoint: "javascript:alert(1)" }),
+		() =>
+			Value.Parse(PiTeamsOtlpConfigSchema, {
+				endpoint: "javascript:alert(1)",
+			}),
 		/Expected string to match/,
 	);
 });
 
 test("H8: OTLP endpoint rejects empty string", () => {
-	assert.throws(
-		() => Value.Parse(PiTeamsOtlpConfigSchema, { endpoint: "" }),
-		/Expected string length greater/,
-	);
+	assert.throws(() => Value.Parse(PiTeamsOtlpConfigSchema, { endpoint: "" }), /Expected string length greater/);
 });
 
 test("H8: OTLP endpoint rejects file:// URL", () => {
 	assert.throws(
-		() => Value.Parse(PiTeamsOtlpConfigSchema, { endpoint: "file:///etc/passwd" }),
+		() =>
+			Value.Parse(PiTeamsOtlpConfigSchema, {
+				endpoint: "file:///etc/passwd",
+			}),
 		/Expected string to match/,
 	);
 });

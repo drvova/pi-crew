@@ -132,9 +132,13 @@ export class RenderScheduler {
 	 */
 	private invalidate(payload: unknown): void {
 		try {
-			const runId = typeof payload === "object" && payload !== null && "runId" in payload && typeof (payload as { runId: unknown }).runId === "string"
-				? (payload as { runId: string }).runId
-				: undefined;
+			const runId =
+				typeof payload === "object" &&
+				payload !== null &&
+				"runId" in payload &&
+				typeof (payload as { runId: unknown }).runId === "string"
+					? (payload as { runId: string }).runId
+					: undefined;
 			if (runId === undefined || this.invalidateCoalesceMs <= 0) {
 				this.onInvalidate?.(payload);
 				return;
@@ -210,7 +214,11 @@ export class RenderScheduler {
 		this.invalidateTimer = undefined;
 		this.invalidateBuffer.clear();
 		for (const unsub of this.unsubs.splice(0)) {
-			try { unsub(); } catch (error) { logInternalError("render-scheduler.unsubscribe", error); }
+			try {
+				unsub();
+			} catch (error) {
+				logInternalError("render-scheduler.unsubscribe", error);
+			}
 		}
 	}
 }

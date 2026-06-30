@@ -166,9 +166,10 @@ export class OverflowRecoveryTracker {
 		const existing = this.timers.get(key);
 		if (existing) clearTimeout(existing);
 		const current = this.states.get(key);
-		const timeoutMs = current?.phase === "recovered" || current?.phase === "failed" || current?.phase === "none"
-			? TERMINAL_STATE_TTL_MS
-			: PHASE_TIMEOUT_MS;
+		const timeoutMs =
+			current?.phase === "recovered" || current?.phase === "failed" || current?.phase === "none"
+				? TERMINAL_STATE_TTL_MS
+				: PHASE_TIMEOUT_MS;
 
 		const timer = setTimeout(() => {
 			this.timers.delete(key);

@@ -1,5 +1,11 @@
 export function sanitizeName(name: string): string {
-	const result = name.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+	const result = name
+		.toLowerCase()
+		.trim()
+		.replace(/\s+/g, "-")
+		.replace(/[^a-z0-9-]/g, "")
+		.replace(/-+/g, "-")
+		.replace(/^-+|-+$/g, "");
 	return result || "unnamed";
 }
 
@@ -8,7 +14,10 @@ export function requireString(value: unknown, label: string): { value?: string; 
 	return { value: value.trim() };
 }
 
-export function parseConfigObject(config: unknown): { value?: Record<string, unknown>; error?: string } {
+export function parseConfigObject(config: unknown): {
+	value?: Record<string, unknown>;
+	error?: string;
+} {
 	let parsed = config;
 	if (typeof parsed === "string") {
 		try {
@@ -23,5 +32,5 @@ export function parseConfigObject(config: unknown): { value?: Record<string, unk
 }
 
 export function hasOwn(obj: Record<string, unknown>, key: string): boolean {
-	return  Object.hasOwn(obj, key);
+	return Object.hasOwn(obj, key);
 }

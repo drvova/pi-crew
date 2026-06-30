@@ -1,7 +1,12 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { renderRunStarted, renderRunCompleted, renderResumeDirective, registerCrewMessageRenderers } from "../../src/extension/message-renderers.ts";
+import { describe, it } from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
+import {
+	registerCrewMessageRenderers,
+	renderResumeDirective,
+	renderRunCompleted,
+	renderRunStarted,
+} from "../../src/extension/message-renderers.ts";
 
 // Minimal stub theme — the renderers only call theme.fg(level, text) and theme.bold(text).
 const theme = {
@@ -14,7 +19,15 @@ const options = { expanded: false };
 describe("renderRunStarted", () => {
 	it("renders a launch line with team/workflow/goal", () => {
 		const result = renderRunStarted(
-			{ content: "", details: { runId: "team_123", team: "default", workflow: "fast-fix", goal: "fix bug" } },
+			{
+				content: "",
+				details: {
+					runId: "team_123",
+					team: "default",
+					workflow: "fast-fix",
+					goal: "fix bug",
+				},
+			},
 			options,
 			theme,
 		);
@@ -27,7 +40,10 @@ describe("renderRunStarted", () => {
 	it("truncates long goals", () => {
 		const longGoal = "x".repeat(100);
 		const result = renderRunStarted(
-			{ content: "", details: { runId: "r1", team: "t", goal: longGoal } },
+			{
+				content: "",
+				details: { runId: "r1", team: "t", goal: longGoal },
+			},
 			options,
 			theme,
 		);
@@ -46,7 +62,15 @@ describe("renderRunStarted", () => {
 describe("renderRunCompleted", () => {
 	it("uses success styling for completed runs", () => {
 		const result = renderRunCompleted(
-			{ content: "", details: { runId: "r1", status: "completed", taskCount: 5, goal: "done" } },
+			{
+				content: "",
+				details: {
+					runId: "r1",
+					status: "completed",
+					taskCount: 5,
+					goal: "done",
+				},
+			},
 			options,
 			theme,
 		);
@@ -57,21 +81,13 @@ describe("renderRunCompleted", () => {
 	});
 
 	it("uses error styling for failed runs", () => {
-		const result = renderRunCompleted(
-			{ content: "", details: { runId: "r1", status: "failed" } },
-			options,
-			theme,
-		);
+		const result = renderRunCompleted({ content: "", details: { runId: "r1", status: "failed" } }, options, theme);
 		const rendered = result.render(120).join(" ");
 		assert.match(rendered, /failed/);
 	});
 
 	it("uses warning styling for cancelled runs", () => {
-		const result = renderRunCompleted(
-			{ content: "", details: { runId: "r1", status: "cancelled" } },
-			options,
-			theme,
-		);
+		const result = renderRunCompleted({ content: "", details: { runId: "r1", status: "cancelled" } }, options, theme);
 		const rendered = result.render(120).join(" ");
 		assert.match(rendered, /cancelled/);
 	});
@@ -107,7 +123,9 @@ describe("registerCrewMessageRenderers", () => {
 	it("registers all 3 renderers without throwing", () => {
 		const registered: string[] = [];
 		const fakePi = {
-			registerMessageRenderer: (customType: string) => { registered.push(customType); },
+			registerMessageRenderer: (customType: string) => {
+				registered.push(customType);
+			},
 		};
 		registerCrewMessageRenderers(fakePi as never);
 		assert.deepEqual(registered, ["crew:run-started", "crew:run-completed", "crew:resume-directive"]);

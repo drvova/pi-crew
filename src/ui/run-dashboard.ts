@@ -1,32 +1,32 @@
 import * as fs from "node:fs";
-import type { TeamRunManifest, TeamTaskState, UsageState } from "../state/types.ts";
+import type { MetricRegistry } from "../observability/metric-registry.ts";
 import { readCrewAgents } from "../runtime/crew-agent-records.ts";
-import { getLiveAgentContextPercent } from "../runtime/live-agent-manager.ts";
 import type { CrewAgentRecord } from "../runtime/crew-agent-runtime.ts";
+import { getLiveAgentContextPercent } from "../runtime/live-agent-manager.ts";
 import { isDisplayActiveRun, isLikelyOrphanedActiveRun } from "../runtime/process-status.ts";
-import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
-import type { CrewTheme } from "./theme-adapter.ts";
-import { asCrewTheme, subscribeThemeChange } from "./theme-adapter.ts";
-import { applyStatusColor, colorizeStatusGlyphs, iconForStatus, type RunStatus } from "./status-colors.ts";
-import { pad, truncate, sanitizeLine, visibleWidth } from "../utils/visual.ts";
-import { Box, Text } from "./layout-primitives.ts";
-import { DynamicCrewBorder } from "./dynamic-border.ts";
+import type { TeamRunManifest, TeamTaskState, UsageState } from "../state/types.ts";
 import { aggregateUsage } from "../state/usage.ts";
+import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { resolveRealContainedPath } from "../utils/safe-paths.ts";
+import { pad, sanitizeLine, truncate, visibleWidth } from "../utils/visual.ts";
 import { renderAgentsPane } from "./dashboard-panes/agents-pane.ts";
+import { summarizeTerminalReason } from "./dashboard-panes/cancellation-pane.ts";
+import { renderHealthPane } from "./dashboard-panes/health-pane.ts";
 import { renderMailboxPane } from "./dashboard-panes/mailbox-pane.ts";
+import { renderMetricsPane } from "./dashboard-panes/metrics-pane.ts";
 import { renderProgressPane } from "./dashboard-panes/progress-pane.ts";
 import { renderTranscriptPane } from "./dashboard-panes/transcript-pane.ts";
-import { renderHealthPane } from "./dashboard-panes/health-pane.ts";
-import { renderMetricsPane } from "./dashboard-panes/metrics-pane.ts";
-import { summarizeTerminalReason } from "./dashboard-panes/cancellation-pane.ts";
-import { HelpOverlay } from "./overlays/help-overlay.ts";
+import { DynamicCrewBorder } from "./dynamic-border.ts";
 import { dashboardActionForKey } from "./keybinding-map.ts";
+import { Box, Text } from "./layout-primitives.ts";
+import { HelpOverlay } from "./overlays/help-overlay.ts";
+import { runEventBus } from "./run-event-bus.ts";
 import type { RunSnapshotCache, RunUiSnapshot } from "./snapshot-types.ts";
 import { spinnerBucket, spinnerFrame } from "./spinner.ts";
-import type { MetricRegistry } from "../observability/metric-registry.ts";
-import { resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { runEventBus } from "./run-event-bus.ts";
+import { applyStatusColor, colorizeStatusGlyphs, iconForStatus, type RunStatus } from "./status-colors.ts";
+import type { CrewTheme } from "./theme-adapter.ts";
+import { asCrewTheme, subscribeThemeChange } from "./theme-adapter.ts";
 
 interface DashboardComponent {
 	invalidate(): void;
@@ -66,7 +66,24 @@ export interface RunDashboardOptions {
  */
 let lastActivePane: "agents" | "progress" | "mailbox" | "output" | "health" | "metrics" = "agents";
 
-export type RunDashboardAction = "status" | "summary" | "artifacts" | "api" | "events" | "agents" | "agent-events" | "agent-output" | "agent-transcript" | "agent-live" | "mailbox" | "reload" | "mailbox-detail" | "health-recovery" | "health-kill-stale" | "health-diagnostic-export" | "notifications-dismiss";
+export type RunDashboardAction =
+	| "status"
+	| "summary"
+	| "artifacts"
+	| "api"
+	| "events"
+	| "agents"
+	| "agent-events"
+	| "agent-output"
+	| "agent-transcript"
+	| "agent-live"
+	| "mailbox"
+	| "reload"
+	| "mailbox-detail"
+	| "health-recovery"
+	| "health-kill-stale"
+	| "health-diagnostic-export"
+	| "notifications-dismiss";
 export interface RunDashboardSelection {
 	runId: string;
 	action: RunDashboardAction;
@@ -199,7 +216,8 @@ function agentPreviewLine(agent: CrewAgentRecord, task: TeamTaskState | undefine
 		agent.progress?.activityState,
 		options.showModel !== false && modelForAgent(agent, task) ? `model=${modelForAgent(agent, task)}` : undefined,
 		options.showTokens !== false
-			? formatTokens(usageForAgent(agent, task)) ?? (agent.progress?.tokens !== undefined ? `tok=${agent.progress.tokens}` : undefined)
+			? (formatTokens(usageForAgent(agent, task)) ??
+				(agent.progress?.tokens !== undefined ? `tok=${agent.progress.tokens}` : undefined))
 			: undefined,
 		options.showTools !== false && agent.progress?.currentTool ? `tool=${agent.progress.currentTool}` : undefined,
 		options.showTools !== false && agent.toolUses !== undefined ? `${agent.toolUses} tools` : undefined,
@@ -208,8 +226,12 @@ function agentPreviewLine(agent: CrewAgentRecord, task: TeamTaskState | undefine
 		agent.startedAt ? `age=${formatAge(agent.completedAt ?? agent.startedAt)}` : undefined,
 	].filter((part): part is string => Boolean(part));
 	const recent = agent.progress?.recentOutput?.at(-1);
-	const icon = iconForStatus(agent.status, { runningGlyph: spinnerFrame(agent.taskId) });
-	return sanitizeLine(`Agent: ${icon} ${agent.taskId} ${agent.role}->${agent.agent}${stats.length ? ` · ${stats.join(" · ")}` : ""}${recent ? ` ⎿ ${recent}` : ""}`);
+	const icon = iconForStatus(agent.status, {
+		runningGlyph: spinnerFrame(agent.taskId),
+	});
+	return sanitizeLine(
+		`Agent: ${icon} ${agent.taskId} ${agent.role}->${agent.agent}${stats.length ? ` · ${stats.join(" · ")}` : ""}${recent ? ` ⎿ ${recent}` : ""}`,
+	);
 }
 
 function readAgentPreview(run: TeamRunManifest, maxLines = 5, options: RunDashboardOptions = {}): string[] {
@@ -218,20 +240,27 @@ function readAgentPreview(run: TeamRunManifest, maxLines = 5, options: RunDashbo
 		const agents = snapshot?.agents ?? readCrewAgents(run);
 		const tasks = snapshot?.tasks ?? readRunTasks(run, options.snapshotCache);
 		if (!agents.length) return ["Agents: (none)"];
-		const totals = tasks.reduce((acc, task) => {
-			acc.input += task.usage?.input ?? 0;
-			acc.output += task.usage?.output ?? 0;
-			acc.cacheRead += task.usage?.cacheRead ?? 0;
-			acc.cacheWrite += task.usage?.cacheWrite ?? 0;
-			acc.cost += task.usage?.cost ?? 0;
-			return acc;
-		}, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 } as { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number });
+		const totals = tasks.reduce(
+			(acc, task) => {
+				acc.input += task.usage?.input ?? 0;
+				acc.output += task.usage?.output ?? 0;
+				acc.cacheRead += task.usage?.cacheRead ?? 0;
+				acc.cacheWrite += task.usage?.cacheWrite ?? 0;
+				acc.cost += task.usage?.cost ?? 0;
+				return acc;
+			},
+			{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 } as {
+				input: number;
+				output: number;
+				cacheRead: number;
+				cacheWrite: number;
+				cost: number;
+			},
+		);
 		const header = formatTokens(totals) ? `Agents: ${formatTokens(totals)}` : "Agents:";
 		return [
 			header,
-			...agents
-				.slice(0, maxLines)
-				.map((agent) => agentPreviewLine(agent, taskForAgent(tasks, agent), options)),
+			...agents.slice(0, maxLines).map((agent) => agentPreviewLine(agent, taskForAgent(tasks, agent), options)),
 			...(agents.length > maxLines ? [`Agents: +${agents.length - maxLines} more`] : []),
 		];
 	} catch (error) {
@@ -255,10 +284,18 @@ function runLabel(run: TeamRunManifest, selected: boolean, snapshotCache?: RunSn
 	const stale = isLikelyOrphanedActiveRun(run, agents);
 	const running = agents.find((agent) => agent.status === "running");
 	const queued = agents.find((agent) => agent.status === "queued");
-	const step = stale ? "orphaned queued run" : running ? `step ${running.taskId}` : queued ? `queued ${queued.taskId}` : `agents ${agents.length}`;
+	const step = stale
+		? "orphaned queued run"
+		: running
+			? `step ${running.taskId}`
+			: queued
+				? `queued ${queued.taskId}`
+				: `agents ${agents.length}`;
 	const status: RunStatus = stale ? "stale" : (run.status as RunStatus);
 	const marker = selected ? "›" : " ";
-	const icon = iconForStatus(status, { runningGlyph: spinnerFrame(run.runId) });
+	const icon = iconForStatus(status, {
+		runningGlyph: spinnerFrame(run.runId),
+	});
 	// L-5: unified " · " separator (was "|").
 	// L-3: keep the GOAL (the human identifier) visible on narrow terminals —
 	// when the full line overflows, sacrifice the meta prefix (runId/status
@@ -304,8 +341,12 @@ function resolveRuns(runs: TeamRunManifest[], snapshotCache?: RunSnapshotCache):
 function groupedRuns(runs: TeamRunManifest[], snapshotCache?: RunSnapshotCache): Array<{ label: string; run?: TeamRunManifest }> {
 	const resolved = resolveRuns(runs, snapshotCache);
 	const rows: Array<{ label: string; run?: TeamRunManifest }> = [];
-	const active = runs.filter((run) => isDisplayActiveRun(resolved.get(run.runId)?.snapshot?.manifest ?? run, resolved.get(run.runId)?.agents ?? []));
-	const rest = runs.filter((run) => !isDisplayActiveRun(resolved.get(run.runId)?.snapshot?.manifest ?? run, resolved.get(run.runId)?.agents ?? []));
+	const active = runs.filter((run) =>
+		isDisplayActiveRun(resolved.get(run.runId)?.snapshot?.manifest ?? run, resolved.get(run.runId)?.agents ?? []),
+	);
+	const rest = runs.filter(
+		(run) => !isDisplayActiveRun(resolved.get(run.runId)?.snapshot?.manifest ?? run, resolved.get(run.runId)?.agents ?? []),
+	);
 	if (active.length) rows.push({ label: "Active" }, ...active.map((run) => ({ label: run.runId, run })));
 	if (rest.length) rows.push({ label: "Recent" }, ...rest.map((run) => ({ label: run.runId, run })));
 	return rows;
@@ -355,11 +396,15 @@ export class RunDashboard implements DashboardComponent {
 		this.options = options;
 		this.unsubscribeTheme = subscribeThemeChange(theme, () => this.invalidateAndRender());
 		this.unsubscribeEventBus = (() => {
-		const unsub1 = runEventBus.onChannel("run:state", () => this.invalidateAndRender());
-		const unsub2 = runEventBus.onChannel("worker:lifecycle", () => this.invalidateAndRender());
-		const unsub3 = runEventBus.onChannel("ui:invalidate", () => this.invalidateAndRender());
-		return () => { unsub1(); unsub2(); unsub3(); };
-	})();
+			const unsub1 = runEventBus.onChannel("run:state", () => this.invalidateAndRender());
+			const unsub2 = runEventBus.onChannel("worker:lifecycle", () => this.invalidateAndRender());
+			const unsub3 = runEventBus.onChannel("ui:invalidate", () => this.invalidateAndRender());
+			return () => {
+				unsub1();
+				unsub2();
+				unsub3();
+			};
+		})();
 	}
 
 	/**
@@ -373,7 +418,11 @@ export class RunDashboard implements DashboardComponent {
 	 */
 	private invalidateAndRender(): void {
 		this.invalidate();
-		try { this.options.requestRender?.(); } catch { /* host may not expose requestRender */ }
+		try {
+			this.options.requestRender?.();
+		} catch {
+			/* host may not expose requestRender */
+		}
 	}
 
 	/**
@@ -396,7 +445,9 @@ export class RunDashboard implements DashboardComponent {
 		const next = this.options.runProvider();
 		this.runs = Array.isArray(next) ? next : this.runs;
 		if (selectedRunId) {
-			const nextIndex = groupedRuns(this.runs, this.options.snapshotCache).filter((row) => row.run).findIndex((row) => row.run?.runId === selectedRunId);
+			const nextIndex = groupedRuns(this.runs, this.options.snapshotCache)
+				.filter((row) => row.run)
+				.findIndex((row) => row.run?.runId === selectedRunId);
 			if (nextIndex >= 0) this.selected = nextIndex;
 			else this.selected = 0;
 		}
@@ -428,16 +479,19 @@ export class RunDashboard implements DashboardComponent {
 
 	private buildSignature(): string {
 		let hasRunning = false;
-		const statuses = this.runs.map((run) => {
-			const snapshot = snapshotFor(run, this.options.snapshotCache);
-			const displayRun = snapshot?.manifest ?? run;
-			const agents = snapshot?.agents ?? agentsFor(run, this.options.snapshotCache);
-			const stale = isLikelyOrphanedActiveRun(displayRun, agents);
-			const status: RunStatus = stale ? "stale" : (displayRun.status as RunStatus);
-			if (status === "running" || agents.some((agent) => agent.status === "running")) hasRunning = true;
-			return snapshot?.signature ?? `${displayRun.runId}:${displayRun.status}:${displayRun.updatedAt}:${status}`;
-		}).join("|");
-		const metricsSig = this.activePane === "metrics" ? `:metrics=${this.options.registry?.snapshot().length ?? 0}:${spinnerBucket()}` : "";
+		const statuses = this.runs
+			.map((run) => {
+				const snapshot = snapshotFor(run, this.options.snapshotCache);
+				const displayRun = snapshot?.manifest ?? run;
+				const agents = snapshot?.agents ?? agentsFor(run, this.options.snapshotCache);
+				const stale = isLikelyOrphanedActiveRun(displayRun, agents);
+				const status: RunStatus = stale ? "stale" : (displayRun.status as RunStatus);
+				if (status === "running" || agents.some((agent) => agent.status === "running")) hasRunning = true;
+				return snapshot?.signature ?? `${displayRun.runId}:${displayRun.status}:${displayRun.updatedAt}:${status}`;
+			})
+			.join("|");
+		const metricsSig =
+			this.activePane === "metrics" ? `:metrics=${this.options.registry?.snapshot().length ?? 0}:${spinnerBucket()}` : "";
 		return `${this.selected}:${this.showHelp ? 1 : 0}:${this.showFullProgress ? 1 : 0}:${this.activePane}:${statuses}${hasRunning ? `:spin=${spinnerBucket()}` : ""}${metricsSig}`;
 	}
 
@@ -460,10 +514,7 @@ export class RunDashboard implements DashboardComponent {
 			return this.renderUnsafe(width);
 		} catch (error) {
 			logInternalError("run-dashboard.render", error);
-			return renderLines([
-				"Dashboard error — see logs for details.",
-				"Press r to reload · Esc to close.",
-			], width);
+			return renderLines(["Dashboard error — see logs for details.", "Press r to reload · Esc to close."], width);
 		}
 	}
 
@@ -478,7 +529,7 @@ export class RunDashboard implements DashboardComponent {
 			const border = (left: string, right: string) => `${fg("border", left)}${borderFill(borderWidth)}${fg("border", right)}`;
 			const row = (text: string) => `│ ${pad(truncate(text, innerWidth - 1), innerWidth - 1)}│`;
 			const sep = () => border("├", "┤");
-			
+
 			const lines: string[] = [];
 			if (this.showHelp) {
 				// K-1: help overlay replaces the dashboard body until dismissed.
@@ -486,7 +537,9 @@ export class RunDashboard implements DashboardComponent {
 			} else {
 				lines.push(
 					border("╭", "╮"),
-					row(`${fg("accent", "▐")} ${this.theme.bold("pi-crew")} · ${this.runs.length} runs  ${fg("dim", "1-6 pane · ↑↓ · Enter · ? help · Esc")}`),
+					row(
+						`${fg("accent", "▐")} ${this.theme.bold("pi-crew")} · ${this.runs.length} runs  ${fg("dim", "1-6 pane · ↑↓ · Enter · ? help · Esc")}`,
+					),
 					sep(),
 				);
 
@@ -504,7 +557,10 @@ export class RunDashboard implements DashboardComponent {
 					if (selectableCount <= RUN_LIST_MAX) {
 						// Common case (≤8 runs): keep the Active/Recent group headers.
 						for (const rowItem of allGrouped) {
-							if (!rowItem.run) { lines.push(row(fg("dim", `── ${rowItem.label} ──`))); continue; }
+							if (!rowItem.run) {
+								lines.push(row(fg("dim", `── ${rowItem.label} ──`)));
+								continue;
+							}
 							const idx = selectable.findIndex((c) => c.run?.runId === rowItem.run?.runId);
 							const snap = snapshotFor(rowItem.run, this.options.snapshotCache);
 							const run = snap?.manifest ?? rowItem.run;
@@ -527,7 +583,8 @@ export class RunDashboard implements DashboardComponent {
 							const label = runLabel(run, gi === this.selected, this.options.snapshotCache, innerWidth - 2);
 							lines.push(row(applyStatusColor(this.theme, status, label)));
 						}
-						if (win.hasBottom) lines.push(row(fg("dim", `↓ ${selectableCount - (this.runScrollOffset + win.slots)} more below`)));
+						if (win.hasBottom)
+							lines.push(row(fg("dim", `↓ ${selectableCount - (this.runScrollOffset + win.slots)} more below`)));
 					}
 
 					// Selected run detail — compact
@@ -544,21 +601,36 @@ export class RunDashboard implements DashboardComponent {
 						const isTerminal = statusStr === "failed" || statusStr === "cancelled" || statusStr === "stopped";
 						const reason = isTerminal ? summarizeTerminalReason(r, selectedTasks, snap?.cancellationReason) : undefined;
 						const reasonSuffix = reason ? ` · ${truncate(sanitizeLine(reason), 40)}` : "";
-						lines.push(row(fg("dim", sanitizeLine(`  ${r.team}/${r.workflow ?? "default"} · ${statusStr} · ${r.runId.slice(-10)}${reasonSuffix}`))));
+						lines.push(
+							row(
+								fg(
+									"dim",
+									sanitizeLine(
+										`  ${r.team}/${r.workflow ?? "default"} · ${statusStr} · ${r.runId.slice(-10)}${reasonSuffix}`,
+									),
+								),
+							),
+						);
 
 						// Pane content (max 8 lines) — F-2: colorize embedded status glyphs.
 						const paneLines = snap
-							? this.activePane === "agents" ? renderAgentsPane(snap, this.options)
-							: this.activePane === "progress" ? renderProgressPane(snap)
-							: this.activePane === "mailbox" ? renderMailboxPane(snap)
-							: this.activePane === "health" ? renderHealthPane(snap, { isForeground: !r.async })
-							: this.activePane === "metrics" ? renderMetricsPane(snap, { registry: this.options.registry })
-							: renderTranscriptPane(snap)
-							: [
-								...readAgentPreview(r, 4, this.options),
-								...readProgressPreview(r, 2),
-							];
-						const filteredPane = paneLines.filter(l => l && !l.includes("(none)") && l.trim() !== "");
+							? this.activePane === "agents"
+								? renderAgentsPane(snap, this.options)
+								: this.activePane === "progress"
+									? renderProgressPane(snap)
+									: this.activePane === "mailbox"
+										? renderMailboxPane(snap)
+										: this.activePane === "health"
+											? renderHealthPane(snap, {
+													isForeground: !r.async,
+												})
+											: this.activePane === "metrics"
+												? renderMetricsPane(snap, {
+														registry: this.options.registry,
+													})
+												: renderTranscriptPane(snap)
+							: [...readAgentPreview(r, 4, this.options), ...readProgressPreview(r, 2)];
+						const filteredPane = paneLines.filter((l) => l && !l.includes("(none)") && l.trim() !== "");
 						if (filteredPane.length > 0) {
 							lines.push(row(fg("dim", `── ${this.activePane} ──`)));
 							for (const line of filteredPane.slice(0, 8)) {
@@ -573,14 +645,23 @@ export class RunDashboard implements DashboardComponent {
 
 						// One-line footer — V-1: width-padded so the right edge doesn't jitter.
 						const usage = aggregateUsage(selectedTasks);
-						const u = usage ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+						const u = usage ?? {
+							input: 0,
+							output: 0,
+							cacheRead: 0,
+							cacheWrite: 0,
+							cost: 0,
+						};
 						const tok = (u.input ?? 0) + (u.output ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
 						const tokStr = tok > 0 ? (tok >= 1000 ? `${(tok / 1000).toFixed(1)}k tok` : `${tok} tok`) : "";
 						let ctxPct: number | undefined;
 						for (const agent of agents) {
 							if (agent.status === "running" && agent.runtime === "live-session") {
 								const pct = getLiveAgentContextPercent(agent.taskId);
-								if (pct != null) { ctxPct = pct; break; }
+								if (pct != null) {
+									ctxPct = pct;
+									break;
+								}
 							}
 						}
 						const ctxStr = ctxPct != null ? `${Math.round(ctxPct)}% ctx` : "";
@@ -607,7 +688,10 @@ export class RunDashboard implements DashboardComponent {
 				lines.push(bottom);
 			}
 
-			this.cachedLines = renderLines(lines.map((line) => truncate(line, width)), width);
+			this.cachedLines = renderLines(
+				lines.map((line) => truncate(line, width)),
+				width,
+			);
 			this.cachedVersion = signature;
 			this.cachedWidth = width;
 		}
@@ -637,7 +721,19 @@ export class RunDashboard implements DashboardComponent {
 			this.done(selectedRunId ? { runId: selectedRunId, action: "status" } : undefined);
 			return;
 		}
-		if (action === "summary" || action === "artifacts" || action === "api" || action === "agents" || action === "mailbox" || action === "reload" || action === "mailbox-detail" || action === "health-recovery" || action === "health-kill-stale" || action === "health-diagnostic-export" || action === "notifications-dismiss") {
+		if (
+			action === "summary" ||
+			action === "artifacts" ||
+			action === "api" ||
+			action === "agents" ||
+			action === "mailbox" ||
+			action === "reload" ||
+			action === "mailbox-detail" ||
+			action === "health-recovery" ||
+			action === "health-kill-stale" ||
+			action === "health-diagnostic-export" ||
+			action === "notifications-dismiss"
+		) {
 			this.done(selectedRunId ? { runId: selectedRunId, action } : action === "reload" ? { runId: "", action } : undefined);
 			return;
 		}

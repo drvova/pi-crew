@@ -19,16 +19,16 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { appendEvent } from "../state/event-log.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-import { makeWorkflowCtx, getWorkflowFinalResult, getWorkflowPhaseState } from "./dynamic-workflow-context.ts";
-import { DwfStore } from "./dwf-state-store.ts";
-import { assertDeterministicScript, isDeterminismCheckEnabled } from "./deterministic-ast.ts";
-import { projectCrewRoot, userPiRoot, packageRoot } from "../utils/paths.ts";
-import type { DynamicWorkflowConfig } from "../workflows/workflow-config.ts";
+import { appendEvent } from "../state/event-log.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { packageRoot, projectCrewRoot, userPiRoot } from "../utils/paths.ts";
+import { resolveRealContainedPath } from "../utils/safe-paths.ts";
+import type { DynamicWorkflowConfig } from "../workflows/workflow-config.ts";
+import { assertDeterministicScript, isDeterminismCheckEnabled } from "./deterministic-ast.ts";
+import { DwfStore } from "./dwf-state-store.ts";
+import { getWorkflowFinalResult, getWorkflowPhaseState, makeWorkflowCtx } from "./dynamic-workflow-context.ts";
 
 export interface RunDynamicWorkflowInput {
 	manifest: TeamRunManifest;
@@ -84,11 +84,7 @@ function resolveScriptPath(workflow: DynamicWorkflowConfig, cwd: string): string
 	// Fix round-5 P1: the round-4 P2-5 fix over-corrected to a SINGLE base (crewRoot/workflows).
 	// But discoverWorkflows() reads from THREE dirs (builtin, user, project). Use the same bases
 	// so user/builtin dynamic workflows aren't rejected.
-	const allowedBases = [
-		join(projectCrewRoot(cwd), "workflows"),
-		join(userPiRoot(), "workflows"),
-		join(packageRoot(), "workflows"),
-	];
+	const allowedBases = [join(projectCrewRoot(cwd), "workflows"), join(userPiRoot(), "workflows"), join(packageRoot(), "workflows")];
 	for (const base of allowedBases) {
 		try {
 			const real = resolveRealContainedPath(base, workflow.filePath);
@@ -98,7 +94,9 @@ function resolveScriptPath(workflow: DynamicWorkflowConfig, cwd: string): string
 		}
 	}
 	// Not contained in any allowed base — refuse (do NOT fall back to the raw path).
-	throw new Error(`Dynamic workflow '${workflow.filePath}' is outside the allowed workflows directories (${allowedBases.join(", ")}). Refusing to load.`);
+	throw new Error(
+		`Dynamic workflow '${workflow.filePath}' is outside the allowed workflows directories (${allowedBases.join(", ")}). Refusing to load.`,
+	);
 }
 
 /**
@@ -121,7 +119,7 @@ async function loadWorkflowModule(scriptPath: string): Promise<DynamicWorkflowSc
 	// lazily so this module stays importable in environments without jiti (type-only consumers).
 	// Fix round-4: use createRequire(import.meta.url) so `require` works under the strip-types
 	// loader fallback (Node ≥ 22.6) where bare `require` is not defined in ESM scope.
-		// LAZY: defer dynamic import of node:module to its call site.
+	// LAZY: defer dynamic import of node:module to its call site.
 	const { createRequire } = await import("node:module");
 	const require = createRequire(import.meta.url);
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -144,7 +142,11 @@ export async function runDynamicWorkflow(input: RunDynamicWorkflowInput): Promis
 	const eventsPath = manifest.eventsPath;
 	const scriptPath = resolveScriptPath(workflow, manifest.cwd);
 
-	appendEvent(eventsPath, { type: "dwf.started", runId: manifest.runId, data: { workflow: workflow.name, script: scriptPath } });
+	appendEvent(eventsPath, {
+		type: "dwf.started",
+		runId: manifest.runId,
+		data: { workflow: workflow.name, script: scriptPath },
+	});
 
 	// round-18 P2-3: resume/checkpoint. Load any existing checkpoint for this run's stateRoot.
 	// stateRoot is already <crewRoot>/state/runs/<runId>, so the checkpoint lands at
@@ -156,7 +158,11 @@ export async function runDynamicWorkflow(input: RunDynamicWorkflowInput): Promis
 		appendEvent(eventsPath, {
 			type: "dwf.resumed",
 			runId: manifest.runId,
-			data: { agentCount: resumedState.agentCount, phases: resumedState.phases, currentPhase: resumedState.currentPhase },
+			data: {
+				agentCount: resumedState.agentCount,
+				phases: resumedState.phases,
+				currentPhase: resumedState.currentPhase,
+			},
 		});
 	}
 
@@ -194,7 +200,11 @@ export async function runDynamicWorkflow(input: RunDynamicWorkflowInput): Promis
 		let timeoutHandle: NodeJS.Timeout | undefined;
 		const timeoutPromise = new Promise<never>((_, reject) => {
 			timeoutHandle = setTimeout(() => {
-				reject(new Error(`Dynamic workflow script timed out after ${SCRIPT_TIMEOUT_MS}ms. The script may have spawned a child process that did not exit. Check for spawn/exec calls without proper stdio handling.`));
+				reject(
+					new Error(
+						`Dynamic workflow script timed out after ${SCRIPT_TIMEOUT_MS}ms. The script may have spawned a child process that did not exit. Check for spawn/exec calls without proper stdio handling.`,
+					),
+				);
 			}, SCRIPT_TIMEOUT_MS);
 			timeoutHandle.unref?.();
 		});
@@ -205,13 +215,21 @@ export async function runDynamicWorkflow(input: RunDynamicWorkflowInput): Promis
 		}
 	} catch (error) {
 		logInternalError("dynamic-workflow-runner.run", error, `runId=${manifest.runId}, workflow=${workflow.name}`);
-		appendEvent(eventsPath, { type: "dwf.failed", runId: manifest.runId, data: { error: error instanceof Error ? error.message : String(error) } });
+		appendEvent(eventsPath, {
+			type: "dwf.failed",
+			runId: manifest.runId,
+			data: {
+				error: error instanceof Error ? error.message : String(error),
+			},
+		});
 		// Re-throw so background-runner's error handling marks the run failed.
 		throw error;
 	}
 
 	const final = getWorkflowFinalResult(ctx);
-	const finalText = final ? readFinalArtifact(final.artifactPath) : `(dynamic workflow '${workflow.name}' completed without calling ctx.setResult())`;
+	const finalText = final
+		? readFinalArtifact(final.artifactPath)
+		: `(dynamic workflow '${workflow.name}' completed without calling ctx.setResult())`;
 
 	// round-12 P0-4: fail fast on unawaited Promise returns BEFORE we try to
 	// write a 2 KB blob that contains a Promise reference. structuredClone on
@@ -240,7 +258,11 @@ export async function runDynamicWorkflow(input: RunDynamicWorkflowInput): Promis
 		phaseState.currentPhase = undefined;
 	}
 
-	appendEvent(eventsPath, { type: "dwf.completed", runId: manifest.runId, data: { workflow: workflow.name, summaryArtifact: summary.path } });
+	appendEvent(eventsPath, {
+		type: "dwf.completed",
+		runId: manifest.runId,
+		data: { workflow: workflow.name, summaryArtifact: summary.path },
+	});
 
 	// round-18 P2-3: the run completed cleanly — delete the checkpoint so a fresh re-run
 	// (same runId) starts from scratch rather than resuming stale state.

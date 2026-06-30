@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import type { UsageState } from "../state/types.ts";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function numberField(obj: Record<string, unknown>, keys: string[]): number | undefined {

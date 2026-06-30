@@ -54,7 +54,9 @@ export function deliverGroupJoin(input: {
 }): CrewGroupJoinDelivery | undefined {
 	if (!shouldGroupJoin(input.mode, input.batch)) return undefined;
 	const taskIds = input.batch.map((task) => task.id);
-	const latest = taskIds.map((id) => input.allTasks.find((task) => task.id === id)).filter((task): task is TeamTaskState => Boolean(task));
+	const latest = taskIds
+		.map((id) => input.allTasks.find((task) => task.id === id))
+		.filter((task): task is TeamTaskState => Boolean(task));
 	const completed = statusList(latest, "completed");
 	const failed = statusList(latest, "failed");
 	const skipped = statusList(latest, "skipped");
@@ -64,8 +66,22 @@ export function deliverGroupJoin(input: {
 	const summary = aggregateTaskOutputs(latest, input.manifest);
 	const requestId = requestIdFor(input.manifest.runId, batchId, partial);
 	const existingMailbox = findMailboxMessageByRequestId(input.manifest, requestId);
-	const existingStatus = existingMailbox ? readDeliveryState(input.manifest).messages[existingMailbox.id] ?? existingMailbox.status : undefined;
-	const delivery: CrewGroupJoinDelivery = { batchId, mode: input.mode, partial, taskIds, completed, failed, skipped, remaining, requestId, ackRequired: true, ackStatus: existingStatus === "acknowledged" ? "acknowledged" : "pending" };
+	const existingStatus = existingMailbox
+		? (readDeliveryState(input.manifest).messages[existingMailbox.id] ?? existingMailbox.status)
+		: undefined;
+	const delivery: CrewGroupJoinDelivery = {
+		batchId,
+		mode: input.mode,
+		partial,
+		taskIds,
+		completed,
+		failed,
+		skipped,
+		remaining,
+		requestId,
+		ackRequired: true,
+		ackStatus: existingStatus === "acknowledged" ? "acknowledged" : "pending",
+	};
 	const content = `${JSON.stringify({ ...delivery, createdAt: new Date().toISOString() }, null, 2)}\n`;
 	const artifact = writeArtifact(input.manifest.artifactsRoot, {
 		kind: "metadata",
@@ -73,35 +89,55 @@ export function deliverGroupJoin(input: {
 		producer: "group-join",
 		content,
 	});
-	const mailbox = existingMailbox ?? appendMailboxMessage(input.manifest, {
-		direction: "outbox",
-		from: "group-join",
-		to: "leader",
-		body: [
-			`Group join ${partial ? "partial" : "completed"}: ${taskIds.join(", ")}`,
-			`Request: ${requestId}`,
-			`Completed: ${completed.join(", ") || "none"}`,
-			`Failed: ${failed.join(", ") || "none"}`,
-			`Skipped: ${skipped.join(", ") || "none"}`,
-			`Remaining: ${remaining.join(", ") || "none"}`,
-			"",
-			summary,
-		].join("\n"),
-		status: "delivered",
-		data: { kind: "group_join", requestId, batchId, partial, ackRequired: true, taskIds, completed, failed, skipped, remaining },
-	});
+	const mailbox =
+		existingMailbox ??
+		appendMailboxMessage(input.manifest, {
+			direction: "outbox",
+			from: "group-join",
+			to: "leader",
+			body: [
+				`Group join ${partial ? "partial" : "completed"}: ${taskIds.join(", ")}`,
+				`Request: ${requestId}`,
+				`Completed: ${completed.join(", ") || "none"}`,
+				`Failed: ${failed.join(", ") || "none"}`,
+				`Skipped: ${skipped.join(", ") || "none"}`,
+				`Remaining: ${remaining.join(", ") || "none"}`,
+				"",
+				summary,
+			].join("\n"),
+			status: "delivered",
+			data: {
+				kind: "group_join",
+				requestId,
+				batchId,
+				partial,
+				ackRequired: true,
+				taskIds,
+				completed,
+				failed,
+				skipped,
+				remaining,
+			},
+		});
 	appendEvent(input.manifest.eventsPath, {
 		type: partial ? "agent.group_join.partial" : "agent.group_join.completed",
 		runId: input.manifest.runId,
 		message: `Group join ${partial ? "partial" : "completed"} for ${taskIds.length} task(s).`,
-		data: { ...delivery, artifactPath: artifact.path, messageId: mailbox.id, fallback: "mailbox-delivered", reused: Boolean(existingMailbox) },
+		data: {
+			...delivery,
+			artifactPath: artifact.path,
+			messageId: mailbox.id,
+			fallback: "mailbox-delivered",
+			reused: Boolean(existingMailbox),
+		},
 	});
-	if (existingMailbox) appendEvent(input.manifest.eventsPath, {
-		type: "agent.group_join.delivery_reused",
-		runId: input.manifest.runId,
-		message: `Reused group join mailbox delivery for ${taskIds.length} task(s).`,
-		data: { requestId, messageId: mailbox.id, batchId, partial },
-	});
+	if (existingMailbox)
+		appendEvent(input.manifest.eventsPath, {
+			type: "agent.group_join.delivery_reused",
+			runId: input.manifest.runId,
+			message: `Reused group join mailbox delivery for ${taskIds.length} task(s).`,
+			data: { requestId, messageId: mailbox.id, batchId, partial },
+		});
 	return { ...delivery, artifact, messageId: mailbox.id };
 }
 
@@ -129,10 +165,7 @@ export class GroupJoinManager {
 	private deliverCb: DeliveryCallback;
 	private groupTimeout: number;
 
-	constructor(
-		deliverCb: DeliveryCallback,
-		groupTimeout = DEFAULT_TIMEOUT,
-	) {
+	constructor(deliverCb: DeliveryCallback, groupTimeout = DEFAULT_TIMEOUT) {
 		this.deliverCb = deliverCb;
 		this.groupTimeout = groupTimeout;
 	}

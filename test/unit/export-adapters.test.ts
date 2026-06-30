@@ -1,10 +1,10 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import type { ExportContent } from "../../src/adapters/types.ts";
-import { createAdapterRegistry } from "../../src/adapters/registry.ts";
+import test from "node:test";
 import { claudeAdapter } from "../../src/adapters/claude-adapter.ts";
-import { cursorAdapter } from "../../src/adapters/cursor-adapter.ts";
 import { codexAdapter } from "../../src/adapters/codex-adapter.ts";
+import { cursorAdapter } from "../../src/adapters/cursor-adapter.ts";
+import { createAdapterRegistry } from "../../src/adapters/registry.ts";
+import type { ExportContent } from "../../src/adapters/types.ts";
 import "../../src/adapters/index.ts";
 import { generateToolExport, resourcesToExportContent } from "../../src/adapters/export-util.ts";
 
@@ -39,11 +39,13 @@ test("claude adapter: formatFile includes YAML frontmatter with safe quoting", (
 });
 
 test("claude adapter: formatFile safely quotes values with special YAML characters", () => {
-	const output = claudeAdapter.formatFile(sampleContent({
-		description: "Has: colons, 'quotes', and \"more\"",
-		category: "cat: with: colons",
-		tags: ["tag:with:colons", "tag'with'quotes"],
-	}));
+	const output = claudeAdapter.formatFile(
+		sampleContent({
+			description: "Has: colons, 'quotes', and \"more\"",
+			category: "cat: with: colons",
+			tags: ["tag:with:colons", "tag'with'quotes"],
+		}),
+	);
 	// JSON.stringify wraps in double quotes and escapes inner quotes
 	assert.match(output, /description: "Has: colons, 'quotes', and \\"more\\""/);
 	assert.match(output, /category: "cat: with: colons"/);
@@ -136,10 +138,7 @@ test("registry: register overwrites previous adapter with same toolId", () => {
 // ── generateToolExport integration ──────────────────────────────────
 
 test("generateToolExport throws for unknown toolId", () => {
-	assert.throws(
-		() => generateToolExport("unknown", []),
-		/Unknown export adapter: unknown/,
-	);
+	assert.throws(() => generateToolExport("unknown", []), /Unknown export adapter: unknown/);
 });
 
 test("generateToolExport produces files for claude adapter", () => {
@@ -189,7 +188,13 @@ test("resourcesToExportContent converts team config", () => {
 				description: "Quick bug fixes",
 				source: "builtin",
 				filePath: "/teams/fast-fix.team.md",
-				roles: [{ name: "fixer", agent: "executor", description: "Applies fixes" }],
+				roles: [
+					{
+						name: "fixer",
+						agent: "executor",
+						description: "Applies fixes",
+					},
+				],
 			},
 		},
 	]);

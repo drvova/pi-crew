@@ -1,8 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	probeLiveSessionRuntime,
-} from "../../src/runtime/live-session-runtime.ts";
+import { describe, it } from "node:test";
+import { probeLiveSessionRuntime } from "../../src/runtime/live-session-runtime.ts";
 
 // Note: runLiveSessionTask requires the @earendil-works/pi-coding-agent package
 // and a complex session setup, so we test probeLiveSessionRuntime which is

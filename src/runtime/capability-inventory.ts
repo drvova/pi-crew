@@ -1,10 +1,10 @@
 import type { AgentConfig, ResourceSource } from "../agents/agent-config.ts";
 import { discoverAgents } from "../agents/discover-agents.ts";
-import { discoverTeams } from "../teams/discover-teams.ts";
-import { discoverWorkflows } from "../workflows/discover-workflows.ts";
+import type { PiTeamsConfig } from "../config/config.ts";
 import { discoverSkills, getLastDiscoveryDiagnostics } from "../skills/discover-skills.ts";
 import type { SkillValidationError } from "../skills/validate.ts";
-import type { PiTeamsConfig } from "../config/config.ts";
+import { discoverTeams } from "../teams/discover-teams.ts";
+import { discoverWorkflows } from "../workflows/discover-workflows.ts";
 
 export type CapabilityKind = "team" | "workflow" | "agent" | "skill" | "tool" | "runtime";
 export type CapabilitySource = "builtin" | "project" | "user" | "package" | "git";
@@ -105,7 +105,9 @@ export function buildCapabilityInventory(cwd: string, config?: PiTeamsConfig): C
 	];
 
 	// Mark shadowed resources: project/user items with same kind:name as a builtin
-	const builtinNames = new Set(items.filter((item) => item.source === "builtin" || item.source === "package").map((item) => `${item.kind}:${item.name}`));
+	const builtinNames = new Set(
+		items.filter((item) => item.source === "builtin" || item.source === "package").map((item) => `${item.kind}:${item.name}`),
+	);
 	for (const item of items) {
 		if (item.source !== "builtin" && item.source !== "package" && builtinNames.has(`${item.kind}:${item.name}`)) {
 			item.state = "shadowed";

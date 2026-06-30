@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { getAgentDir } from "../runtime/peer-dep.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { isSafePathId, resolveContainedPath, resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { parseSkillFrontmatter, validateSkillFrontmatter, type SkillValidationError } from "./validate.ts";
+import { parseSkillFrontmatter, type SkillValidationError, validateSkillFrontmatter } from "./validate.ts";
 
 const PACKAGE_SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "skills");
 
@@ -46,10 +46,16 @@ export interface SkillDescriptor {
 function listSkillDirs(cwd: string): Array<{ root: string; source: SkillDescriptor["source"] }> {
 	return [
 		{ root: path.resolve(cwd, ".pi", "skills"), source: "project-pi" },
-		{ root: path.resolve(cwd, ".agents", "skills"), source: "project-agents" },
+		{
+			root: path.resolve(cwd, ".agents", "skills"),
+			source: "project-agents",
+		},
 		{ root: path.resolve(cwd, "skills"), source: "project" },
 		{ root: path.join(getAgentDir(), "skills"), source: "user-pi" },
-		{ root: path.join(os.homedir(), ".agents", "skills"), source: "user-agents" },
+		{
+			root: path.join(os.homedir(), ".agents", "skills"),
+			source: "user-agents",
+		},
 		{ root: path.join(os.homedir(), ".pi", "skills"), source: "user-pi" },
 		{ root: PACKAGE_SKILLS_DIR, source: "package" },
 	];
@@ -72,11 +78,17 @@ export function getLastDiscoveryDiagnostics(): SkillValidationError[] {
  * SKILL.md files that pre-date the validator (we record a diagnostic in that
  * case but still return the description we could salvage).
  */
-function readDescription(content: string): { description: string; parseError: string | null } {
+function readDescription(content: string): {
+	description: string;
+	parseError: string | null;
+} {
 	const parsed = parseSkillFrontmatter(content);
 	if (parsed.ok) {
 		const d = parsed.data.description;
-		return { description: typeof d === "string" ? d : "", parseError: null };
+		return {
+			description: typeof d === "string" ? d : "",
+			parseError: null,
+		};
 	}
 	// YAML parse failed — fall back to legacy line-prefix match so we don't
 	// regress existing skills whose frontmatter the old parser could read.
@@ -96,22 +108,30 @@ export function discoverSkills(cwd: string): SkillDescriptor[] {
 	for (const dir of listSkillDirs(cwd)) {
 		if (!fs.existsSync(dir.root)) continue;
 		try {
-			for (const entry of fs.readdirSync(dir.root, { withFileTypes: true })) {
+			for (const entry of fs.readdirSync(dir.root, {
+				withFileTypes: true,
+			})) {
 				if (!entry.isDirectory()) continue;
 				if (!isSafePathId(entry.name)) continue;
 				const skillDirPath = path.join(dir.root, entry.name);
 				try {
 					if (fs.lstatSync(skillDirPath).isSymbolicLink()) continue;
-				} catch { continue; }
+				} catch {
+					continue;
+				}
 				const skillMdRelative = path.join(entry.name, "SKILL.md");
 				let skillMdPath: string;
 				try {
 					skillMdPath = resolveContainedPath(dir.root, skillMdRelative);
-				} catch { continue; }
+				} catch {
+					continue;
+				}
 				if (!fs.existsSync(skillMdPath)) continue;
 				try {
 					if (fs.lstatSync(skillMdPath).isSymbolicLink()) continue;
-				} catch { continue; }
+				} catch {
+					continue;
+				}
 				let description = "";
 				try {
 					let readPath = skillMdPath;
@@ -136,7 +156,12 @@ export function discoverSkills(cwd: string): SkillDescriptor[] {
 				} catch (error) {
 					logInternalError("discoverSkills.readSkill", error, `skill=${entry.name}`);
 				}
-				results.push({ name: entry.name, description, source: dir.source, path: skillMdPath });
+				results.push({
+					name: entry.name,
+					description,
+					source: dir.source,
+					path: skillMdPath,
+				});
 			}
 		} catch (error) {
 			logInternalError("discoverSkills.readdir", error, `root=${dir.root}`);

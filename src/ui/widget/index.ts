@@ -7,24 +7,33 @@
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { CrewUiConfig } from "../../config/config.ts";
+import { DEFAULT_UI } from "../../config/defaults.ts";
 import type { ManifestCache } from "../../runtime/manifest-cache.ts";
 import type { TeamRunManifest } from "../../state/types.ts";
-import type { RunSnapshotCache, RunUiSnapshot } from "../snapshot-types.ts";
-import type { CrewTheme } from "../theme-adapter.ts";
-import { asCrewTheme, subscribeThemeChange } from "../theme-adapter.ts";
 import { truncate } from "../../utils/visual.ts";
 import { requestRender, requestRenderTarget, setExtensionWidget } from "../pi-ui-compat.ts";
-import { spinnerBucket, spinnerFrame } from "../spinner.ts";
 import { runEventBus } from "../run-event-bus.ts";
-import { DEFAULT_UI } from "../../config/defaults.ts";
+import type { RunSnapshotCache, RunUiSnapshot } from "../snapshot-types.ts";
+import { spinnerBucket, spinnerFrame } from "../spinner.ts";
+import type { CrewTheme } from "../theme-adapter.ts";
+import { asCrewTheme, subscribeThemeChange } from "../theme-adapter.ts";
 import { activeWidgetRuns, statusSummary } from "./widget-model.ts";
-import { buildWidgetLines, colorWidgetLine, renderLines, DEFAULT_WIDGET_WIDTH, TASK_DESC_MAX } from "./widget-renderer.ts";
+import { buildWidgetLines, colorWidgetLine, DEFAULT_WIDGET_WIDTH, renderLines, TASK_DESC_MAX } from "./widget-renderer.ts";
 import type { CrewWidgetModel, CrewWidgetState, WidgetRun } from "./widget-types.ts";
 
-// Re-export types and helpers for backward compatibility
-export type { WidgetRun, CrewWidgetModel, CrewWidgetState } from "./widget-types.ts";
 export { activeWidgetRuns, statusSummary } from "./widget-model.ts";
-export { buildWidgetLines as buildCrewWidgetLines, widgetHeader, DEFAULT_WIDGET_WIDTH, TASK_DESC_MAX } from "./widget-renderer.ts";
+export {
+	buildWidgetLines as buildCrewWidgetLines,
+	DEFAULT_WIDGET_WIDTH,
+	TASK_DESC_MAX,
+	widgetHeader,
+} from "./widget-renderer.ts";
+// Re-export types and helpers for backward compatibility
+export type {
+	CrewWidgetModel,
+	CrewWidgetState,
+	WidgetRun,
+} from "./widget-types.ts";
 
 /**
  * Resolve the real render width for widget lines, in priority order:
@@ -42,7 +51,10 @@ export function getRenderWidth(width?: number): number {
 	if (Number.isFinite(stdoutCols) && stdoutCols! > 0) return Math.floor(stdoutCols!);
 	return DEFAULT_WIDGET_WIDTH;
 }
-export { notificationBadge, NOTIFICATION_BADGE_CAP } from "./widget-formatters.ts";
+export {
+	NOTIFICATION_BADGE_CAP,
+	notificationBadge,
+} from "./widget-formatters.ts";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -112,30 +124,53 @@ class CrewWidgetComponent implements WidgetComponent {
 		installResizeListener();
 		this.unsubscribeTheme = subscribeThemeChange(themeLike, () => this.invalidate());
 		this.unsubscribeEventBus = (() => {
-		const unsub1 = runEventBus.onChannel("run:state", () => this.invalidate());
-		const unsub2 = runEventBus.onChannel("worker:lifecycle", () => this.invalidate());
-		const unsub3 = runEventBus.onChannel("ui:invalidate", () => this.invalidate());
-		return () => { unsub1(); unsub2(); unsub3(); };
-	})();
+			const unsub1 = runEventBus.onChannel("run:state", () => this.invalidate());
+			const unsub2 = runEventBus.onChannel("worker:lifecycle", () => this.invalidate());
+			const unsub3 = runEventBus.onChannel("ui:invalidate", () => this.invalidate());
+			return () => {
+				unsub1();
+				unsub2();
+				unsub3();
+			};
+		})();
 	}
 
 	private buildSignature(runs: WidgetRun[]): string {
-		const liveSig = [...listLiveAgents()].map((h) =>
-			`${h.agentId}:${h.status}:${h.activity.turnCount}:${h.activity.toolUses}:${[...h.activity.activeTools.values()].join(",")}:${h.activity.responseText.slice(-30)}`
-		).join("|");
+		const liveSig = [...listLiveAgents()]
+			.map(
+				(h) =>
+					`${h.agentId}:${h.status}:${h.activity.turnCount}:${h.activity.toolUses}:${[...h.activity.activeTools.values()].join(",")}:${h.activity.responseText.slice(-30)}`,
+			)
+			.join("|");
 
-		const hasRunning = runs.some((entry) => entry.agents.some((a) => a.status === "running"))
-			|| [...listLiveAgents()].some((h) => h.status === "running");
+		const hasRunning =
+			runs.some((entry) => entry.agents.some((a) => a.status === "running")) ||
+			[...listLiveAgents()].some((h) => h.status === "running");
 		const animation = hasRunning ? `:spin=${spinnerBucket()}` : "";
 
-		return runs
-			.map((entry) => entry.snapshot?.signature ?? `${entry.run.runId}:${entry.run.status}:${entry.run.updatedAt}:` +
-				entry.agents.map((a) => {
-					const recentOutput = a.progress?.recentOutput.at(-1) ?? "";
-					const progress = [a.progress?.currentTool ?? "", a.progress?.toolCount ?? 0, a.progress?.tokens ?? 0, a.progress?.turns ?? 0, a.progress?.lastActivityAt ?? "", recentOutput].join(":");
-					return `${a.status}:${a.startedAt}:${a.completedAt ?? ""}:${a.toolUses ?? 0}:${progress}`;
-				}).join(","))
-			.join("|") + `|live:${liveSig}${animation}`;
+		return (
+			runs
+				.map(
+					(entry) =>
+						entry.snapshot?.signature ??
+						`${entry.run.runId}:${entry.run.status}:${entry.run.updatedAt}:` +
+							entry.agents
+								.map((a) => {
+									const recentOutput = a.progress?.recentOutput.at(-1) ?? "";
+									const progress = [
+										a.progress?.currentTool ?? "",
+										a.progress?.toolCount ?? 0,
+										a.progress?.tokens ?? 0,
+										a.progress?.turns ?? 0,
+										a.progress?.lastActivityAt ?? "",
+										recentOutput,
+									].join(":");
+									return `${a.status}:${a.startedAt}:${a.completedAt ?? ""}:${a.toolUses ?? 0}:${progress}`;
+								})
+								.join(","),
+				)
+				.join("|") + `|live:${liveSig}${animation}`
+		);
 	}
 
 	private colorize(lines: string[], width: number): string[] {
@@ -168,7 +203,14 @@ class CrewWidgetComponent implements WidgetComponent {
 		const runningGlyph = spinnerFrame("widget-header");
 
 		if (this.cacheSignature !== signature || width !== this.cachedWidth || this.cachedTheme !== this.theme) {
-			this.cachedBaseLines = buildWidgetLines(this.model.cwd, 0, this.model.maxLines, runs, this.model.notificationCount ?? 0, width).map((line, index) => {
+			this.cachedBaseLines = buildWidgetLines(
+				this.model.cwd,
+				0,
+				this.model.maxLines,
+				runs,
+				this.model.notificationCount ?? 0,
+				width,
+			).map((line, index) => {
 				if (index === 0 && line.length > 0) return `${runningGlyph}${line.slice(1)}`;
 				return line;
 			});
@@ -240,9 +282,24 @@ export function updateCrewWidget(
 		return;
 	}
 
-	const needsWidgetInstall = state.lastVisibility !== "visible" || state.lastPlacement !== placement || state.lastKey !== WIDGET_KEY || state.lastMaxLines !== maxLines || state.lastCwd !== ctx.cwd || !state.model;
+	const needsWidgetInstall =
+		state.lastVisibility !== "visible" ||
+		state.lastPlacement !== placement ||
+		state.lastKey !== WIDGET_KEY ||
+		state.lastMaxLines !== maxLines ||
+		state.lastCwd !== ctx.cwd ||
+		!state.model;
 
-	if (!state.model) state.model = { cwd: ctx.cwd, frame: state.frame, maxLines, notificationCount: state.notificationCount ?? 0, manifestCache, snapshotCache, preloadManifests: preloadedManifests };
+	if (!state.model)
+		state.model = {
+			cwd: ctx.cwd,
+			frame: state.frame,
+			maxLines,
+			notificationCount: state.notificationCount ?? 0,
+			manifestCache,
+			snapshotCache,
+			preloadManifests: preloadedManifests,
+		};
 	else {
 		state.model.cwd = ctx.cwd;
 		state.model.frame = state.frame;
@@ -255,12 +312,10 @@ export function updateCrewWidget(
 
 	if (needsWidgetInstall) {
 		const model = state.model;
-		setExtensionWidget(
-			ctx,
-			WIDGET_KEY,
-			((_tui: unknown, theme: unknown) => new CrewWidgetComponent(model, theme, _tui)) as never,
-			{ placement, persist: true },
-		);
+		setExtensionWidget(ctx, WIDGET_KEY, ((_tui: unknown, theme: unknown) => new CrewWidgetComponent(model, theme, _tui)) as never, {
+			placement,
+			persist: true,
+		});
 		state.lastVisibility = "visible";
 		state.lastPlacement = placement;
 		state.lastKey = WIDGET_KEY;
@@ -271,7 +326,11 @@ export function updateCrewWidget(
 	requestRender(ctx);
 }
 
-export function stopCrewWidget(ctx: Pick<ExtensionContext, "hasUI" | "ui"> | undefined, state: CrewWidgetState, config?: CrewUiConfig): void {
+export function stopCrewWidget(
+	ctx: Pick<ExtensionContext, "hasUI" | "ui"> | undefined,
+	state: CrewWidgetState,
+	config?: CrewUiConfig,
+): void {
 	if (state.interval) clearInterval(state.interval);
 	state.interval = undefined;
 	if (ctx?.hasUI) {

@@ -3,13 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import {
-	buildAndSaveRunGraph,
-	buildRunGraph,
-	listRunGraphs,
-	loadRunGraph,
-	saveRunGraph,
-} from "../../src/state/run-graph.ts";
+import { buildAndSaveRunGraph, buildRunGraph, listRunGraphs, loadRunGraph, saveRunGraph } from "../../src/state/run-graph.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
 function makeManifest(runId: string): TeamRunManifest {
@@ -33,11 +27,7 @@ function makeManifest(runId: string): TeamRunManifest {
 	} as unknown as TeamRunManifest;
 }
 
-function makeTask(
-	id: string,
-	role: string,
-	dependsOn: string[] = [],
-): TeamTaskState {
+function makeTask(id: string, role: string, dependsOn: string[] = []): TeamTaskState {
 	return {
 		id,
 		runId: "test_run",
@@ -82,35 +72,18 @@ test("buildRunGraph: creates task nodes with edges", () => {
 	// Check dependsOn edge
 	const dependsEdges = graph.edges.filter((e) => e.type === "dependsOn");
 	assert.equal(dependsEdges.length, 2);
-	assert.ok(
-		dependsEdges.some(
-			(e) =>
-				e.source === "task:01_explore" && e.target === "task:02_plan",
-		),
-	);
-	assert.ok(
-		dependsEdges.some(
-			(e) =>
-				e.source === "task:02_plan" && e.target === "task:03_execute",
-		),
-	);
+	assert.ok(dependsEdges.some((e) => e.source === "task:01_explore" && e.target === "task:02_plan"));
+	assert.ok(dependsEdges.some((e) => e.source === "task:02_plan" && e.target === "task:03_execute"));
 });
 
 test("buildRunGraph: creates layers from phases", () => {
 	const manifest = makeManifest("test_phases");
-	const tasks: TeamTaskState[] = [
-		makeTask("01_explore", "explorer"),
-		makeTask("02_plan", "planner"),
-		makeTask("03_execute", "executor"),
-	];
+	const tasks: TeamTaskState[] = [makeTask("01_explore", "explorer"), makeTask("02_plan", "planner"), makeTask("03_execute", "executor")];
 
 	const graph = buildRunGraph(manifest, tasks);
 
 	// Should create 3 layers: explorer, planner, executor
-	assert.ok(
-		graph.layers.length >= 3,
-		`Expected at least 3 layers, got ${graph.layers.length}`,
-	);
+	assert.ok(graph.layers.length >= 3, `Expected at least 3 layers, got ${graph.layers.length}`);
 	assert.deepEqual(
 		graph.layers.map((l) => l.name),
 		["explorer", "planner", "executor"],
@@ -179,10 +152,7 @@ test("buildRunGraph: includes agent nodes when agentModel is present", () => {
 // `assertSafePathId` the runId could escape the graphs dir. The fix in
 // commit <this> adds `assertSafePathId("runId", runId)` to both.
 test("run-graph: loadRunGraph rejects path-traversal runId", () => {
-	assert.throws(
-		() => loadRunGraph(os.tmpdir(), "../../../tmp/pwned"),
-		/Invalid runId/,
-	);
+	assert.throws(() => loadRunGraph(os.tmpdir(), "../../../tmp/pwned"), /Invalid runId/);
 });
 
 test("run-graph: saveRunGraph rejects path-traversal runId in graph.runId", () => {

@@ -1,21 +1,21 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { TeamRunManifest, TeamTaskState } from "./types.ts";
-import { canTransitionRunStatus } from "./contracts.ts";
-import { unregisterActiveRun } from "./active-run-registry.ts";
-import { atomicWriteJson, atomicWriteJsonAsync, atomicWriteJsonCoalesced, readJsonFile } from "./atomic-write.ts";
-import { appendEvent } from "./event-log.ts";
 import { DEFAULT_CACHE, DEFAULT_PATHS } from "../config/defaults.ts";
-import { createRunId, createTaskId } from "../utils/ids.ts";
-import { findRepoRoot, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
-import { assertSafePathId, resolveContainedRelativePath, resolveRealContainedPath } from "../utils/safe-paths.ts";
-import { withRunLock, withRunLockSync } from "./locks.ts";
-import { logInternalError } from "../utils/internal-error.ts";
 import { errors } from "../errors.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
-import type { WorkflowConfig } from "../workflows/workflow-config.ts";
+import { createRunId, createTaskId } from "../utils/ids.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { findRepoRoot, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
+import { assertSafePathId, resolveContainedRelativePath, resolveRealContainedPath } from "../utils/safe-paths.ts";
 import { toPiSessionId } from "../utils/session-utils.ts";
+import type { WorkflowConfig } from "../workflows/workflow-config.ts";
+import { unregisterActiveRun } from "./active-run-registry.ts";
+import { atomicWriteJson, atomicWriteJsonAsync, atomicWriteJsonCoalesced, readJsonFile } from "./atomic-write.ts";
+import { canTransitionRunStatus } from "./contracts.ts";
+import { appendEvent } from "./event-log.ts";
 import { HealthStore } from "./health-store.ts";
+import { withRunLock, withRunLockSync } from "./locks.ts";
+import type { TeamRunManifest, TeamTaskState } from "./types.ts";
 
 /**
  * stat() the manifest with a brief retry on Windows for the AV-scan window.
@@ -42,7 +42,9 @@ function statManifestWithWindowsRetry(manifestPath: string): fs.Stats {
 			const code = (error as NodeJS.ErrnoException).code;
 			if (!retryable.has(code ?? "")) throw error;
 			const end = Date.now() + Math.min(8, 1 * 2 ** attempt);
-			while (Date.now() < end) { /* brief spin to ride out the AV scan window */ }
+			while (Date.now() < end) {
+				/* brief spin to ride out the AV scan window */
+			}
 		}
 	}
 	return fs.statSync(manifestPath); // last attempt — let caller's catch handle ENOENT
@@ -111,7 +113,10 @@ function setManifestCache(stateRoot: string, entry: ManifestCacheEntry): void {
 		let oldestTime = Infinity;
 		for (const [key, val] of manifestCache.entries()) {
 			const t = val.cachedAt ?? 0;
-			if (t < oldestTime) { oldestTime = t; oldestKey = key; }
+			if (t < oldestTime) {
+				oldestTime = t;
+				oldestKey = key;
+			}
 		}
 		if (!oldestKey) break;
 		manifestCache.delete(oldestKey);
@@ -151,7 +156,13 @@ function validateRunManifestPaths(cwd: string, runId: string, manifest: TeamRunM
 	// Issue 2 fix: Reject manifests missing status field to prevent undefined
 	// behavior in callers like canTransitionRunStatus(manifest.status, newStatus).
 	if (!manifest.status || typeof manifest.status !== "string") return false;
-	if (manifest.runId !== runId || manifest.stateRoot !== stateRoot || manifest.tasksPath !== tasksPath || manifest.eventsPath !== path.join(stateRoot, "events.jsonl")) return false;
+	if (
+		manifest.runId !== runId ||
+		manifest.stateRoot !== stateRoot ||
+		manifest.tasksPath !== tasksPath ||
+		manifest.eventsPath !== path.join(stateRoot, "events.jsonl")
+	)
+		return false;
 	const artifactsParent = path.join(scopeBaseRoot(cwd), DEFAULT_PATHS.state.artifactsSubdir);
 	const expectedArtifactsRoot = resolveContainedRelativePath(artifactsParent, runId, "runId");
 	if (manifest.artifactsRoot !== expectedArtifactsRoot) return false;
@@ -197,7 +208,10 @@ export function createTasksFromWorkflow(runId: string, workflow: WorkflowConfig,
 		const role = team.roles.find((candidate) => candidate.name === step.role);
 		const id = stepToTaskId.get(step.id) ?? createTaskId(step.id, index);
 		const dependencies = step.dependsOn ?? [];
-		const children = workflow.steps.filter((candidate) => candidate.dependsOn?.includes(step.id)).map((candidate) => stepToTaskId.get(candidate.id)).filter((childId): childId is string => childId !== undefined);
+		const children = workflow.steps
+			.filter((candidate) => candidate.dependsOn?.includes(step.id))
+			.map((candidate) => stepToTaskId.get(candidate.id))
+			.filter((childId): childId is string => childId !== undefined);
 		return {
 			id,
 			runId,
@@ -268,8 +282,13 @@ export function createRunManifest(params: {
 		// "unknown"). Include it explicitly in the thrown message so CI logs and
 		// production callers can see WHY the write failed instead of ": unknown".
 		const cause = result.error ? `: ${result.error}` : "";
-		throw errors.fileWrite(paths.stateRoot, { code: "EWRITEFAIL" } as NodeJS.ErrnoException)
-			.withContext(`saveManifestAndTasksAtomicSync: manifestWritten=${result.manifestWritten}, tasksWritten=${result.tasksWritten}${cause}`);
+		throw errors
+			.fileWrite(paths.stateRoot, {
+				code: "EWRITEFAIL",
+			} as NodeJS.ErrnoException)
+			.withContext(
+				`saveManifestAndTasksAtomicSync: manifestWritten=${result.manifestWritten}, tasksWritten=${result.tasksWritten}${cause}`,
+			);
 	}
 	appendEvent(paths.eventsPath, {
 		type: "run.created",
@@ -278,8 +297,16 @@ export function createRunManifest(params: {
 		metadata: {
 			seq: 1,
 			provenance: "team_runner",
-			sessionIdentity: { title: params.team.name, workspace: params.cwd, purpose: params.goal },
-			ownership: { owner: params.team.name, workflowScope: params.workflow?.name ?? "manual", watcherAction: "act" },
+			sessionIdentity: {
+				title: params.team.name,
+				workspace: params.cwd,
+				purpose: params.goal,
+			},
+			ownership: {
+				owner: params.team.name,
+				workflowScope: params.workflow?.name ?? "manual",
+				watcherAction: "act",
+			},
 			confidence: "high",
 		},
 	});
@@ -401,14 +428,22 @@ export function saveRunTasks(manifest: TeamRunManifest, tasks: TeamTaskState[]):
 function saveRunTasksCoalesced(manifest: TeamRunManifest, tasks: TeamTaskState[]): void {
 	// FIX: Invalidate cache BEFORE atomic write to prevent stale cache serving.
 	invalidateRunCache(manifest.stateRoot);
-	try { fs.statSync(manifest.stateRoot); } catch { return; }
+	try {
+		fs.statSync(manifest.stateRoot);
+	} catch {
+		return;
+	}
 	atomicWriteJsonCoalesced(manifest.tasksPath, tasks);
 }
 
 export async function saveRunTasksAsync(manifest: TeamRunManifest, tasks: TeamTaskState[]): Promise<void> {
 	// FIX: Invalidate cache BEFORE atomic write to prevent stale cache serving.
 	invalidateRunCache(manifest.stateRoot);
-	try { fs.statSync(manifest.stateRoot); } catch { return; }
+	try {
+		fs.statSync(manifest.stateRoot);
+	} catch {
+		return;
+	}
 	await atomicWriteJsonAsync(manifest.tasksPath, tasks);
 }
 
@@ -490,18 +525,32 @@ export interface UpdateRunStatusOptions {
 	metadata?: Parameters<typeof appendEvent>[1]["metadata"];
 }
 
-export function updateRunStatus(manifest: TeamRunManifest, status: TeamRunManifest["status"], summary?: string, options: UpdateRunStatusOptions = {}): TeamRunManifest {
+export function updateRunStatus(
+	manifest: TeamRunManifest,
+	status: TeamRunManifest["status"],
+	summary?: string,
+	options: UpdateRunStatusOptions = {},
+): TeamRunManifest {
 	if (!canTransitionRunStatus(manifest.status, status)) {
 		throw errors.invalidStatusTransition(manifest.status, status);
 	}
-	const updated: TeamRunManifest = { ...manifest, status, updatedAt: new Date().toISOString(), summary: summary ?? manifest.summary };
+	const updated: TeamRunManifest = {
+		...manifest,
+		status,
+		updatedAt: new Date().toISOString(),
+		summary: summary ?? manifest.summary,
+	};
 	saveRunManifest(updated);
 	// Unregister from active-run-index when run reaches a terminal status.
 	// Without this, stale entries accumulate (e.g. integration tests in /tmp) and
 	// Pi UI shows ghost "queued" runs that are actually completed/failed/cancelled.
 	// Note: "blocked" is excluded because blocked runs can be unblocked later.
 	if (status === "completed" || status === "failed" || status === "cancelled") {
-		try { unregisterActiveRun(updated.runId); } catch { /* non-critical */ }
+		try {
+			unregisterActiveRun(updated.runId);
+		} catch {
+			/* non-critical */
+		}
 	}
 	appendEvent(updated.eventsPath, {
 		type: `run.${status}`,
@@ -510,8 +559,16 @@ export function updateRunStatus(manifest: TeamRunManifest, status: TeamRunManife
 		...(options.data ? { data: options.data } : {}),
 		metadata: {
 			provenance: "team_runner",
-			sessionIdentity: { title: updated.team, workspace: updated.cwd, purpose: updated.goal },
-			ownership: { owner: updated.team, workflowScope: updated.workflow ?? "manual", watcherAction: "act" },
+			sessionIdentity: {
+				title: updated.team,
+				workspace: updated.cwd,
+				purpose: updated.goal,
+			},
+			ownership: {
+				owner: updated.team,
+				workflowScope: updated.workflow ?? "manual",
+				watcherAction: "act",
+			},
 			confidence: "high",
 			...options.metadata,
 		},
@@ -574,12 +631,12 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 	}
 	const tasksMtimeMs = tasksStat?.mtimeMs ?? 0;
 	if (
-		cached
-		&& cached.manifestMtimeMs === manifestStat.mtimeMs
-		&& cached.manifestSize === manifestStat.size
-		&& cached.tasksMtimeMs === tasksMtimeMs
-		&& cached.tasksSize === (tasksStat?.size ?? 0)
-		&& cached.generation === manifestCacheGeneration
+		cached &&
+		cached.manifestMtimeMs === manifestStat.mtimeMs &&
+		cached.manifestSize === manifestStat.size &&
+		cached.tasksMtimeMs === tasksMtimeMs &&
+		cached.tasksSize === (tasksStat?.size ?? 0) &&
+		cached.generation === manifestCacheGeneration
 	) {
 		// TTL eviction: expire stale entries even if mtime matches
 		// FIX: Also evict entries where cachedAt is undefined — such entries are
@@ -592,7 +649,7 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 		} else if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
 			manifestCache.delete(stateRoot);
 			return undefined;
-			} else if (!fs.existsSync(tasksPath)) {
+		} else if (!fs.existsSync(tasksPath)) {
 			// Tasks file was deleted after cache was populated — this is a cache miss,
 			// not a manifest inconsistency. The cache check passes because
 			// tasksMtimeMs=0 and tasksSize=0 match a cache entry written when tasks.json
@@ -621,8 +678,11 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 		const freshTasksStat = fs.existsSync(tasksPath) ? fs.statSync(tasksPath) : undefined;
 		tasks = readJsonFile<TeamTaskState[]>(tasksPath) ?? [];
 		// If size/mtime didn't change between stat and read, we're consistent.
-		if (freshStat.mtimeMs === manifestStat.mtimeMs && freshStat.size === manifestStat.size
-			&& (!freshTasksStat || (freshTasksStat.mtimeMs === tasksStat?.mtimeMs && freshTasksStat.size === tasksStat?.size))) {
+		if (
+			freshStat.mtimeMs === manifestStat.mtimeMs &&
+			freshStat.size === manifestStat.size &&
+			(!freshTasksStat || (freshTasksStat.mtimeMs === tasksStat?.mtimeMs && freshTasksStat.size === tasksStat?.size))
+		) {
 			break;
 		}
 		attempts += 1;
@@ -637,7 +697,9 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 		// Round 19: downgrade to debug — retry-loop instability is expected under
 		// concurrent writes (live team runs constantly append to tasks.json).
 		// This is best-effort by design; strict consistency requires withRunLock().
-		console.debug(`[state-store] loadRunManifestById: retry loop detected instability for run ${runId} after ${attempts} attempt(s) — best-effort only, use withRunLock() for strict consistency`);
+		console.debug(
+			`[state-store] loadRunManifestById: retry loop detected instability for run ${runId} after ${attempts} attempt(s) — best-effort only, use withRunLock() for strict consistency`,
+		);
 	}
 	// NOTE: manifest mtime may legitimately be >= tasks mtime because
 	// saveManifestAndTasksAtomicSync writes manifest before tasks. However,
@@ -659,7 +721,10 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 	return { manifest, tasks: tasks ?? [] };
 }
 
-export async function loadRunManifestByIdAsync(cwd: string, runId: string): Promise<{ manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined> {
+export async function loadRunManifestByIdAsync(
+	cwd: string,
+	runId: string,
+): Promise<{ manifest: TeamRunManifest; tasks: TeamTaskState[] } | undefined> {
 	const stateRoot = resolveRunStateRoot(cwd, runId);
 	if (!stateRoot) return undefined;
 	const manifestPath = path.join(stateRoot, "manifest.json");
@@ -681,7 +746,14 @@ export async function loadRunManifestByIdAsync(cwd: string, runId: string): Prom
 		tasksStat = undefined;
 	}
 	const tasksMtimeMs = tasksStat?.mtimeMs ?? 0;
-	if (cached && cached.manifestMtimeMs === manifestStat.mtimeMs && cached.manifestSize === manifestStat.size && cached.tasksMtimeMs === tasksMtimeMs && cached.tasksSize === (tasksStat?.size ?? 0) && cached.generation === manifestCacheGeneration) {
+	if (
+		cached &&
+		cached.manifestMtimeMs === manifestStat.mtimeMs &&
+		cached.manifestSize === manifestStat.size &&
+		cached.tasksMtimeMs === tasksMtimeMs &&
+		cached.tasksSize === (tasksStat?.size ?? 0) &&
+		cached.generation === manifestCacheGeneration
+	) {
 		// TTL eviction: expire stale entries even if mtime matches
 		// FIX: Also evict entries where cachedAt is undefined — such entries are
 		// effectively immortal otherwise (the `cached.cachedAt &&` check would skip
@@ -693,10 +765,10 @@ export async function loadRunManifestByIdAsync(cwd: string, runId: string): Prom
 		} else if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
 			manifestCache.delete(stateRoot);
 			return undefined;
-			} else if (!fs.existsSync(tasksPath)) {
-				// Tasks file was deleted after cache was populated — do not serve stale cache.
-				manifestCache.delete(stateRoot);
-				return undefined;
+		} else if (!fs.existsSync(tasksPath)) {
+			// Tasks file was deleted after cache was populated — do not serve stale cache.
+			manifestCache.delete(stateRoot);
+			return undefined;
 		} else {
 			return { manifest: cached.manifest, tasks: cached.tasks ?? [] };
 		}
@@ -714,8 +786,11 @@ export async function loadRunManifestByIdAsync(cwd: string, runId: string): Prom
 		const freshTasksStat = await fs.promises.stat(tasksPath).catch(() => undefined);
 		tasks = (await readJsonFileAsync<TeamTaskState[]>(tasksPath)) ?? [];
 		// If size/mtime didn't change between stat and read, we're consistent.
-		if (freshStat.mtimeMs === manifestStat.mtimeMs && freshStat.size === manifestStat.size
-			&& (!freshTasksStat || (freshTasksStat.mtimeMs === tasksStat?.mtimeMs && freshTasksStat.size === tasksStat?.size))) {
+		if (
+			freshStat.mtimeMs === manifestStat.mtimeMs &&
+			freshStat.size === manifestStat.size &&
+			(!freshTasksStat || (freshTasksStat.mtimeMs === tasksStat?.mtimeMs && freshTasksStat.size === tasksStat?.size))
+		) {
 			break;
 		}
 		attempts += 1;
@@ -730,7 +805,9 @@ export async function loadRunManifestByIdAsync(cwd: string, runId: string): Prom
 		// Round 19: downgrade to debug — retry-loop instability is expected under
 		// concurrent writes (live team runs constantly append to tasks.json).
 		// This is best-effort by design; strict consistency requires withRunLock().
-		console.debug(`[state-store] loadRunManifestByIdAsync: retry loop detected instability for run ${runId} after ${attempts} attempt(s) — best-effort only, use withRunLock() for strict consistency`);
+		console.debug(
+			`[state-store] loadRunManifestByIdAsync: retry loop detected instability for run ${runId} after ${attempts} attempt(s) — best-effort only, use withRunLock() for strict consistency`,
+		);
 	}
 	// NOTE: manifest mtime may legitimately be >= tasks mtime because
 	// saveManifestAndTasksAtomicSync writes manifest before tasks. However,
@@ -742,6 +819,13 @@ export async function loadRunManifestByIdAsync(cwd: string, runId: string): Prom
 	// It does not indicate corruption on its own.
 
 	if (!manifest || !validateRunManifestPaths(cwd, runId, manifest, stateRoot, tasksPath)) return undefined;
-	setManifestCache(stateRoot, { manifest, tasks: tasks ?? [], manifestMtimeMs: manifestStat.mtimeMs, manifestSize: manifestStat.size, tasksMtimeMs, tasksSize: tasksStat?.size ?? 0 });
+	setManifestCache(stateRoot, {
+		manifest,
+		tasks: tasks ?? [],
+		manifestMtimeMs: manifestStat.mtimeMs,
+		manifestSize: manifestStat.size,
+		tasksMtimeMs,
+		tasksSize: tasksStat?.size ?? 0,
+	});
 	return { manifest, tasks: tasks ?? [] };
 }

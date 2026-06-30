@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { DeliveryCoordinator } from "../../src/runtime/delivery-coordinator.ts";
 
 describe("DeliveryCoordinator", () => {
@@ -15,7 +15,9 @@ describe("DeliveryCoordinator", () => {
 	it("delivers results immediately when active", () => {
 		const emitted: Array<{ event: string; data: unknown }> = [];
 		const dc = new DeliveryCoordinator({
-			emit: (event, data) => { emitted.push({ event, data }); },
+			emit: (event, data) => {
+				emitted.push({ event, data });
+			},
 		});
 		dc.activate("session-1");
 		assert.equal(dc.isActive(), true);
@@ -35,7 +37,9 @@ describe("DeliveryCoordinator", () => {
 
 		// Replace deps to capture delivery on activate
 		const activeDc = new DeliveryCoordinator({
-			emit: (event, data) => { emitted.push({ event, data }); },
+			emit: (event, data) => {
+				emitted.push({ event, data });
+			},
 			sendFollowUp: () => {},
 			sendWakeUp: () => {},
 		});
@@ -51,10 +55,18 @@ describe("DeliveryCoordinator", () => {
 	it("delivers notifications when active", () => {
 		const followUps: string[] = [];
 		const dc = new DeliveryCoordinator({
-			sendFollowUp: (title, body) => { followUps.push(`${title}: ${body}`); },
+			sendFollowUp: (title, body) => {
+				followUps.push(`${title}: ${body}`);
+			},
 		});
 		dc.activate("session-1");
-		dc.deliverNotification({ id: "n1", severity: "info", source: "test", title: "Test Title", body: "Test Body" });
+		dc.deliverNotification({
+			id: "n1",
+			severity: "info",
+			source: "test",
+			title: "Test Title",
+			body: "Test Body",
+		});
 		assert.equal(followUps.length, 1);
 		assert.equal(followUps[0], "Test Title: Test Body");
 		assert.equal(dc.getPendingCount(), 0);
@@ -63,7 +75,13 @@ describe("DeliveryCoordinator", () => {
 
 	it("queues notifications when inactive", () => {
 		const dc = new DeliveryCoordinator({});
-		dc.deliverNotification({ id: "n1", severity: "info", source: "test", title: "Test", body: "Body" });
+		dc.deliverNotification({
+			id: "n1",
+			severity: "info",
+			source: "test",
+			title: "Test",
+			body: "Body",
+		});
 		assert.equal(dc.getPendingCount(), 1);
 		dc.dispose();
 	});
@@ -71,7 +89,9 @@ describe("DeliveryCoordinator", () => {
 	it("delivers steer messages when active", () => {
 		const wakeUps: string[] = [];
 		const dc = new DeliveryCoordinator({
-			sendWakeUp: (message) => { wakeUps.push(message); },
+			sendWakeUp: (message) => {
+				wakeUps.push(message);
+			},
 		});
 		dc.activate("session-1");
 		dc.deliverSteer("run1", "continue please");
@@ -90,7 +110,9 @@ describe("DeliveryCoordinator", () => {
 	it("deactivate stops delivery", () => {
 		const emitted: unknown[] = [];
 		const dc = new DeliveryCoordinator({
-			emit: (event, data) => { emitted.push(data); },
+			emit: (event, data) => {
+				emitted.push(data);
+			},
 		});
 		dc.activate("session-1");
 		dc.deliverResult("run1", { status: "ok" });
@@ -103,7 +125,11 @@ describe("DeliveryCoordinator", () => {
 	});
 
 	it("requeues result when active emit throws outside flush", () => {
-		const dc = new DeliveryCoordinator({ emit: () => { throw new Error("transient"); } });
+		const dc = new DeliveryCoordinator({
+			emit: () => {
+				throw new Error("transient");
+			},
+		});
 		dc.activate("session-1");
 		dc.deliverResult("run1", { status: "completed" });
 		assert.equal(dc.getPendingCount(), 1);
@@ -111,7 +137,11 @@ describe("DeliveryCoordinator", () => {
 	});
 
 	it("requeues failing deliveries during flush without recursive retry", () => {
-		const dc = new DeliveryCoordinator({ emit: () => { throw new Error("persistent"); } });
+		const dc = new DeliveryCoordinator({
+			emit: () => {
+				throw new Error("persistent");
+			},
+		});
 		dc.deliverResult("run1", { status: "completed" });
 		assert.equal(dc.getPendingCount(), 1);
 		dc.activate("session-1");
@@ -120,16 +150,30 @@ describe("DeliveryCoordinator", () => {
 	});
 
 	it("requeues notification when active follow-up throws", () => {
-		const dc = new DeliveryCoordinator({ sendFollowUp: () => { throw new Error("transient"); } });
+		const dc = new DeliveryCoordinator({
+			sendFollowUp: () => {
+				throw new Error("transient");
+			},
+		});
 		dc.activate("session-1");
-		dc.deliverNotification({ id: "n1", severity: "info", source: "test", title: "Test", body: "Body" });
+		dc.deliverNotification({
+			id: "n1",
+			severity: "info",
+			source: "test",
+			title: "Test",
+			body: "Body",
+		});
 		assert.equal(dc.getPendingCount(), 1);
 		dc.dispose();
 	});
 
 	it("preserves result deliveries queued before a session switch", () => {
 		const emitted: unknown[] = [];
-		const dc = new DeliveryCoordinator({ emit: (_event, data) => { emitted.push(data); } });
+		const dc = new DeliveryCoordinator({
+			emit: (_event, data) => {
+				emitted.push(data);
+			},
+		});
 		dc.deliverResult("run-before", { status: "queued-before-switch" });
 		assert.equal(dc.getPendingCount(), 1);
 		dc.deactivate();
@@ -141,7 +185,11 @@ describe("DeliveryCoordinator", () => {
 
 	it("drops stale steer deliveries across a session switch", () => {
 		const wakeups: string[] = [];
-		const dc = new DeliveryCoordinator({ sendWakeUp: (message) => { wakeups.push(message); } });
+		const dc = new DeliveryCoordinator({
+			sendWakeUp: (message) => {
+				wakeups.push(message);
+			},
+		});
 		dc.deliverSteer("run-before", "old steer");
 		assert.equal(dc.getPendingCount(), 1);
 		dc.deactivate();
@@ -154,7 +202,12 @@ describe("DeliveryCoordinator", () => {
 	it("delivers active emit failures after a session switch", () => {
 		const emitted: unknown[] = [];
 		let shouldThrow = true;
-		const dc = new DeliveryCoordinator({ emit: (_event, data) => { if (shouldThrow) throw new Error("transient"); emitted.push(data); } });
+		const dc = new DeliveryCoordinator({
+			emit: (_event, data) => {
+				if (shouldThrow) throw new Error("transient");
+				emitted.push(data);
+			},
+		});
 		dc.activate("session-1");
 		dc.deliverResult("run1", { status: "completed" });
 		assert.equal(dc.getPendingCount(), 1);
@@ -169,7 +222,12 @@ describe("DeliveryCoordinator", () => {
 	it("retries flush failures on a later activation", () => {
 		const emitted: unknown[] = [];
 		let shouldThrow = true;
-		const dc = new DeliveryCoordinator({ emit: (_event, data) => { if (shouldThrow) throw new Error("persistent"); emitted.push(data); } });
+		const dc = new DeliveryCoordinator({
+			emit: (_event, data) => {
+				if (shouldThrow) throw new Error("persistent");
+				emitted.push(data);
+			},
+		});
 		dc.deliverResult("run1", { status: "completed" });
 		dc.activate("session-1");
 		assert.equal(dc.getPendingCount(), 1);
@@ -183,7 +241,11 @@ describe("DeliveryCoordinator", () => {
 
 	it("delivers inactive payloads queued during the current generation", () => {
 		const emitted: unknown[] = [];
-		const dc = new DeliveryCoordinator({ emit: (_event, data) => { emitted.push(data); } });
+		const dc = new DeliveryCoordinator({
+			emit: (_event, data) => {
+				emitted.push(data);
+			},
+		});
 		dc.deactivate();
 		dc.deliverResult("run-after", { status: "queued-after-switch" });
 		dc.activate("session-2");

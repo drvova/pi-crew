@@ -44,7 +44,9 @@ function parseLines(raw: string): Record<string, string> {
 export function parseCsv(value: string | undefined): string[] | undefined {
 	if (value === undefined) return undefined;
 	// Handle quoted values with commas inside.
-	const values = splitCsv(value).map((item) => item.trim()).filter(Boolean);
+	const values = splitCsv(value)
+		.map((item) => item.trim())
+		.filter(Boolean);
 	return values.length > 0 ? [...new Set(values)] : undefined;
 }
 

@@ -1,11 +1,26 @@
 export const TEAM_RUN_STATUSES = ["queued", "planning", "running", "blocked", "completed", "failed", "cancelled"] as const;
-export type TeamRunStatus = typeof TEAM_RUN_STATUSES[number];
+export type TeamRunStatus = (typeof TEAM_RUN_STATUSES)[number];
 
-export const TEAM_TASK_STATUSES = ["queued", "running", "waiting", "completed", "failed", "cancelled", "skipped", "needs_attention"] as const;
-export type TeamTaskStatus = typeof TEAM_TASK_STATUSES[number];
+export const TEAM_TASK_STATUSES = [
+	"queued",
+	"running",
+	"waiting",
+	"completed",
+	"failed",
+	"cancelled",
+	"skipped",
+	"needs_attention",
+] as const;
+export type TeamTaskStatus = (typeof TEAM_TASK_STATUSES)[number];
 
 export const TEAM_TERMINAL_RUN_STATUSES: ReadonlySet<TeamRunStatus> = new Set(["blocked", "completed", "failed", "cancelled"]);
-export const TEAM_TERMINAL_TASK_STATUSES: ReadonlySet<TeamTaskStatus> = new Set(["completed", "failed", "cancelled", "skipped", "needs_attention"]);
+export const TEAM_TERMINAL_TASK_STATUSES: ReadonlySet<TeamTaskStatus> = new Set([
+	"completed",
+	"failed",
+	"cancelled",
+	"skipped",
+	"needs_attention",
+]);
 
 export const TEAM_RUN_STATUS_TRANSITIONS: Readonly<Record<TeamRunStatus, readonly TeamRunStatus[]>> = {
 	queued: ["planning", "running", "cancelled", "failed"],
@@ -93,7 +108,7 @@ const TEAM_EVENT_TYPES = [
 	"dwf.failed",
 	"dwf.log",
 ] as const;
-export type TeamEventType = typeof TEAM_EVENT_TYPES[number];
+export type TeamEventType = (typeof TEAM_EVENT_TYPES)[number];
 
 export const TEAM_WAKEABLE_EVENT_TYPES: ReadonlySet<TeamEventType> = new Set([
 	"run.blocked",

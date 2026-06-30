@@ -3,12 +3,12 @@
  * @see src/extension/team-tool/plan.ts
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { handlePlan } from "../../src/extension/team-tool/plan.ts";
-import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
+import { describe, it } from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import { handlePlan } from "../../src/extension/team-tool/plan.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
+import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeCtx(cwd: string): TeamContext {
@@ -25,10 +25,7 @@ describe("handlePlan", () => {
 	it("returns error when specified team is not found", () => {
 		const tmp = createTrackedTempDir("plan-test-");
 		try {
-			const res = handlePlan(
-				makeParams({ team: "nonexistent-team", goal: "test goal" }),
-				makeCtx(tmp),
-			);
+			const res = handlePlan(makeParams({ team: "nonexistent-team", goal: "test goal" }), makeCtx(tmp));
 
 			assert.strictEqual(res.isError, true);
 			const text = textFromToolResult(res);
@@ -42,10 +39,7 @@ describe("handlePlan", () => {
 		const tmp = createTrackedTempDir("plan-test-");
 		try {
 			// The 'default' team is a builtin team that should be discovered
-			const res = handlePlan(
-				makeParams({ team: "default", goal: "test goal" }),
-				makeCtx(tmp),
-			);
+			const res = handlePlan(makeParams({ team: "default", goal: "test goal" }), makeCtx(tmp));
 
 			// Should succeed — default team and its defaultWorkflow should exist
 			const text = textFromToolResult(res);
@@ -61,10 +55,7 @@ describe("handlePlan", () => {
 	it("returns error details with action=plan", () => {
 		const tmp = createTrackedTempDir("plan-test-");
 		try {
-			const res = handlePlan(
-				makeParams({ team: "missing" }),
-				makeCtx(tmp),
-			);
+			const res = handlePlan(makeParams({ team: "missing" }), makeCtx(tmp));
 
 			assert.strictEqual(res.details.action, "plan");
 			assert.strictEqual(res.details.status, "error");
@@ -78,10 +69,7 @@ describe("handlePlan", () => {
 		try {
 			// Use a nonexistent team to hit the error path first,
 			// but test that the handler reads the params correctly
-			const res = handlePlan(
-				makeParams({ team: "default" }),
-				makeCtx(tmp),
-			);
+			const res = handlePlan(makeParams({ team: "default" }), makeCtx(tmp));
 
 			const text = textFromToolResult(res);
 			// If team is found, plan output should show goal as "(not provided)"
@@ -97,7 +85,10 @@ describe("handlePlan", () => {
 		const tmp = createTrackedTempDir("plan-test-");
 		try {
 			const res = handlePlan(
-				makeParams({ team: "default", workflow: "nonexistent-workflow-xyz" }),
+				makeParams({
+					team: "default",
+					workflow: "nonexistent-workflow-xyz",
+				}),
 				makeCtx(tmp),
 			);
 
@@ -113,10 +104,7 @@ describe("handlePlan", () => {
 	it("shows step information in successful plan output", () => {
 		const tmp = createTrackedTempDir("plan-test-");
 		try {
-			const res = handlePlan(
-				makeParams({ team: "default", goal: "implement feature" }),
-				makeCtx(tmp),
-			);
+			const res = handlePlan(makeParams({ team: "default", goal: "implement feature" }), makeCtx(tmp));
 
 			if (!res.isError) {
 				const text = textFromToolResult(res);

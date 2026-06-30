@@ -1,7 +1,7 @@
-import { detectTeamIntent } from "./autonomous-policy.ts";
 import type { AgentConfig } from "../agents/agent-config.ts";
-import type { TeamConfig } from "../teams/team-config.ts";
 import type { PiTeamsAutonomousConfig } from "../config/config.ts";
+import type { TeamConfig } from "../teams/team-config.ts";
+import { detectTeamIntent } from "./autonomous-policy.ts";
 
 export type DecompositionStrategy = "numbered" | "bulleted" | "conjunction" | "atomic";
 
@@ -18,16 +18,61 @@ export interface TeamRecommendation {
 	async: boolean;
 	workspaceMode: "single" | "worktree";
 	confidence: "low" | "medium" | "high";
-	decomposition: { strategy: DecompositionStrategy; subtasks: RecommendedSubtask[]; fanout: number };
+	decomposition: {
+		strategy: DecompositionStrategy;
+		subtasks: RecommendedSubtask[];
+		fanout: number;
+	};
 	reasons: string[];
 }
 
 const REVIEW_TERMS = ["review", "audit", "security", "vulnerability", "diff", "pr", "pull request"];
-const RESEARCH_TERMS = ["research", "investigate", "compare", "analyze", "document", "docs", "explain", "architecture", "đọc sâu", "source", "projects"];
+const RESEARCH_TERMS = [
+	"research",
+	"investigate",
+	"compare",
+	"analyze",
+	"document",
+	"docs",
+	"explain",
+	"architecture",
+	"đọc sâu",
+	"source",
+	"projects",
+];
 const PARALLEL_RESEARCH_RE = /(?:đọc sâu|deep read|deep research|source audit|multiple projects|các project|pi-\*|source\/|@source)/i;
 const FAST_FIX_TERMS = ["quick fix", "fast-fix", "small bug", "typo", "one-line", "minor", "lint"];
-const IMPLEMENTATION_TERMS = ["implement", "refactor", "migrate", "feature", "tests", "test", "integration", "upgrade", "build", "create", "add", "fix", "update", "sửa", "thêm", "cập nhật", "kiểm thử"];
-const RISKY_TERMS = ["migration", "refactor", "large", "multiple", "parallel", "concurrent", "risky", "critical", "nhiều file", "nhiều task"];
+const IMPLEMENTATION_TERMS = [
+	"implement",
+	"refactor",
+	"migrate",
+	"feature",
+	"tests",
+	"test",
+	"integration",
+	"upgrade",
+	"build",
+	"create",
+	"add",
+	"fix",
+	"update",
+	"sửa",
+	"thêm",
+	"cập nhật",
+	"kiểm thử",
+];
+const RISKY_TERMS = [
+	"migration",
+	"refactor",
+	"large",
+	"multiple",
+	"parallel",
+	"concurrent",
+	"risky",
+	"critical",
+	"nhiều file",
+	"nhiều task",
+];
 const NUMBERED_LINE_RE = /^\s*\d+[.)]\s+(.+)$/;
 const BULLETED_LINE_RE = /^\s*[-*•]\s+(.+)$/;
 const CONJUNCTION_SPLIT_RE = /\s+(?:and|,\s*and|,)\s+/i;
@@ -58,8 +103,15 @@ function makeSubtask(text: string): RecommendedSubtask {
 	return { subject, description: text.trim(), role: recommendRole(text) };
 }
 
-export function decomposeGoal(goal: string): { strategy: DecompositionStrategy; subtasks: RecommendedSubtask[]; fanout: number } {
-	const lines = goal.split("\n").map((line) => line.trim()).filter(Boolean);
+export function decomposeGoal(goal: string): {
+	strategy: DecompositionStrategy;
+	subtasks: RecommendedSubtask[];
+	fanout: number;
+} {
+	const lines = goal
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
 	const fileRefs = goal.match(FILE_REF_RE)?.length ?? 0;
 	const codeSymbols = goal.match(CODE_SYMBOL_RE)?.length ?? 0;
 	const hasParallelKeyword = /\b(?:parallel|concurrently|simultaneously|independently)\b/i.test(goal);
@@ -78,10 +130,17 @@ export function decomposeGoal(goal: string): { strategy: DecompositionStrategy; 
 		return { strategy: "bulleted", subtasks, fanout: subtasks.length };
 	}
 	if (lines.length === 1) {
-		const parts = lines[0].split(CONJUNCTION_SPLIT_RE).map((part) => part.trim()).filter(Boolean);
+		const parts = lines[0]
+			.split(CONJUNCTION_SPLIT_RE)
+			.map((part) => part.trim())
+			.filter(Boolean);
 		if (parts.length >= 2) {
 			const subtasks = parts.map((part) => makeSubtask(part));
-			return { strategy: "conjunction", subtasks, fanout: subtasks.length };
+			return {
+				strategy: "conjunction",
+				subtasks,
+				fanout: subtasks.length,
+			};
 		}
 	}
 	const subtask = makeSubtask(goal);
@@ -93,7 +152,11 @@ function metadataMatches(goal: string, values: string[] | undefined): string[] {
 	return (values ?? []).filter((value) => lower.includes(value.toLowerCase()));
 }
 
-export function recommendTeam(goal: string, config: PiTeamsAutonomousConfig = {}, resources?: { teams?: TeamConfig[]; agents?: AgentConfig[] }): TeamRecommendation {
+export function recommendTeam(
+	goal: string,
+	config: PiTeamsAutonomousConfig = {},
+	resources?: { teams?: TeamConfig[]; agents?: AgentConfig[] },
+): TeamRecommendation {
 	const normalized = goal.toLowerCase();
 	const intents = detectTeamIntent(goal, config);
 	const decomposition = decomposeGoal(goal);
@@ -106,7 +169,10 @@ export function recommendTeam(goal: string, config: PiTeamsAutonomousConfig = {}
 	if (intents.length > 0) reasons.push(`Matched explicit intent keyword(s): ${intents.join(", ")}.`);
 
 	const metadataTeamMatches = (resources?.teams ?? [])
-		.map((candidate) => ({ team: candidate, matches: [...metadataMatches(goal, candidate.routing?.triggers), ...metadataMatches(goal, candidate.routing?.useWhen)] }))
+		.map((candidate) => ({
+			team: candidate,
+			matches: [...metadataMatches(goal, candidate.routing?.triggers), ...metadataMatches(goal, candidate.routing?.useWhen)],
+		}))
 		.filter((candidate) => candidate.matches.length > 0)
 		.sort((a, b) => b.matches.length - a.matches.length);
 
@@ -120,13 +186,22 @@ export function recommendTeam(goal: string, config: PiTeamsAutonomousConfig = {}
 		team = metadataTeamMatches[0].team.name as TeamRecommendation["team"];
 		workflow = (metadataTeamMatches[0].team.defaultWorkflow ?? metadataTeamMatches[0].team.name) as TeamRecommendation["workflow"];
 		confidence = "high";
-		reasons.push(`Matched team routing metadata for '${metadataTeamMatches[0].team.name}': ${metadataTeamMatches[0].matches.join(", ")}.`);
+		reasons.push(
+			`Matched team routing metadata for '${metadataTeamMatches[0].team.name}': ${metadataTeamMatches[0].matches.join(", ")}.`,
+		);
 	} else if (intents.includes("review") || reviewMatches.length >= 2 || normalized.includes("security review")) {
 		team = "review";
 		workflow = "review";
 		confidence = "high";
 		reasons.push(`Review/audit terms detected: ${reviewMatches.join(", ") || "explicit review intent"}.`);
-	} else if (PARALLEL_RESEARCH_RE.test(goal) || (researchMatches.length >= 2 && (normalized.includes("multiple") || normalized.includes("source") || normalized.includes("project") || normalized.includes("pi-")))) {
+	} else if (
+		PARALLEL_RESEARCH_RE.test(goal) ||
+		(researchMatches.length >= 2 &&
+			(normalized.includes("multiple") ||
+				normalized.includes("source") ||
+				normalized.includes("project") ||
+				normalized.includes("pi-")))
+	) {
 		team = "parallel-research";
 		workflow = "parallel-research";
 		confidence = "high";
@@ -145,7 +220,9 @@ export function recommendTeam(goal: string, config: PiTeamsAutonomousConfig = {}
 		team = "implementation";
 		workflow = "implementation";
 		confidence = "high";
-		reasons.push(`Actionable multi-item task list detected (${decomposition.fanout} bullet${decomposition.fanout === 1 ? "" : "s"}); use coordinated implementation planning.`);
+		reasons.push(
+			`Actionable multi-item task list detected (${decomposition.fanout} bullet${decomposition.fanout === 1 ? "" : "s"}); use coordinated implementation planning.`,
+		);
 	} else if (intents.includes("implementation") || implementationMatches.length > 0) {
 		team = "implementation";
 		workflow = "implementation";
@@ -157,14 +234,26 @@ export function recommendTeam(goal: string, config: PiTeamsAutonomousConfig = {}
 		reasons.push("No strong team-specific intent detected; start with planning/default discovery.");
 	}
 
-
-	if (decomposition.strategy !== "atomic") reasons.push(`Goal decomposes into ${decomposition.subtasks.length} subtasks using ${decomposition.strategy} parsing.`);
-	const async = config.preferAsyncForLongTasks === true && (wordCount(goal) > 24 || riskyMatches.length > 0 || implementationMatches.length >= 2 || decomposition.fanout >= 3);
-	const workspaceMode = config.allowWorktreeSuggestion === false ? "single" : (riskyMatches.length > 0 && team === "implementation" ? "worktree" : "single");
+	if (decomposition.strategy !== "atomic")
+		reasons.push(`Goal decomposes into ${decomposition.subtasks.length} subtasks using ${decomposition.strategy} parsing.`);
+	const async =
+		config.preferAsyncForLongTasks === true &&
+		(wordCount(goal) > 24 || riskyMatches.length > 0 || implementationMatches.length >= 2 || decomposition.fanout >= 3);
+	const workspaceMode =
+		config.allowWorktreeSuggestion === false ? "single" : riskyMatches.length > 0 && team === "implementation" ? "worktree" : "single";
 	if (async) reasons.push("Task appears long/risky and config prefers async for long tasks.");
 	if (workspaceMode === "worktree") reasons.push(`Risk/isolation terms detected: ${riskyMatches.join(", ")}.`);
 
-	return { team, workflow, action, async, workspaceMode, confidence, decomposition, reasons };
+	return {
+		team,
+		workflow,
+		action,
+		async,
+		workspaceMode,
+		confidence,
+		decomposition,
+		reasons,
+	};
 }
 
 export function formatRecommendation(goal: string, recommendation: TeamRecommendation): string {
@@ -183,6 +272,17 @@ export function formatRecommendation(goal: string, recommendation: TeamRecommend
 		"Reasons:",
 		...recommendation.reasons.map((reason) => `- ${reason}`),
 		"Suggested tool call:",
-		JSON.stringify({ action: recommendation.action, team: recommendation.team, workflow: recommendation.workflow, goal, async: recommendation.async, workspaceMode: recommendation.workspaceMode }, null, 2),
+		JSON.stringify(
+			{
+				action: recommendation.action,
+				team: recommendation.team,
+				workflow: recommendation.workflow,
+				goal,
+				async: recommendation.async,
+				workspaceMode: recommendation.workspaceMode,
+			},
+			null,
+			2,
+		),
 	].join("\n");
 }

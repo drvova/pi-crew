@@ -4,21 +4,34 @@
  * - Bug 3: pruneUserLevelRuns cleans user-level run directories
  * - Bug 4: registerActiveRun filters terminal entries inline
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { readActiveRunRegistry, registerActiveRun, unregisterActiveRun } from "../../src/state/active-run-registry.ts";
+import { DEFAULT_PATHS } from "../../src/config/defaults.ts";
 import { pruneUserLevelRuns } from "../../src/extension/run-maintenance.ts";
+import { readActiveRunRegistry, registerActiveRun, unregisterActiveRun } from "../../src/state/active-run-registry.ts";
 import { createRunManifest, updateRunStatus } from "../../src/state/state-store.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
-import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 import { userCrewRoot } from "../../src/utils/paths.ts";
-import { DEFAULT_PATHS } from "../../src/config/defaults.ts";
+import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
-const team: TeamConfig = { name: "ari", description: "ari", source: "builtin", filePath: "ari.team.md", roles: [{ name: "explorer", agent: "explorer" }] };
-const workflow: WorkflowConfig = { name: "ari", description: "ari", source: "builtin", filePath: "ari.workflow.md", steps: [{ id: "explore", role: "explorer", task: "Explore" }] };
+const team: TeamConfig = {
+	name: "ari",
+	description: "ari",
+	source: "builtin",
+	filePath: "ari.team.md",
+	roles: [{ name: "explorer", agent: "explorer" }],
+};
+const workflow: WorkflowConfig = {
+	name: "ari",
+	description: "ari",
+	source: "builtin",
+	filePath: "ari.workflow.md",
+	steps: [{ id: "explore", role: "explorer", task: "Explore" }],
+};
 
 function withIsolatedHome<T>(fn: () => T): T {
 	const previousHome = process.env.PI_TEAMS_HOME;
@@ -41,17 +54,31 @@ test("registerActiveRun filters out terminal entries before writing", () => {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		try {
 			// Create a run and register it
-			const created = createRunManifest({ cwd, team, workflow, goal: "terminal filter test" });
+			const created = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "terminal filter test",
+			});
 			registerActiveRun(created.manifest);
 
 			// Transition to running then completed
 			updateRunStatus(created.manifest, "running", "started");
 			// Re-read to get updated manifest for next transition
-			const updatedManifest = { ...created.manifest, status: "running" as const, updatedAt: new Date().toISOString() };
+			const updatedManifest = {
+				...created.manifest,
+				status: "running" as const,
+				updatedAt: new Date().toISOString(),
+			};
 			updateRunStatus(updatedManifest, "completed", "done");
 
 			// Create a second run and register it
-			const created2 = createRunManifest({ cwd, team, workflow, goal: "second run" });
+			const created2 = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "second run",
+			});
 			registerActiveRun(created2.manifest);
 
 			// The registry should only have the second (non-terminal) run
@@ -70,14 +97,27 @@ test("registerActiveRun filters out entries with missing manifest files", () => 
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		try {
 			// Create a run and register it
-			const created = createRunManifest({ cwd, team, workflow, goal: "missing manifest test" });
+			const created = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "missing manifest test",
+			});
 			registerActiveRun(created.manifest);
 
 			// Delete the manifest file to simulate stale entry
-			fs.rmSync(created.manifest.stateRoot, { recursive: true, force: true });
+			fs.rmSync(created.manifest.stateRoot, {
+				recursive: true,
+				force: true,
+			});
 
 			// Create a second run and register — should filter the missing one
-			const created2 = createRunManifest({ cwd, team, workflow, goal: "still alive" });
+			const created2 = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "still alive",
+			});
 			registerActiveRun(created2.manifest);
 
 			const entries = readActiveRunRegistry();
@@ -95,11 +135,21 @@ test("registerActiveRun keeps active entries intact", () => {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 		try {
 			// Create and register a running run
-			const created = createRunManifest({ cwd, team, workflow, goal: "running run" });
+			const created = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "running run",
+			});
 			registerActiveRun(created.manifest);
 
 			// Create and register a second running run
-			const created2 = createRunManifest({ cwd, team, workflow, goal: "another running run" });
+			const created2 = createRunManifest({
+				cwd,
+				team,
+				workflow,
+				goal: "another running run",
+			});
 			registerActiveRun(created2.manifest);
 
 			// Both should be present (both are still "queued" status)

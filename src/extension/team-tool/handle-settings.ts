@@ -1,14 +1,10 @@
-import type { TeamContext } from "../team-tool/context.ts";
 import { loadConfig, updateConfig } from "../../config/config.ts";
+import { suggestConfigKey } from "../../config/suggestions.ts";
+import { discoverPiThemes, formatThemesListing, setPiTheme } from "../../ui/theme-discovery.ts";
 import { configPatchFromConfig } from "../team-tool/config-patch.ts";
+import type { TeamContext } from "../team-tool/context.ts";
 import { result } from "../team-tool/context.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
-import { suggestConfigKey } from "../../config/suggestions.ts";
-import {
-	formatThemesListing,
-	discoverPiThemes,
-	setPiTheme,
-} from "../../ui/theme-discovery.ts";
 
 // ---------------------------------------------------------------------------
 // Effective defaults — values used when config key is not set
@@ -40,9 +36,9 @@ const EFFECTIVE_DEFAULTS: Record<string, unknown> = {
 	"autonomous.injectPolicy": true,
 	"autonomous.preferAsyncForLongTasks": false,
 	"autonomous.allowWorktreeSuggestion": true,
-	"executeWorkers": true,
-	"asyncByDefault": false,
-	"notifierIntervalMs": 5000,
+	executeWorkers: true,
+	asyncByDefault: false,
+	notifierIntervalMs: 5000,
 	"reliability.autoRetry": false,
 	"reliability.autoRecover": false,
 	"reliability.cleanupOrphanedTempDirs": true,
@@ -88,7 +84,11 @@ function formatValue(value: unknown, key?: string): string {
 
 function parseValue(raw: string): unknown {
 	// JSON handles strings (quoted), numbers, booleans, null, arrays, objects.
-	try { return JSON.parse(raw); } catch { /* keep as string */ }
+	try {
+		return JSON.parse(raw);
+	} catch {
+		/* keep as string */
+	}
 	return raw;
 }
 
@@ -107,9 +107,7 @@ function flattenConfig(obj: unknown, prefix: string = ""): string[] {
 			// Check if it's a "leaf object" — a value-type record like agent overrides
 			// where keys are agent names and values are { model, thinking, ... }
 			const entries = Object.entries(value as Record<string, unknown>);
-			const allLeafValues = entries.every(([, v]) =>
-				v === undefined || v === null || typeof v !== "object" || Array.isArray(v)
-			);
+			const allLeafValues = entries.every(([, v]) => v === undefined || v === null || typeof v !== "object" || Array.isArray(v));
 			if (allLeafValues && entries.length > 0) {
 				// It's a flat record like { explorer: { model: "...", thinking: "..." } }
 				// Check if nested values are objects (agent overrides pattern)
@@ -285,7 +283,10 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 			for (const w of loaded.warnings) lines.push(`  ${w}`);
 		}
 		lines.push("", USAGE);
-		return result(lines.join("\n"), { ...OK, count: flatLines.length } as never);
+		return result(lines.join("\n"), {
+			...OK,
+			count: flatLines.length,
+		} as never);
 	}
 
 	// team-settings json — full JSON dump
@@ -294,7 +295,7 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 			`// pi-crew effective config (merged from all sources)`,
 			`// Config file: ${loaded.path}`,
 			`// Sources: ${loaded.paths?.join(", ") ?? loaded.path}`,
-			...loaded.warnings?.map(w => `// WARNING: ${w}`) ?? [],
+			...(loaded.warnings?.map((w) => `// WARNING: ${w}`) ?? []),
 			"",
 			JSON.stringify(effective, null, 2),
 		];
@@ -310,15 +311,15 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 			lines.push(`  ${key}${marker}`);
 		}
 		lines.push("", "✓ = currently set in config. Keys without ✓ use defaults.", "", USAGE);
-		return result(lines.join("\n"), { ...OK, count: KNOWN_KEYS.size } as never);
+		return result(lines.join("\n"), {
+			...OK,
+			count: KNOWN_KEYS.size,
+		} as never);
 	}
 
 	// team-settings paths — show all config file paths
 	if (args === "path" || args === "paths") {
-		const lines = [
-			"pi-crew config paths:",
-			`  User config:     ${loaded.path}`,
-		];
+		const lines = ["pi-crew config paths:", `  User config:     ${loaded.path}`];
 		if (ctx.cwd && loaded.paths) {
 			for (const p of loaded.paths) {
 				if (p !== loaded.path) lines.push(`  Additional:      ${p}`);
@@ -337,7 +338,9 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 	if (args === "theme" || args.startsWith("theme ")) {
 		const name = args === "theme" ? "" : args.slice(6).trim();
 		if (!name) {
-			const available = discoverPiThemes().map((t) => t.name).join(", ");
+			const available = discoverPiThemes()
+				.map((t) => t.name)
+				.join(", ");
 			return result(
 				`Usage: team-settings theme <name>\n\nAvailable Pi themes: ${available}\n\nBrowse all: team-settings themes`,
 				{ ...ERR },
@@ -356,14 +359,10 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 		}
 		try {
 			const savedTo = setPiTheme(name);
-			return result(
-				[
-					`✓ Pi theme set to '${name}'`,
-					`  Written to: ${savedTo}`,
-					`  Applied live — no restart needed.`,
-				].join("\n"),
-				{ ...OK, theme: name } as never,
-			);
+			return result([`✓ Pi theme set to '${name}'`, `  Written to: ${savedTo}`, `  Applied live — no restart needed.`].join("\n"), {
+				...OK,
+				theme: name,
+			} as never);
 		} catch (error) {
 			return result(error instanceof Error ? error.message : String(error), { ...ERR }, true);
 		}
@@ -382,23 +381,29 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 	if (args === "scope" || args.startsWith("scope ")) {
 		const scopeArg = args === "scope" ? "" : args.slice(6).trim();
 		if (!scopeArg) {
-			return result([
-				`Current write scope: ${scope}`,
-				`  user    → writes to ${loaded.path}`,
-				`  project → writes to ${projectConfigPath(ctx.cwd)}`,
-				"Usage: team-settings scope [user|project]",
-			].join("\n"), { ...OK, scope } as never);
+			return result(
+				[
+					`Current write scope: ${scope}`,
+					`  user    → writes to ${loaded.path}`,
+					`  project → writes to ${projectConfigPath(ctx.cwd)}`,
+					"Usage: team-settings scope [user|project]",
+				].join("\n"),
+				{ ...OK, scope } as never,
+			);
 		}
 		if (scopeArg !== "user" && scopeArg !== "project") {
 			return result("Scope must be 'user' or 'project'.", { ...ERR }, true);
 		}
-		return result([
-			`Write scope is a per-command option. Use:`,
-			`  team-settings set <key> <value>  (writes to ${scopeArg === "project" ? "project" : "user"} config)`,
-			``,
-			`To change scope for a single command, pass scope in the team tool:`,
-			`  team(action="settings", config={ args: "set <key> <value>", scope: "${scopeArg}" })`,
-		].join("\n"), { ...OK } as never);
+		return result(
+			[
+				`Write scope is a per-command option. Use:`,
+				`  team-settings set <key> <value>  (writes to ${scopeArg === "project" ? "project" : "user"} config)`,
+				``,
+				`To change scope for a single command, pass scope in the team tool:`,
+				`  team(action="settings", config={ args: "set <key> <value>", scope: "${scopeArg}" })`,
+			].join("\n"),
+			{ ...OK } as never,
+		);
 	}
 
 	// team-settings get <key>
@@ -413,7 +418,11 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 			if (suggestion) note = `\n(did you mean '${suggestion}'?)`;
 			else note = "\n(unknown key — may not take effect)";
 		}
-		return result(`${key} = ${formatValue(value, key)}${note}`, { ...OK, key, value } as never);
+		return result(`${key} = ${formatValue(value, key)}${note}`, {
+			...OK,
+			key,
+			value,
+		} as never);
 	}
 
 	// team-settings unset <key>
@@ -422,7 +431,10 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 		if (!key) return result("Usage: team-settings unset <key>", { ...ERR }, true);
 		try {
 			const saved = updateConfig({}, { cwd: ctx.cwd, scope, unsetPaths: [key] });
-			return result(`Unset ${key}\nSaved to: ${saved.path}`, { ...OK, key } as never);
+			return result(`Unset ${key}\nSaved to: ${saved.path}`, {
+				...OK,
+				key,
+			} as never);
 		} catch (error) {
 			return result(error instanceof Error ? error.message : String(error), { ...ERR }, true);
 		}
@@ -432,7 +444,12 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 	if (args.startsWith("set ")) {
 		const rest = args.slice(4).trim();
 		const spaceIdx = rest.indexOf(" ");
-		if (spaceIdx === -1) return result("Usage: team-settings set <key> <value>\nExample: team-settings set runtime.mode child-process", { ...ERR }, true);
+		if (spaceIdx === -1)
+			return result(
+				"Usage: team-settings set <key> <value>\nExample: team-settings set runtime.mode child-process",
+				{ ...ERR },
+				true,
+			);
 		const key = rest.slice(0, spaceIdx);
 		const rawValue = rest.slice(spaceIdx + 1).trim();
 		if (!key) return result("Usage: team-settings set <key> <value>", { ...ERR }, true);
@@ -450,23 +467,44 @@ export function handleSettings(params: { config?: Record<string, unknown> }, ctx
 			let warning = "";
 			if (!KNOWN_KEYS.has(key) && !key.startsWith("agents.overrides.") && !key.startsWith("ui.")) {
 				const suggestion = suggestConfigKey(key, KNOWN_SORTED);
-				warning = suggestion ? `\nWarning: unknown key. Did you mean '${suggestion}'?` : "\nWarning: unknown key — verify it exists in config schema.";
+				warning = suggestion
+					? `\nWarning: unknown key. Did you mean '${suggestion}'?`
+					: "\nWarning: unknown key — verify it exists in config schema.";
 			}
 
 			// Check if project config would sanitize this key
 			if (scope === "project") {
-				const sensitiveKeys = ["executeWorkers", "asyncByDefault", "runtime.mode", "runtime.preferLiveSession", "runtime.allowChildProcessFallback", "runtime.inheritContext", "runtime.isolationPolicy", "autonomous.profile", "autonomous.enabled", "autonomous.injectPolicy", "agents.overrides", "agents.disableBuiltins"];
-				if (sensitiveKeys.some(k => key === k || key.startsWith(k + "."))) {
-					warning += "\nNote: this key is sensitive and will be ignored in project-level config for security. Set it in user scope instead.";
+				const sensitiveKeys = [
+					"executeWorkers",
+					"asyncByDefault",
+					"runtime.mode",
+					"runtime.preferLiveSession",
+					"runtime.allowChildProcessFallback",
+					"runtime.inheritContext",
+					"runtime.isolationPolicy",
+					"autonomous.profile",
+					"autonomous.enabled",
+					"autonomous.injectPolicy",
+					"agents.overrides",
+					"agents.disableBuiltins",
+				];
+				if (sensitiveKeys.some((k) => key === k || key.startsWith(k + "."))) {
+					warning +=
+						"\nNote: this key is sensitive and will be ignored in project-level config for security. Set it in user scope instead.";
 				}
 			}
 
-			return result([
-				`Set ${key} = ${formatValue(value, key)}`,
-				`Effective: ${formatValue(effectiveValue, key)}`,
-				`Saved to: ${saved.path}`,
-				warning,
-			].filter(Boolean).join("\n"), { ...OK, key, value } as never);
+			return result(
+				[
+					`Set ${key} = ${formatValue(value, key)}`,
+					`Effective: ${formatValue(effectiveValue, key)}`,
+					`Saved to: ${saved.path}`,
+					warning,
+				]
+					.filter(Boolean)
+					.join("\n"),
+				{ ...OK, key, value } as never,
+			);
 		} catch (error) {
 			return result(error instanceof Error ? error.message : String(error), { ...ERR }, true);
 		}

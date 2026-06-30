@@ -143,12 +143,18 @@ export function classifyProcessCrash(input: CrashClassificationInput): CrashClas
 	// 1. Timeout takes precedence: the response-timeout guard is the proximate
 	//    cause of death even if cancellation was also requested.
 	if (input.timedOut) {
-		return { crashClass: "timeout", reason: "process timed out (response timeout guard fired)" };
+		return {
+			crashClass: "timeout",
+			reason: "process timed out (response timeout guard fired)",
+		};
 	}
 
 	// 2. Cooperative cancellation.
 	if (input.cancelled) {
-		return { crashClass: "cancelled", reason: "process was cancelled (abort requested)" };
+		return {
+			crashClass: "cancelled",
+			reason: "process was cancelled (abort requested)",
+		};
 	}
 
 	// 3. Spawn error: the child never started or emitted a process error.
@@ -165,13 +171,19 @@ export function classifyProcessCrash(input: CrashClassificationInput): CrashClas
 	if (abnormalExit) {
 		const panic = detectNativePanic(input.stderrSnippet);
 		if (panic !== null) {
-			return { crashClass: "native_panic", reason: `native panic detected: ${panic}` };
+			return {
+				crashClass: "native_panic",
+				reason: `native panic detected: ${panic}`,
+			};
 		}
 	}
 
 	// 5. Signal exit.
 	if (signal !== null) {
-		return { crashClass: "signal_exit", reason: `process exited after signal ${signal}` };
+		return {
+			crashClass: "signal_exit",
+			reason: `process exited after signal ${signal}`,
+		};
 	}
 
 	// 6. Clean exit.
@@ -181,7 +193,10 @@ export function classifyProcessCrash(input: CrashClassificationInput): CrashClas
 
 	// 7. Non-zero exit.
 	if (exitCode !== null) {
-		return { crashClass: "non_zero_exit", reason: `process exited with code ${exitCode}` };
+		return {
+			crashClass: "non_zero_exit",
+			reason: `process exited with code ${exitCode}`,
+		};
 	}
 
 	// 8. Protocol exit: exitCode is null with no signal — the process stream
@@ -189,11 +204,17 @@ export function classifyProcessCrash(input: CrashClassificationInput): CrashClas
 	//    If `killed` is true but no signal was recorded, treat as protocol_exit
 	//    (the kill may not have delivered a signal we could capture).
 	if (input.killed) {
-		return { crashClass: "protocol_exit", reason: "process was killed but no signal/exit code was captured" };
+		return {
+			crashClass: "protocol_exit",
+			reason: "process was killed but no signal/exit code was captured",
+		};
 	}
 
 	// 8b. Truly null exitCode with no other context — protocol/stream ended early.
-	return { crashClass: "protocol_exit", reason: "process exited before protocol completion (exit code unknown)" };
+	return {
+		crashClass: "protocol_exit",
+		reason: "process exited before protocol completion (exit code unknown)",
+	};
 }
 
 /** Render an unknown error value to a short message string. */

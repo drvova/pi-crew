@@ -8,8 +8,8 @@
  * Actual capture hooks into the lifecycle events (Pattern 12).
  */
 
-import { readFileSync, existsSync, appendFileSync } from "node:fs";
 import * as fs from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import { logInternalError } from "../utils/internal-error.ts";
 import { atomicWriteJson } from "./atomic-write.ts";
@@ -40,7 +40,7 @@ export interface CompressedObservation {
 export interface ObservationStoreConfig {
 	maxObservations: number;
 	maxCompressed: number;
-	privacyTags: string[];  // tags to strip before storage
+	privacyTags: string[]; // tags to strip before storage
 }
 
 const DEFAULT_CONFIG: ObservationStoreConfig = {
@@ -127,9 +127,7 @@ export class ObservationStore {
 	 * Get compressed observations for injection.
 	 */
 	getCompressed(limit = 5): CompressedObservation[] {
-		return this.compressed
-			.sort((a, b) => b.relevanceScore - a.relevanceScore)
-			.slice(0, limit);
+		return this.compressed.sort((a, b) => b.relevanceScore - a.relevanceScore).slice(0, limit);
 	}
 
 	/**
@@ -139,14 +137,19 @@ export class ObservationStore {
 		const items = this.getCompressed(limit);
 		if (items.length === 0) return "";
 
-		return "## Observations from Previous Sessions\n\n" +
-			items.map((o) =>
-				`### ${o.summary}\n` +
-				`Patterns: ${o.patterns.join(", ")}\n` +
-				`Decisions: ${o.decisions.join(", ")}\n` +
-				`Files: ${o.filesAffected.join(", ")}`,
-			).join("\n\n") +
-			"\n";
+		return (
+			"## Observations from Previous Sessions\n\n" +
+			items
+				.map(
+					(o) =>
+						`### ${o.summary}\n` +
+						`Patterns: ${o.patterns.join(", ")}\n` +
+						`Decisions: ${o.decisions.join(", ")}\n` +
+						`Files: ${o.filesAffected.join(", ")}`,
+				)
+				.join("\n\n") +
+			"\n"
+		);
 	}
 
 	/**
@@ -167,7 +170,10 @@ export class ObservationStore {
 	}
 
 	get stats(): { observations: number; compressed: number } {
-		return { observations: this.observations.length, compressed: this.compressed.length };
+		return {
+			observations: this.observations.length,
+			compressed: this.compressed.length,
+		};
 	}
 
 	private load(): void {

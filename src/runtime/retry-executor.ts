@@ -21,7 +21,12 @@ export interface RetryHooks {
 	signal?: AbortSignal;
 }
 
-export const DEFAULT_RETRY_POLICY: RetryPolicy = { maxAttempts: 3, backoffMs: 1000, jitterRatio: 0.3, exponentialFactor: 2 };
+export const DEFAULT_RETRY_POLICY: RetryPolicy = {
+	maxAttempts: 3,
+	backoffMs: 1000,
+	jitterRatio: 0.3,
+	exponentialFactor: 2,
+};
 
 function asError(error: unknown): Error {
 	return error instanceof Error ? error : new Error(String(error));
@@ -45,11 +50,22 @@ export function calculateRetryDelay(attempt: number, policy: RetryPolicy = DEFAU
 }
 
 function retryAttemptInfo(attempt: number, hooks: RetryHooks): RetryAttemptInfo {
-	return { attempt, attemptId: hooks.attemptId?.(attempt) ?? `retry_attempt_${attempt}` };
+	return {
+		attempt,
+		attemptId: hooks.attemptId?.(attempt) ?? `retry_attempt_${attempt}`,
+	};
 }
 
-export async function executeWithRetry<T>(fn: (attempt: number, info: RetryAttemptInfo) => Promise<T>, policy: RetryPolicy = DEFAULT_RETRY_POLICY, hooks: RetryHooks = {}): Promise<T> {
-	const normalized: RetryPolicy = { ...DEFAULT_RETRY_POLICY, ...policy, maxAttempts: Math.max(1, policy.maxAttempts ?? DEFAULT_RETRY_POLICY.maxAttempts) };
+export async function executeWithRetry<T>(
+	fn: (attempt: number, info: RetryAttemptInfo) => Promise<T>,
+	policy: RetryPolicy = DEFAULT_RETRY_POLICY,
+	hooks: RetryHooks = {},
+): Promise<T> {
+	const normalized: RetryPolicy = {
+		...DEFAULT_RETRY_POLICY,
+		...policy,
+		maxAttempts: Math.max(1, policy.maxAttempts ?? DEFAULT_RETRY_POLICY.maxAttempts),
+	};
 	let lastError: Error | undefined;
 	for (let attempt = 1; attempt <= normalized.maxAttempts; attempt += 1) {
 		throwIfCancelled(hooks.signal);

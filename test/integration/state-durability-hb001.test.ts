@@ -11,13 +11,14 @@
  * can find it across platforms (handles /var→/private/var on macOS and
  * path-canonicalisation on Windows).
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { createRunManifest, saveRunTasks, loadRunManifestById } from "../../src/state/state-store.ts";
 import { appendEvent } from "../../src/state/event-log.ts";
+import { createRunManifest, loadRunManifestById, saveRunTasks } from "../../src/state/state-store.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
@@ -39,7 +40,12 @@ const workflow: WorkflowConfig = {
 	steps: [],
 };
 
-test("HB-001 integration: interleaved manifest + event writes reload consistently", { skip: process.platform === "win32" ? "Windows tmpdir path-canonicalization mismatch with createRunManifest; covered on ubuntu + macos CI" : false }, () => {
+test("HB-001 integration: interleaved manifest + event writes reload consistently", {
+	skip:
+		process.platform === "win32"
+			? "Windows tmpdir path-canonicalization mismatch with createRunManifest; covered on ubuntu + macos CI"
+			: false,
+}, () => {
 	// realpathSync so macOS /var → /private/var symlink is canonicalised before
 	// the run dir is created; otherwise loadRunManifestById (which uses
 	// resolveRealContainedPath) would look under a different lexical path.
@@ -47,7 +53,12 @@ test("HB-001 integration: interleaved manifest + event writes reload consistentl
 	fs.writeFileSync(path.join(tmpRoot, "package.json"), "{}\n", "utf-8");
 	fs.mkdirSync(path.join(tmpRoot, ".git"), { recursive: true });
 	try {
-		const { manifest, paths } = createRunManifest({ cwd: tmpRoot, team, workflow, goal: "durability" });
+		const { manifest, paths } = createRunManifest({
+			cwd: tmpRoot,
+			team,
+			workflow,
+			goal: "durability",
+		});
 		const now = () => new Date().toISOString();
 		const eventsPath = manifest.eventsPath;
 
@@ -66,8 +77,16 @@ test("HB-001 integration: interleaved manifest + event writes reload consistentl
 			};
 			tasks.push(task);
 			saveRunTasks(manifest, tasks);
-			appendEvent(eventsPath, { type: "task.progress", runId: manifest.runId, data: { taskId: task.id, status: task.status } });
-			appendEvent(eventsPath, { type: "task.completed", runId: manifest.runId, data: { taskId: task.id } });
+			appendEvent(eventsPath, {
+				type: "task.progress",
+				runId: manifest.runId,
+				data: { taskId: task.id, status: task.status },
+			});
+			appendEvent(eventsPath, {
+				type: "task.completed",
+				runId: manifest.runId,
+				data: { taskId: task.id },
+			});
 		}
 
 		// Reload via the same loader the reconciler uses.
@@ -77,7 +96,10 @@ test("HB-001 integration: interleaved manifest + event writes reload consistentl
 		assert.equal(loaded!.tasks.length, 10, "all 10 tasks must reload");
 
 		// Reload events and assert none were lost / no partial JSON lines.
-		const events = fs.readFileSync(eventsPath, "utf-8").split("\n").filter((l) => l.trim());
+		const events = fs
+			.readFileSync(eventsPath, "utf-8")
+			.split("\n")
+			.filter((l) => l.trim());
 		// createRunManifest may emit its own run.created event; assert we have AT
 		// LEAST the 20 task events we appended, and every line parses.
 		assert.ok(events.length >= 20, `expected >=20 events (createRunManifest may add 1), got ${events.length}`);

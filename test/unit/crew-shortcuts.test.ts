@@ -1,9 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	registerCrewShortcuts,
-	CREW_SHORTCUT_KEYS,
-} from "../../src/extension/crew-shortcuts.ts";
+import { describe, it } from "node:test";
+import { CREW_SHORTCUT_KEYS, registerCrewShortcuts } from "../../src/extension/crew-shortcuts.ts";
 
 describe("registerCrewShortcuts", () => {
 	it("registers every crew shortcut on a Pi-like object", () => {
@@ -16,7 +13,10 @@ describe("registerCrewShortcuts", () => {
 		registerCrewShortcuts(fakePi);
 		assert.equal(registered.length, CREW_SHORTCUT_KEYS.length);
 		// alt+s must be present (settings overlay)
-		assert.ok(registered.some((r) => r.key === "alt+s"), "alt+s shortcut should be registered");
+		assert.ok(
+			registered.some((r) => r.key === "alt+s"),
+			"alt+s shortcut should be registered",
+		);
 		for (const r of registered) {
 			assert.ok(typeof r.description === "string" && r.description.length > 0, "each shortcut needs a description");
 		}
@@ -36,15 +36,19 @@ describe("registerCrewShortcuts", () => {
 		// This is the complete occupied alt+ set as of the verified keymaps.
 		const piBuiltinAlt = new Set([
 			// editor word/delete/navigation (pi-tui)
-			"alt+b",   // cursor word left
-			"alt+f",   // cursor word right
-			"alt+d",   // delete word forward
-			"alt+y",   // yank pop
+			"alt+b", // cursor word left
+			"alt+f", // cursor word right
+			"alt+d", // delete word forward
+			"alt+y", // yank pop
 			"alt+backspace", // delete word backward
-			"alt+delete",     // delete word forward (alt)
+			"alt+delete", // delete word forward (alt)
 			// app-level (pi core)
-			"alt+v",   // paste
-			"alt+enter", "alt+up", "alt+down", "alt+left", "alt+right",
+			"alt+v", // paste
+			"alt+enter",
+			"alt+up",
+			"alt+down",
+			"alt+left",
+			"alt+right",
 		]);
 		for (const key of CREW_SHORTCUT_KEYS) {
 			assert.ok(!piBuiltinAlt.has(key), `crew shortcut ${key} must not collide with a Pi built-in`);

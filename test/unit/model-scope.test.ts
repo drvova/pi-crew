@@ -14,13 +14,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { CrewError, ErrorCode } from "../../src/errors.ts";
-import {
-	checkModelScope,
-	isModelInScope,
-	matchesModelPattern,
-	patternToRegExp,
-} from "../../src/runtime/model-scope.ts";
 import { buildConfiguredModelRouting } from "../../src/runtime/model-fallback.ts";
+import { checkModelScope, isModelInScope, matchesModelPattern, patternToRegExp } from "../../src/runtime/model-scope.ts";
 
 // Use a fresh temp cwd per test so configuredModelInfosFromPiConfig doesn't
 // leak the host project's pi settings into the routing candidates (otherwise
@@ -34,7 +29,11 @@ function freshCwd(): string {
 afterEach(() => {
 	while (tempDirs.length > 0) {
 		const dir = tempDirs.pop()!;
-		try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+		try {
+			fs.rmSync(dir, { recursive: true, force: true });
+		} catch {
+			/* ignore */
+		}
 	}
 });
 
@@ -151,7 +150,10 @@ describe("buildConfiguredModelRouting — F7 scope gate", () => {
 
 	it("no scopeModelsPatterns → no gate (back-compat, never throws on out-of-scope)", () => {
 		// Caller passes a model that would be out-of-scope if patterns were set.
-		const result = buildConfiguredModelRouting({ ...baseInput(freshCwd()), overrideModel: "openai/gpt-4o" });
+		const result = buildConfiguredModelRouting({
+			...baseInput(freshCwd()),
+			overrideModel: "openai/gpt-4o",
+		});
 		assert.equal(result.scopeVerdict, undefined);
 	});
 

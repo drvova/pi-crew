@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { validateRunBundle, assertRunBundle } from "../../src/extension/run-bundle-schema.ts";
+import { describe, it } from "node:test";
+import { assertRunBundle, validateRunBundle } from "../../src/extension/run-bundle-schema.ts";
 
 function validBundle(): Record<string, unknown> {
 	return {
@@ -22,13 +22,25 @@ function validBundle(): Record<string, unknown> {
 			eventsPath: "/tmp/events.jsonl",
 			artifacts: [],
 		},
-		tasks: [{
-			id: "t1", runId: "r1", role: "agent", agent: "a1",
-			title: "task", status: "completed", dependsOn: [], cwd: "/tmp",
-		}],
-		events: [{
-			time: "2026-01-01T00:00:00Z", type: "run.created", runId: "r1",
-		}],
+		tasks: [
+			{
+				id: "t1",
+				runId: "r1",
+				role: "agent",
+				agent: "a1",
+				title: "task",
+				status: "completed",
+				dependsOn: [],
+				cwd: "/tmp",
+			},
+		],
+		events: [
+			{
+				time: "2026-01-01T00:00:00Z",
+				type: "run.created",
+				runId: "r1",
+			},
+		],
 		artifactPaths: [],
 	};
 }

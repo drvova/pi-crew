@@ -1,9 +1,9 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { readIfSmall, MAX_RESULT_INLINE_BYTES } from "../../src/runtime/task-output-context.ts";
+import * as path from "node:path";
+import { test } from "node:test";
+import { MAX_RESULT_INLINE_BYTES, readIfSmall } from "../../src/runtime/task-output-context.ts";
 
 /**
  * These tests call the REAL exported `readIfSmall` function — no mirror.

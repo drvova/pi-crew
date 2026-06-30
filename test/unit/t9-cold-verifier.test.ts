@@ -13,8 +13,8 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { allAgents, discoverAgents } from "../../src/agents/discover-agents.ts";
 
 const CREW_CWD = fileURLToPath(new URL("../../", import.meta.url));
@@ -51,7 +51,10 @@ describe("T9: cold-verifier builtin agent", () => {
 		assert.ok(prompt.includes("independently") || prompt.includes("independence"), "must emphasize independent re-derivation");
 		assert.ok(prompt.includes("confirm") || prompt.includes("refute"), "must instruct to confirm/refute claims");
 		// Distinct from the correlating verifier — look for the adversarial framing.
-		assert.ok(prompt.includes("confirmation bias") || prompt.includes("contradict"), "must frame around confirmation bias / contradiction");
+		assert.ok(
+			prompt.includes("confirmation bias") || prompt.includes("contradict"),
+			"must frame around confirmation bias / contradiction",
+		);
 	});
 
 	test("cold-verifier is in the SEC-001 protected-names blocklist (cannot be shadowed)", () => {
@@ -60,7 +63,7 @@ describe("T9: cold-verifier builtin agent", () => {
 		const src = readFileSync(fileURLToPath(new URL("../../src/agents/discover-agents.ts", import.meta.url)), "utf-8");
 		const setBlock = src.match(/PROTECTED_AGENT_NAMES = new Set\(\[([\s\S]*?)\]\)/);
 		assert.ok(setBlock, "PROTECTED_AGENT_NAMES set should exist");
-		assert.ok(setBlock![1].includes("\"cold-verifier\""), "cold-verifier must be in the protected-names set");
+		assert.ok(setBlock![1].includes('"cold-verifier"'), "cold-verifier must be in the protected-names set");
 	});
 
 	test("the agent file on disk is well-formed frontmatter + body", () => {

@@ -17,9 +17,16 @@ export interface TaskGraphIndex {
 
 export function buildTaskGraphIndex(tasks: TeamTaskState[]): TaskGraphIndex {
 	return {
-		doneSteps: new Set(tasks.filter((task) => task.status === "completed").map((task) => task.stepId).filter((id): id is string => id !== undefined)),
+		doneSteps: new Set(
+			tasks
+				.filter((task) => task.status === "completed")
+				.map((task) => task.stepId)
+				.filter((id): id is string => id !== undefined),
+		),
 		idMap: new Map(tasks.map((task) => [task.id, task])),
-		stepToTaskId: new Map(tasks.map((task) => [task.stepId, task.id]).filter((entry): entry is [string, string] => entry[0] !== undefined)),
+		stepToTaskId: new Map(
+			tasks.map((task) => [task.stepId, task.id]).filter((entry): entry is [string, string] => entry[0] !== undefined),
+		),
 	};
 }
 
@@ -27,7 +34,12 @@ function taskById(tasks: TeamTaskState[]): Map<string, TeamTaskState> {
 	return new Map(tasks.map((task) => [task.id, task]));
 }
 
-function dependencySatisfied(task: TeamTaskState, doneStepIds: Set<string>, idMap: Map<string, TeamTaskState>, stepMap: Map<string, string>): boolean {
+function dependencySatisfied(
+	task: TeamTaskState,
+	doneStepIds: Set<string>,
+	idMap: Map<string, TeamTaskState>,
+	stepMap: Map<string, string>,
+): boolean {
 	return task.dependsOn.every((dependency) => {
 		if (doneStepIds.has(dependency)) return true;
 		const taskId = stepMap.get(dependency) ?? dependency;
@@ -38,15 +50,27 @@ function dependencySatisfied(task: TeamTaskState, doneStepIds: Set<string>, idMa
 function withQueue(task: TeamTaskState, index: TaskGraphIndex): TeamTaskState {
 	if (task.status === "queued") {
 		const isReady = dependencySatisfied(task, index.doneSteps, index.idMap, index.stepToTaskId);
-		return { ...task, graph: task.graph ? { ...task.graph, queue: isReady ? "ready" : "blocked" } : task.graph };
+		return {
+			...task,
+			graph: task.graph ? { ...task.graph, queue: isReady ? "ready" : "blocked" } : task.graph,
+		};
 	}
 	if (task.status === "running") {
-		return { ...task, graph: task.graph ? { ...task.graph, queue: "running" } : task.graph };
+		return {
+			...task,
+			graph: task.graph ? { ...task.graph, queue: "running" } : task.graph,
+		};
 	}
 	if (task.status === "completed" || task.status === "skipped" || task.status === "needs_attention") {
-		return { ...task, graph: task.graph ? { ...task.graph, queue: "done" } : task.graph };
+		return {
+			...task,
+			graph: task.graph ? { ...task.graph, queue: "done" } : task.graph,
+		};
 	}
-	return { ...task, graph: task.graph ? { ...task.graph, queue: "blocked" } : task.graph };
+	return {
+		...task,
+		graph: task.graph ? { ...task.graph, queue: "blocked" } : task.graph,
+	};
 }
 
 function ensureIndex(tasks: TeamTaskState[], index?: TaskGraphIndex): TaskGraphIndex {
@@ -59,20 +83,49 @@ export function refreshTaskGraphQueues(tasks: TeamTaskState[], index?: TaskGraph
 }
 
 export function getReadyTasks(tasks: TeamTaskState[], maxCount = 1, index?: TaskGraphIndex): TeamTaskState[] {
-	return refreshTaskGraphQueues(tasks, index).filter((task) => task.status === "queued" && task.graph?.queue === "ready").slice(0, Math.max(0, maxCount));
+	return refreshTaskGraphQueues(tasks, index)
+		.filter((task) => task.status === "queued" && task.graph?.queue === "ready")
+		.slice(0, Math.max(0, maxCount));
 }
 
 export function markTaskRunning(tasks: TeamTaskState[], taskId: string, now = new Date(), index?: TaskGraphIndex): TeamTaskState[] {
 	const resolved = ensureIndex(tasks, index);
-	return refreshTaskGraphQueues(tasks, resolved).map((task) => task.id === taskId ? withQueue({ ...task, status: "running", startedAt: task.startedAt ?? now.toISOString() }, resolved) : task);
+	return refreshTaskGraphQueues(tasks, resolved).map((task) =>
+		task.id === taskId
+			? withQueue(
+					{
+						...task,
+						status: "running",
+						startedAt: task.startedAt ?? now.toISOString(),
+					},
+					resolved,
+				)
+			: task,
+	);
 }
 
 export function markTaskDone(tasks: TeamTaskState[], taskId: string, now = new Date(), index?: TaskGraphIndex): TeamTaskState[] {
 	const resolved = ensureIndex(tasks, index);
-	return refreshTaskGraphQueues(tasks.map((task) => task.id === taskId ? { ...task, status: "completed", finishedAt: task.finishedAt ?? now.toISOString() } : task), resolved);
+	return refreshTaskGraphQueues(
+		tasks.map((task) =>
+			task.id === taskId
+				? {
+						...task,
+						status: "completed",
+						finishedAt: task.finishedAt ?? now.toISOString(),
+					}
+				: task,
+		),
+		resolved,
+	);
 }
 
-export function cancelTaskSubtree(tasks: TeamTaskState[], rootTaskId: string, reason = "Cancelled by task graph scheduler.", now = new Date()): TeamTaskState[] {
+export function cancelTaskSubtree(
+	tasks: TeamTaskState[],
+	rootTaskId: string,
+	reason = "Cancelled by task graph scheduler.",
+	now = new Date(),
+): TeamTaskState[] {
 	const ids = taskById(tasks);
 	const toCancel = new Set<string>();
 	const stack = [rootTaskId];
@@ -83,11 +136,18 @@ export function cancelTaskSubtree(tasks: TeamTaskState[], rootTaskId: string, re
 		const task = ids.get(current);
 		for (const child of task?.graph?.children ?? []) stack.push(child);
 	}
-	return refreshTaskGraphQueues(tasks.map((task) => {
-		if (!toCancel.has(task.id)) return task;
-		if (task.status === "completed") return task;
-		return { ...task, status: "cancelled", error: reason, finishedAt: task.finishedAt ?? now.toISOString() };
-	}));
+	return refreshTaskGraphQueues(
+		tasks.map((task) => {
+			if (!toCancel.has(task.id)) return task;
+			if (task.status === "completed") return task;
+			return {
+				...task,
+				status: "cancelled",
+				error: reason,
+				finishedAt: task.finishedAt ?? now.toISOString(),
+			};
+		}),
+	);
 }
 
 export function failTaskAndBlockChildren(tasks: TeamTaskState[], rootTaskId: string, reason: string, now = new Date()): TeamTaskState[] {
@@ -102,11 +162,25 @@ export function failTaskAndBlockChildren(tasks: TeamTaskState[], rootTaskId: str
 		const task = ids.get(current);
 		for (const child of task?.graph?.children ?? []) stack.push(child);
 	}
-	return refreshTaskGraphQueues(tasks.map((task) => {
-		if (task.id === rootTaskId) return { ...task, status: "failed", error: reason, finishedAt: task.finishedAt ?? now.toISOString() };
-		if (blocked.has(task.id) && task.status === "queued") return { ...task, status: "skipped", error: `Blocked by failed task '${rootTaskId}'.`, finishedAt: task.finishedAt ?? now.toISOString() };
-		return task;
-	}));
+	return refreshTaskGraphQueues(
+		tasks.map((task) => {
+			if (task.id === rootTaskId)
+				return {
+					...task,
+					status: "failed",
+					error: reason,
+					finishedAt: task.finishedAt ?? now.toISOString(),
+				};
+			if (blocked.has(task.id) && task.status === "queued")
+				return {
+					...task,
+					status: "skipped",
+					error: `Blocked by failed task '${rootTaskId}'.`,
+					finishedAt: task.finishedAt ?? now.toISOString(),
+				};
+			return task;
+		}),
+	);
 }
 
 export function taskGraphSnapshot(tasks: TeamTaskState[], index?: TaskGraphIndex): TaskGraphSchedulerSnapshot {

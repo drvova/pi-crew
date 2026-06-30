@@ -1,10 +1,7 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { InstinctStore, type NewInstinct } from "../../src/state/instinct-store.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 const BASE_INSTINCT: NewInstinct = {
 	trigger: "test-trigger",
@@ -67,14 +64,22 @@ describe("InstinctStore", () => {
 
 		it("returns all instincts when no scope filter", () => {
 			store.saveInstinct({ ...BASE_INSTINCT });
-			store.saveInstinct({ ...BASE_INSTINCT, scope: "global", projectId: undefined });
+			store.saveInstinct({
+				...BASE_INSTINCT,
+				scope: "global",
+				projectId: undefined,
+			});
 			const all = store.getInstincts();
 			assert.equal(all.length, 2);
 		});
 
 		it("filters by project scope", () => {
 			store.saveInstinct({ ...BASE_INSTINCT });
-			store.saveInstinct({ ...BASE_INSTINCT, scope: "global", projectId: undefined });
+			store.saveInstinct({
+				...BASE_INSTINCT,
+				scope: "global",
+				projectId: undefined,
+			});
 			const projects = store.getInstincts("project");
 			assert.equal(projects.length, 1);
 			assert.equal(projects[0]!.scope, "project");
@@ -82,7 +87,11 @@ describe("InstinctStore", () => {
 
 		it("filters by global scope", () => {
 			store.saveInstinct({ ...BASE_INSTINCT });
-			store.saveInstinct({ ...BASE_INSTINCT, scope: "global", projectId: undefined });
+			store.saveInstinct({
+				...BASE_INSTINCT,
+				scope: "global",
+				projectId: undefined,
+			});
 			const globals = store.getInstincts("global");
 			assert.equal(globals.length, 1);
 			assert.equal(globals[0]!.scope, "global");
@@ -141,7 +150,10 @@ describe("InstinctStore", () => {
 
 	describe("promoteInstinct", () => {
 		it("promotes a project instinct to global", () => {
-			const saved = store.saveInstinct({ ...BASE_INSTINCT, projectId: "proj-1" });
+			const saved = store.saveInstinct({
+				...BASE_INSTINCT,
+				projectId: "proj-1",
+			});
 			const promoted = store.promoteInstinct(saved.id);
 			assert.ok(promoted);
 			assert.equal(promoted!.scope, "global");
@@ -154,7 +166,10 @@ describe("InstinctStore", () => {
 		});
 
 		it("removes instinct from project after promotion", () => {
-			const saved = store.saveInstinct({ ...BASE_INSTINCT, projectId: "proj-1" });
+			const saved = store.saveInstinct({
+				...BASE_INSTINCT,
+				projectId: "proj-1",
+			});
 			store.promoteInstinct(saved.id);
 			const project = store.getInstincts("project");
 			assert.equal(project.length, 0, "project instinct should be removed");

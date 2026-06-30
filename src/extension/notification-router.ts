@@ -22,9 +22,17 @@ export interface NotificationRouterOptions {
 }
 
 const DEFAULT_SEVERITY_FILTER: Severity[] = ["warning", "error", "critical"];
-const SEVERITY_RANK: Record<Severity, number> = { info: 0, warning: 1, error: 2, critical: 3 };
+const SEVERITY_RANK: Record<Severity, number> = {
+	info: 0,
+	warning: 1,
+	error: 2,
+	critical: 3,
+};
 
-export function parseHHMMRange(range: string): { startMin: number; endMin: number } {
+export function parseHHMMRange(range: string): {
+	startMin: number;
+	endMin: number;
+} {
 	const match = /^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/.exec(range);
 	if (!match) throw new Error(`Invalid quiet-hours range '${range}'. Expected HH:MM-HH:MM.`);
 	const [, sh, sm, eh, em] = match;
@@ -33,7 +41,10 @@ export function parseHHMMRange(range: string): { startMin: number; endMin: numbe
 	const endHour = Number(eh);
 	const endMinute = Number(em);
 	if (startHour > 23 || endHour > 23 || startMinute > 59 || endMinute > 59) throw new Error(`Invalid quiet-hours range '${range}'.`);
-	return { startMin: startHour * 60 + startMinute, endMin: endHour * 60 + endMinute };
+	return {
+		startMin: startHour * 60 + startMinute,
+		endMin: endHour * 60 + endMinute,
+	};
 }
 
 export function isInQuietHours(range: string, now = new Date()): boolean {
@@ -48,7 +59,10 @@ function notificationKey(notification: NotificationDescriptor): string {
 }
 
 function batchSeverity(items: NotificationDescriptor[]): Severity {
-	return items.reduce((highest, item) => SEVERITY_RANK[item.severity] > SEVERITY_RANK[highest] ? item.severity : highest, "info" as Severity);
+	return items.reduce(
+		(highest, item) => (SEVERITY_RANK[item.severity] > SEVERITY_RANK[highest] ? item.severity : highest),
+		"info" as Severity,
+	);
 }
 
 export class NotificationRouter {
@@ -81,7 +95,10 @@ export class NotificationRouter {
 
 	enqueue(notification: NotificationDescriptor): boolean {
 		const now = this.opts.now?.() ?? Date.now();
-		const withTime = { ...notification, timestamp: notification.timestamp ?? now };
+		const withTime = {
+			...notification,
+			timestamp: notification.timestamp ?? now,
+		};
 		try {
 			this.opts.sink?.(withTime);
 		} catch (sinkError) {

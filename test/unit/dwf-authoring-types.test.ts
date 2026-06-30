@@ -8,13 +8,14 @@
  * `pi-crew` package.json and resolves the self-reference. We spawn the local
  * `typescript` compiler (a devDependency) so this mirrors real authoring.
  */
+
+import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
-import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const typesFile = path.join(repoRoot, "types", "dwf.d.ts");
@@ -42,20 +43,36 @@ function readPackageJson(): Record<string, unknown> {
 	return JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 }
 
-function runTsc(samplePath: string): { status: number; stdout: string; stderr: string } {
+function runTsc(samplePath: string): {
+	status: number;
+	stdout: string;
+	stderr: string;
+} {
 	const tscBin = path.join(repoRoot, "node_modules", "typescript", "bin", "tsc");
-	const res = spawnSync(process.execPath, [
-		tscBin,
-		"--noEmit",
-		"--moduleResolution", "NodeNext",
-		"--module", "NodeNext",
-		"--target", "ES2022",
-		"--strict",
-		"--skipLibCheck",
-		"--types", "node",
-		samplePath,
-	], { encoding: "utf-8" });
-	return { status: res.status ?? -1, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
+	const res = spawnSync(
+		process.execPath,
+		[
+			tscBin,
+			"--noEmit",
+			"--moduleResolution",
+			"NodeNext",
+			"--module",
+			"NodeNext",
+			"--target",
+			"ES2022",
+			"--strict",
+			"--skipLibCheck",
+			"--types",
+			"node",
+			samplePath,
+		],
+		{ encoding: "utf-8" },
+	);
+	return {
+		status: res.status ?? -1,
+		stdout: res.stdout ?? "",
+		stderr: res.stderr ?? "",
+	};
 }
 
 test("round-14 P1-1: types/dwf.d.ts ships and package.json declares the ./workflow export", () => {

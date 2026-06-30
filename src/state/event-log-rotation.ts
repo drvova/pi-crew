@@ -1,8 +1,7 @@
 import * as fs from "node:fs";
-import { readEvents, type TeamEvent } from "./event-log.ts";
-import { atomicWriteFile } from "./atomic-write.ts";
 import { logInternalError } from "../utils/internal-error.ts";
-import { withEventLogLockSync } from "./event-log.ts";
+import { atomicWriteFile } from "./atomic-write.ts";
+import { readEvents, type TeamEvent, withEventLogLockSync } from "./event-log.ts";
 
 export interface RotationConfig {
 	maxFileSizeBytes: number;
@@ -82,12 +81,25 @@ export function compactEventLog(eventsPath: string, config?: Partial<RotationCon
 /** Round 24 (BUG 1): the lock-free pre-read for compaction. Safe to run
  * outside the lock (read-only). Returns the compacted lines + stats needed
  * for the write phase. */
-export function prepareCompaction(eventsPath: string, config?: Partial<RotationConfig>):
-	{ lines: string; originalSize: number; originalCount: number; kept: TeamEvent[] } | undefined {
+export function prepareCompaction(
+	eventsPath: string,
+	config?: Partial<RotationConfig>,
+):
+	| {
+			lines: string;
+			originalSize: number;
+			originalCount: number;
+			kept: TeamEvent[];
+	  }
+	| undefined {
 	if (!fs.existsSync(eventsPath)) return undefined;
 	const cfg = resolveConfig(config);
 	let originalSize: number;
-	try { originalSize = fs.statSync(eventsPath).size; } catch { return undefined; }
+	try {
+		originalSize = fs.statSync(eventsPath).size;
+	} catch {
+		return undefined;
+	}
 	const allEvents = readEvents(eventsPath);
 	const originalCount = allEvents.length;
 	if (originalCount <= cfg.compactToCount) return undefined;
@@ -100,7 +112,12 @@ export function prepareCompaction(eventsPath: string, config?: Partial<RotationC
  * caller ALREADY holds the event-log lock (or accepts the unlocked race). */
 export function applyCompactionUnlocked(
 	eventsPath: string,
-	prepared: { lines: string; originalSize: number; originalCount: number; kept: TeamEvent[] },
+	prepared: {
+		lines: string;
+		originalSize: number;
+		originalCount: number;
+		kept: TeamEvent[];
+	},
 ): CompactionResult | undefined {
 	const { lines, originalSize, originalCount, kept } = prepared;
 	try {
@@ -250,16 +267,24 @@ export function getEventLogStats(eventsPath: string): EventLogStats | undefined 
 			let searchFrom = tailStr.length;
 			for (;;) {
 				const nl = tailStr.lastIndexOf("\n", searchFrom - 1);
-				if (nl < 0) { lastLine = tailStr.trim(); break; }
+				if (nl < 0) {
+					lastLine = tailStr.trim();
+					break;
+				}
 				const candidate = tailStr.slice(nl + 1, searchFrom).trim();
-				if (candidate) { lastLine = candidate; break; }
+				if (candidate) {
+					lastLine = candidate;
+					break;
+				}
 				searchFrom = nl;
 			}
 			try {
 				if (lastLine) {
 					newestTimestamp = (JSON.parse(lastLine) as { time: string }).time;
 				}
-			} catch { /* corrupt tail */ }
+			} catch {
+				/* corrupt tail */
+			}
 		}
 
 		// Stream-scan to count newlines and find first line boundary.
@@ -280,9 +305,9 @@ export function getEventLogStats(eventsPath: string): EventLogStats | undefined 
 				}
 				offset += bytesRead;
 			}
-			} finally {
-				fs.closeSync(scanFd);
-			}
+		} finally {
+			fs.closeSync(scanFd);
+		}
 		eventCount = newlineCount;
 
 		// Read first line for oldest timestamp.
@@ -300,7 +325,9 @@ export function getEventLogStats(eventsPath: string): EventLogStats | undefined 
 				if (firstLine) {
 					oldestTimestamp = (JSON.parse(firstLine) as { time: string }).time;
 				}
-			} catch { /* corrupt head */ }
+			} catch {
+				/* corrupt head */
+			}
 		}
 
 		return {
@@ -313,4 +340,3 @@ export function getEventLogStats(eventsPath: string): EventLogStats | undefined 
 		return undefined;
 	}
 }
-

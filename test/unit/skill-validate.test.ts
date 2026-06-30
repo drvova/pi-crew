@@ -14,16 +14,13 @@
  *   - parseSkillFrontmatter handles multi-line folded (`>`), quoted strings,
  *     and nested mappings correctly.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-	parseSkillFrontmatter,
-	validateSkillFrontmatter,
-	ALLOWED_SKILL_PROPS,
-} from "../../src/skills/validate.ts";
+import { describe, it } from "node:test";
+import { ALLOWED_SKILL_PROPS, parseSkillFrontmatter, validateSkillFrontmatter } from "../../src/skills/validate.ts";
 
 const tempDirs: string[] = [];
 
@@ -40,7 +37,11 @@ function makeSkill(skillDir: string, skillMdBody: string): void {
 function cleanup(): void {
 	while (tempDirs.length > 0) {
 		const d = tempDirs.pop()!;
-		try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* ignore */ }
+		try {
+			fs.rmSync(d, { recursive: true, force: true });
+		} catch {
+			/* ignore */
+		}
 	}
 }
 
@@ -70,7 +71,7 @@ describe("parseSkillFrontmatter", () => {
 	});
 
 	it("parses quoted strings (single + double)", () => {
-		const r1 = parseSkillFrontmatter('---\nname: "foo-bar"\ndescription: \'hello world\'\n---\nbody');
+		const r1 = parseSkillFrontmatter("---\nname: \"foo-bar\"\ndescription: 'hello world'\n---\nbody");
 		assert.equal(r1.ok, true);
 		if (r1.ok) {
 			assert.equal(r1.data.name, "foo-bar");
@@ -90,9 +91,7 @@ describe("parseSkillFrontmatter", () => {
 	});
 
 	it("parses lists (allowed-tools / triggers)", () => {
-		const r = parseSkillFrontmatter(
-			"---\nname: my-skill\ndescription: x\nallowed-tools:\n  - read\n  - grep\n---\nbody",
-		);
+		const r = parseSkillFrontmatter("---\nname: my-skill\ndescription: x\nallowed-tools:\n  - read\n  - grep\n---\nbody");
 		assert.equal(r.ok, true);
 		if (r.ok) {
 			assert.deepEqual(r.data["allowed-tools"], ["read", "grep"]);
@@ -105,7 +104,10 @@ describe("parseSkillFrontmatter", () => {
 		);
 		assert.equal(r.ok, true);
 		if (r.ok) {
-			assert.deepEqual(r.data.metadata, { audience: "internal", priority: "high" });
+			assert.deepEqual(r.data.metadata, {
+				audience: "internal",
+				priority: "high",
+			});
 		}
 	});
 
@@ -130,14 +132,16 @@ describe("validateSkillFrontmatter — valid cases", () => {
 			assert.equal(r.errors.length, 0);
 			assert.equal(r.manifest?.name, "good-skill");
 			assert.equal(r.manifest?.description, "A valid skill.");
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=true with all optional fields populated", () => {
 		const dir = freshSkillDir();
 		makeSkill(
 			dir,
-			"---\nname: full-skill\ndescription: Full skill.\nlicense: MIT\nallowed-tools:\n  - read\n  - grep\nmetadata:\n  audience: internal\ncompatibility: \">=1.0.0\"\nversion: 1.2.3\nauthor: tester\n---\nbody",
+			'---\nname: full-skill\ndescription: Full skill.\nlicense: MIT\nallowed-tools:\n  - read\n  - grep\nmetadata:\n  audience: internal\ncompatibility: ">=1.0.0"\nversion: 1.2.3\nauthor: tester\n---\nbody',
 		);
 		try {
 			const r = validateSkillFrontmatter(dir);
@@ -148,13 +152,15 @@ describe("validateSkillFrontmatter — valid cases", () => {
 			assert.equal(r.manifest?.compatibility, ">=1.0.0");
 			assert.equal(r.manifest?.version, "1.2.3");
 			assert.equal(r.manifest?.author, "tester");
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=true for SOFT warning (unknown prop keeps skill)", () => {
 		const dir = freshSkillDir();
 		// `origin` and `triggers` are unknown props commonly used by bundled skills.
-		makeSkill(dir, "---\nname: bundled-style\ndescription: ok\norigin: pi-crew\ntriggers:\n  - \"do thing\"\n---\nbody");
+		makeSkill(dir, '---\nname: bundled-style\ndescription: ok\norigin: pi-crew\ntriggers:\n  - "do thing"\n---\nbody');
 		try {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, true);
@@ -162,7 +168,9 @@ describe("validateSkillFrontmatter — valid cases", () => {
 			const softFields = r.errors.filter((e) => e.severity === "warn").map((e) => e.field);
 			assert.ok(softFields.includes("<unknown-prop:origin>"));
 			assert.ok(softFields.includes("<unknown-prop:triggers>"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=true with derived name when frontmatter omits name (back-compat)", () => {
@@ -174,7 +182,9 @@ describe("validateSkillFrontmatter — valid cases", () => {
 			assert.equal(r.ok, true);
 			assert.equal(r.manifest?.name, "derived-name-skill"); // derived from dir
 			assert.ok(r.errors.some((e) => e.severity === "warn" && e.field === "name"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=true for empty SKILL.md (no frontmatter at all)", () => {
@@ -186,7 +196,9 @@ describe("validateSkillFrontmatter — valid cases", () => {
 			assert.equal(r.ok, true);
 			assert.equal(r.manifest?.name, "no-frontmatter");
 			assert.equal(r.manifest?.description, "");
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 });
 
@@ -198,7 +210,9 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.severity === "error" && e.field === "name"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when name has underscore", () => {
@@ -208,7 +222,9 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.severity === "error" && e.field === "name"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when name exceeds 64 chars", () => {
@@ -219,7 +235,9 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.severity === "error" && /exceeds 64/.test(e.reason)));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when description contains '<' or '>'", () => {
@@ -233,7 +251,9 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			assert.equal(r1.ok, false);
 			assert.equal(r2.ok, false);
 			assert.ok(r1.errors.some((e) => e.severity === "error" && e.field === "description"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when description exceeds 1024 chars", () => {
@@ -244,7 +264,9 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.severity === "error" && /exceeds 1024/.test(e.reason)));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when description is missing", () => {
@@ -254,7 +276,9 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.severity === "error" && /Required field 'description'/.test(e.reason)));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when allowed-tools is not array of strings", () => {
@@ -264,17 +288,21 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.severity === "error" && e.field === "allowed-tools"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when metadata is not object", () => {
 		const dir = freshSkillDir();
-		makeSkill(dir, "---\nname: bad-meta\ndescription: x\nmetadata: \"a string, not an object\"\n---\nbody");
+		makeSkill(dir, '---\nname: bad-meta\ndescription: x\nmetadata: "a string, not an object"\n---\nbody');
 		try {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.severity === "error" && e.field === "metadata"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when version is not semver-ish", () => {
@@ -284,7 +312,9 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.severity === "error" && e.field === "version"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false when SKILL.md cannot be read", () => {
@@ -293,7 +323,9 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.field === "SKILL.md"));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 
 	it("ok=false on YAML parse error", () => {
@@ -303,6 +335,8 @@ describe("validateSkillFrontmatter — HARD errors", () => {
 			const r = validateSkillFrontmatter(dir);
 			assert.equal(r.ok, false);
 			assert.ok(r.errors.some((e) => e.field === "frontmatter" && /YAML parse error/.test(e.reason)));
-		} finally { cleanup(); }
+		} finally {
+			cleanup();
+		}
 	});
 });

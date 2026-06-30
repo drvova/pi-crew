@@ -1,7 +1,7 @@
-import type { HookDefinition, HookName, HookContext, HookResult, HookExecutionReport } from "./types.ts";
 import { appendEvent } from "../state/event-log.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 import { runEventBus } from "../ui/run-event-bus.ts";
+import type { HookContext, HookDefinition, HookExecutionReport, HookName, HookResult } from "./types.ts";
 
 const registry = new Map<HookName, HookDefinition[]>();
 
@@ -67,7 +67,22 @@ export async function executeHook(name: HookName, ctx: HookContext): Promise<Hoo
 		return ctx.includeGlobalHooks !== false;
 	});
 	if (scopedHooks.length === 0) return { hookName: name, outcome: "allow", durationMs: 0 };
-	const POLLUTED_KEYS = new Set(["__proto__", "constructor", "prototype", "hasOwnProperty", "toString", "valueOf", "isPrototypeOf", "propertyIsEnumerable", "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__"].map((k) => k.toLowerCase().normalize("NFKC")));
+	const POLLUTED_KEYS = new Set(
+		[
+			"__proto__",
+			"constructor",
+			"prototype",
+			"hasOwnProperty",
+			"toString",
+			"valueOf",
+			"isPrototypeOf",
+			"propertyIsEnumerable",
+			"__defineGetter__",
+			"__defineSetter__",
+			"__lookupGetter__",
+			"__lookupSetter__",
+		].map((k) => k.toLowerCase().normalize("NFKC")),
+	);
 	function sanitizeMergeData(data: Record<string, unknown>): Record<string, unknown> {
 		const clean: Record<string, unknown> = {};
 		for (const [k, v] of Object.entries(data)) {
@@ -75,7 +90,11 @@ export async function executeHook(name: HookName, ctx: HookContext): Promise<Hoo
 				if (v !== null && typeof v === "object") {
 					if (Array.isArray(v)) {
 						// Sanitize array elements that are objects
-						clean[k] = v.map((item) => (item !== null && typeof item === "object" && !Array.isArray(item) ? sanitizeMergeData(item as Record<string, unknown>) : item));
+						clean[k] = v.map((item) =>
+							item !== null && typeof item === "object" && !Array.isArray(item)
+								? sanitizeMergeData(item as Record<string, unknown>)
+								: item,
+						);
 					} else {
 						clean[k] = sanitizeMergeData(v as Record<string, unknown>);
 					}
@@ -108,14 +127,19 @@ export async function executeHook(name: HookName, ctx: HookContext): Promise<Hoo
 	const diagnostics: string[] = [];
 	let capturedModifications: Record<string, unknown> | undefined;
 	for (const hook of scopedHooks) {
-			try {
-				const result: HookResult = await hook.handler(sanitizeContext(ctx));
-				// SECURITY: Sanitize any direct mutations the handler may have made to ctx.
-				// This prevents hooks from injecting dangerous properties via direct ctx assignment.
-				sanitizeContext(ctx);
-				if (hook.mode === "blocking" && result.outcome === "block") {
-					return { hookName: name, outcome: "block", durationMs: Date.now() - start, reason: result.reason };
-				}
+		try {
+			const result: HookResult = await hook.handler(sanitizeContext(ctx));
+			// SECURITY: Sanitize any direct mutations the handler may have made to ctx.
+			// This prevents hooks from injecting dangerous properties via direct ctx assignment.
+			sanitizeContext(ctx);
+			if (hook.mode === "blocking" && result.outcome === "block") {
+				return {
+					hookName: name,
+					outcome: "block",
+					durationMs: Date.now() - start,
+					reason: result.reason,
+				};
+			}
 			if (result.outcome === "modify" && result.data) {
 				Object.assign(ctx, sanitizeMergeData(result.data));
 				capturedModifications = { ...result.data };
@@ -123,16 +147,32 @@ export async function executeHook(name: HookName, ctx: HookContext): Promise<Hoo
 		} catch (error) {
 			const message = sanitizeErrorMessage(error instanceof Error ? error.message : String(error));
 			if (hook.mode === "blocking") {
-				return { hookName: name, outcome: "block", durationMs: Date.now() - start, reason: `Hook error: ${message}` };
+				return {
+					hookName: name,
+					outcome: "block",
+					durationMs: Date.now() - start,
+					reason: `Hook error: ${message}`,
+				};
 			}
 			// Non-blocking hook errors are accumulated as diagnostics; continue to next hook
 			diagnostics.push(message);
-			}
+		}
 	}
 	if (diagnostics.length > 0) {
-		return { hookName: name, outcome: "diagnostic", durationMs: Date.now() - start, reason: diagnostics.join("; "), modifiedData: capturedModifications };
+		return {
+			hookName: name,
+			outcome: "diagnostic",
+			durationMs: Date.now() - start,
+			reason: diagnostics.join("; "),
+			modifiedData: capturedModifications,
+		};
 	}
-	return { hookName: name, outcome: "allow", durationMs: Date.now() - start, modifiedData: capturedModifications };
+	return {
+		hookName: name,
+		outcome: "allow",
+		durationMs: Date.now() - start,
+		modifiedData: capturedModifications,
+	};
 }
 
 export function appendHookEvent(manifest: TeamRunManifest, report: HookExecutionReport): void {
@@ -140,7 +180,16 @@ export function appendHookEvent(manifest: TeamRunManifest, report: HookExecution
 		type: "hook.executed",
 		runId: manifest.runId,
 		message: `Hook ${report.hookName} completed with outcome=${report.outcome}${report.reason ? `: ${report.reason}` : ""}`,
-		data: { hookName: report.hookName, outcome: report.outcome, durationMs: report.durationMs, reason: report.reason },
+		data: {
+			hookName: report.hookName,
+			outcome: report.outcome,
+			durationMs: report.durationMs,
+			reason: report.reason,
+		},
 	});
-	runEventBus.emit({ type: "effectiveness_changed", runId: manifest.runId, data: { hookName: report.hookName, outcome: report.outcome } });
+	runEventBus.emit({
+		type: "effectiveness_changed",
+		runId: manifest.runId,
+		data: { hookName: report.hookName, outcome: report.outcome },
+	});
 }

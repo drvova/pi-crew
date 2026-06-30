@@ -5,11 +5,12 @@
  * Uses a child node-process per iteration so the module cache stays cold.
  * Reports p50/p95/p99 in ms.
  */
-import { performance } from "node:perf_hooks";
+
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -62,7 +63,11 @@ fs.writeFileSync(driverPath, driverSrc, "utf-8");
 const samplesImport: number[] = [];
 const samplesRegister: number[] = [];
 for (let i = 0; i < ITERS; i++) {
-	const result = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", driverPath], { encoding: "utf-8", cwd: root, timeout: 30_000 });
+	const result = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", driverPath], {
+		encoding: "utf-8",
+		cwd: root,
+		timeout: 30_000,
+	});
 	if (result.status !== 0) {
 		fs.unlinkSync(driverPath);
 		throw new Error(`driver failed: ${result.stderr}`);
@@ -99,4 +104,6 @@ function percentile(sorted: number[], q: number): number {
 	const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q));
 	return sorted[idx];
 }
-function round(n: number): number { return Math.round(n * 100) / 100; }
+function round(n: number): number {
+	return Math.round(n * 100) / 100;
+}

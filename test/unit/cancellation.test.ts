@@ -1,10 +1,18 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { cancellationErrorFromSignal, cancellationReasonFromSignal, CrewCancellationError, throwIfCancelled } from "../../src/runtime/cancellation.ts";
+import test from "node:test";
+import {
+	CrewCancellationError,
+	cancellationErrorFromSignal,
+	cancellationReasonFromSignal,
+	throwIfCancelled,
+} from "../../src/runtime/cancellation.ts";
 
 test("cancellationReasonFromSignal preserves structured abort reason", () => {
 	const controller = new AbortController();
-	controller.abort({ code: "worker_timeout", message: "worker stopped responding" });
+	controller.abort({
+		code: "worker_timeout",
+		message: "worker stopped responding",
+	});
 	assert.deepEqual(cancellationReasonFromSignal(controller.signal), {
 		code: "worker_timeout",
 		message: "worker stopped responding",
@@ -15,11 +23,14 @@ test("cancellationReasonFromSignal preserves structured abort reason", () => {
 test("throwIfCancelled throws CrewCancellationError", () => {
 	const controller = new AbortController();
 	controller.abort("shutdown");
-	assert.throws(() => throwIfCancelled(controller.signal), (error) => {
-		assert.equal(error instanceof CrewCancellationError, true);
-		assert.equal((error as CrewCancellationError).reason.code, "shutdown");
-		return true;
-	});
+	assert.throws(
+		() => throwIfCancelled(controller.signal),
+		(error) => {
+			assert.equal(error instanceof CrewCancellationError, true);
+			assert.equal((error as CrewCancellationError).reason.code, "shutdown");
+			return true;
+		},
+	);
 });
 
 test("cancellationErrorFromSignal falls back to caller_cancelled", () => {

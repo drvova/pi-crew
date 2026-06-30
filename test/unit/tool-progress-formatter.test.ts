@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { formatCompactToolProgress } from "../../src/ui/tool-progress-formatter.ts";
+import test from "node:test";
 import type { CrewAgentRecord } from "../../src/runtime/crew-agent-runtime.ts";
+import { formatCompactToolProgress } from "../../src/ui/tool-progress-formatter.ts";
 
 function makeAgent(overrides: Partial<CrewAgentRecord> = {}): CrewAgentRecord {
 	return {
@@ -18,14 +18,24 @@ function makeAgent(overrides: Partial<CrewAgentRecord> = {}): CrewAgentRecord {
 }
 
 test("formatCompactToolProgress renders 'waiting for run' when no run yet", () => {
-	const text = formatCompactToolProgress({ agentId: "agent_a", status: "running", startedAt: Date.now() });
+	const text = formatCompactToolProgress({
+		agentId: "agent_a",
+		status: "running",
+		startedAt: Date.now(),
+	});
 	const lines = text.split("\n");
 	assert.equal(lines[0]?.startsWith("agent=agent_a status=running"), true);
 	assert.match(lines[1] ?? "", /waiting for run to start/);
 });
 
 test("formatCompactToolProgress renders run header before agent record materializes", () => {
-	const text = formatCompactToolProgress({ agentId: "agent_b", status: "running", runId: "run-xyz", startedAt: Date.now(), tasks: [] });
+	const text = formatCompactToolProgress({
+		agentId: "agent_b",
+		status: "running",
+		runId: "run-xyz",
+		startedAt: Date.now(),
+		tasks: [],
+	});
 	assert.match(text, /run=run-xyz \(starting\)/);
 });
 
@@ -35,7 +45,19 @@ test("formatCompactToolProgress surfaces active agent role, turn count, current 
 		status: "running",
 		runId: "run-1",
 		startedAt: Date.now(),
-		agents: [makeAgent({ status: "running", progress: { recentTools: [], recentOutput: [], toolCount: 3, turns: 5, currentTool: "Read", tokens: 1234 } })],
+		agents: [
+			makeAgent({
+				status: "running",
+				progress: {
+					recentTools: [],
+					recentOutput: [],
+					toolCount: 3,
+					turns: 5,
+					currentTool: "Read",
+					tokens: 1234,
+				},
+			}),
+		],
 	});
 	const lines = text.split("\n");
 	assert.match(lines[1] ?? "", /explorer->explorer turn=5 tokens=1234/);
@@ -49,10 +71,17 @@ test("formatCompactToolProgress trims long recent output and falls back to usage
 		status: "running",
 		runId: "run-1",
 		startedAt: Date.now(),
-		agents: [makeAgent({
-			progress: { recentTools: [], recentOutput: [longText], toolCount: 1, turns: 1 },
-			usage: { input: 100, output: 50, cost: 0, turns: 1 } as never,
-		})],
+		agents: [
+			makeAgent({
+				progress: {
+					recentTools: [],
+					recentOutput: [longText],
+					toolCount: 1,
+					turns: 1,
+				},
+				usage: { input: 100, output: 50, cost: 0, turns: 1 } as never,
+			}),
+		],
 	});
 	const lines = text.split("\n");
 	assert.match(lines[1] ?? "", /tokens=150/);
@@ -62,6 +91,11 @@ test("formatCompactToolProgress trims long recent output and falls back to usage
 });
 
 test("formatCompactToolProgress shows error when no active agent and no run", () => {
-	const text = formatCompactToolProgress({ agentId: "agent_e", status: "error", startedAt: Date.now(), error: "spawn failed: pi binary not found" });
+	const text = formatCompactToolProgress({
+		agentId: "agent_e",
+		status: "error",
+		startedAt: Date.now(),
+		error: "spawn failed: pi binary not found",
+	});
 	assert.match(text, /error: spawn failed: pi binary not found/);
 });

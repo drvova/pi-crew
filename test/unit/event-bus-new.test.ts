@@ -3,9 +3,9 @@
  * Covers: EventBus singleton, emit, on/off, dispose, listener error isolation
  */
 
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { crewEventBus, type CrewEvent, type CrewEventType } from "../../src/observability/event-bus.ts";
+import { beforeEach, describe, it } from "node:test";
+import { type CrewEvent, type CrewEventType, crewEventBus } from "../../src/observability/event-bus.ts";
 
 function makeEvent(overrides: Partial<CrewEvent> = {}): CrewEvent {
 	return {
@@ -88,7 +88,9 @@ describe("EventBus emit", () => {
 
 	it("isolates errors in listeners — subsequent listeners still run", () => {
 		const received: CrewEvent[] = [];
-		crewEventBus.on("run:complete", () => { throw new Error("boom"); });
+		crewEventBus.on("run:complete", () => {
+			throw new Error("boom");
+		});
 		crewEventBus.on("run:complete", (e) => received.push(e));
 		crewEventBus.emit(makeEvent({ type: "run:complete" }));
 		assert.equal(received.length, 1, "second listener should still be called despite first throwing");

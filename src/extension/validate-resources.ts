@@ -25,13 +25,23 @@ export function validateResources(cwd: string): ValidationReport {
 	const issues: ValidationIssue[] = [];
 
 	for (const agent of agents) {
-		const modelValues = [agent.model, ...(agent.fallbackModels ?? [])].filter((value): value is string => typeof value === "string" && value.length > 0);
+		const modelValues = [agent.model, ...(agent.fallbackModels ?? [])].filter(
+			(value): value is string => typeof value === "string" && value.length > 0,
+		);
 		for (const model of modelValues) {
 			if (/\s/.test(model)) {
-				issues.push({ level: "warning", resource: `agent:${agent.name}`, message: `Model reference '${model}' contains whitespace.` });
+				issues.push({
+					level: "warning",
+					resource: `agent:${agent.name}`,
+					message: `Model reference '${model}' contains whitespace.`,
+				});
 			}
 			if (model.includes("/") && model.split("/").some((part) => part.trim() === "")) {
-				issues.push({ level: "warning", resource: `agent:${agent.name}`, message: `Model reference '${model}' has an empty provider/model segment.` });
+				issues.push({
+					level: "warning",
+					resource: `agent:${agent.name}`,
+					message: `Model reference '${model}' has an empty provider/model segment.`,
+				});
 			}
 		}
 	}
@@ -39,27 +49,48 @@ export function validateResources(cwd: string): ValidationReport {
 	for (const team of teams) {
 		for (const role of team.roles) {
 			if (!agentNames.has(role.agent)) {
-				issues.push({ level: "error", resource: `team:${team.name}`, message: `Role '${role.name}' references unknown agent '${role.agent}'.` });
+				issues.push({
+					level: "error",
+					resource: `team:${team.name}`,
+					message: `Role '${role.name}' references unknown agent '${role.agent}'.`,
+				});
 			}
 		}
 		if (team.defaultWorkflow && !workflowNames.has(team.defaultWorkflow)) {
-			issues.push({ level: "error", resource: `team:${team.name}`, message: `defaultWorkflow references unknown workflow '${team.defaultWorkflow}'.` });
+			issues.push({
+				level: "error",
+				resource: `team:${team.name}`,
+				message: `defaultWorkflow references unknown workflow '${team.defaultWorkflow}'.`,
+			});
 		}
 		const workflow = workflows.find((candidate) => candidate.name === team.defaultWorkflow);
 		if (workflow) {
 			for (const error of validateWorkflowForTeam(workflow, team)) {
-				issues.push({ level: "error", resource: `workflow:${workflow.name}`, message: `Team '${team.name}': ${error}` });
+				issues.push({
+					level: "error",
+					resource: `workflow:${workflow.name}`,
+					message: `Team '${team.name}': ${error}`,
+				});
 			}
 		}
 	}
 
 	for (const workflow of workflows) {
 		if (workflow.steps.length === 0) {
-			issues.push({ level: "warning", resource: `workflow:${workflow.name}`, message: "Workflow has no steps." });
+			issues.push({
+				level: "warning",
+				resource: `workflow:${workflow.name}`,
+				message: "Workflow has no steps.",
+			});
 		}
 	}
 
-	return { issues, agents: agents.length, teams: teams.length, workflows: workflows.length };
+	return {
+		issues,
+		agents: agents.length,
+		teams: teams.length,
+		workflows: workflows.length,
+	};
 }
 
 export function formatValidationReport(report: ValidationReport): string {

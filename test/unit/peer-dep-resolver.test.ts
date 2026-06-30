@@ -1,19 +1,19 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import * as url from "node:url";
 
 import {
-	resolvePeerDep,
-	resolvePeerDepDir,
-	primePeerDep,
+	__resetPeerDepCacheForTest,
 	getAgentDir,
-	peerDepResolutionBases,
 	PEER_DEP_DIR_ENV,
 	PEER_DEP_NAMES,
-	__resetPeerDepCacheForTest,
+	peerDepResolutionBases,
+	primePeerDep,
+	resolvePeerDep,
+	resolvePeerDepDir,
 } from "../../src/runtime/peer-dep.ts";
 import { __setNpmGlobalRootForTest } from "../../src/runtime/pi-spawn.ts";
 
@@ -23,7 +23,10 @@ import { __setNpmGlobalRootForTest } from "../../src/runtime/pi-spawn.ts";
  *   <root>/node_modules/@earendil-works/pi-coding-agent/package.json + index.js
  * The fake exports getAgentDir() returning `agentDirValue`.
  */
-function buildFakePeerDep(agentDirValue: string): { root: string; pkgDir: string } {
+function buildFakePeerDep(agentDirValue: string): {
+	root: string;
+	pkgDir: string;
+} {
 	const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "peerdep-"));
 	const scopeDir = path.join(tmpRoot, "node_modules", "@earendil-works");
 	const pkgDir = path.join(scopeDir, "pi-coding-agent");

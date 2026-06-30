@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 
 // Replicate the preStepScript containment check logic for direct testing
 function validatePreStepScript(preStepScript: string, cwd: string): void {
@@ -24,10 +24,7 @@ describe("preStepScript path validation", () => {
 	});
 
 	it("rejects parent directory traversal", () => {
-		assert.throws(
-			() => validatePreStepScript("../escape.sh", "/project"),
-			/Security: preStepScript path escapes working directory/,
-		);
+		assert.throws(() => validatePreStepScript("../escape.sh", "/project"), /Security: preStepScript path escapes working directory/);
 	});
 
 	it("rejects deep parent traversal", () => {
@@ -38,17 +35,11 @@ describe("preStepScript path validation", () => {
 	});
 
 	it("rejects absolute path outside cwd", () => {
-		assert.throws(
-			() => validatePreStepScript("/etc/passwd", "/project"),
-			/Security: preStepScript path escapes working directory/,
-		);
+		assert.throws(() => validatePreStepScript("/etc/passwd", "/project"), /Security: preStepScript path escapes working directory/);
 	});
 
 	it("rejects absolute path in different root", () => {
-		assert.throws(
-			() => validatePreStepScript("/tmp/evil.sh", "/project"),
-			/Security: preStepScript path escapes working directory/,
-		);
+		assert.throws(() => validatePreStepScript("/tmp/evil.sh", "/project"), /Security: preStepScript path escapes working directory/);
 	});
 
 	it("accepts dot-relative path", () => {

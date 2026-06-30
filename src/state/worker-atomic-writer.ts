@@ -20,10 +20,11 @@
  *   { kind: "done", id }
  *   { kind: "error", id, message }
  */
-import { Worker } from "node:worker_threads";
-import * as path from "node:path";
+
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
+import * as path from "node:path";
+import { Worker } from "node:worker_threads";
 
 const require = createRequire(import.meta.url);
 
@@ -175,7 +176,9 @@ export function terminateWorkerAtomicWriter(): void {
 	if (worker) {
 		const w = worker;
 		worker = undefined;
-		w.terminate().catch(() => { /* ignore */ });
+		w.terminate().catch(() => {
+			/* ignore */
+		});
 	}
 	for (const [, entry] of pending) entry.reject(new Error("worker terminated"));
 	pending.clear();

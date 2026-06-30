@@ -98,10 +98,7 @@ export interface ExistingState {
  * - **resource_deleted**: referenced agent/team/workflow in import does not exist
  *   in the current state.
  */
-export function detectImportConflicts(
-	importBundle: ImportBundle,
-	existingState: ExistingState,
-): ConflictReport {
+export function detectImportConflicts(importBundle: ImportBundle, existingState: ExistingState): ConflictReport {
 	const conflicts: Conflict[] = [];
 	const { manifest: incoming, tasks: incomingTasks } = importBundle;
 	const { manifest: current, tasks: currentTasks } = existingState;
@@ -110,11 +107,7 @@ export function detectImportConflicts(
 	if (current) {
 		const incomingVersion = incoming.schemaVersion;
 		const currentVersion = current.schemaVersion;
-		if (
-			typeof incomingVersion !== "undefined" &&
-			typeof currentVersion !== "undefined" &&
-			incomingVersion !== currentVersion
-		) {
+		if (typeof incomingVersion !== "undefined" && typeof currentVersion !== "undefined" && incomingVersion !== currentVersion) {
 			conflicts.push({
 				kind: "schema_drift",
 				path: "manifest.schemaVersion",
@@ -156,9 +149,7 @@ export function detectImportConflicts(
 
 	// ── State mismatch (task status differences) ─────────────────────
 	if (currentTasks && currentTasks.length > 0) {
-		const currentTaskMap = new Map(
-			extractTaskLikes(currentTasks).map((t) => [t.id, t]),
-		);
+		const currentTaskMap = new Map(extractTaskLikes(currentTasks).map((t) => [t.id, t]));
 		const incomingTaskList = extractTaskLikes(incomingTasks);
 
 		for (const inTask of incomingTaskList) {
@@ -257,10 +248,7 @@ export interface CurrentState {
  * - **file_overwrite**: files changed since suspension.
  * - **state_mismatch**: task statuses changed externally.
  */
-export function detectResumeConflicts(
-	suspendedState: SuspendedState,
-	currentState: CurrentState,
-): ConflictReport {
+export function detectResumeConflicts(suspendedState: SuspendedState, currentState: CurrentState): ConflictReport {
 	const conflicts: Conflict[] = [];
 	const { tasks: suspendedTasks, artifacts: suspendedArtifacts } = suspendedState;
 	const { changedFiles, taskStatuses } = currentState;
@@ -310,17 +298,17 @@ export function detectResumeConflicts(
  * - **merge**: attempt merge — resolves `state_mismatch` with merged status;
  *   resolves others conditionally.
  */
-export function resolveConflict(
-	conflict: Conflict,
-	strategy: ConflictStrategy,
-): ConflictResolution {
+export function resolveConflict(conflict: Conflict, strategy: ConflictStrategy): ConflictResolution {
 	switch (strategy) {
 		case "skip":
 			return { resolved: true, action: `Skipped ${conflict.path}` };
 
 		case "overwrite":
 			if (conflict.kind === "file_overwrite" || conflict.kind === "schema_drift") {
-				return { resolved: true, action: `Overwritten ${conflict.path} with incoming value` };
+				return {
+					resolved: true,
+					action: `Overwritten ${conflict.path} with incoming value`,
+				};
 			}
 			return {
 				resolved: false,

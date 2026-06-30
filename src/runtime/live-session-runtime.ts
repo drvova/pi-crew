@@ -1,10 +1,42 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentConfig } from "../agents/agent-config.ts";
+import { resolveToolPolicy } from "../agents/agent-config.ts";
 import type { CrewRuntimeConfig } from "../config/config.ts";
-import type { TeamRunManifest, TeamTaskState, UsageState } from "../state/types.ts";
+import { loadConfig } from "../config/config.ts";
+import { DEFAULT_LIVE_SESSION } from "../config/defaults.ts";
 import { appendEvent } from "../state/event-log.ts";
-import { trackTaskUsage } from "./usage-tracker.ts";
+import type { TeamRunManifest, TeamTaskState, UsageState } from "../state/types.ts";
+import { logInternalError } from "../utils/internal-error.ts";
+import { redactSecrets } from "../utils/redaction.ts";
+import type { WorkflowStep } from "../workflows/workflow-config.ts";
+import { createIrcTool } from "./custom-tools/irc-tool.ts";
+import { createSubmitResultTool } from "./custom-tools/submit-result-tool.ts";
+import { applyLiveAgentControlRequest, applyLiveAgentControlRequests, type LiveAgentControlCursor } from "./live-agent-control.ts";
+import {
+	disposeLiveAgentSession,
+	listLiveAgents,
+	markLiveAgentCompleted,
+	registerLiveAgent,
+	terminateLiveAgent,
+	trackLiveAgentResponseText,
+	trackLiveAgentToolEnd,
+	trackLiveAgentToolStart,
+	trackLiveAgentTurnEnd,
+	updateLiveAgentStatus,
+} from "./live-agent-manager.ts";
+import { subscribeLiveControlRealtime } from "./live-control-realtime.ts";
+import { buildExtensionBridge } from "./live-extension-bridge.ts";
+import { collectLiveSessionHealth, formatLiveSessionDiagnostics, type LiveSessionHealth } from "./live-session-health.ts";
+import { buildMcpProxyFromSession } from "./mcp-proxy.ts";
+import { buildConfiguredModelRouting } from "./model-fallback.ts";
+import { readEnabledModelsPatterns } from "./model-scope.ts";
+import { isLiveSessionRuntimeAvailable } from "./runtime-resolver.ts";
+import { awaitRuntimeWarmup } from "./runtime-warmup.ts";
+// prose-compressor imported for custom tool descriptions below;
+// tool description compression for SDK-managed tools awaits SDK support.
+import { buildSensitivePathConstraint } from "./sensitive-paths.ts";
+import { eventToSidechainType, sidechainOutputPath, writeSidechainEntry } from "./sidechain-output.ts";
 // NOTE: buildMemoryBlock is intentionally NOT imported here. The agent memory
 // block is injected via renderTaskPrompt().full (the USER prompt), which is
 // shared by both the child-pi path (no system prompt) and the live-session
@@ -12,30 +44,16 @@ import { trackTaskUsage } from "./usage-tracker.ts";
 // block (up to 200 lines) in both the user and system prompts. Keep memory
 // in a single place: the shared user prompt. See G3 fix.
 import { createStreamingOutput, type StreamingOutputHandle } from "./streaming-output.ts";
-import { registerLiveAgent, disposeLiveAgentSession, terminateLiveAgent, updateLiveAgentStatus, trackLiveAgentToolStart, trackLiveAgentToolEnd, trackLiveAgentTurnEnd, trackLiveAgentResponseText, markLiveAgentCompleted } from "./live-agent-manager.ts";
-import { applyLiveAgentControlRequest, applyLiveAgentControlRequests, type LiveAgentControlCursor } from "./live-agent-control.ts";
-import { subscribeLiveControlRealtime } from "./live-control-realtime.ts";
-import { eventToSidechainType, sidechainOutputPath, writeSidechainEntry } from "./sidechain-output.ts";
-import type { WorkflowStep } from "../workflows/workflow-config.ts";
-import { isLiveSessionRuntimeAvailable } from "./runtime-resolver.ts";
-import { redactSecrets } from "../utils/redaction.ts";
-import { buildConfiguredModelRouting } from "./model-fallback.ts";
-import { readEnabledModelsPatterns } from "./model-scope.ts";
-import { resolveToolPolicy } from "../agents/agent-config.ts";
-import { loadConfig } from "../config/config.ts";
-import { awaitRuntimeWarmup } from "./runtime-warmup.ts";
-import { DEFAULT_LIVE_SESSION } from "../config/defaults.ts";
-import { buildYieldReminder, hasYieldInOutput, isYieldEvent, extractYieldResult, validateYieldData, DEFAULT_YIELD_CONFIG, type YieldResult } from "./yield-handler.ts";
-import { buildMcpProxyFromSession } from "./mcp-proxy.ts";
-import { createSubmitResultTool } from "./custom-tools/submit-result-tool.ts";
-import { createIrcTool } from "./custom-tools/irc-tool.ts";
-import { buildExtensionBridge } from "./live-extension-bridge.ts";
-import { logInternalError } from "../utils/internal-error.ts";
-// prose-compressor imported for custom tool descriptions below;
-// tool description compression for SDK-managed tools awaits SDK support.
-import { buildSensitivePathConstraint } from "./sensitive-paths.ts";
-import { collectLiveSessionHealth, formatLiveSessionDiagnostics, type LiveSessionHealth } from "./live-session-health.ts";
-import { listLiveAgents } from "./live-agent-manager.ts";
+import { trackTaskUsage } from "./usage-tracker.ts";
+import {
+	buildYieldReminder,
+	DEFAULT_YIELD_CONFIG,
+	extractYieldResult,
+	hasYieldInOutput,
+	isYieldEvent,
+	validateYieldData,
+	type YieldResult,
+} from "./yield-handler.ts";
 
 /**
  * Module-scoped latch for the optional peer dependency import. When N
@@ -110,13 +128,16 @@ export interface LiveSessionPlannedResult {
 type LiveSessionModule = Record<string, unknown> & {
 	createAgentSession?: (options?: Record<string, unknown>) => Promise<{ session: LiveSessionLike; modelFallbackMessage?: string }>;
 	DefaultResourceLoader?: new (options: Record<string, unknown>) => { reload?: () => Promise<void> };
-	SessionManager?: { inMemory?: (cwd?: string) => unknown; create?: (cwd?: string, sessionDir?: string) => unknown };
+	SessionManager?: {
+		inMemory?: (cwd?: string) => unknown;
+		create?: (cwd?: string, sessionDir?: string) => unknown;
+	};
 	SettingsManager?: { create?: (cwd?: string, agentDir?: string) => unknown };
 	getAgentDir?: () => string;
 };
 
 type LiveSessionLike = {
-	subscribe?: (listener: (event: unknown) => void) => (() => void);
+	subscribe?: (listener: (event: unknown) => void) => () => void;
 	prompt?: (text: string, options?: Record<string, unknown>) => Promise<void>;
 	steer?: (text: string) => Promise<void>;
 	abort?: () => Promise<void> | void;
@@ -135,7 +156,7 @@ function appendTranscript(filePath: string | undefined, event: unknown): void {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function isString(value: unknown): value is string {
@@ -157,7 +178,7 @@ function extractMessageRole(obj: Record<string, unknown> | undefined): string | 
  */
 function extractMessageUsage(obj: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
 	const message = obj?.message ? asRecord(obj.message) : undefined;
-	return message?.usage && typeof message.usage === "object" ? message.usage as Record<string, unknown> : undefined;
+	return message?.usage && typeof message.usage === "object" ? (message.usage as Record<string, unknown>) : undefined;
 }
 
 /**
@@ -260,21 +281,18 @@ function modelFromRegistry(modelRegistry: unknown, modelId: string | undefined):
  * model (e.g. minimax/MiniMax-M3, zai/glm-5.2); otherwise returns the
  * raw `parentModel` unchanged so the caller surfaces E008.
  */
-export function resolveParentModelFromRegistry(
-	modelRegistry: unknown,
-	rawParentModel: unknown,
-): string | undefined {
+export function resolveParentModelFromRegistry(modelRegistry: unknown, rawParentModel: unknown): string | undefined {
 	const raw = typeof rawParentModel === "string" ? rawParentModel.trim() : undefined;
 	if (raw) {
 		const candidate = raw.includes("/")
 			? raw
 			: (() => {
-				const m = modelFromRegistry(modelRegistry, raw);
-				if (m && typeof m === "object" && "fullId" in m) {
-					return String((m as { fullId?: unknown }).fullId ?? raw);
-				}
-				return undefined;
-			})();
+					const m = modelFromRegistry(modelRegistry, raw);
+					if (m && typeof m === "object" && "fullId" in m) {
+						return String((m as { fullId?: unknown }).fullId ?? raw);
+					}
+					return undefined;
+				})();
 		if (candidate && modelFromRegistry(modelRegistry, candidate)) return candidate;
 	}
 	const registry = modelRegistry as { getAvailable?: () => unknown[] } | undefined;
@@ -311,15 +329,16 @@ const ROLE_INTENSITY: Record<string, "lite" | "full" | "ultra"> = {
 function buildCommunicationStyle(role: string): string {
 	const intensity = ROLE_INTENSITY[role] ?? "full";
 	if (intensity === "lite") return "## Communication\nProfessional concise. No filler/hedging. Full sentences OK.";
-	if (intensity === "ultra") return [
-		"## Communication (ultra-compressed)",
-		"Drop: articles, filler, hedging, pleasantries. Fragments OK.",
-		"Pattern: [thing] [action] [reason].",
-		"Code/paths/symbols: exact, never abbreviated. Errors quoted exact.",
-		"Abbreviate prose words: DB/auth/config/req/res/fn/impl.",
-		"Arrows for causality: X → Y. One word when one word enough.",
-		"Security/destructive: write normal English. Resume compressed after.",
-	].join("\n");
+	if (intensity === "ultra")
+		return [
+			"## Communication (ultra-compressed)",
+			"Drop: articles, filler, hedging, pleasantries. Fragments OK.",
+			"Pattern: [thing] [action] [reason].",
+			"Code/paths/symbols: exact, never abbreviated. Errors quoted exact.",
+			"Abbreviate prose words: DB/auth/config/req/res/fn/impl.",
+			"Arrows for causality: X → Y. One word when one word enough.",
+			"Security/destructive: write normal English. Resume compressed after.",
+		].join("\n");
 	return [
 		"## Communication (compressed)",
 		"Drop: articles (a/an/the), filler (just/really/basically/actually/simply), hedging, pleasantries.",
@@ -330,32 +349,36 @@ function buildCommunicationStyle(role: string): string {
 }
 
 function buildOutputContract(role: string): string {
-	if (role === "explorer") return [
-		"## Output Contract",
-		"<path>:<line> — `<symbol>` — <≤6 word note>",
-		"Group: Defs: / Refs: / Callers: / Tests: / Sites:",
-		"Zero hits → \"No match.\"",
-		"Last line → totals: N defs, M refs.",
-	].join("\n");
-	if (role === "executor") return [
-		"## Output Contract",
-		"<path>:<line-range> — <change ≤10 words>.",
-		"verified: <re-read OK | mismatch @ path:line>.",
-		"Refusal tokens: too-big. / needs-confirm. / ambiguous. / regressed.",
-	].join("\n");
-	if (role === "reviewer" || role === "security-reviewer") return [
-		"## Output Contract",
-		"<path>:<line>: <emoji> <severity>: <problem>. <fix>.",
-		"Severity: 🔴 bug, 🟡 risk, 🔵 nit, ❓ question.",
-		"Zero findings → \"No issues.\"",
-		"Sorted: file order → ascending line numbers.",
-	].join("\n");
-	if (role === "verifier") return [
-		"## Output Contract",
-		"PASS: <what verified> — <evidence ≤20 words>.",
-		"FAIL: <what failed> — <reason>. <expected vs actual>.",
-		"Evidence: file paths, test output, or diffs.",
-	].join("\n");
+	if (role === "explorer")
+		return [
+			"## Output Contract",
+			"<path>:<line> — `<symbol>` — <≤6 word note>",
+			"Group: Defs: / Refs: / Callers: / Tests: / Sites:",
+			'Zero hits → "No match."',
+			"Last line → totals: N defs, M refs.",
+		].join("\n");
+	if (role === "executor")
+		return [
+			"## Output Contract",
+			"<path>:<line-range> — <change ≤10 words>.",
+			"verified: <re-read OK | mismatch @ path:line>.",
+			"Refusal tokens: too-big. / needs-confirm. / ambiguous. / regressed.",
+		].join("\n");
+	if (role === "reviewer" || role === "security-reviewer")
+		return [
+			"## Output Contract",
+			"<path>:<line>: <emoji> <severity>: <problem>. <fix>.",
+			"Severity: 🔴 bug, 🟡 risk, 🔵 nit, ❓ question.",
+			'Zero findings → "No issues."',
+			"Sorted: file order → ascending line numbers.",
+		].join("\n");
+	if (role === "verifier")
+		return [
+			"## Output Contract",
+			"PASS: <what verified> — <evidence ≤20 words>.",
+			"FAIL: <what failed> — <reason>. <expected vs actual>.",
+			"Evidence: file paths, test output, or diffs.",
+		].join("\n");
 	if (role === "writer") return "## Output Contract\nWrite clear documentation. Full sentences. No compression.";
 	return ""; // planner, critic, analyst, test-engineer: no strict format
 }
@@ -397,7 +420,9 @@ export function liveSystemPrompt(input: LiveSessionSpawnInput): string {
 		sensitiveConstraint,
 		"",
 		input.agent.systemPrompt || "Follow the user task exactly and report verification evidence.",
-	].filter(Boolean).join("\n");
+	]
+		.filter(Boolean)
+		.join("\n");
 }
 
 function filterActiveTools(session: LiveSessionLike, agent: AgentConfig, role?: string): void {
@@ -411,7 +436,9 @@ function filterActiveTools(session: LiveSessionLike, agent: AgentConfig, role?: 
 	const policy = resolveToolPolicy(agent, role);
 	const disallowed = policy.excludeTools?.length ? new Set(policy.excludeTools) : undefined;
 	const allowed = policy.tools?.length ? new Set(policy.tools) : undefined;
-	const active = session.getActiveToolNames().filter((name) => !recursiveTools.has(name) && (!disallowed || !disallowed.has(name)) && (!allowed || allowed.has(name)));
+	const active = session
+		.getActiveToolNames()
+		.filter((name) => !recursiveTools.has(name) && (!disallowed || !disallowed.has(name)) && (!allowed || allowed.has(name)));
 	session.setActiveToolsByName(active);
 }
 
@@ -424,11 +451,16 @@ function usageFromStats(stats: unknown): UsageState | undefined {
 	const cacheWrite = numberField(obj, ["cacheWrite", "cache_write"]);
 	const cost = numberField(obj, ["cost"]);
 	const turns = numberField(obj, ["turns", "turnCount", "turn_count"]);
-	return [input, output, cacheRead, cacheWrite, cost, turns].some((value) => value !== undefined) ? { input, output, cacheRead, cacheWrite, cost, turns } : undefined;
+	return [input, output, cacheRead, cacheWrite, cost, turns].some((value) => value !== undefined)
+		? { input, output, cacheRead, cacheWrite, cost, turns }
+		: undefined;
 }
 
 async function promptWithTimeout(session: LiveSessionLike, text: string, timeoutMs: number, label: string): Promise<boolean> {
-	const promptPromise = session.prompt?.(text, { source: "api", expandPromptTemplates: false });
+	const promptPromise = session.prompt?.(text, {
+		source: "api",
+		expandPromptTemplates: false,
+	});
 	if (!promptPromise) return false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	try {
@@ -447,8 +479,15 @@ async function promptWithTimeout(session: LiveSessionLike, text: string, timeout
 
 export async function probeLiveSessionRuntime(): Promise<LiveSessionUnavailableResult | LiveSessionPlannedResult> {
 	const availability = await isLiveSessionRuntimeAvailable();
-	if (!availability.available) return { available: false, reason: availability.reason ?? "Live-session runtime is unavailable." };
-	return { available: true, reason: "Live-session SDK exports are available. pi-crew can run in-process live agents when runtime.mode=live-session." };
+	if (!availability.available)
+		return {
+			available: false,
+			reason: availability.reason ?? "Live-session runtime is unavailable.",
+		};
+	return {
+		available: true,
+		reason: "Live-session SDK exports are available. pi-crew can run in-process live agents when runtime.mode=live-session.",
+	};
 }
 
 export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<LiveSessionRunResult> {
@@ -464,29 +503,91 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 	let customToolYieldResolved = false;
 	if (process.env.PI_CREW_MOCK_LIVE_SESSION === "success") {
 		const agentId = `${input.manifest.runId}:${input.task.id}`;
-		const inherited = input.runtimeConfig?.inheritContext === true && input.parentContext ? ` with inherited context: ${input.parentContext}` : "";
-		const event = { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: `Mock live-session success for ${input.agent.name}${inherited}` }] } };
-		const mockSession = { steer: async () => {}, prompt: async () => {}, abort: async () => {} };
-		registerLiveAgent({ agentId, runId: input.manifest.runId, taskId: input.task.id, role: input.task.role, agent: input.agent?.name ?? "mock", description: "mock", session: mockSession, status: "running", workspaceId: input.workspaceId }, appendEvent, input.manifest.eventsPath);
+		const inherited =
+			input.runtimeConfig?.inheritContext === true && input.parentContext ? ` with inherited context: ${input.parentContext}` : "";
+		const event = {
+			type: "message_end",
+			message: {
+				role: "assistant",
+				content: [
+					{
+						type: "text",
+						text: `Mock live-session success for ${input.agent.name}${inherited}`,
+					},
+				],
+			},
+		};
+		const mockSession = {
+			steer: async () => {},
+			prompt: async () => {},
+			abort: async () => {},
+		};
+		registerLiveAgent(
+			{
+				agentId,
+				runId: input.manifest.runId,
+				taskId: input.task.id,
+				role: input.task.role,
+				agent: input.agent?.name ?? "mock",
+				description: "mock",
+				session: mockSession,
+				status: "running",
+				workspaceId: input.workspaceId,
+			},
+			appendEvent,
+			input.manifest.eventsPath,
+		);
 		appendTranscript(input.transcriptPath, event);
 		const sidechainPath = sidechainOutputPath(input.manifest.stateRoot, input.task.id);
-		writeSidechainEntry(sidechainPath, { agentId, type: "user", message: { role: "user", content: input.prompt }, cwd: input.task.cwd });
-		writeSidechainEntry(sidechainPath, { agentId, type: "message", message: event, cwd: input.task.cwd });
+		writeSidechainEntry(sidechainPath, {
+			agentId,
+			type: "user",
+			message: { role: "user", content: input.prompt },
+			cwd: input.task.cwd,
+		});
+		writeSidechainEntry(sidechainPath, {
+			agentId,
+			type: "message",
+			message: event,
+			cwd: input.task.cwd,
+		});
 		if (isCurrent()) input.onEvent?.(event);
 		const stdout = `Mock live-session success for ${input.agent.name}${inherited}`;
 		if (isCurrent()) input.onOutput?.(stdout);
 		updateLiveAgentStatus(agentId, "completed");
 		markLiveAgentCompleted(agentId);
-		return { available: true, exitCode: 0, stdout, stderr: "", jsonEvents: 1 };
+		return {
+			available: true,
+			exitCode: 0,
+			stdout,
+			stderr: "",
+			jsonEvents: 1,
+		};
 	}
 	const availability = await isLiveSessionRuntimeAvailable();
-	if (!availability.available) return { available: true, exitCode: 1, stdout: "", stderr: availability.reason ?? "Live-session runtime unavailable.", jsonEvents: 0, error: availability.reason };
+	if (!availability.available)
+		return {
+			available: true,
+			exitCode: 1,
+			stdout: "",
+			stderr: availability.reason ?? "Live-session runtime unavailable.",
+			jsonEvents: 0,
+			error: availability.reason,
+		};
 	// LAZY: optional peer dependency — only loaded when live-session runtime is
 	// chosen. Goes through the module-scoped latch (loadLiveSessionModule) so
 	// concurrent first-imports share ONE in-flight promise instead of racing
 	// module-record instantiation under the tsx loader.
 	const mod = await loadLiveSessionModule();
-	if (typeof mod.createAgentSession !== "function") return { available: true, exitCode: 1, stdout: "", stderr: "createAgentSession export is unavailable.", jsonEvents: 0, error: "createAgentSession export is unavailable." };
+	if (typeof mod.createAgentSession !== "function")
+		return {
+			available: true,
+			exitCode: 1,
+			stdout: "",
+			stderr: "createAgentSession export is unavailable.",
+			jsonEvents: 0,
+			error: "createAgentSession export is unavailable.",
+		};
 	let session: LiveSessionLike | undefined;
 	let unsubscribe: (() => void) | undefined;
 	let unsubscribeControlRealtime: (() => void) | undefined;
@@ -528,8 +629,19 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			await (resourceLoader as { reload?: () => Promise<void> }).reload?.();
 		}
 		const effectiveParentModel = resolveParentModelFromRegistry(input.modelRegistry, input.parentModel);
-		const modelRouting = buildConfiguredModelRouting({ overrideModel: input.modelOverride, stepModel: input.step.model, teamRoleModel: input.teamRoleModel, agentModel: input.agent.model, fallbackModels: input.agent.fallbackModels, parentModel: effectiveParentModel, modelRegistry: input.modelRegistry, cwd: input.manifest.cwd, scopeModelsPatterns: await resolveScopeModelsPatterns(input.manifest.cwd) });
-		const resolvedModel = modelFromRegistry(input.modelRegistry, modelRouting.candidates[0] ?? modelRouting.requested) ?? input.parentModel;
+		const modelRouting = buildConfiguredModelRouting({
+			overrideModel: input.modelOverride,
+			stepModel: input.step.model,
+			teamRoleModel: input.teamRoleModel,
+			agentModel: input.agent.model,
+			fallbackModels: input.agent.fallbackModels,
+			parentModel: effectiveParentModel,
+			modelRegistry: input.modelRegistry,
+			cwd: input.manifest.cwd,
+			scopeModelsPatterns: await resolveScopeModelsPatterns(input.manifest.cwd),
+		});
+		const resolvedModel =
+			modelFromRegistry(input.modelRegistry, modelRouting.candidates[0] ?? modelRouting.requested) ?? input.parentModel;
 		// Phase 4: MCP proxy — will be determined after session creation
 		// (we check parent's MCP tools and share connections when available)
 		const mcpProxy = buildMcpProxyFromSession([], { shareMcp: true });
@@ -547,8 +659,16 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			cwd: input.task.cwd,
 			...(agentDir ? { agentDir } : {}),
 			...(resourceLoader ? { resourceLoader } : {}),
-			...(mod.SessionManager?.inMemory ? { sessionManager: mod.SessionManager.inMemory(input.task.cwd) } : {}),
-			...(mod.SettingsManager?.create && agentDir ? { settingsManager: mod.SettingsManager.create(input.task.cwd, agentDir) } : {}),
+			...(mod.SessionManager?.inMemory
+				? {
+						sessionManager: mod.SessionManager.inMemory(input.task.cwd),
+					}
+				: {}),
+			...(mod.SettingsManager?.create && agentDir
+				? {
+						settingsManager: mod.SettingsManager.create(input.task.cwd, agentDir),
+					}
+				: {}),
 			...(input.modelRegistry ? { modelRegistry: input.modelRegistry } : {}),
 			...(resolvedModel ? { model: resolvedModel } : {}),
 			...(input.agent.thinking ? { thinkingLevel: input.agent.thinking } : {}),
@@ -556,7 +676,15 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			customTools,
 		});
 		session = created.session;
-		appendEvent(input.manifest.eventsPath, { type: "live-session.session_created", runId: input.manifest.runId, taskId: input.task.id, data: { elapsedMs: Date.now() - sessionCreateStart, modelFallbackMessage: created.modelFallbackMessage } });
+		appendEvent(input.manifest.eventsPath, {
+			type: "live-session.session_created",
+			runId: input.manifest.runId,
+			taskId: input.task.id,
+			data: {
+				elapsedMs: Date.now() - sessionCreateStart,
+				modelFallbackMessage: created.modelFallbackMessage,
+			},
+		});
 		filterActiveTools(session, input.agent, input.task.role);
 
 		// Diagnostic: log before bindExtensions so we can identify extension-loading hangs
@@ -568,7 +696,15 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			]);
 		} catch (bindError) {
 			const msg = bindError instanceof Error ? bindError.message : String(bindError);
-			appendEvent(input.manifest.eventsPath, { type: "live-session.bind_extensions_error", runId: input.manifest.runId, taskId: input.task.id, data: { elapsedMs: Date.now() - bindExtensionsStart, error: msg } });
+			appendEvent(input.manifest.eventsPath, {
+				type: "live-session.bind_extensions_error",
+				runId: input.manifest.runId,
+				taskId: input.task.id,
+				data: {
+					elapsedMs: Date.now() - bindExtensionsStart,
+					error: msg,
+				},
+			});
 			// Continue without extensions — they should not block the session
 		}
 
@@ -583,9 +719,17 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			const extRunner = (session as Record<string, unknown>).extensionRunner;
 			if (extRunner && typeof (extRunner as Record<string, unknown>).initialize === "function") {
 				try {
-					(extRunner as { initialize: (apis: unknown, host: unknown) => void }).initialize(extensionBridge.apis, extensionBridge.host);
+					(
+						extRunner as {
+							initialize: (apis: unknown, host: unknown) => void;
+						}
+					).initialize(extensionBridge.apis, extensionBridge.host);
 					if (typeof (extRunner as Record<string, unknown>).emit === "function") {
-						await (extRunner as { emit: (event: unknown) => Promise<void> }).emit({ type: "session_start" });
+						await (
+							extRunner as {
+								emit: (event: unknown) => Promise<void>;
+							}
+						).emit({ type: "session_start" });
 					}
 				} catch {
 					// Extension runner initialization failure should not block the session
@@ -593,7 +737,22 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			}
 		}
 
-		registerLiveAgent({ agentId, runId: input.manifest.runId, taskId: input.task.id, role: input.task.role, agent: input.agent?.name ?? "unknown", description: input.task.adaptive?.task ?? input.step?.task ?? "", modelName: (resolvedModel as { name?: string })?.name, session, status: "running", workspaceId: input.workspaceId }, appendEvent, input.manifest.eventsPath);
+		registerLiveAgent(
+			{
+				agentId,
+				runId: input.manifest.runId,
+				taskId: input.task.id,
+				role: input.task.role,
+				agent: input.agent?.name ?? "unknown",
+				description: input.task.adaptive?.task ?? input.step?.task ?? "",
+				modelName: (resolvedModel as { name?: string })?.name,
+				session,
+				status: "running",
+				workspaceId: input.workspaceId,
+			},
+			appendEvent,
+			input.manifest.eventsPath,
+		);
 		streamOut = createStreamingOutput(input.manifest, input.task.id);
 		let controlCursor: LiveAgentControlCursor = { offset: 0 };
 		const seenControlRequestIds = new Set<string>();
@@ -602,14 +761,27 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			if (!isCurrent() || controlBusy || !session) return;
 			controlBusy = true;
 			try {
-				controlCursor = await applyLiveAgentControlRequests({ manifest: input.manifest, taskId: input.task.id, agentId, session, cursor: controlCursor, seenRequestIds: seenControlRequestIds });
+				controlCursor = await applyLiveAgentControlRequests({
+					manifest: input.manifest,
+					taskId: input.task.id,
+					agentId,
+					session,
+					cursor: controlCursor,
+					seenRequestIds: seenControlRequestIds,
+				});
 			} finally {
 				controlBusy = false;
 			}
 		};
 		unsubscribeControlRealtime = subscribeLiveControlRealtime((request) => {
 			if (!isCurrent() || request.runId !== input.manifest.runId || request.taskId !== input.task.id || !session) return;
-			void applyLiveAgentControlRequest({ request, taskId: input.task.id, agentId, session, seenRequestIds: seenControlRequestIds });
+			void applyLiveAgentControlRequest({
+				request,
+				taskId: input.task.id,
+				agentId,
+				session,
+				seenRequestIds: seenControlRequestIds,
+			});
 		});
 		await pollControl();
 		controlTimer = setInterval(() => {
@@ -620,14 +792,25 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 		const maxTurns = input.runtimeConfig?.maxTurns;
 		const graceTurns = input.runtimeConfig?.graceTurns ?? 5;
 		const sidechainPath = sidechainOutputPath(input.manifest.stateRoot, input.task.id);
-		writeSidechainEntry(sidechainPath, { agentId, type: "user", message: { role: "user", content: input.prompt }, cwd: input.task.cwd });
+		writeSidechainEntry(sidechainPath, {
+			agentId,
+			type: "user",
+			message: { role: "user", content: input.prompt },
+			cwd: input.task.cwd,
+		});
 		if (typeof session.subscribe === "function") {
 			unsubscribe = session.subscribe((event) => {
 				if (!isCurrent()) return;
 				jsonEvents += 1;
 				appendTranscript(input.transcriptPath, event);
 				const sidechainType = eventToSidechainType(event);
-				if (sidechainType) writeSidechainEntry(sidechainPath, { agentId, type: sidechainType, message: event, cwd: input.task.cwd });
+				if (sidechainType)
+					writeSidechainEntry(sidechainPath, {
+						agentId,
+						type: sidechainType,
+						message: event,
+						cwd: input.task.cwd,
+					});
 				const obj = asRecord(event);
 				if (obj?.type === "turn_end") {
 					turnCount += 1;
@@ -670,24 +853,42 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 				// Phase 1: collect events for yield detection
 				if (event && typeof event === "object" && !Array.isArray(event)) {
 					collectedJsonEvents.push(event as Record<string, unknown>);
-					if (collectedJsonEvents.length > maxCollectedJsonEvents) collectedJsonEvents.splice(0, collectedJsonEvents.length - maxCollectedJsonEvents);
+					if (collectedJsonEvents.length > maxCollectedJsonEvents)
+						collectedJsonEvents.splice(0, collectedJsonEvents.length - maxCollectedJsonEvents);
 				}
 			});
 		}
 		// Round 27 (BUG 4): named abort handler (removed in finally below).
-		onSignalAbort = (): void => { void session?.abort?.(); };
+		onSignalAbort = (): void => {
+			void session?.abort?.();
+		};
 		if (input.signal) {
 			if (input.signal.aborted) await session.abort?.();
 			// Round 27 (BUG 4): named handler so the finally block can remove it.
 			// The previous anonymous listener leaked on normal completion (only
 			// auto-removed by { once: true } AFTER the signal fires).
-			else input.signal.addEventListener("abort", onSignalAbort, { once: true });
+			else
+				input.signal.addEventListener("abort", onSignalAbort, {
+					once: true,
+				});
 		}
-		const effectivePrompt = input.runtimeConfig?.inheritContext === true && input.parentContext ? `${input.parentContext}\n\n---\n# Live Subagent Task\n${input.prompt}` : input.prompt;
+		const effectivePrompt =
+			input.runtimeConfig?.inheritContext === true && input.parentContext
+				? `${input.parentContext}\n\n---\n# Live Subagent Task\n${input.prompt}`
+				: input.prompt;
 
 		// Diagnostic: log prompt size and timing
 		const promptStart = Date.now();
-		appendEvent(input.manifest.eventsPath, { type: "live-session.prompt_start", runId: input.manifest.runId, taskId: input.task.id, data: { promptLength: effectivePrompt.length, agent: input.agent.name, role: input.task.role } });
+		appendEvent(input.manifest.eventsPath, {
+			type: "live-session.prompt_start",
+			runId: input.manifest.runId,
+			taskId: input.task.id,
+			data: {
+				promptLength: effectivePrompt.length,
+				agent: input.agent.name,
+				role: input.task.role,
+			},
+		});
 
 		// Phase 3: Wrap session.prompt with timeout for graceful cancellation
 		const sessionTimeoutMs = DEFAULT_LIVE_SESSION.responseTimeoutMs;
@@ -695,20 +896,43 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			await promptWithTimeout(session, effectivePrompt, sessionTimeoutMs, "Live-session");
 		} catch (promptError) {
 			const msg = promptError instanceof Error ? promptError.message : String(promptError);
-			appendEvent(input.manifest.eventsPath, { type: "live-session.prompt_error", runId: input.manifest.runId, taskId: input.task.id, data: { elapsedMs: Date.now() - promptStart, error: msg } });
+			appendEvent(input.manifest.eventsPath, {
+				type: "live-session.prompt_error",
+				runId: input.manifest.runId,
+				taskId: input.task.id,
+				data: { elapsedMs: Date.now() - promptStart, error: msg },
+			});
 			if (msg.includes("timed out")) {
 				await session.abort?.();
 				updateLiveAgentStatus(agentId, "failed");
-				return { available: true, exitCode: 1, stdout: stdout.trim(), stderr: msg, jsonEvents, error: msg };
+				return {
+					available: true,
+					exitCode: 1,
+					stdout: stdout.trim(),
+					stderr: msg,
+					jsonEvents,
+					error: msg,
+				};
 			}
 			throw promptError;
 		}
-		appendEvent(input.manifest.eventsPath, { type: "live-session.prompt_done", runId: input.manifest.runId, taskId: input.task.id, data: { elapsedMs: Date.now() - promptStart, jsonEvents, outputLength: stdout.length } });
+		appendEvent(input.manifest.eventsPath, {
+			type: "live-session.prompt_done",
+			runId: input.manifest.runId,
+			taskId: input.task.id,
+			data: {
+				elapsedMs: Date.now() - promptStart,
+				jsonEvents,
+				outputLength: stdout.length,
+			},
+		});
 
 		// --- Phase 1: Yield enforcement loop ---
 		// After the initial prompt completes, check if the worker called submit_result.
 		// Priority: 1) custom tool callback (G1), 2) JSON event detection (legacy).
-		const yieldConfig = input.runtimeConfig?.yield ?? { enabled: DEFAULT_YIELD_CONFIG.enabled };
+		const yieldConfig = input.runtimeConfig?.yield ?? {
+			enabled: DEFAULT_YIELD_CONFIG.enabled,
+		};
 		const yieldEnabled = yieldConfig.enabled !== false;
 		if (yieldEnabled && session) {
 			// Check custom tool callback first (G1)
@@ -733,7 +957,12 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 					customToolYieldResolved = false;
 					const schemaReminder = `Your submit_result data did not match the required schema: ${validation.error}. Please fix and call submit_result again with valid data.`;
 					try {
-						await promptWithTimeout(session, schemaReminder, Math.min(sessionTimeoutMs, DEFAULT_LIVE_SESSION.idleWaitTimeoutMs), "Live-session schema reminder");
+						await promptWithTimeout(
+							session,
+							schemaReminder,
+							Math.min(sessionTimeoutMs, DEFAULT_LIVE_SESSION.idleWaitTimeoutMs),
+							"Live-session schema reminder",
+						);
 					} catch {
 						/* ignore */
 					}
@@ -770,7 +999,12 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 					if (typeof session.setActiveToolsByName === "function" && prevTools.length > 0) {
 						session.setActiveToolsByName(["submit_result"]);
 					}
-					await promptWithTimeout(session, reminder, Math.min(sessionTimeoutMs, DEFAULT_LIVE_SESSION.idleWaitTimeoutMs), "Live-session yield reminder");
+					await promptWithTimeout(
+						session,
+						reminder,
+						Math.min(sessionTimeoutMs, DEFAULT_LIVE_SESSION.idleWaitTimeoutMs),
+						"Live-session yield reminder",
+					);
 				} catch {
 					break;
 				} finally {
@@ -794,14 +1028,32 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 				}
 			}
 			if (!customToolYieldResolved && !yieldResult && !input.signal?.aborted && retryCount >= maxReminders) {
-				input.onEvent?.({ type: "task.attention", runId: input.manifest.runId, taskId: input.task.id, message: "Live-session worker completed without calling submit_result tool.", data: { activityState: "needs_attention", reason: "no_yield", attempts: retryCount } });
+				input.onEvent?.({
+					type: "task.attention",
+					runId: input.manifest.runId,
+					taskId: input.task.id,
+					message: "Live-session worker completed without calling submit_result tool.",
+					data: {
+						activityState: "needs_attention",
+						reason: "no_yield",
+						attempts: retryCount,
+					},
+				});
 			}
 		}
 
 		const usage = usageFromStats(typeof session.getStats === "function" ? session.getStats() : session.stats);
 		updateLiveAgentStatus(agentId, "completed");
 		markLiveAgentCompleted(agentId);
-		return { available: true, exitCode: 0, stdout: stdout.trim(), stderr: created.modelFallbackMessage ?? "", jsonEvents, usage, yieldResult };
+		return {
+			available: true,
+			exitCode: 0,
+			stdout: stdout.trim(),
+			stderr: created.modelFallbackMessage ?? "",
+			jsonEvents,
+			usage,
+			yieldResult,
+		};
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 
@@ -810,13 +1062,23 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			const agents = listLiveAgents();
 			const health = collectLiveSessionHealth(agents, () => undefined);
 			const diagnostics = formatLiveSessionDiagnostics(health);
-			input.onEvent?.({ type: "live-session.diagnostics", data: diagnostics });
+			input.onEvent?.({
+				type: "live-session.diagnostics",
+				data: diagnostics,
+			});
 		} catch (diagError) {
 			logInternalError("live-session.diagnostics", diagError);
 		}
 
 		updateLiveAgentStatus(`${input.manifest.runId}:${input.task.id}`, "failed");
-		return { available: true, exitCode: 1, stdout: stdout.trim(), stderr: message, jsonEvents, error: message };
+		return {
+			available: true,
+			exitCode: 1,
+			stdout: stdout.trim(),
+			stderr: message,
+			jsonEvents,
+			error: message,
+		};
 	} finally {
 		// H6: Unsubscribe listeners FIRST before clearing timer to prevent race
 		unsubscribe?.();

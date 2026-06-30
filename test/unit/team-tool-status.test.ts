@@ -6,12 +6,12 @@
  * argument validation and error handling for missing/invalid params.
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { handleStatus } from "../../src/extension/team-tool/status.ts";
-import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
+import { describe, it } from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import { handleStatus } from "../../src/extension/team-tool/status.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
+import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeCtx(cwd: string): TeamContext {
@@ -41,10 +41,7 @@ describe("handleStatus", () => {
 	it("returns error when run is not found", () => {
 		const tmp = createTrackedTempDir("status-test-");
 		try {
-			const res = handleStatus(
-				makeParams({ runId: "nonexistent-run-999" }),
-				makeCtx(tmp),
-			);
+			const res = handleStatus(makeParams({ runId: "nonexistent-run-999" }), makeCtx(tmp));
 
 			assert.strictEqual(res.isError, true);
 			const text = textFromToolResult(res);
@@ -57,10 +54,7 @@ describe("handleStatus", () => {
 	it("includes action=status in details", () => {
 		const tmp = createTrackedTempDir("status-test-");
 		try {
-			const res = handleStatus(
-				makeParams({ runId: "any-run-id" }),
-				makeCtx(tmp),
-			);
+			const res = handleStatus(makeParams({ runId: "any-run-id" }), makeCtx(tmp));
 
 			assert.strictEqual(res.details.action, "status");
 		} finally {
@@ -71,10 +65,7 @@ describe("handleStatus", () => {
 	it("returns error status in details for missing run", () => {
 		const tmp = createTrackedTempDir("status-test-");
 		try {
-			const res = handleStatus(
-				makeParams({ runId: "missing" }),
-				makeCtx(tmp),
-			);
+			const res = handleStatus(makeParams({ runId: "missing" }), makeCtx(tmp));
 
 			assert.strictEqual(res.details.status, "error");
 		} finally {

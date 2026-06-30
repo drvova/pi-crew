@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { replace } from "../../src/runtime/replace.ts";
 
 describe("replace — ReplaceResult contract", () => {
@@ -94,7 +94,9 @@ describe("replace — replaceAll=true", () => {
 	});
 
 	it("replaceAll=true with a single occurrence still works", () => {
-		const result = replace("hello world", "hello", "hi", { replaceAll: true });
+		const result = replace("hello world", "hello", "hi", {
+			replaceAll: true,
+		});
 		assert.equal(result.changed, true);
 		assert.equal(result.content, "hi world");
 		assert.equal(result.strategy, "simple-replaceAll");
@@ -102,7 +104,9 @@ describe("replace — replaceAll=true", () => {
 	});
 
 	it("replaceAll=true when oldString is not found returns changed=false", () => {
-		const result = replace("hello world", "missing", "x", { replaceAll: true });
+		const result = replace("hello world", "missing", "x", {
+			replaceAll: true,
+		});
 		assert.equal(result.changed, false);
 		assert.equal(result.content, "hello world");
 		assert.equal(result.strategy, "none");
@@ -242,12 +246,7 @@ describe("replace — line-trimmed strategy", () => {
 
 describe("replace — block-anchor (Levenshtein fuzzy fallback) strategy", () => {
 	it("matches a 3+ line block using first/last anchors with fuzzy middle", () => {
-		const content = [
-			"function foo() {",
-			'  console.log("hello world");',
-			"  return 42;",
-			"}",
-		].join("\n");
+		const content = ["function foo() {", '  console.log("hello world");', "  return 42;", "}"].join("\n");
 
 		// Find has a slightly different middle line — anchors match, Levenshtein similarity is high
 		const find = [

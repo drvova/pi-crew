@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 
 const installScript = path.resolve("install.mjs");
 
@@ -22,7 +22,9 @@ test("install.mjs respects PI_TEAMS_HOME and writes default UI config", () => {
 		const configPath = path.join(home, ".pi", "agent", "pi-crew.json");
 		assert.match(output, /Created default pi-crew global config/);
 		assert.equal(fs.existsSync(configPath), true);
-		const config = JSON.parse(fs.readFileSync(configPath, "utf-8")) as { ui?: Record<string, unknown> };
+		const config = JSON.parse(fs.readFileSync(configPath, "utf-8")) as {
+			ui?: Record<string, unknown>;
+		};
 		assert.deepEqual(config.ui, {
 			widgetPlacement: "aboveEditor",
 			widgetMaxLines: 8,
@@ -52,7 +54,9 @@ test("install.mjs migrates legacy config inside PI_TEAMS_HOME", () => {
 		const output = runInstaller(home);
 		const configPath = path.join(home, ".pi", "agent", "pi-crew.json");
 		assert.match(output, /Migrated pi-crew global config/);
-		const config = JSON.parse(fs.readFileSync(configPath, "utf-8")) as { ui?: Record<string, unknown> };
+		const config = JSON.parse(fs.readFileSync(configPath, "utf-8")) as {
+			ui?: Record<string, unknown>;
+		};
 		assert.deepEqual(config.ui, { widgetPlacement: "belowEditor" });
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });

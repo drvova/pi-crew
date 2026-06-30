@@ -12,11 +12,7 @@
  * slash-command, file (`@`), and command-argument completion all keep working
  * unchanged.
  */
-import type {
-	AutocompleteItem,
-	AutocompleteProvider,
-	AutocompleteSuggestions,
-} from "@earendil-works/pi-tui";
+import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import { CREW_PHRASES } from "./crew-input-router.ts";
 
 /** Max phrases to suggest. */
@@ -68,9 +64,7 @@ export function suggestCrewPhrases(query: string): AutocompleteItem[] {
  * a crew natural-language trigger, returns phrase suggestions; otherwise
  * delegates to `current`.
  */
-export function createCrewAutocompleteProvider(
-	current: AutocompleteProvider,
-): AutocompleteProvider {
+export function createCrewAutocompleteProvider(current: AutocompleteProvider): AutocompleteProvider {
 	return {
 		async getSuggestions(
 			lines: string[],
@@ -115,11 +109,7 @@ export function createCrewAutocompleteProvider(
 			return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
 		},
 
-		shouldTriggerFileCompletion(
-			lines: string[],
-			cursorLine: number,
-			cursorCol: number,
-		): boolean {
+		shouldTriggerFileCompletion(lines: string[], cursorLine: number, cursorCol: number): boolean {
 			// Suppress file-completion trigger inside a crew phrase so the
 			// editor doesn't pop a file list over our phrase suggestions.
 			if (cursorLine === 0) {
@@ -132,8 +122,10 @@ export function createCrewAutocompleteProvider(
 }
 
 /** Register the crew autocomplete provider on a Pi UI context. Safe to call once. */
-export function registerCrewAutocomplete(
-	ctx: { ui?: { addAutocompleteProvider?: (factory: (current: AutocompleteProvider) => AutocompleteProvider) => void } },
-): void {
+export function registerCrewAutocomplete(ctx: {
+	ui?: {
+		addAutocompleteProvider?: (factory: (current: AutocompleteProvider) => AutocompleteProvider) => void;
+	};
+}): void {
 	ctx.ui?.addAutocompleteProvider?.((current) => createCrewAutocompleteProvider(current));
 }

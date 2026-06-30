@@ -2,9 +2,9 @@
  * Safe Bash Tests
  */
 
-import test from "node:test";
 import assert from "node:assert";
-import { isDangerous, validateCommand, createSafeBash, SAFE_BASH_PRESETS } from "../../src/tools/safe-bash.ts";
+import test from "node:test";
+import { createSafeBash, isDangerous, SAFE_BASH_PRESETS, validateCommand } from "../../src/tools/safe-bash.ts";
 
 test("blocks rm -rf /", () => {
 	assert.ok(isDangerous("rm -rf /"));
@@ -110,16 +110,16 @@ test("handles multiline commands", () => {
 
 test("createSafeBash singleton interface", () => {
 	const safe = createSafeBash();
-	
+
 	assert.ok(typeof safe.validate === "function");
 	assert.ok(typeof safe.check === "function");
 	assert.ok(typeof safe.getPatterns === "function");
 	assert.ok(typeof safe.isEnabled === "function");
-	
+
 	assert.ok(safe.isEnabled());
 	assert.ok(safe.check("rm -rf /"));
 	assert.ok(!safe.check("ls"));
-	
+
 	const patterns = safe.getPatterns();
 	assert.ok(Array.isArray(patterns.dangerous));
 	assert.ok(patterns.dangerous.length > 0);
@@ -127,18 +127,12 @@ test("createSafeBash singleton interface", () => {
 
 test("overly permissive allowPatterns are rejected", () => {
 	const safe = createSafeBash({ allowPatterns: [/.*/] });
-	assert.throws(
-		() => safe.check("echo hello"),
-		/Overly permissive allowPattern rejected/,
-	);
+	assert.throws(() => safe.check("echo hello"), /Overly permissive allowPattern rejected/);
 });
 
 test("allowPattern matching empty string and dangerous command is rejected", () => {
 	const safe = createSafeBash({ allowPatterns: [/^.*$/] });
-	assert.throws(
-		() => safe.check("echo test"),
-		/Overly permissive allowPattern/,
-	);
+	assert.throws(() => safe.check("echo test"), /Overly permissive allowPattern/);
 });
 
 test("specific allowPatterns are accepted", () => {

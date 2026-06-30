@@ -1,16 +1,23 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { isWorkerAtomicWriterEnabled, appendFileViaWorker } from "./worker-atomic-writer.ts";
 import { DEFAULT_EVENT_LOG } from "../config/defaults.ts";
-import { atomicWriteFile } from "./atomic-write.ts";
 import { errors } from "../errors.ts";
 import { emitFromTeamEvent } from "../ui/run-event-bus.ts";
+import { type IncrementalReadState, readJsonlSince } from "../utils/incremental-reader.ts";
 import { logInternalError } from "../utils/internal-error.ts";
-import { readJsonlSince, type IncrementalReadState } from "../utils/incremental-reader.ts";
 import { redactSecrets } from "../utils/redaction.ts";
 import { sleepSync } from "../utils/sleep.ts";
-import { needsRotation, compactEventLog, rotateEventLog, applyCompactionUnlocked, prepareCompaction, rotateEventLogUnlocked } from "./event-log-rotation.ts";
+import { atomicWriteFile } from "./atomic-write.ts";
+import {
+	applyCompactionUnlocked,
+	compactEventLog,
+	needsRotation,
+	prepareCompaction,
+	rotateEventLog,
+	rotateEventLogUnlocked,
+} from "./event-log-rotation.ts";
+import { appendFileViaWorker, isWorkerAtomicWriterEnabled } from "./worker-atomic-writer.ts";
 
 export type TeamEventProvenance = "live_worker" | "test" | "healthcheck" | "replay" | "api" | "background" | "team_runner";
 export type TeamWatcherAction = "act" | "observe" | "ignore";
@@ -54,7 +61,9 @@ export interface TeamEvent {
 	metadata?: TeamEventMetadata;
 }
 
-export type AppendTeamEvent = Omit<TeamEvent, "time" | "metadata"> & { metadata?: Partial<TeamEventMetadata> };
+export type AppendTeamEvent = Omit<TeamEvent, "time" | "metadata"> & {
+	metadata?: Partial<TeamEventMetadata>;
+};
 
 const TERMINAL_EVENT_TYPES = new Set<string>(DEFAULT_EVENT_LOG.terminalEventTypes);
 const MAX_EVENTS_BYTES = 50 * 1024 * 1024;
@@ -99,7 +108,11 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T, options
 			// the stale lock in one operation, eliminating the race. The 5s timeout
 			// (reduced from 120s) is appropriate.
 			fs.mkdirSync(lockDir);
-			try { fs.writeFileSync(pidFile, String(process.pid), "utf-8"); } catch { /* best-effort */ }
+			try {
+				fs.writeFileSync(pidFile, String(process.pid), "utf-8");
+			} catch {
+				/* best-effort */
+			}
 			acquired = true;
 			break;
 		} catch {
@@ -122,7 +135,9 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T, options
 					fs.rmSync(lockDir, { recursive: true, force: true });
 					continue;
 				}
-			} catch { /* dir vanished — let loop retry */ }
+			} catch {
+				/* dir vanished — let loop retry */
+			}
 			// Round 26 (BUG 4): the mtime check was previously NESTED inside
 			// `if (!alive)`, so a recycled PID (crashed holder's PID reused by an
 			// unrelated live process) kept `alive=true` and the mtime check NEVER
@@ -135,11 +150,18 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T, options
 				const ownerPid = Number.parseInt(raw, 10);
 				if (!Number.isNaN(ownerPid) && ownerPid !== process.pid) {
 					let alive = false;
-					try { process.kill(ownerPid, 0); alive = true; } catch { /* dead */ }
+					try {
+						process.kill(ownerPid, 0);
+						alive = true;
+					} catch {
+						/* dead */
+					}
 					// (mtime already handled above; nothing to do here for dead-but-fresh.)
 					void alive;
 				}
-			} catch { /* no pid file — mtime check above already handles it */ }
+			} catch {
+				/* no pid file — mtime check above already handles it */
+			}
 			sleepSync(10);
 		}
 	}
@@ -159,7 +181,9 @@ export function withEventLogLockSync<T>(eventsPath: string, fn: () => T, options
 				if (currentPid === String(process.pid)) {
 					fs.rmSync(lockDir, { recursive: true, force: true });
 				}
-			} catch { /* lock stolen or already gone — do not touch */ }
+			} catch {
+				/* lock stolen or already gone — do not touch */
+			}
 		}
 	}
 }
@@ -183,7 +207,12 @@ export function __test__sequenceCacheSize(): number {
 
 /** @internal — seed an entry into the sequence cache for testing. */
 export function __test__seedSequenceCache(eventsPath: string, lastAccessMs: number): void {
-	sequenceCache.set(eventsPath, { size: 1, mtimeMs: 0, seq: 0, lastAccessMs });
+	sequenceCache.set(eventsPath, {
+		size: 1,
+		mtimeMs: 0,
+		seq: 0,
+		lastAccessMs,
+	});
 }
 
 /** @internal — expose eviction for testing. */
@@ -248,11 +277,21 @@ function nextSequence(eventsPath: string): number {
 	const stored = readStoredSequence(eventsPath);
 	const fileShrunk = cached && stat.size < cached.size;
 	if (stored !== undefined && !fileShrunk) {
-		sequenceCache.set(eventsPath, { size: stat.size, mtimeMs: stat.mtimeMs, seq: stored, lastAccessMs: Date.now() });
+		sequenceCache.set(eventsPath, {
+			size: stat.size,
+			mtimeMs: stat.mtimeMs,
+			seq: stored,
+			lastAccessMs: Date.now(),
+		});
 		return stored + 1;
 	}
 	const current = scanSequence(eventsPath);
-	sequenceCache.set(eventsPath, { size: stat.size, mtimeMs: stat.mtimeMs, seq: current, lastAccessMs: Date.now() });
+	sequenceCache.set(eventsPath, {
+		size: stat.size,
+		mtimeMs: stat.mtimeMs,
+		seq: current,
+		lastAccessMs: Date.now(),
+	});
 	persistSequence(eventsPath, current);
 	return current + 1;
 }
@@ -266,7 +305,17 @@ function persistSequence(eventsPath: string, seq: number): void {
 }
 
 export function computeEventFingerprint(event: Pick<TeamEvent, "type" | "runId" | "taskId" | "data">): string {
-	return createHash("sha256").update(JSON.stringify({ type: event.type, runId: event.runId, taskId: event.taskId, data: event.data ?? null })).digest("hex").slice(0, 16);
+	return createHash("sha256")
+		.update(
+			JSON.stringify({
+				type: event.type,
+				runId: event.runId,
+				taskId: event.taskId,
+				data: event.data ?? null,
+			}),
+		)
+		.digest("hex")
+		.slice(0, 16);
 }
 
 /**
@@ -399,7 +448,10 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 			metadata,
 		};
 		if (baseMetadata?.fingerprint || TERMINAL_EVENT_TYPES.has(fullEvent.type)) {
-			metadata = { ...metadata, fingerprint: baseMetadata?.fingerprint ?? computeEventFingerprint(fullEvent) };
+			metadata = {
+				...metadata,
+				fingerprint: baseMetadata?.fingerprint ?? computeEventFingerprint(fullEvent),
+			};
 			fullEvent.metadata = metadata;
 		}
 
@@ -409,7 +461,9 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 		let fileStat: fs.Stats | undefined;
 		try {
 			fileStat = await fs.promises.stat(eventsPath).catch(() => undefined);
-		} catch { /* file does not exist */ }
+		} catch {
+			/* file does not exist */
+		}
 		if (!isTerminal && fileStat) {
 			const stat = fileStat;
 			if (stat.size > MAX_EVENTS_BYTES) {
@@ -421,7 +475,9 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 				let afterCompactStat: fs.Stats | undefined;
 				try {
 					afterCompactStat = await fs.promises.stat(eventsPath).catch(() => undefined);
-				} catch { /* file does not exist */ }
+				} catch {
+					/* file does not exist */
+				}
 				if (afterCompactStat) {
 					if (afterCompactStat.size > MAX_EVENTS_BYTES) {
 						rotateEventLog(eventsPath);
@@ -432,10 +488,16 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 		let sizeCheckStat: fs.Stats | undefined;
 		try {
 			sizeCheckStat = await fs.promises.stat(eventsPath).catch(() => undefined);
-		} catch { /* file does not exist */ }
+		} catch {
+			/* file does not exist */
+		}
 		try {
 			if (sizeCheckStat && sizeCheckStat.size > MAX_EVENTS_BYTES) {
-				logInternalError("event-log.size-limit", new Error(`events file ${eventsPath} exceeds ${MAX_EVENTS_BYTES} bytes after compaction`), `eventsPath=${eventsPath}`);
+				logInternalError(
+					"event-log.size-limit",
+					new Error(`events file ${eventsPath} exceeds ${MAX_EVENTS_BYTES} bytes after compaction`),
+					`eventsPath=${eventsPath}`,
+				);
 				skippedDueToSize = true;
 			}
 		} catch (error) {
@@ -448,7 +510,10 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 			if (isWorkerAtomicWriterEnabled()) {
 				await appendFileViaWorker(eventsPath, line);
 			} else {
-				await fs.promises.appendFile(eventsPath, line, { encoding: "utf-8", flag: "a" });
+				await fs.promises.appendFile(eventsPath, line, {
+					encoding: "utf-8",
+					flag: "a",
+				});
 			}
 			// FIX: fsync to ensure event content is flushed to disk before persisting
 			// the sequence number. This closes the crash window between appendFile and
@@ -466,9 +531,17 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 			persistSequence(eventsPath, seq);
 		}
 		if (appendCounter % 100 === 0 && needsRotation(eventsPath)) {
-			try { compactEventLog(eventsPath); } catch (error) { logInternalError("event-log.rotation", error, `eventsPath=${eventsPath}`); }
+			try {
+				compactEventLog(eventsPath);
+			} catch (error) {
+				logInternalError("event-log.rotation", error, `eventsPath=${eventsPath}`);
+			}
 		}
-		try { emitFromTeamEvent(fullEvent); } catch (error) { logInternalError("event-log.emit", error); }
+		try {
+			emitFromTeamEvent(fullEvent);
+		} catch (error) {
+			logInternalError("event-log.emit", error);
+		}
 
 		// FIX: Sequence was persisted AFTER appendFile in the append block above.
 		// Only update the cache here (the sidecar persist is already done).
@@ -477,12 +550,19 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 			let statResult: fs.Stats | undefined;
 			try {
 				statResult = await fs.promises.stat(eventsPath).catch(() => undefined);
-			} catch { /* file may not exist */ }
+			} catch {
+				/* file may not exist */
+			}
 			if (statResult) {
 				if (sequenceCache.size >= MAX_SEQUENCE_CACHE_ENTRIES) {
 					evictOldestSequenceCacheEntries();
 				}
-				sequenceCache.set(eventsPath, { size: statResult.size, mtimeMs: statResult.mtimeMs, seq: finalSeq, lastAccessMs: Date.now() });
+				sequenceCache.set(eventsPath, {
+					size: statResult.size,
+					mtimeMs: statResult.mtimeMs,
+					seq: finalSeq,
+					lastAccessMs: Date.now(),
+				});
 			}
 			// Note: persistSequence is NOT called here again - it was already called
 			// after the append to ensure the sidecar is current after the event is written.
@@ -491,22 +571,27 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 		}
 		return fullEvent;
 	});
-	asyncQueues.set(queueKey, next.then(
-		() => { asyncQueues.delete(queueKey); },
-		(error) => {
-			// FIX: Wrap error handler in try-catch to ensure asyncQueues.delete
-			// always runs, even if logging itself throws.
-			try {
-				logInternalError("event-log.async-queue", error, eventsPath);
-			} catch {
-				// logging failed — ensure queue is still cleaned up
-			}
-			// FIX: Reset queue to a resolved state instead of deleting it.
-			// This prevents cascading failures where a single transient error
-			// (e.g., ENOSPC) causes all subsequent events on the same path to fail.
-			asyncQueues.set(queueKey, Promise.resolve());
-		},
-	));
+	asyncQueues.set(
+		queueKey,
+		next.then(
+			() => {
+				asyncQueues.delete(queueKey);
+			},
+			(error) => {
+				// FIX: Wrap error handler in try-catch to ensure asyncQueues.delete
+				// always runs, even if logging itself throws.
+				try {
+					logInternalError("event-log.async-queue", error, eventsPath);
+				} catch {
+					// logging failed — ensure queue is still cleaned up
+				}
+				// FIX: Reset queue to a resolved state instead of deleting it.
+				// This prevents cascading failures where a single transient error
+				// (e.g., ENOSPC) causes all subsequent events on the same path to fail.
+				asyncQueues.set(queueKey, Promise.resolve());
+			},
+		),
+	);
 	return next;
 }
 
@@ -537,7 +622,10 @@ function appendEventInsideLock(eventsPath: string, event: AppendTeamEvent): Team
 		metadata,
 	};
 	if (baseMetadata?.fingerprint || TERMINAL_EVENT_TYPES.has(fullEvent.type)) {
-		metadata = { ...metadata, fingerprint: baseMetadata?.fingerprint ?? computeEventFingerprint(fullEvent) };
+		metadata = {
+			...metadata,
+			fingerprint: baseMetadata?.fingerprint ?? computeEventFingerprint(fullEvent),
+		};
 		fullEvent.metadata = metadata;
 	}
 	// H1 fix: handle overflow before appending.
@@ -573,7 +661,11 @@ function appendEventInsideLock(eventsPath: string, event: AppendTeamEvent): Team
 		if (fs.existsSync(eventsPath) && fs.statSync(eventsPath).size > MAX_EVENTS_BYTES) {
 			// Only reach here for non-terminal events that still overflow after compact+rotate.
 			// Log and mark as not appended.
-			logInternalError("event-log.size-limit", new Error(`events file ${eventsPath} exceeds ${MAX_EVENTS_BYTES} bytes after compaction`), `eventsPath=${eventsPath}`);
+			logInternalError(
+				"event-log.size-limit",
+				new Error(`events file ${eventsPath} exceeds ${MAX_EVENTS_BYTES} bytes after compaction`),
+				`eventsPath=${eventsPath}`,
+			);
 			skippedDueToSize = true;
 		}
 	} catch (error) {
@@ -605,7 +697,12 @@ function appendEventInsideLock(eventsPath: string, event: AppendTeamEvent): Team
 			if (sequenceCache.size >= MAX_SEQUENCE_CACHE_ENTRIES) {
 				evictOldestSequenceCacheEntries();
 			}
-			sequenceCache.set(eventsPath, { size: stat.size, mtimeMs: stat.mtimeMs, seq, lastAccessMs: Date.now() });
+			sequenceCache.set(eventsPath, {
+				size: stat.size,
+				mtimeMs: stat.mtimeMs,
+				seq,
+				lastAccessMs: Date.now(),
+			});
 		} catch (error) {
 			logInternalError("event-log.persist-sequence", error, `eventsPath=${eventsPath}`);
 		}
@@ -620,9 +717,15 @@ function appendEventInsideLock(eventsPath: string, event: AppendTeamEvent): Team
 		try {
 			const prepared = prepareCompaction(eventsPath);
 			if (prepared) applyCompactionUnlocked(eventsPath, prepared);
-		} catch (error) { logInternalError("event-log.rotation", error, `eventsPath=${eventsPath}`); }
+		} catch (error) {
+			logInternalError("event-log.rotation", error, `eventsPath=${eventsPath}`);
+		}
 	}
-	try { emitFromTeamEvent(fullEvent); } catch (error) { logInternalError("event-log.emit", error); }
+	try {
+		emitFromTeamEvent(fullEvent);
+	} catch (error) {
+		logInternalError("event-log.emit", error);
+	}
 	return fullEvent;
 }
 
@@ -692,13 +795,17 @@ async function flushOneEventLogBuffer(eventsPath: string): Promise<void> {
 			const lastDroppedMeta = dropped[dropped.length - 1]?.event.metadata;
 			logInternalError(
 				"event-log.buffer-overflow",
-				new Error(`Buffer overflow #${overflowCounter}: Dropped ${dropped.length} events: first seq=${firstDroppedMeta?.seq} type=${dropped[0]?.event.type}, last seq=${lastDroppedMeta?.seq} type=${dropped[dropped.length - 1]?.event.type}`),
+				new Error(
+					`Buffer overflow #${overflowCounter}: Dropped ${dropped.length} events: first seq=${firstDroppedMeta?.seq} type=${dropped[0]?.event.type}, last seq=${lastDroppedMeta?.seq} type=${dropped[dropped.length - 1]?.event.type}`,
+				),
 				`${eventsPath}: ${queue.length + dropped.length} entries > 1000 cap`,
 			);
 			for (const item of dropped) {
-				item.reject(new Error(
-					`Event log buffer overflow: ${queue.length + dropped.length} entries > 1000 cap; oldest ${dropped.length} dropped to keep memory bounded; first dropped seq=${firstDroppedMeta?.seq} type=${dropped[0]?.event.type}`,
-				));
+				item.reject(
+					new Error(
+						`Event log buffer overflow: ${queue.length + dropped.length} entries > 1000 cap; oldest ${dropped.length} dropped to keep memory bounded; first dropped seq=${firstDroppedMeta?.seq} type=${dropped[0]?.event.type}`,
+					),
+				);
 			}
 		}
 
@@ -757,7 +864,11 @@ process.on("SIGINT", () => setImmediate(() => flushEventLogBuffer()));
 // abandoned on crash; clearing the map prevents memory leaks and stale state.
 // Note: SIGKILL (kill -9) cannot be intercepted and is not handled.
 process.on("uncaughtException", (error) => {
-	try { flushEventLogBuffer(); } catch { /* best-effort */ }
+	try {
+		flushEventLogBuffer();
+	} catch {
+		/* best-effort */
+	}
 	// FIX (Issue 1): Drain asyncQueues before clearing to minimize event loss.
 	drainAsyncQueues();
 	asyncQueues.clear();
@@ -767,13 +878,17 @@ process.on("uncaughtException", (error) => {
 
 export function readEvents(eventsPath: string): TeamEvent[] {
 	if (!fs.existsSync(eventsPath)) return [];
-	return fs.readFileSync(eventsPath, "utf-8")
+	return fs
+		.readFileSync(eventsPath, "utf-8")
 		.split("\n")
 		.map((line) => line.trim())
 		.filter(Boolean)
 		.flatMap((line) => {
-			try { return [JSON.parse(line) as TeamEvent]; }
-			catch { return []; }
+			try {
+				return [JSON.parse(line) as TeamEvent];
+			} catch {
+				return [];
+			}
 		});
 }
 

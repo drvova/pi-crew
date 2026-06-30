@@ -120,7 +120,7 @@ export function isSecretKey(keyName: string): boolean {
 // Boundary chars that may precede an "authorization:" or "Bearer " keyword.
 // Includes '-' so prefixed headers (Proxy-Authorization, X-Authorization) and
 // '\t' so tab-indented headers are recognized. See security review L5.
-const AUTH_HEADER_BOUNDARY_CHARS = new Set([" ", ",", "{", "[", "\"", "\r", "\n", "-", "\t"]);
+const AUTH_HEADER_BOUNDARY_CHARS = new Set([" ", ",", "{", "[", '"', "\r", "\n", "-", "\t"]);
 function isAuthHeaderBoundary(ch: string | undefined): boolean {
 	return ch !== undefined && AUTH_HEADER_BOUNDARY_CHARS.has(ch);
 }
@@ -133,8 +133,8 @@ function isAuthHeaderBoundary(ch: string | undefined): boolean {
 export function redactAuthHeader(line: string): string {
 	const lower = line.toLowerCase();
 	let result = "";
-	let i = 0;          // emit cursor into the original `line`
-	let searchFrom = 0;  // cursor for the next indexOf scan
+	let i = 0; // emit cursor into the original `line`
+	let searchFrom = 0; // cursor for the next indexOf scan
 	for (;;) {
 		const authIdx = lower.indexOf("authorization:", searchFrom);
 		if (authIdx === -1) {
@@ -172,7 +172,7 @@ export function redactBearerTokens(line: string): string {
 	const upper = line.toUpperCase();
 	const result: string[] = [];
 	let i = 0;
-	
+
 	while (i < line.length) {
 		if (upper.startsWith("BEARER ", i)) {
 			// Check word boundary: start-of-string or a boundary char. Includes '-'
@@ -182,7 +182,7 @@ export function redactBearerTokens(line: string): string {
 				i++;
 				continue;
 			}
-			
+
 			// Found "Bearer " - now find the token
 			const bearerPrefix = line.substring(i, i + 7); // "Bearer "
 			let j = i + 7;
@@ -191,7 +191,7 @@ export function redactBearerTokens(line: string): string {
 				j++;
 				tokenLen++;
 			}
-			
+
 			if (tokenLen >= 8) {
 				// Replace with Bearer + *** (redact the token)
 				result.push(bearerPrefix + "***");
@@ -202,29 +202,30 @@ export function redactBearerTokens(line: string): string {
 		result.push(line[i]);
 		i++;
 	}
-	
+
 	return result.join("");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-	if (value instanceof Date || value instanceof RegExp || value instanceof Error || value instanceof Map || value instanceof Set) return false;
+	if (value instanceof Date || value instanceof RegExp || value instanceof Error || value instanceof Map || value instanceof Set)
+		return false;
 	return true;
 }
 
 export function redactSecretString(value: string): string {
 	let result = value;
-	
+
 	// Replace PEM private keys
 	result = result.replace(PEM_PRIVATE_KEY_PATTERN, "***");
-	
+
 	// Replace Authorization headers (non-Bearer format)
 	result = redactAuthHeader(result);
-	
+
 	// Replace Bearer tokens (run before structured-token patterns so a
 	// "Bearer <jwt>" pair is collapsed first; bare tokens are caught below).
 	result = redactBearerTokens(result);
-	
+
 	// P1f: structured secret tokens (JWT / GitHub PAT / AWS keys + optional
 	// Slack/Google/Stripe). Best-effort vs adversarial workers (see note above).
 	result = result
@@ -234,10 +235,10 @@ export function redactSecretString(value: string): string {
 		.replace(SLACK_TOKEN_PATTERN, "***")
 		.replace(GOOGLE_API_KEY_PATTERN, "***")
 		.replace(STRIPE_KEY_PATTERN, "***");
-	
+
 	// Replace inline secrets: key=value or key:value patterns
 	result = redactInlineSecrets(result);
-	
+
 	return result;
 }
 
@@ -254,8 +255,8 @@ export function redactSecretString(value: string): string {
 function isKeyChar(c: string): boolean {
 	const code = c.charCodeAt(0);
 	return (
-		(code >= 48 && code <= 57) ||  // 0-9
-		(code >= 65 && code <= 90) ||  // A-Z
+		(code >= 48 && code <= 57) || // 0-9
+		(code >= 65 && code <= 90) || // A-Z
 		(code >= 97 && code <= 122) || // a-z
 		code === 95 || // _
 		code === 45 // -
@@ -275,7 +276,7 @@ function redactInlineSecrets(value: string): string {
 		const keyLen = j - i;
 
 		let redacted = false;
-		if (keyLen > 0 && j < value.length && (value[j] === '=' || value[j] === ':')) {
+		if (keyLen > 0 && j < value.length && (value[j] === "=" || value[j] === ":")) {
 			const key = value.substring(i, j);
 
 			// Check if this is a secret key
@@ -284,7 +285,16 @@ function redactInlineSecrets(value: string): string {
 				const sep = value[j];
 				let k = j + 1;
 				let valLen = 0;
-				while (k < value.length && valLen < 500 && value[k] !== ' ' && value[k] !== ',' && value[k] !== ';' && value[k] !== '"' && value[k] !== '\r' && value[k] !== '\n') {
+				while (
+					k < value.length &&
+					valLen < 500 &&
+					value[k] !== " " &&
+					value[k] !== "," &&
+					value[k] !== ";" &&
+					value[k] !== '"' &&
+					value[k] !== "\r" &&
+					value[k] !== "\n"
+				) {
 					k++;
 					valLen++;
 				}

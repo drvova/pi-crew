@@ -35,12 +35,21 @@ export function inferGreenLevelFromTask(success: boolean, contract: Verification
 
 export function createVerificationEvidence(contract: VerificationContract, success: boolean, notes: string): VerificationEvidence {
 	const observedGreenLevel = inferGreenLevelFromTask(success, contract);
-	const outcome = evaluateGreenContract(contract, { requiredGreenLevel: contract.requiredGreenLevel, observedGreenLevel, satisfied: false, commands: [], notes });
+	const outcome = evaluateGreenContract(contract, {
+		requiredGreenLevel: contract.requiredGreenLevel,
+		observedGreenLevel,
+		satisfied: false,
+		commands: [],
+		notes,
+	});
 	return {
 		requiredGreenLevel: contract.requiredGreenLevel,
 		observedGreenLevel,
 		satisfied: outcome.satisfied,
-		commands: contract.commands.map((cmd) => ({ cmd, status: "not_run" as const })),
+		commands: contract.commands.map((cmd) => ({
+			cmd,
+			status: "not_run" as const,
+		})),
 		notes,
 	};
 }

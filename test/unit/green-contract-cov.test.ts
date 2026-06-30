@@ -1,10 +1,10 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
-	greenLevelSatisfies,
-	evaluateGreenContract,
-	inferGreenLevelFromTask,
 	createVerificationEvidence,
+	evaluateGreenContract,
+	greenLevelSatisfies,
+	inferGreenLevelFromTask,
 } from "../../src/runtime/green-contract.ts";
 import type { VerificationContract, VerificationEvidence } from "../../src/state/types.ts";
 
@@ -74,29 +74,35 @@ describe("green-contract", () => {
 
 	describe("inferGreenLevelFromTask", () => {
 		it("returns none when task failed", () => {
-			assert.equal(
-				inferGreenLevelFromTask(false, makeContract({ requiredGreenLevel: "targeted" })),
-				"none",
-			);
+			assert.equal(inferGreenLevelFromTask(false, makeContract({ requiredGreenLevel: "targeted" })), "none");
 		});
 
 		it("returns none when required is none", () => {
-			assert.equal(
-				inferGreenLevelFromTask(true, makeContract({ requiredGreenLevel: "none" })),
-				"none",
-			);
+			assert.equal(inferGreenLevelFromTask(true, makeContract({ requiredGreenLevel: "none" })), "none");
 		});
 
 		it("returns required level when allowManualEvidence and success", () => {
 			assert.equal(
-				inferGreenLevelFromTask(true, makeContract({ requiredGreenLevel: "workspace", allowManualEvidence: true })),
+				inferGreenLevelFromTask(
+					true,
+					makeContract({
+						requiredGreenLevel: "workspace",
+						allowManualEvidence: true,
+					}),
+				),
 				"workspace",
 			);
 		});
 
 		it("returns targeted when not allowManualEvidence and success", () => {
 			assert.equal(
-				inferGreenLevelFromTask(true, makeContract({ requiredGreenLevel: "workspace", allowManualEvidence: false })),
+				inferGreenLevelFromTask(
+					true,
+					makeContract({
+						requiredGreenLevel: "workspace",
+						allowManualEvidence: false,
+					}),
+				),
 				"targeted",
 			);
 		});
@@ -104,7 +110,11 @@ describe("green-contract", () => {
 
 	describe("createVerificationEvidence", () => {
 		it("creates evidence with correct green level for success", () => {
-			const contract = makeContract({ requiredGreenLevel: "targeted", commands: ["npm test"], allowManualEvidence: true });
+			const contract = makeContract({
+				requiredGreenLevel: "targeted",
+				commands: ["npm test"],
+				allowManualEvidence: true,
+			});
 			const evidence = createVerificationEvidence(contract, true, "tests passed");
 			assert.equal(evidence.observedGreenLevel, "targeted");
 			assert.equal(evidence.satisfied, true);
@@ -115,7 +125,11 @@ describe("green-contract", () => {
 		});
 
 		it("creates evidence with none for failure", () => {
-			const contract = makeContract({ requiredGreenLevel: "targeted", commands: ["npm test"], allowManualEvidence: false });
+			const contract = makeContract({
+				requiredGreenLevel: "targeted",
+				commands: ["npm test"],
+				allowManualEvidence: false,
+			});
 			const evidence = createVerificationEvidence(contract, false, "tests failed");
 			assert.equal(evidence.observedGreenLevel, "none");
 			assert.equal(evidence.satisfied, false);

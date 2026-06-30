@@ -1,8 +1,8 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 import { discoverSkills, getLastDiscoveryDiagnostics } from "../../src/skills/discover-skills.ts";
 
 describe("discoverSkills", () => {
@@ -18,9 +18,7 @@ describe("discoverSkills", () => {
 			// package). The test cwd is fresh but user-skill-roots from
 			// $HOME can still leak in on a developer machine — accept any
 			// valid source rather than asserting the old 2-source set.
-			const validSources = new Set([
-				"project", "package", "project-pi", "user-pi", "project-agents", "user-agents",
-			]);
+			const validSources = new Set(["project", "package", "project-pi", "user-pi", "project-agents", "user-agents"]);
 			assert.ok(skills.every((s) => validSources.has(s.source)));
 			// All should have SKILL.md path
 			for (const skill of skills) {
@@ -94,7 +92,9 @@ describe("discoverSkills", () => {
 				try {
 					fs.mkdirSync(skillDir, { recursive: true });
 					fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\ndescription: unsafe\n---\nunsafe");
-				} catch { /* some names may fail mkdir on certain platforms */ }
+				} catch {
+					/* some names may fail mkdir on certain platforms */
+				}
 			}
 			const skills = discoverSkills(cwd);
 			for (const skill of skills) {
@@ -115,7 +115,9 @@ describe("discoverSkills", () => {
 			fs.mkdirSync(skillsDir, { recursive: true });
 			try {
 				fs.symlinkSync(outsideDir, path.join(skillsDir, "symlinked"));
-			} catch { /* symlinks may not be supported on some Windows configs */ }
+			} catch {
+				/* symlinks may not be supported on some Windows configs */
+			}
 			const skills = discoverSkills(cwd);
 			const symlinked = skills.find((s) => s.name === "symlinked" && s.source === "project");
 			assert.equal(symlinked, undefined, "should not discover symlinked skill directories");
@@ -133,7 +135,9 @@ describe("discoverSkills", () => {
 			fs.mkdirSync(skillDir, { recursive: true });
 			try {
 				fs.symlinkSync(outsideFile, path.join(skillDir, "SKILL.md"));
-			} catch { /* symlinks may not be supported */ }
+			} catch {
+				/* symlinks may not be supported */
+			}
 			const skills = discoverSkills(cwd);
 			const linked = skills.find((s) => s.name === "linked-md" && s.source === "project");
 			assert.equal(linked, undefined, "should not discover symlinked SKILL.md files");
@@ -185,7 +189,11 @@ describe("discoverSkills", () => {
 			const diagnostics = getLastDiscoveryDiagnostics();
 			const bundledPaths = new Set(bundled.map((s) => path.dirname(s.path)));
 			const hardFromBundled = diagnostics.filter((d) => d.severity === "error" && bundledPaths.has(d.path));
-			assert.equal(hardFromBundled.length, 0, `bundled skills must produce no HARD diagnostics; got: ${JSON.stringify(hardFromBundled, null, 2)}`);
+			assert.equal(
+				hardFromBundled.length,
+				0,
+				`bundled skills must produce no HARD diagnostics; got: ${JSON.stringify(hardFromBundled, null, 2)}`,
+			);
 		} finally {
 			fs.rmSync(cwd, { recursive: true, force: true });
 		}

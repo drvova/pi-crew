@@ -61,15 +61,21 @@ export function buildMemoryBlock(agentName: string, scope: AgentMemoryScope, cwd
 		`# Agent Memory (${mode})`,
 		`Memory scope: ${scope}`,
 		`Memory directory: ${memoryDir}`,
-		writable ? "Use this persistent directory to maintain useful long-term notes for this agent." : "You may reference existing memory, but do not create or modify memory files.",
+		writable
+			? "Use this persistent directory to maintain useful long-term notes for this agent."
+			: "You may reference existing memory, but do not create or modify memory files.",
 		"",
 		existing ? `## Current MEMORY.md\n${existing}` : "No MEMORY.md exists yet.",
-		writable ? [
-			"",
-			"## Memory Instructions",
-			"- Keep MEMORY.md concise (under 200 lines); store details in separate linked files.",
-			"- Reject stale memories; update or remove outdated notes.",
-			"- Use safe relative filenames inside the memory directory only.",
-		].join("\n") : "",
-	].filter(Boolean).join("\n");
+		writable
+			? [
+					"",
+					"## Memory Instructions",
+					"- Keep MEMORY.md concise (under 200 lines); store details in separate linked files.",
+					"- Reject stale memories; update or remove outdated notes.",
+					"- Use safe relative filenames inside the memory directory only.",
+				].join("\n")
+			: "",
+	]
+		.filter(Boolean)
+		.join("\n");
 }

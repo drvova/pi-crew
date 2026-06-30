@@ -1,10 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	levenshtein,
-	findClosestKey,
-	suggestConfigKey,
-} from "../../src/config/suggestions.ts";
+import { describe, it } from "node:test";
+import { findClosestKey, levenshtein, suggestConfigKey } from "../../src/config/suggestions.ts";
 
 describe("levenshtein", () => {
 	it("returns 0 for identical single-char strings", () => {

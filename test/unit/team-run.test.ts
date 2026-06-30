@@ -1,8 +1,8 @@
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { loadRunManifestById } from "../../src/state/state-store.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
@@ -16,7 +16,15 @@ test("team run creates durable artifacts and status", async () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-run-test-"));
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	try {
-		const run = await handleTeamTool({ action: "run", config: { runtime: { mode: "scaffold" } }, team: "default", goal: "Test durable run" }, { cwd });
+		const run = await handleTeamTool(
+			{
+				action: "run",
+				config: { runtime: { mode: "scaffold" } },
+				team: "default",
+				goal: "Test durable run",
+			},
+			{ cwd },
+		);
 		assert.equal(run.isError, false);
 		const runId = run.details.runId;
 		assert.ok(runId);
@@ -66,7 +74,15 @@ test("team resume blocks implicit scaffold when worker execution is disabled", a
 	const previous = process.env.PI_CREW_EXECUTE_WORKERS;
 	fs.mkdirSync(path.join(cwd, ".crew"));
 	try {
-		const run = await handleTeamTool({ action: "run", config: { runtime: { mode: "scaffold" } }, team: "default", goal: "create resumable run" }, { cwd });
+		const run = await handleTeamTool(
+			{
+				action: "run",
+				config: { runtime: { mode: "scaffold" } },
+				team: "default",
+				goal: "create resumable run",
+			},
+			{ cwd },
+		);
 		assert.equal(run.isError, false);
 		const runId = run.details.runId;
 		assert.ok(runId);
@@ -83,4 +99,3 @@ test("team resume blocks implicit scaffold when worker execution is disabled", a
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });
-

@@ -1,6 +1,6 @@
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { randomUUID } from "node:crypto";
 
 /**
  * Represents a learned instinct that guides agent behavior.
@@ -138,7 +138,10 @@ export class InstinctStore {
 		if (!scope || scope === "project") {
 			const projectsDir = path.join(this.crewRoot, "instincts", "projects");
 			if (fs.existsSync(projectsDir)) {
-				for (const projectId of fs.readdirSync(projectsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)) {
+				for (const projectId of fs
+					.readdirSync(projectsDir, { withFileTypes: true })
+					.filter((e) => e.isDirectory())
+					.map((e) => e.name)) {
 					const filePath = path.join(projectsDir, projectId, INSTINCT_FILE);
 					results.push(...this.readInstinctsFromFile(filePath));
 				}
@@ -176,7 +179,10 @@ export class InstinctStore {
 		// Search in all project instinct files
 		const projectsDir = path.join(this.crewRoot, "instincts", "projects");
 		if (fs.existsSync(projectsDir)) {
-			for (const projectId of fs.readdirSync(projectsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)) {
+			for (const projectId of fs
+				.readdirSync(projectsDir, { withFileTypes: true })
+				.filter((e) => e.isDirectory())
+				.map((e) => e.name)) {
 				const filePath = path.join(projectsDir, projectId, INSTINCT_FILE);
 				const instincts = this.readInstinctsFromFile(filePath);
 				const index = instincts.findIndex((i) => i.id === instinctId);
@@ -229,7 +235,10 @@ export class InstinctStore {
 		// Search in project instincts
 		const projectsDir = path.join(this.crewRoot, "instincts", "projects");
 		if (fs.existsSync(projectsDir)) {
-			for (const projectId of fs.readdirSync(projectsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)) {
+			for (const projectId of fs
+				.readdirSync(projectsDir, { withFileTypes: true })
+				.filter((e) => e.isDirectory())
+				.map((e) => e.name)) {
 				const filePath = path.join(projectsDir, projectId, INSTINCT_FILE);
 				instincts = this.readInstinctsFromFile(filePath);
 				index = instincts.findIndex((i) => i.id === instinctId);
@@ -246,4 +255,7 @@ export class InstinctStore {
 	}
 }
 
-export { getGlobalStorageDir, getProjectStorageDir } from "../utils/project-detector.ts";
+export {
+	getGlobalStorageDir,
+	getProjectStorageDir,
+} from "../utils/project-detector.ts";

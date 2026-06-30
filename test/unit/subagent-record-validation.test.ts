@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { readPersistedSubagentRecord } from "../../src/runtime/subagent-manager.ts";
 
 // We test the validatePersistedRecord function indirectly through readPersistedSubagentRecord.
@@ -12,8 +12,8 @@ import { readPersistedSubagentRecord } from "../../src/runtime/subagent-manager.
 // We need to write files to disk to test it.
 
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
 
 describe("H3: Subagent record validation", () => {
 	let tmpDir: string;
@@ -118,7 +118,7 @@ describe("H3: Subagent record validation", () => {
 			writeSubagentFile("agent_test7", {
 				agentId: "agent_test7",
 				status: "running",
-				__proto__: { admin: true },  // prototype pollution attempt
+				__proto__: { admin: true }, // prototype pollution attempt
 				maliciousField: "injected",
 			});
 			// The record should still pass basic validation (agentId is present)

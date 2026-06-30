@@ -12,8 +12,8 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
 	awaitRuntimeWarmup,
 	getRuntimeWarmupStatus,
@@ -62,10 +62,7 @@ describe("runtime-warmup: hot-module specifiers are valid", () => {
 	test("every HOT_MODULE_SPECIFIER resolves to a real file (no silent no-op from a typo)", async () => {
 		// Read the source to extract the specifiers, then verify each resolves.
 		// This catches typos that would make the warmup silently skip a module.
-		const src = readFileSync(
-			fileURLToPath(new URL("../../src/runtime/runtime-warmup.ts", import.meta.url)),
-			"utf-8",
-		);
+		const src = readFileSync(fileURLToPath(new URL("../../src/runtime/runtime-warmup.ts", import.meta.url)), "utf-8");
 		const match = src.match(/HOT_MODULE_SPECIFIERS\s*=\s*\[([\s\S]*?)\]/);
 		assert.ok(match, "HOT_MODULE_SPECIFIERS array should exist");
 		const specifiers = [...match![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
@@ -75,10 +72,7 @@ describe("runtime-warmup: hot-module specifiers are valid", () => {
 			// Each specifier is relative to runtime-warmup.ts (src/runtime/).
 			// Verify it resolves to an importable module.
 			const url = new URL(spec, new URL("../../src/runtime/runtime-warmup.ts", import.meta.url));
-			await assert.doesNotReject(
-				async () => import(url.href),
-				`hot module specifier "${spec}" must resolve to a real module`,
-			);
+			await assert.doesNotReject(async () => import(url.href), `hot module specifier "${spec}" must resolve to a real module`);
 		}
 	});
 });

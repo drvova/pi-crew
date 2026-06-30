@@ -1,6 +1,14 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { clearLiveAgentsForTest, disposeLiveAgentSession, followUpLiveAgent, listActiveLiveAgents, listLiveAgents, registerLiveAgent, terminateLiveAgent } from "../../src/runtime/live-agent-manager.ts";
+import test from "node:test";
+import {
+	clearLiveAgentsForTest,
+	disposeLiveAgentSession,
+	followUpLiveAgent,
+	listActiveLiveAgents,
+	listLiveAgents,
+	registerLiveAgent,
+	terminateLiveAgent,
+} from "../../src/runtime/live-agent-manager.ts";
 
 const TEST_WORKSPACE = "workspace:///test/cleanup";
 
@@ -21,7 +29,14 @@ test("followUpLiveAgent queues and flushes pending follow-ups through prompt", a
 	const prompts: string[] = [];
 	const id = `followup-test-${Date.now()}`;
 	try {
-		registerLiveAgent({ agentId: id, taskId: "task", runId: "run", status: "running", session: {}, workspaceId: TEST_WORKSPACE });
+		registerLiveAgent({
+			agentId: id,
+			taskId: "task",
+			runId: "run",
+			status: "running",
+			session: {},
+			workspaceId: TEST_WORKSPACE,
+		});
 		const pending = await followUpLiveAgent(id, "review this next");
 		assert.deepEqual(pending.pendingFollowUps, ["review this next"]);
 		registerLiveAgent({
@@ -29,12 +44,23 @@ test("followUpLiveAgent queues and flushes pending follow-ups through prompt", a
 			taskId: "task",
 			runId: "run",
 			status: "running",
-			session: { prompt: async (text: string) => { prompts.push(text); } },
+			session: {
+				prompt: async (text: string) => {
+					prompts.push(text);
+				},
+			},
 			workspaceId: TEST_WORKSPACE,
 		});
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		assert.deepEqual(prompts, ["review this next"]);
-		const handle = registerLiveAgent({ agentId: id, taskId: "task", runId: "run", status: "running", session: {}, workspaceId: TEST_WORKSPACE });
+		const handle = registerLiveAgent({
+			agentId: id,
+			taskId: "task",
+			runId: "run",
+			status: "running",
+			session: {},
+			workspaceId: TEST_WORKSPACE,
+		});
 		assert.deepEqual(handle.pendingFollowUps, []);
 	} finally {
 		terminateLiveAgent(id);
@@ -50,14 +76,21 @@ test("terminateLiveAgent removes handle and calls abort + dispose", async () => 
 		runId: "run",
 		status: "running",
 		session: {
-			abort: async () => { calls.push("abort"); },
-			dispose: () => { calls.push("dispose"); },
+			abort: async () => {
+				calls.push("abort");
+			},
+			dispose: () => {
+				calls.push("dispose");
+			},
 		},
 		workspaceId: TEST_WORKSPACE,
 	});
 	await terminateLiveAgent(id);
 	assert.deepEqual(calls.sort(), ["abort", "dispose"]);
-	assert.equal(listLiveAgents().find((a) => a.agentId === id), undefined);
+	assert.equal(
+		listLiveAgents().find((a) => a.agentId === id),
+		undefined,
+	);
 });
 
 test("disposeLiveAgentSession removes session without abort", () => {
@@ -69,7 +102,9 @@ test("disposeLiveAgentSession removes session without abort", () => {
 		runId: "run",
 		status: "running",
 		session: {
-			dispose: () => { calls.push("dispose"); },
+			dispose: () => {
+				calls.push("dispose");
+			},
 		},
 		workspaceId: TEST_WORKSPACE,
 	});
@@ -82,9 +117,26 @@ test("listActiveLiveAgents returns only non-terminal statuses", () => {
 	clearLiveAgentsForTest();
 	const id1 = `done-${Date.now()}`;
 	const id2 = `active-${Date.now()}`;
-	registerLiveAgent({ agentId: id1, taskId: "t1", runId: "run", status: "completed", session: {}, workspaceId: TEST_WORKSPACE });
-	registerLiveAgent({ agentId: id2, taskId: "t2", runId: "run", status: "running", session: {}, workspaceId: TEST_WORKSPACE });
-	assert.deepEqual(listActiveLiveAgents().map((agent) => agent.agentId), [id2]);
+	registerLiveAgent({
+		agentId: id1,
+		taskId: "t1",
+		runId: "run",
+		status: "completed",
+		session: {},
+		workspaceId: TEST_WORKSPACE,
+	});
+	registerLiveAgent({
+		agentId: id2,
+		taskId: "t2",
+		runId: "run",
+		status: "running",
+		session: {},
+		workspaceId: TEST_WORKSPACE,
+	});
+	assert.deepEqual(
+		listActiveLiveAgents().map((agent) => agent.agentId),
+		[id2],
+	);
 	terminateLiveAgent(id1);
 	terminateLiveAgent(id2);
 });

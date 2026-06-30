@@ -1,11 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	getBuiltinTemplates,
-	findTemplate,
-	instantiateTemplate,
-	listTemplates,
-} from "../../src/skills/skill-templates.ts";
+import { describe, it } from "node:test";
+import { findTemplate, getBuiltinTemplates, instantiateTemplate, listTemplates } from "../../src/skills/skill-templates.ts";
 
 describe("skill-templates", () => {
 	describe("getBuiltinTemplates", () => {
@@ -99,14 +94,8 @@ describe("skill-templates", () => {
 				language: "Rust",
 			});
 			assert.ok(result.content.includes("Rust"), "should contain the provided language");
-			assert.ok(
-				result.content.includes("correctness, readability, performance"),
-				"should use default focusAreas",
-			);
-			assert.ok(
-				result.content.includes("warning"),
-				"should use default severityThreshold",
-			);
+			assert.ok(result.content.includes("correctness, readability, performance"), "should use default focusAreas");
+			assert.ok(result.content.includes("warning"), "should use default severityThreshold");
 		});
 
 		it("throws for missing required variables", () => {
@@ -116,14 +105,8 @@ describe("skill-templates", () => {
 				() => instantiateTemplate(t, {}),
 				(err: unknown) => {
 					assert.ok(err instanceof Error, "should throw an Error");
-					assert.ok(
-						err.message.includes("language"),
-						"error message should mention the missing variable",
-					);
-					assert.ok(
-						err.message.includes("required"),
-						"error message should say required",
-					);
+					assert.ok(err.message.includes("language"), "error message should mention the missing variable");
+					assert.ok(err.message.includes("required"), "error message should say required");
 					return true;
 				},
 			);
@@ -140,14 +123,8 @@ describe("skill-templates", () => {
 					}),
 				(err: unknown) => {
 					assert.ok(err instanceof Error, "should throw an Error");
-					assert.ok(
-						err.message.includes("nonexistent"),
-						"error should mention the invalid value",
-					);
-					assert.ok(
-						err.message.includes("Allowed values"),
-						"error should mention allowed values",
-					);
+					assert.ok(err.message.includes("nonexistent"), "error should mention the invalid value");
+					assert.ok(err.message.includes("Allowed values"), "error should mention allowed values");
 					return true;
 				},
 			);

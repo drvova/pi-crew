@@ -84,20 +84,22 @@ export function getPhaseInputs(machine: WorkflowStateMachine, phaseIndex: number
  * 3. All declared `inputs` for the target phase must appear in `completedArtifacts`.
  * 4. If a custom `guard` is supplied on a transition, it must also approve.
  */
-export function canTransitionToPhase(
-	machine: WorkflowStateMachine,
-	phaseIndex: number,
-	context: PhaseGuardContext,
-): GuardResult {
+export function canTransitionToPhase(machine: WorkflowStateMachine, phaseIndex: number, context: PhaseGuardContext): GuardResult {
 	if (phaseIndex < 0 || phaseIndex >= machine.phases.length) {
-		return { allowed: false, reason: `Phase index ${phaseIndex} is out of bounds (0..${machine.phases.length - 1}).` };
+		return {
+			allowed: false,
+			reason: `Phase index ${phaseIndex} is out of bounds (0..${machine.phases.length - 1}).`,
+		};
 	}
 
 	// Previous phase must have completed (or been skipped).
 	if (phaseIndex > 0) {
 		const prevStatus = context.previousPhaseStatus;
 		if (prevStatus !== "completed" && prevStatus !== "skipped") {
-			return { allowed: false, reason: `Previous phase status is '${prevStatus}'; expected 'completed' or 'skipped'.` };
+			return {
+				allowed: false,
+				reason: `Previous phase status is '${prevStatus}'; expected 'completed' or 'skipped'.`,
+			};
 		}
 	}
 
@@ -107,7 +109,10 @@ export function canTransitionToPhase(
 		const artifactSet = new Set(context.completedArtifacts);
 		const missing = phase.inputs.filter((input) => !artifactSet.has(input));
 		if (missing.length > 0) {
-			return { allowed: false, reason: `Missing required artifacts: ${missing.join(", ")}.` };
+			return {
+				allowed: false,
+				reason: `Missing required artifacts: ${missing.join(", ")}.`,
+			};
 		}
 	}
 
@@ -124,7 +129,10 @@ export function validatePhasePreconditions(
 ): { ready: boolean; blocking: string[] } {
 	const phase = machine.phases[machine.currentPhaseIndex];
 	if (!phase) {
-		return { ready: false, blocking: [`No phase at index ${machine.currentPhaseIndex}.`] };
+		return {
+			ready: false,
+			blocking: [`No phase at index ${machine.currentPhaseIndex}.`],
+		};
 	}
 
 	const artifactSet = new Set(context.completedArtifacts);

@@ -1,8 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { registerCrewRpcHandlers, type EventBus } from "../../src/runtime/cross-extension-rpc.ts";
+import { describe, it } from "node:test";
+import { type EventBus, registerCrewRpcHandlers } from "../../src/runtime/cross-extension-rpc.ts";
 
-function createMockEventBus(): { bus: EventBus; emitted: Array<{ event: string; data: unknown }> } {
+function createMockEventBus(): {
+	bus: EventBus;
+	emitted: Array<{ event: string; data: unknown }>;
+} {
 	const emitted: Array<{ event: string; data: unknown }> = [];
 	const bus: EventBus = {
 		on(event: string, handler: (data: unknown) => void) {

@@ -19,8 +19,8 @@
  */
 import { spawnSync } from "node:child_process";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
-import type { WorkflowConfig } from "../workflows/workflow-config.ts";
 import { findRepoRoot } from "../utils/paths.ts";
+import type { WorkflowConfig } from "../workflows/workflow-config.ts";
 
 /**
  * Roles whose job is to EDIT project source/test files (changes that appear in
@@ -71,18 +71,30 @@ export function assessGoalAchievement(
 	// (1) Only code-mutating workflows can be false-green. Read-only/doc runs
 	//     legitimately make no project edits — never accuse them.
 	if (!workflowIsMutating(workflow)) {
-		return { achieved: "unknown", reason: "read-only / doc-only workflow (no executor/test-engineer steps)", signals: [] };
+		return {
+			achieved: "unknown",
+			reason: "read-only / doc-only workflow (no executor/test-engineer steps)",
+			signals: [],
+		};
 	}
 
 	// (2) Need a git repo to inspect the working tree.
 	const tree = isGitWorkingTreeClean(manifest.cwd);
 	if (tree.clean === "unknown" || !tree.repoRoot) {
-		return { achieved: "unknown", reason: "not a git repo or git unavailable", signals: [] };
+		return {
+			achieved: "unknown",
+			reason: "not a git repo or git unavailable",
+			signals: [],
+		};
 	}
 
 	// (3) Non-empty working tree → the mutating run made edits. Achieved.
 	if (!tree.clean) {
-		return { achieved: true, reason: "git working tree has changes (mutating run edited project files)", signals: [`repoRoot=${tree.repoRoot}`] };
+		return {
+			achieved: true,
+			reason: "git working tree has changes (mutating run edited project files)",
+			signals: [`repoRoot=${tree.repoRoot}`],
+		};
 	}
 
 	// (4) Mutating run + CLEAN working tree → suspicious. The executor's job was
@@ -113,13 +125,18 @@ export function applyGoalAchievement(
 	manifest: TeamRunManifest,
 	assessment: GoalAchievementAssessment,
 ): { manifest: TeamRunManifest; downgraded: boolean } {
-	const note = assessment.achieved === false
-		? `goal-achievement: FALSE-GREEN — ${assessment.reason}. ${assessment.signals.join("; ")}`
-		: assessment.achieved === true
-			? `goal-achievement: OK — ${assessment.reason}`
-			: `goal-achievement: unknown — ${assessment.reason}`;
+	const note =
+		assessment.achieved === false
+			? `goal-achievement: FALSE-GREEN — ${assessment.reason}. ${assessment.signals.join("; ")}`
+			: assessment.achieved === true
+				? `goal-achievement: OK — ${assessment.reason}`
+				: `goal-achievement: unknown — ${assessment.reason}`;
 
-	const updated: TeamRunManifest = { ...manifest, goalAchieved: assessment.achieved, goalAchievementNote: note };
+	const updated: TeamRunManifest = {
+		...manifest,
+		goalAchieved: assessment.achieved,
+		goalAchievementNote: note,
+	};
 
 	// Downgrade only on the highest-confidence false-green: a failed task
 	// corroborates that the run genuinely did not succeed.

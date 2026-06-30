@@ -1,15 +1,15 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 import {
-	sharedPath,
-	collectDependencyOutputContext,
-	renderDependencyOutputContext,
 	aggregateTaskOutputs,
+	collectDependencyOutputContext,
 	type DependencyOutputContext,
+	renderDependencyOutputContext,
+	sharedPath,
 } from "../../src/runtime/task-output-context.ts";
-import type { TeamRunManifest, TeamTaskState, ArtifactDescriptor } from "../../src/state/types.ts";
+import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 import type { WorkflowStep } from "../../src/workflows/workflow-config.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
@@ -86,10 +86,7 @@ describe("sharedPath", () => {
 			const manifest = makeManifest(tmp);
 			const p = sharedPath(manifest, "sub/file.txt");
 			// Cross-platform: use path.sep or check for both / and \
-			assert.ok(
-				p.endsWith("sub/file.txt") || p.endsWith("sub\\file.txt"),
-				`expected path to end with sub/file.txt, got: ${p}`,
-			);
+			assert.ok(p.endsWith("sub/file.txt") || p.endsWith("sub\\file.txt"), `expected path to end with sub/file.txt, got: ${p}`);
 		} finally {
 			removeTrackedTempDir(tmp);
 		}
@@ -102,7 +99,11 @@ describe("collectDependencyOutputContext", () => {
 		try {
 			const manifest = makeManifest(tmp);
 			const task = makeTask({ dependsOn: [] });
-			const step: WorkflowStep = { id: "step_01", role: "agent", task: "do it" };
+			const step: WorkflowStep = {
+				id: "step_01",
+				role: "agent",
+				task: "do it",
+			};
 			const ctx = collectDependencyOutputContext(manifest, [task], task, step);
 			assert.equal(ctx.dependencies.length, 0);
 			assert.equal(ctx.sharedReads.length, 0);
@@ -115,9 +116,20 @@ describe("collectDependencyOutputContext", () => {
 		const tmp = createTrackedTempDir("pi-crew-toc-");
 		try {
 			const manifest = makeManifest(tmp);
-			const depTask = makeTask({ id: "task_dep", stepId: "step_dep", status: "completed" });
-			const mainTask = makeTask({ id: "task_main", dependsOn: ["step_dep"] });
-			const step: WorkflowStep = { id: "step_main", role: "agent", task: "do it" };
+			const depTask = makeTask({
+				id: "task_dep",
+				stepId: "step_dep",
+				status: "completed",
+			});
+			const mainTask = makeTask({
+				id: "task_main",
+				dependsOn: ["step_dep"],
+			});
+			const step: WorkflowStep = {
+				id: "step_main",
+				role: "agent",
+				task: "do it",
+			};
 			const ctx = collectDependencyOutputContext(manifest, [depTask, mainTask], mainTask, step);
 			assert.equal(ctx.dependencies.length, 1);
 			assert.equal(ctx.dependencies[0].taskId, "task_dep");
@@ -137,7 +149,12 @@ describe("collectDependencyOutputContext", () => {
 			fs.writeFileSync(path.join(sharedDir, "input.txt"), "hello world", "utf-8");
 
 			const task = makeTask({ dependsOn: [] });
-			const step: WorkflowStep = { id: "step_01", role: "agent", task: "do it", reads: ["input.txt"] };
+			const step: WorkflowStep = {
+				id: "step_01",
+				role: "agent",
+				task: "do it",
+				reads: ["input.txt"],
+			};
 			const ctx = collectDependencyOutputContext(manifest, [task], task, step);
 			assert.equal(ctx.sharedReads.length, 1);
 			assert.equal(ctx.sharedReads[0].name, "input.txt");
@@ -152,7 +169,12 @@ describe("collectDependencyOutputContext", () => {
 		try {
 			const manifest = makeManifest(tmp);
 			const task = makeTask({ dependsOn: [] });
-			const step: WorkflowStep = { id: "step_01", role: "agent", task: "do it", reads: false };
+			const step: WorkflowStep = {
+				id: "step_01",
+				role: "agent",
+				task: "do it",
+				reads: false,
+			};
 			const ctx = collectDependencyOutputContext(manifest, [task], task, step);
 			assert.equal(ctx.sharedReads.length, 0);
 		} finally {
@@ -163,19 +185,24 @@ describe("collectDependencyOutputContext", () => {
 
 describe("renderDependencyOutputContext", () => {
 	it("renders empty context as empty string", () => {
-		const ctx: DependencyOutputContext = { dependencies: [], sharedReads: [] };
+		const ctx: DependencyOutputContext = {
+			dependencies: [],
+			sharedReads: [],
+		};
 		const text = renderDependencyOutputContext(ctx);
 		assert.equal(text, "");
 	});
 
 	it("renders dependency information", () => {
 		const ctx: DependencyOutputContext = {
-			dependencies: [{
-				taskId: "task_01",
-				role: "agent",
-				status: "completed",
-				resultSummary: "did the thing",
-			}],
+			dependencies: [
+				{
+					taskId: "task_01",
+					role: "agent",
+					status: "completed",
+					resultSummary: "did the thing",
+				},
+			],
 			sharedReads: [],
 		};
 		const text = renderDependencyOutputContext(ctx);
@@ -187,11 +214,13 @@ describe("renderDependencyOutputContext", () => {
 	it("renders shared reads section", () => {
 		const ctx: DependencyOutputContext = {
 			dependencies: [],
-			sharedReads: [{
-				name: "data.json",
-				path: "/tmp/shared/data.json",
-				content: '{"key": "value"}',
-			}],
+			sharedReads: [
+				{
+					name: "data.json",
+					path: "/tmp/shared/data.json",
+					content: '{"key": "value"}',
+				},
+			],
 		};
 		const text = renderDependencyOutputContext(ctx);
 		assert.ok(text.includes("Shared Run Context Reads"));
@@ -201,13 +230,19 @@ describe("renderDependencyOutputContext", () => {
 
 	it("renders usage information when present", () => {
 		const ctx: DependencyOutputContext = {
-			dependencies: [{
-				taskId: "task_01",
-				role: "agent",
-				status: "completed",
-				resultSummary: "done",
-				usage: { inputTokens: 100, outputTokens: 50, durationMs: 5000 },
-			}],
+			dependencies: [
+				{
+					taskId: "task_01",
+					role: "agent",
+					status: "completed",
+					resultSummary: "done",
+					usage: {
+						inputTokens: 100,
+						outputTokens: 50,
+						durationMs: 5000,
+					},
+				},
+			],
 			sharedReads: [],
 		};
 		const text = renderDependencyOutputContext(ctx);
@@ -218,13 +253,15 @@ describe("renderDependencyOutputContext", () => {
 
 	it("renders artifacts produced", () => {
 		const ctx: DependencyOutputContext = {
-			dependencies: [{
-				taskId: "task_01",
-				role: "agent",
-				status: "completed",
-				resultSummary: "done",
-				artifactsProduced: ["result.md", "log.txt"],
-			}],
+			dependencies: [
+				{
+					taskId: "task_01",
+					role: "agent",
+					status: "completed",
+					resultSummary: "done",
+					artifactsProduced: ["result.md", "log.txt"],
+				},
+			],
 			sharedReads: [],
 		};
 		const text = renderDependencyOutputContext(ctx);
@@ -260,7 +297,12 @@ describe("aggregateTaskOutputs", () => {
 	});
 
 	it("includes usage when present", () => {
-		const tasks = [makeTask({ status: "completed", usage: { input: 100, output: 50 } })];
+		const tasks = [
+			makeTask({
+				status: "completed",
+				usage: { input: 100, output: 50 },
+			}),
+		];
 		const result = aggregateTaskOutputs(tasks);
 		assert.ok(result.includes("Usage"));
 	});

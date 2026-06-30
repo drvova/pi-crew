@@ -1,9 +1,22 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { transformRunContextBeforeWorkerStart, convertRunHistoryToWorkerPrompt } from "../../src/runtime/task-runner/run-projection.ts";
+import test from "node:test";
+import { convertRunHistoryToWorkerPrompt, transformRunContextBeforeWorkerStart } from "../../src/runtime/task-runner/run-projection.ts";
 
 function makeManifest() {
-	return { runId: "test-run", cwd: "/tmp", team: "test", workflow: "default", goal: "test", status: "running", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), stateRoot: "/tmp/.crew/state/runs/test-run", artifactsRoot: "/tmp/.crew/artifacts/test-run", ownerSessionId: "s1", eventsPath: "/tmp/.crew/state/runs/test-run/events.jsonl" } as const;
+	return {
+		runId: "test-run",
+		cwd: "/tmp",
+		team: "test",
+		workflow: "default",
+		goal: "test",
+		status: "running",
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		stateRoot: "/tmp/.crew/state/runs/test-run",
+		artifactsRoot: "/tmp/.crew/artifacts/test-run",
+		ownerSessionId: "s1",
+		eventsPath: "/tmp/.crew/state/runs/test-run/events.jsonl",
+	} as const;
 }
 
 test("transformRunContextBeforeWorkerStart returns empty projection when no history", () => {
@@ -22,8 +35,27 @@ test("transformRunContextBeforeWorkerStart projects completed tasks", () => {
 	const result = transformRunContextBeforeWorkerStart({
 		manifest: makeManifest() as never,
 		tasks: [
-			{ id: "01_explore", role: "explorer", agent: "explorer", title: "explore", status: "completed", dependsOn: [], cwd: "/tmp", runId: "test-run" } as never,
-			{ id: "02_execute", role: "executor", agent: "executor", title: "execute", status: "failed", error: "timeout", dependsOn: [], cwd: "/tmp", runId: "test-run" } as never,
+			{
+				id: "01_explore",
+				role: "explorer",
+				agent: "explorer",
+				title: "explore",
+				status: "completed",
+				dependsOn: [],
+				cwd: "/tmp",
+				runId: "test-run",
+			} as never,
+			{
+				id: "02_execute",
+				role: "executor",
+				agent: "executor",
+				title: "execute",
+				status: "failed",
+				error: "timeout",
+				dependsOn: [],
+				cwd: "/tmp",
+				runId: "test-run",
+			} as never,
 		],
 		pendingMailbox: [],
 		artifacts: [],
@@ -40,7 +72,17 @@ test("transformRunContextBeforeWorkerStart projects mailbox messages", () => {
 		manifest: makeManifest() as never,
 		tasks: [],
 		pendingMailbox: [
-			{ id: "msg-1", runId: "test-run", direction: "inbox", from: "leader", to: "01_explore", body: "Please check the results", createdAt: new Date().toISOString(), status: "queued", kind: "follow-up" } as never,
+			{
+				id: "msg-1",
+				runId: "test-run",
+				direction: "inbox",
+				from: "leader",
+				to: "01_explore",
+				body: "Please check the results",
+				createdAt: new Date().toISOString(),
+				status: "queued",
+				kind: "follow-up",
+			} as never,
 		],
 		artifacts: [],
 	});
@@ -54,7 +96,13 @@ test("transformRunContextBeforeWorkerStart projects artifacts", () => {
 		tasks: [],
 		pendingMailbox: [],
 		artifacts: [
-			{ kind: "result", path: "/tmp/artifacts/results/01_explore.txt", createdAt: new Date().toISOString(), producer: "worker", retention: "run" } as never,
+			{
+				kind: "result",
+				path: "/tmp/artifacts/results/01_explore.txt",
+				createdAt: new Date().toISOString(),
+				producer: "worker",
+				retention: "run",
+			} as never,
 		],
 	});
 	assert.ok(result.summary.includes("Available artifacts"));
@@ -74,7 +122,16 @@ test("convertRunHistoryToWorkerPrompt returns bounded projection header", () => 
 	const text = convertRunHistoryToWorkerPrompt({
 		manifest: makeManifest() as never,
 		tasks: [
-			{ id: "01_explore", role: "explorer", agent: "explorer", title: "explore", status: "completed", dependsOn: [], cwd: "/tmp", runId: "test-run" } as never,
+			{
+				id: "01_explore",
+				role: "explorer",
+				agent: "explorer",
+				title: "explore",
+				status: "completed",
+				dependsOn: [],
+				cwd: "/tmp",
+				runId: "test-run",
+			} as never,
 		],
 		pendingMailbox: [],
 		artifacts: [],

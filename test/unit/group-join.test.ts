@@ -1,10 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	resolveGroupJoinMode,
-	shouldGroupJoin,
-	GroupJoinManager,
-} from "../../src/runtime/group-join.ts";
+import test from "node:test";
+import { GroupJoinManager, resolveGroupJoinMode, shouldGroupJoin } from "../../src/runtime/group-join.ts";
 
 /**
  * Round 25 (test coverage gaps): `group-join.ts` provides group-join mode

@@ -9,24 +9,29 @@
  *
  * All tests use bounded baseDir to avoid touching real user state.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import {
+	__test_getTrackedTempDirs,
+	__test_resetTrackedTempDirs,
 	cleanupAllTrackedTempDirs,
-	cleanupOrphanTempDirs,
 	cleanupLegacyOrphanTempDirs,
+	cleanupOrphanTempDirs,
 	cleanupTempDir,
 	createSafeTempDir,
-	__test_resetTrackedTempDirs,
-	__test_getTrackedTempDirs,
 } from "../../src/runtime/pi-args.ts";
 
 function mkdtemp(prefix: string): string {
 	let dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-	try { dir = fs.realpathSync(dir); } catch { /* keep as-is */ }
+	try {
+		dir = fs.realpathSync(dir);
+	} catch {
+		/* keep as-is */
+	}
 	return dir;
 }
 
@@ -55,17 +60,11 @@ test("cleanupTempDir removes the dir and untracks it", () => {
 	// Use the internal createSafeTempDir to add to tracked Set
 	const tracked = createSafeTempDir(tmp, "pi-crew-tracked-");
 	assert.ok(fs.existsSync(tracked), "tracked dir should exist");
-	assert.ok(
-		__test_getTrackedTempDirs().includes(tracked),
-		"tracked dir should be in Set",
-	);
+	assert.ok(__test_getTrackedTempDirs().includes(tracked), "tracked dir should be in Set");
 
 	cleanupTempDir(tracked);
 	assert.ok(!fs.existsSync(tracked), "dir should be removed");
-	assert.ok(
-		!__test_getTrackedTempDirs().includes(tracked),
-		"dir should be removed from Set",
-	);
+	assert.ok(!__test_getTrackedTempDirs().includes(tracked), "dir should be removed from Set");
 
 	rmrf(tmp);
 });

@@ -35,9 +35,7 @@ function cleanup() {
 test("skill-effectiveness: CONFIDENCE_THRESHOLDS are ordered correctly", () => {
 	assert.ok(CONFIDENCE_THRESHOLDS.TENTATIVE < CONFIDENCE_THRESHOLDS.MODERATE);
 	assert.ok(CONFIDENCE_THRESHOLDS.MODERATE < CONFIDENCE_THRESHOLDS.STRONG);
-	assert.ok(
-		CONFIDENCE_THRESHOLDS.STRONG < CONFIDENCE_THRESHOLDS.NEAR_CERTAIN,
-	);
+	assert.ok(CONFIDENCE_THRESHOLDS.STRONG < CONFIDENCE_THRESHOLDS.NEAR_CERTAIN);
 });
 
 test("skill-effectiveness: computeInitialConfidence from observation count", () => {
@@ -72,9 +70,7 @@ test("skill-effectiveness: adjustConfidence clamps to valid range", () => {
 
 test("skill-effectiveness: applyDecay reduces confidence over time", () => {
 	const current = 0.7;
-	const weekAgo = new Date(
-		Date.now() - 8 * 24 * 60 * 60 * 1000,
-	).toISOString();
+	const weekAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
 	const decayed = applyDecay(current, weekAgo);
 	assert.ok(decayed < current);
 	assert.ok(decayed >= 0.1);
@@ -168,10 +164,7 @@ test("skill-effectiveness: computeSkillMetrics with activations", () => {
 			confidence: 0.45,
 		});
 
-		const metrics = computeSkillMetrics(
-			"test-skill",
-			getSkillActivations(TEST_CWD, TEST_RUN_ID),
-		);
+		const metrics = computeSkillMetrics("test-skill", getSkillActivations(TEST_CWD, TEST_RUN_ID));
 		assert.equal(metrics.totalActivations, 3);
 		assert.equal(metrics.passedActivations, 2);
 		assert.equal(metrics.failedActivations, 1);

@@ -8,14 +8,11 @@
  *
  * Run with: PI_CREW_ALLOW_MOCK=1 PI_TEAMS_MOCK_CHILD_PI=success npx tsx --test test/unit/child-pi-hardening.test.ts
  */
-import { describe, test, beforeEach } from "node:test";
-import assert from "node:assert";
 
-import {
-	ChildPiLineObserver,
-	killProcessPid,
-} from "../../src/runtime/child-pi.ts";
+import assert from "node:assert";
+import { beforeEach, describe, test } from "node:test";
 import type { AgentConfig } from "../../src/agents/agent-config.ts";
+import { ChildPiLineObserver, killProcessPid } from "../../src/runtime/child-pi.ts";
 
 // --- Test helpers ---
 
@@ -34,8 +31,12 @@ function makeInput() {
 		cwd: "/tmp",
 		task: "test task",
 		agent: MINIMAL_AGENT,
-		onJsonEvent: (_e: unknown) => { /* noop */ },
-		onLifecycleEvent: (_e: unknown) => { /* noop */ },
+		onJsonEvent: (_e: unknown) => {
+			/* noop */
+		},
+		onLifecycleEvent: (_e: unknown) => {
+			/* noop */
+		},
 	};
 }
 
@@ -48,7 +49,9 @@ describe("#3 SIGKILL timer hardening", () => {
 	// Windows, killProcessPid uses `taskkill /T /F` and returns early (no
 	// SIGTERM, no SIGKILL timer). This subtest verifies the Unix path; skip it
 	// on win32 (cross-platform CI caught the original assertion assuming SIGTERM).
-	test("killProcessPid schedules SIGKILL timer after SIGTERM (mock)", { skip: process.platform === "win32" ? "Unix-only path (win32 uses taskkill)" : false }, () => {
+	test("killProcessPid schedules SIGKILL timer after SIGTERM (mock)", {
+		skip: process.platform === "win32" ? "Unix-only path (win32 uses taskkill)" : false,
+	}, () => {
 		// This test verifies the hardKillTimer is scheduled by checking the
 		// side effect: after SIGTERM succeeds, a setTimeout with HARD_KILL_MS
 		// (3000ms) is armed.
@@ -62,19 +65,13 @@ describe("#3 SIGKILL timer hardening", () => {
 
 		try {
 			// Mock process.kill to succeed without throwing
-			(process as unknown as Record<string, unknown>).kill = (
-				pid: number,
-				sig?: string,
-			) => {
+			(process as unknown as Record<string, unknown>).kill = (pid: number, sig?: string) => {
 				killCalls.push([pid, sig ?? "(default)"]);
 				// Don't actually send signals
 			};
 
 			// Override setTimeout to capture the timer delay
-			(globalThis as unknown as Record<string, unknown>).setTimeout = (
-				fn: () => void,
-				delay: number,
-			): NodeJS.Timeout => {
+			(globalThis as unknown as Record<string, unknown>).setTimeout = (fn: () => void, delay: number): NodeJS.Timeout => {
 				capturedDelay = delay;
 				// Fire immediately so the test doesn't hang
 				return originalSetTimeout(fn, 0);
@@ -88,15 +85,8 @@ describe("#3 SIGKILL timer hardening", () => {
 			assert.ok(termCall, "Should have attempted SIGTERM");
 
 			// Verify a timer was scheduled with HARD_KILL_MS delay
-			assert.ok(
-				capturedDelay !== undefined,
-				"A timer should be scheduled after SIGTERM",
-			);
-			assert.strictEqual(
-				capturedDelay,
-				HARD_KILL_MS,
-				`Timer delay should be ${HARD_KILL_MS}ms (HARD_KILL_MS)`,
-			);
+			assert.ok(capturedDelay !== undefined, "A timer should be scheduled after SIGTERM");
+			assert.strictEqual(capturedDelay, HARD_KILL_MS, `Timer delay should be ${HARD_KILL_MS}ms (HARD_KILL_MS)`);
 		} finally {
 			// Restore originals
 			(process as unknown as Record<string, unknown>).kill = originalKill;
@@ -184,14 +174,8 @@ describe("#7 intermediate findings (over-budget worker hardening)", () => {
 
 		// intermediateFindings should be non-empty (captured tool result display lines)
 		const findings = observer.getIntermediateFindings();
-		assert.ok(
-			findings.length > 0,
-			"intermediateFindings should capture tool result content",
-		);
-		assert.ok(
-			findings.includes("Read") || findings.includes("Write"),
-			"intermediateFindings should include tool names",
-		);
+		assert.ok(findings.length > 0, "intermediateFindings should capture tool result content");
+		assert.ok(findings.includes("Read") || findings.includes("Write"), "intermediateFindings should include tool names");
 	});
 
 	test("getIntermediateFindings is bounded by maxChars", () => {
@@ -202,7 +186,10 @@ describe("#7 intermediate findings (over-budget worker hardening)", () => {
 		for (let i = 0; i < 30; i++) {
 			const line = JSON.stringify({
 				type: "message",
-				message: { role: "assistant", content: [{ type: "text", text: `Line ${i}: ${"x".repeat(50)}` }] },
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: `Line ${i}: ${"x".repeat(50)}` }],
+				},
 			});
 			observer.observe(line + "\n");
 		}
@@ -210,17 +197,11 @@ describe("#7 intermediate findings (over-budget worker hardening)", () => {
 
 		// With default maxChars=500, result should be ≤ 500
 		const findings = observer.getIntermediateFindings();
-		assert.ok(
-			findings.length <= 500,
-			`Findings (${findings.length} chars) should be bounded by default maxChars=500`,
-		);
+		assert.ok(findings.length <= 500, `Findings (${findings.length} chars) should be bounded by default maxChars=500`);
 
 		// With custom maxChars=50, should be ≤ 50
 		const bounded = observer.getIntermediateFindings(50);
-		assert.ok(
-			bounded.length <= 50,
-			`Findings (${bounded.length} chars) should be bounded by custom maxChars=50`,
-		);
+		assert.ok(bounded.length <= 50, `Findings (${bounded.length} chars) should be bounded by custom maxChars=50`);
 	});
 
 	test("getIntermediateFindings captures partial assistant text + tool results", () => {
@@ -232,7 +213,10 @@ describe("#7 intermediate findings (over-budget worker hardening)", () => {
 		observer.observe(
 			JSON.stringify({
 				type: "message",
-				message: { role: "assistant", content: [{ type: "text", text: "Writing file..." }] },
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "Writing file..." }],
+				},
 			}) + "\n",
 		);
 		observer.observe(
@@ -245,7 +229,10 @@ describe("#7 intermediate findings (over-budget worker hardening)", () => {
 		observer.observe(
 			JSON.stringify({
 				type: "tool_result_end",
-				message: { role: "assistant", content: [{ type: "toolResult", name: "Write", content: "Done." }] },
+				message: {
+					role: "assistant",
+					content: [{ type: "toolResult", name: "Write", content: "Done." }],
+				},
 			}) + "\n",
 		);
 		observer.flush();
@@ -267,7 +254,10 @@ describe("#7 intermediate findings (over-budget worker hardening)", () => {
 		observer.observe(
 			JSON.stringify({
 				type: "message",
-				message: { role: "assistant", content: [{ type: "text", text: "The answer is 42." }] },
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "The answer is 42." }],
+				},
 			}) + "\n",
 		);
 		observer.observe(
@@ -280,7 +270,10 @@ describe("#7 intermediate findings (over-budget worker hardening)", () => {
 		observer.observe(
 			JSON.stringify({
 				type: "tool_result_end",
-				message: { role: "assistant", content: [{ type: "toolResult", name: "Read", content: "42" }] },
+				message: {
+					role: "assistant",
+					content: [{ type: "toolResult", name: "Read", content: "42" }],
+				},
 			}) + "\n",
 		);
 		// Final assistant turn (with no tool call)
@@ -301,10 +294,7 @@ describe("#7 intermediate findings (over-budget worker hardening)", () => {
 		assert.ok(observer.getIntermediateFindings().length > 0, "intermediateFindings should also be populated");
 
 		// rawFinalText should be the LAST assistant text (the final "Done: 42.")
-		assert.ok(
-			observer.getRawFinalText()!.includes("Done: 42"),
-			"rawFinalText should be the final assistant text",
-		);
+		assert.ok(observer.getRawFinalText()!.includes("Done: 42"), "rawFinalText should be the final assistant text");
 	});
 
 	test("rawFinalText is undefined only when no assistant/tool text is emitted", () => {

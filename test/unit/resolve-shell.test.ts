@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { resolveShellForScript } from "../../src/utils/resolve-shell.ts";
 
 test("resolveShellForScript uses bash for .sh scripts", () => {

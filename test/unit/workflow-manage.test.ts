@@ -4,16 +4,17 @@
  * Verifies the security gating for workflow-create (§0c C3 destructive-gate + C5 path
  * allowlist + content validation) and the read-only actions.
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import {
 	handleWorkflowCreate,
+	handleWorkflowDelete,
 	handleWorkflowGet,
 	handleWorkflowList,
-	handleWorkflowDelete,
 	handleWorkflowSave,
 } from "../../src/extension/team-tool/workflow-manage.ts";
 
@@ -32,7 +33,13 @@ const CLEAN_SCRIPT = `export default async function (ctx) { await ctx.agent({ ro
 test("workflow-create REQUIRES confirm:true (defense-in-depth even if gate is bypassed)", () => {
 	const cwd = tmpCwd();
 	try {
-		const res = handleWorkflowCreate({ action: "workflow-create", config: { name: "x", script: CLEAN_SCRIPT } }, ctx(cwd));
+		const res = handleWorkflowCreate(
+			{
+				action: "workflow-create",
+				config: { name: "x", script: CLEAN_SCRIPT },
+			},
+			ctx(cwd),
+		);
 		assert.equal(res.isError, true);
 		assert.match((res.content[0] as { text: string }).text, /confirm:true/i);
 	} finally {
@@ -43,15 +50,17 @@ test("workflow-create REQUIRES confirm:true (defense-in-depth even if gate is by
 test("workflow-create rejects forbidden content (child_process / process.exit / network)", () => {
 	const cwd = tmpCwd();
 	try {
-		const cases = [
-			`require('child_process')`,
-			`process.exit(1)`,
-			`import net from 'net'`,
-			`import http from 'https'`,
-		];
+		const cases = [`require('child_process')`, `process.exit(1)`, `import net from 'net'`, `import http from 'https'`];
 		for (const evil of cases) {
 			const res = handleWorkflowCreate(
-				{ action: "workflow-create", confirm: true, config: { name: "evil", script: `export default async function(ctx){ ${evil}; }` } },
+				{
+					action: "workflow-create",
+					confirm: true,
+					config: {
+						name: "evil",
+						script: `export default async function(ctx){ ${evil}; }`,
+					},
+				},
 				ctx(cwd),
 			);
 			assert.equal(res.isError, true, `should reject: ${evil}`);
@@ -66,7 +75,11 @@ test("workflow-create writes a clean script to the project workflows dir", () =>
 	const cwd = tmpCwd();
 	try {
 		const res = handleWorkflowCreate(
-			{ action: "workflow-create", confirm: true, config: { name: "clean-wf", script: CLEAN_SCRIPT } },
+			{
+				action: "workflow-create",
+				confirm: true,
+				config: { name: "clean-wf", script: CLEAN_SCRIPT },
+			},
 			ctx(cwd),
 		);
 		assert.equal(res.isError, false);
@@ -81,7 +94,14 @@ test("workflow-create writes a clean script to the project workflows dir", () =>
 test("workflow-create requires config.name + config.script", () => {
 	const cwd = tmpCwd();
 	try {
-		const noName = handleWorkflowCreate({ action: "workflow-create", confirm: true, config: { script: CLEAN_SCRIPT } }, ctx(cwd));
+		const noName = handleWorkflowCreate(
+			{
+				action: "workflow-create",
+				confirm: true,
+				config: { script: CLEAN_SCRIPT },
+			},
+			ctx(cwd),
+		);
 		assert.equal(noName.isError, true);
 		assert.match((noName.content[0] as { text: string }).text, /config\.name/i);
 		const noScript = handleWorkflowCreate({ action: "workflow-create", confirm: true, config: { name: "x" } }, ctx(cwd));
@@ -127,7 +147,14 @@ test("workflow-delete requires confirm:true + only deletes dynamic workflows ins
 		assert.equal(blocked.isError, true);
 		assert.match((blocked.content[0] as { text: string }).text, /confirm:true/);
 		// With confirm → deleted.
-		const ok = handleWorkflowDelete({ action: "workflow-delete", confirm: true, config: { name: "demo" } }, ctx(cwd));
+		const ok = handleWorkflowDelete(
+			{
+				action: "workflow-delete",
+				confirm: true,
+				config: { name: "demo" },
+			},
+			ctx(cwd),
+		);
 		assert.equal(ok.isError, false);
 		assert.ok(!fs.existsSync(path.join(cwd, ".crew", "workflows", "demo.dwf.ts")), "file deleted");
 	} finally {
@@ -138,7 +165,13 @@ test("workflow-delete requires confirm:true + only deletes dynamic workflows ins
 test("workflow-save REQUIRES confirm:true (H-1 — was unconfirmed arbitrary write)", () => {
 	const cwd = tmpCwd();
 	try {
-		const blocked = handleWorkflowSave({ action: "workflow-save", config: { name: "x", script: CLEAN_SCRIPT } }, ctx(cwd));
+		const blocked = handleWorkflowSave(
+			{
+				action: "workflow-save",
+				config: { name: "x", script: CLEAN_SCRIPT },
+			},
+			ctx(cwd),
+		);
 		assert.equal(blocked.isError, true);
 		assert.match((blocked.content[0] as { text: string }).text, /confirm:true/);
 	} finally {

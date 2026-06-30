@@ -13,7 +13,14 @@ export interface TeamToolDetails {
 	/** Resource scope affected by the action (e.g. cleanup: "project"). */
 	scope?: string;
 	/** Run metrics for compact display in TUI tool result rendering. */
-	metrics?: { taskCount?: number; completedCount?: number; totalTokens?: number; totalCost?: number; durationMs?: number; consistencyScore?: number };
+	metrics?: {
+		taskCount?: number;
+		completedCount?: number;
+		totalTokens?: number;
+		totalCost?: number;
+		durationMs?: number;
+		consistencyScore?: number;
+	};
 	/** Structured data for programmatic consumption (e.g. TUI widgets). */
 	data?: Record<string, unknown>;
 }

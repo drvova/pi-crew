@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { saveCrewAgents } from "../../src/runtime/crew-agent-records.ts";
 import { readForegroundControlStatus, writeForegroundInterruptRequest } from "../../src/runtime/foreground-control.ts";
@@ -46,7 +46,18 @@ test("foreground control status and interrupt request are durable", () => {
 	try {
 		const run = manifest(cwd);
 		fs.mkdirSync(run.stateRoot, { recursive: true });
-		saveCrewAgents(run, [{ id: "team_fg:01_execute", runId: run.runId, taskId: "01_execute", agent: "executor", role: "executor", runtime: "child-process", status: "running", startedAt: run.createdAt }]);
+		saveCrewAgents(run, [
+			{
+				id: "team_fg:01_execute",
+				runId: run.runId,
+				taskId: "01_execute",
+				agent: "executor",
+				role: "executor",
+				runtime: "child-process",
+				status: "running",
+				startedAt: run.createdAt,
+			},
+		]);
 		const status = readForegroundControlStatus(run, [task]);
 		assert.equal(status.active, true);
 		assert.deepEqual(status.runningTasks, ["01_execute"]);
@@ -66,14 +77,39 @@ test("team api exposes foreground status and interrupt request", async () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-fg-api-"));
 	try {
 		fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-		const started = await handleTeamTool({ action: "run", config: { runtime: { mode: "scaffold" } }, team: "fast-fix", goal: "foreground api" }, { cwd });
+		const started = await handleTeamTool(
+			{
+				action: "run",
+				config: { runtime: { mode: "scaffold" } },
+				team: "fast-fix",
+				goal: "foreground api",
+			},
+			{ cwd },
+		);
 		assert.equal(started.isError, false);
 		const runId = started.details.runId!;
-		const status = await handleTeamTool({ action: "api", runId, config: { operation: "foreground-status" } }, { cwd });
+		const status = await handleTeamTool(
+			{
+				action: "api",
+				runId,
+				config: { operation: "foreground-status" },
+			},
+			{ cwd },
+		);
 		const statusPayload = JSON.parse(firstText(status));
 		assert.equal(statusPayload.runId, runId);
 		assert.ok(statusPayload.controlPath.includes("foreground-control.json"));
-		const interrupt = await handleTeamTool({ action: "api", runId, config: { operation: "foreground-interrupt", reason: "phase6 test" } }, { cwd });
+		const interrupt = await handleTeamTool(
+			{
+				action: "api",
+				runId,
+				config: {
+					operation: "foreground-interrupt",
+					reason: "phase6 test",
+				},
+			},
+			{ cwd },
+		);
 		const request = JSON.parse(firstText(interrupt));
 		assert.equal(request.type, "interrupt");
 		assert.equal(request.reason, "phase6 test");
@@ -81,4 +117,3 @@ test("team api exposes foreground status and interrupt request", async () => {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });
-

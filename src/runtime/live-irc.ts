@@ -77,7 +77,10 @@ function routeIrcMessage(
 	},
 ): { deliveredTo: string[]; error?: string } {
 	if (!message.to || !message.message?.trim()) {
-		return { deliveredTo: [], error: "Missing 'to' (agent ID or 'all') and 'message' fields." };
+		return {
+			deliveredTo: [],
+			error: "Missing 'to' (agent ID or 'all') and 'message' fields.",
+		};
 	}
 	if (message.to === selfId) {
 		return { deliveredTo: [], error: "Cannot send a message to yourself." };

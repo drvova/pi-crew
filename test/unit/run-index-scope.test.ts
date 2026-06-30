@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { listRunsByScope } from "../../src/extension/run-index.ts";
 
 describe("listRunsByScope", () => {

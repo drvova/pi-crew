@@ -8,7 +8,11 @@ export interface GradientThresholds {
 	deadMs: number;
 }
 
-export const DEFAULT_GRADIENT_THRESHOLDS: GradientThresholds = { warnMs: 30_000, staleMs: 60_000, deadMs: 300_000 };
+export const DEFAULT_GRADIENT_THRESHOLDS: GradientThresholds = {
+	warnMs: 30_000,
+	staleMs: 60_000,
+	deadMs: 300_000,
+};
 
 export function heartbeatAgeMs(heartbeat: WorkerHeartbeatState | undefined, now = Date.now()): number {
 	if (!heartbeat) return Number.POSITIVE_INFINITY;
@@ -16,7 +20,11 @@ export function heartbeatAgeMs(heartbeat: WorkerHeartbeatState | undefined, now 
 	return Number.isFinite(lastSeen) ? Math.max(0, now - lastSeen) : Number.POSITIVE_INFINITY;
 }
 
-export function classifyHeartbeat(heartbeat: WorkerHeartbeatState | undefined, thresholds: GradientThresholds = DEFAULT_GRADIENT_THRESHOLDS, now = Date.now()): HeartbeatLevel {
+export function classifyHeartbeat(
+	heartbeat: WorkerHeartbeatState | undefined,
+	thresholds: GradientThresholds = DEFAULT_GRADIENT_THRESHOLDS,
+	now = Date.now(),
+): HeartbeatLevel {
 	if (!heartbeat) return "dead";
 	if (heartbeat.alive === false) return "dead";
 	const elapsed = heartbeatAgeMs(heartbeat, now);

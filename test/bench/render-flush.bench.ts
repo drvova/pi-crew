@@ -29,11 +29,21 @@ const samples: number[] = [];
 for (let i = 0; i < ITERS; i++) {
 	const events = createEvents();
 	let renders = 0;
-	const scheduler = new RenderScheduler(events, () => { renders += 1; }, { debounceMs: 1, fallbackMs: 1000 });
+	const scheduler = new RenderScheduler(
+		events,
+		() => {
+			renders += 1;
+		},
+		{ debounceMs: 1, fallbackMs: 1000 },
+	);
 
 	const t0 = performance.now();
 	for (let j = 0; j < EVENTS_PER_ITER; j++) {
-		events.emit("crew.subagent.completed", { id: `s${j}`, runId: `run-${i}`, status: "completed" });
+		events.emit("crew.subagent.completed", {
+			id: `s${j}`,
+			runId: `run-${i}`,
+			status: "completed",
+		});
 	}
 	scheduler.flush();
 	const elapsed = performance.now() - t0;
@@ -61,4 +71,6 @@ function percentile(sorted: number[], q: number): number {
 	const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q));
 	return sorted[idx];
 }
-function round(n: number): number { return Math.round(n * 100) / 100; }
+function round(n: number): number {
+	return Math.round(n * 100) / 100;
+}

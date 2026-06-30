@@ -1,12 +1,12 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
 	checkProcessLiveness,
+	hasStaleAsyncProcess,
 	isActiveRunStatus,
+	isDisplayActiveRun,
 	isFinishedRunStatus,
 	isLikelyOrphanedActiveRun,
-	hasStaleAsyncProcess,
-	isDisplayActiveRun,
 } from "../../src/runtime/process-status.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 
@@ -94,21 +94,36 @@ describe("isLikelyOrphanedActiveRun", () => {
 	});
 
 	it("returns false for async runs (they have PID tracking)", () => {
-		const run = makeManifest({ status: "running", async: { pid: 123, logPath: "/tmp/log", spawnedAt: new Date().toISOString() } });
+		const run = makeManifest({
+			status: "running",
+			async: {
+				pid: 123,
+				logPath: "/tmp/log",
+				spawnedAt: new Date().toISOString(),
+			},
+		});
 		assert.equal(isLikelyOrphanedActiveRun(run, []), false);
 	});
 
 	it("returns true when run is stale with specific summary and no agents", () => {
 		const now = Date.now();
 		const stale = new Date(now - 3 * 60 * 1000).toISOString(); // 3 min ago
-		const run = makeManifest({ status: "running", updatedAt: stale, summary: "Creating workflow prompts and placeholder results." });
+		const run = makeManifest({
+			status: "running",
+			updatedAt: stale,
+			summary: "Creating workflow prompts and placeholder results.",
+		});
 		assert.equal(isLikelyOrphanedActiveRun(run, [], now, 2 * 60 * 1000), true);
 	});
 
 	it("returns false when stale but summary does not match", () => {
 		const now = Date.now();
 		const stale = new Date(now - 3 * 60 * 1000).toISOString();
-		const run = makeManifest({ status: "running", updatedAt: stale, summary: "Some other summary" });
+		const run = makeManifest({
+			status: "running",
+			updatedAt: stale,
+			summary: "Some other summary",
+		});
 		assert.equal(isLikelyOrphanedActiveRun(run, [], now, 2 * 60 * 1000), false);
 	});
 
@@ -122,7 +137,16 @@ describe("isLikelyOrphanedActiveRun", () => {
 		const updatedAt = new Date(now - 6 * 60 * 1000).toISOString();
 		const run = makeManifest({ status: "running", updatedAt });
 		const agents = [
-			{ id: "a1", status: "queued" as const, runId: "r", taskId: "t", agent: "x", role: "r", runtime: "scaffold" as const, startedAt: updatedAt },
+			{
+				id: "a1",
+				status: "queued" as const,
+				runId: "r",
+				taskId: "t",
+				agent: "x",
+				role: "r",
+				runtime: "scaffold" as const,
+				startedAt: updatedAt,
+			},
 		];
 		assert.equal(isLikelyOrphanedActiveRun(run, agents, now, 2 * 60 * 1000), true);
 	});
@@ -135,19 +159,37 @@ describe("hasStaleAsyncProcess", () => {
 	});
 
 	it("returns true when async process PID is dead", () => {
-		const run = makeManifest({ status: "running", async: { pid: 4000000, logPath: "/tmp/log", spawnedAt: new Date().toISOString() } });
+		const run = makeManifest({
+			status: "running",
+			async: {
+				pid: 4000000,
+				logPath: "/tmp/log",
+				spawnedAt: new Date().toISOString(),
+			},
+		});
 		assert.equal(hasStaleAsyncProcess(run), true);
 	});
 
 	it("returns false when async process is alive and fresh", () => {
-		const run = makeManifest({ status: "running", async: { pid: process.pid, logPath: "/tmp/log", spawnedAt: new Date().toISOString() } });
+		const run = makeManifest({
+			status: "running",
+			async: {
+				pid: process.pid,
+				logPath: "/tmp/log",
+				spawnedAt: new Date().toISOString(),
+			},
+		});
 		assert.equal(hasStaleAsyncProcess(run), false);
 	});
 
 	it("returns true when process alive but run is very stale", () => {
 		const now = Date.now();
 		const stale = new Date(now - 31 * 60 * 1000).toISOString();
-		const run = makeManifest({ status: "running", updatedAt: stale, async: { pid: process.pid, logPath: "/tmp/log", spawnedAt: stale } });
+		const run = makeManifest({
+			status: "running",
+			updatedAt: stale,
+			async: { pid: process.pid, logPath: "/tmp/log", spawnedAt: stale },
+		});
 		assert.equal(hasStaleAsyncProcess(run, now), true);
 	});
 });
@@ -156,7 +198,11 @@ describe("isDisplayActiveRun", () => {
 	it("returns false for stale async process", () => {
 		const now = Date.now();
 		const stale = new Date(now - 31 * 60 * 1000).toISOString();
-		const run = makeManifest({ status: "running", updatedAt: stale, async: { pid: 4000000, logPath: "/tmp/log", spawnedAt: stale } });
+		const run = makeManifest({
+			status: "running",
+			updatedAt: stale,
+			async: { pid: 4000000, logPath: "/tmp/log", spawnedAt: stale },
+		});
 		assert.equal(isDisplayActiveRun(run, [], now), false);
 	});
 
@@ -174,13 +220,24 @@ describe("isDisplayActiveRun", () => {
 
 	it("returns true for completed run within grace period", () => {
 		const now = Date.now();
-		const run = makeManifest({ status: "completed", updatedAt: new Date(now).toISOString() });
+		const run = makeManifest({
+			status: "completed",
+			updatedAt: new Date(now).toISOString(),
+		});
 		// Need an agent with completedAt within grace
-		const agents = [{
-			id: "a1", status: "completed" as const, runId: "r", taskId: "t", agent: "x", role: "r",
-			runtime: "scaffold" as const, startedAt: new Date(now - 1000).toISOString(),
-			completedAt: new Date(now - 1000).toISOString(),
-		}];
+		const agents = [
+			{
+				id: "a1",
+				status: "completed" as const,
+				runId: "r",
+				taskId: "t",
+				agent: "x",
+				role: "r",
+				runtime: "scaffold" as const,
+				startedAt: new Date(now - 1000).toISOString(),
+				completedAt: new Date(now - 1000).toISOString(),
+			},
+		];
 		assert.equal(isDisplayActiveRun(run, agents, now), true);
 	});
 
@@ -191,10 +248,18 @@ describe("isDisplayActiveRun", () => {
 
 	it("returns true when a running agent exists", () => {
 		const run = makeManifest({ status: "running" });
-		const agents = [{
-			id: "a1", status: "running" as const, runId: "r", taskId: "t", agent: "x", role: "r",
-			runtime: "scaffold" as const, startedAt: new Date().toISOString(),
-		}];
+		const agents = [
+			{
+				id: "a1",
+				status: "running" as const,
+				runId: "r",
+				taskId: "t",
+				agent: "x",
+				role: "r",
+				runtime: "scaffold" as const,
+				startedAt: new Date().toISOString(),
+			},
+		];
 		assert.equal(isDisplayActiveRun(run, agents, Date.now()), true);
 	});
 });

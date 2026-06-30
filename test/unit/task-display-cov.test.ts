@@ -1,11 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	shouldMaterializeAgent,
-	taskById,
-	waitingReason,
-	formatTaskGraphLines,
-} from "../../src/runtime/task-display.ts";
+import { describe, it } from "node:test";
+import { formatTaskGraphLines, shouldMaterializeAgent, taskById, waitingReason } from "../../src/runtime/task-display.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
 function makeTask(overrides: Partial<TeamTaskState> = {}): TeamTaskState {
@@ -71,34 +66,23 @@ describe("task-display", () => {
 		});
 
 		it("returns 'ready' for queued task with no dependencies", () => {
-			assert.equal(
-				waitingReason(makeTask({ status: "queued", dependsOn: [] }), []),
-				"ready",
-			);
+			assert.equal(waitingReason(makeTask({ status: "queued", dependsOn: [] }), []), "ready");
 		});
 
 		it("returns 'waiting for ...' for incomplete dependencies", () => {
-			const tasks = [
-				makeTask({ id: "a", status: "queued", dependsOn: ["b"] }),
-				makeTask({ id: "b", status: "running" }),
-			];
+			const tasks = [makeTask({ id: "a", status: "queued", dependsOn: ["b"] }), makeTask({ id: "b", status: "running" })];
 			const reason = waitingReason(tasks[0], tasks);
 			assert.ok(reason);
 			assert.ok(reason!.includes("b"));
 		});
 
 		it("returns 'ready' when all dependencies are completed", () => {
-			const tasks = [
-				makeTask({ id: "a", status: "queued", dependsOn: ["b"] }),
-				makeTask({ id: "b", status: "completed" }),
-			];
+			const tasks = [makeTask({ id: "a", status: "queued", dependsOn: ["b"] }), makeTask({ id: "b", status: "completed" })];
 			assert.equal(waitingReason(tasks[0], tasks), "ready");
 		});
 
 		it("handles missing dependencies gracefully", () => {
-			const tasks = [
-				makeTask({ id: "a", status: "queued", dependsOn: ["missing"] }),
-			];
+			const tasks = [makeTask({ id: "a", status: "queued", dependsOn: ["missing"] })];
 			const reason = waitingReason(tasks[0], tasks);
 			assert.ok(reason!.includes("missing"));
 		});
@@ -139,17 +123,19 @@ describe("task-display", () => {
 
 		it("includes role and agent in output", () => {
 			const lines = formatTaskGraphLines([
-				makeTask({ id: "t1", role: "planner", agent: "gpt", status: "running" }),
+				makeTask({
+					id: "t1",
+					role: "planner",
+					agent: "gpt",
+					status: "running",
+				}),
 			]);
 			assert.ok(lines[0].includes("planner"));
 			assert.ok(lines[0].includes("gpt"));
 		});
 
 		it("includes waiting reason when not ready", () => {
-			const tasks = [
-				makeTask({ id: "t1", status: "queued", dependsOn: ["t2"] }),
-				makeTask({ id: "t2", status: "running" }),
-			];
+			const tasks = [makeTask({ id: "t1", status: "queued", dependsOn: ["t2"] }), makeTask({ id: "t2", status: "running" })];
 			const lines = formatTaskGraphLines(tasks);
 			assert.ok(lines[0].includes("waiting for"));
 		});

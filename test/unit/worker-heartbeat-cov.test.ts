@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
 	createWorkerHeartbeat,
-	touchWorkerHeartbeat,
 	isWorkerHeartbeatStale,
+	touchWorkerHeartbeat,
 	type WorkerHeartbeatState,
 } from "../../src/runtime/worker-heartbeat.ts";
 

@@ -1,10 +1,10 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	greenLevelSatisfies,
-	evaluateGreenContract,
-	inferGreenLevelFromTask,
 	createVerificationEvidence,
+	evaluateGreenContract,
+	greenLevelSatisfies,
+	inferGreenLevelFromTask,
 } from "../../src/runtime/green-contract.ts";
 import type { GreenLevel, VerificationContract, VerificationEvidence } from "../../src/state/types.ts";
 
@@ -68,7 +68,11 @@ test("evaluateGreenContract: not satisfied when evidence below requirement", () 
 });
 
 test("evaluateGreenContract: defaults to 'none' without evidence", () => {
-	const contract: VerificationContract = { requiredGreenLevel: "none", commands: [], allowManualEvidence: false };
+	const contract: VerificationContract = {
+		requiredGreenLevel: "none",
+		commands: [],
+		allowManualEvidence: false,
+	};
 	const result = evaluateGreenContract(contract);
 	assert.equal(result.observedGreenLevel, "none");
 	assert.equal(result.satisfied, true);
@@ -87,7 +91,11 @@ test("inferGreenLevelFromTask: returns 'none' for failed task", () => {
 });
 
 test("inferGreenLevelFromTask: returns 'none' when required is 'none'", () => {
-	const contract: VerificationContract = { requiredGreenLevel: "none", commands: [], allowManualEvidence: false };
+	const contract: VerificationContract = {
+		requiredGreenLevel: "none",
+		commands: [],
+		allowManualEvidence: false,
+	};
 	assert.equal(inferGreenLevelFromTask(true, contract), "none");
 });
 
@@ -96,7 +104,11 @@ test("inferGreenLevelFromTask: returns required level when success and allowManu
 });
 
 test("inferGreenLevelFromTask: returns 'targeted' when success but no manual evidence", () => {
-	const contract: VerificationContract = { requiredGreenLevel: "workspace", commands: [], allowManualEvidence: false };
+	const contract: VerificationContract = {
+		requiredGreenLevel: "workspace",
+		commands: [],
+		allowManualEvidence: false,
+	};
 	assert.equal(inferGreenLevelFromTask(true, contract), "targeted");
 });
 

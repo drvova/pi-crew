@@ -10,9 +10,9 @@
  */
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { Type, type Static } from "@sinclair/typebox";
-import type { YieldResult } from "../yield-handler.ts";
+import { type Static, Type } from "@sinclair/typebox";
 import { logInternalError } from "../../utils/internal-error.ts";
+import type { YieldResult } from "../yield-handler.ts";
 
 const SubmitResultParams = Type.Object({
 	summary: Type.String({ description: "Summary of completed work." }),
@@ -64,7 +64,10 @@ export function createSubmitResultTool(
 			_signal: AbortSignal | undefined,
 			_onUpdate: unknown,
 			_ctx: unknown,
-		): Promise<{ content: Array<{ type: "text"; text: string }>; details: SubmitResultDetails }> {
+		): Promise<{
+			content: Array<{ type: "text"; text: string }>;
+			details: SubmitResultDetails;
+		}> {
 			const result: YieldResult = {
 				summary: params.summary,
 				toolCallId,
@@ -72,8 +75,16 @@ export function createSubmitResultTool(
 				...(params.structuredData ? { structuredData: params.structuredData } : {}),
 			};
 			// Build response first so the model always gets confirmation
-			const response: { content: Array<{ type: "text"; text: string }>; details: SubmitResultDetails } = {
-				content: [{ type: "text", text: "Result submitted successfully. Thank you." }],
+			const response: {
+				content: Array<{ type: "text"; text: string }>;
+				details: SubmitResultDetails;
+			} = {
+				content: [
+					{
+						type: "text",
+						text: "Result submitted successfully. Thank you.",
+					},
+				],
 				details: {
 					summary: params.summary,
 					artifacts: params.artifacts,

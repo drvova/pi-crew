@@ -1,16 +1,20 @@
 import * as fs from "node:fs";
-import type { TeamRunManifest } from "../state/types.ts";
 import { agentOutputPath, readCrewAgents } from "../runtime/crew-agent-records.ts";
+import type { TeamRunManifest } from "../state/types.ts";
+import { resolveRealContainedPath } from "../utils/safe-paths.ts";
+import { pad, truncate, truncateToVisualLines } from "../utils/visual.ts";
+import { renderDiff } from "./render-diff.ts";
+import { colorForStatus, iconForStatus, type RunStatus } from "./status-colors.ts";
+import { highlightCode, highlightJson } from "./syntax-highlight.ts";
 import type { CrewTheme } from "./theme-adapter.ts";
 import { asCrewTheme, subscribeThemeChange } from "./theme-adapter.ts";
-import { renderDiff } from "./render-diff.ts";
-import { highlightCode, highlightJson } from "./syntax-highlight.ts";
-import { pad, truncate, truncateToVisualLines } from "../utils/visual.ts";
-import { colorForStatus, iconForStatus, type RunStatus } from "./status-colors.ts";
 import { DEFAULT_TRANSCRIPT_TAIL_BYTES, getTranscriptCacheEntry, readTranscriptLinesCached } from "./transcript-cache.ts";
-import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 
-type Component = { invalidate(): void; render(width: number): string[]; handleInput(data: string): void };
+type Component = {
+	invalidate(): void;
+	render(width: number): string[];
+	handleInput(data: string): void;
+};
 
 type TranscriptTheme = CrewTheme;
 
@@ -71,7 +75,10 @@ export function formatTranscriptEvent(event: unknown, themeLike: unknown = undef
 		const isError = obj.isError === true || result?.isError === true;
 		const isPartial = obj.isPartial === true;
 		const status: RunStatus = isError ? "failed" : isPartial ? "running" : "completed";
-		const header = theme.fg(colorForStatus(status), `${iconForStatus(status, { runningGlyph: "⋯" })} [Tool${toolName ? `: ${toolName}` : ""}] ${type}`);
+		const header = theme.fg(
+			colorForStatus(status),
+			`${iconForStatus(status, { runningGlyph: "⋯" })} [Tool${toolName ? `: ${toolName}` : ""}] ${type}`,
+		);
 		const text = (content || (typeof obj.text === "string" ? obj.text : typeof obj.result === "string" ? obj.result : "")).trim();
 		if (!text) return [header, "(no output)"];
 		if (isLikelyDiff(text)) {
@@ -83,7 +90,13 @@ export function formatTranscriptEvent(event: unknown, themeLike: unknown = undef
 		if (text.includes("```") && text.includes("```")) {
 			return [header, ...highlightCodeBlocks(text, theme)];
 		}
-		return [header, ...text.split(/\r?\n/).filter(Boolean).map((line) => theme.fg("muted", line))];
+		return [
+			header,
+			...text
+				.split(/\r?\n/)
+				.filter(Boolean)
+				.map((line) => theme.fg("muted", line)),
+		];
 	}
 	const message = asRecord(obj.message);
 	if (message) {
@@ -97,9 +110,7 @@ export function formatTranscriptEvent(event: unknown, themeLike: unknown = undef
 				return [theme.fg("accent", header), ...highlightCodeBlocks(text, theme)];
 			}
 			if (lines.length > 1) {
-				const block = lines
-					.map((line) => (role === "assistant" ? theme.bold(line) : line))
-					.join("\n");
+				const block = lines.map((line) => (role === "assistant" ? theme.bold(line) : line)).join("\n");
 				return [theme.fg("accent", header), ...block.split(/\r?\n/).filter(Boolean)];
 			}
 			return [theme.fg("accent", header), ...lines.filter(Boolean)];
@@ -125,9 +136,22 @@ export function formatTranscriptText(text: string, themeLike: unknown = undefine
 	return lines.length ? lines : ["(no transcript content)"];
 }
 
-export function readRunTranscript(manifest: TeamRunManifest, taskId?: string, options: { full?: boolean; maxTailBytes?: number } = {}): { title: string; path: string; lines: string[]; bytesRead: number; size: number; truncated: boolean } {
+export function readRunTranscript(
+	manifest: TeamRunManifest,
+	taskId?: string,
+	options: { full?: boolean; maxTailBytes?: number } = {},
+): {
+	title: string;
+	path: string;
+	lines: string[];
+	bytesRead: number;
+	size: number;
+	truncated: boolean;
+} {
 	const agents = readCrewAgents(manifest);
-	const agent = taskId ? agents.find((item) => item.taskId === taskId || item.id === taskId) : agents.find((item) => item.transcriptPath) ?? agents[0];
+	const agent = taskId
+		? agents.find((item) => item.taskId === taskId || item.id === taskId)
+		: (agents.find((item) => item.transcriptPath) ?? agents[0]);
 	const selectedTaskId = agent?.taskId ?? taskId ?? "unknown";
 	let transcriptPath = "";
 	try {
@@ -148,10 +172,20 @@ export function readRunTranscript(manifest: TeamRunManifest, taskId?: string, op
 			// Ignore untrusted transcript paths from mutable agent state and fall back to durable agent output.
 		}
 	}
-	const readOptions = { full: options.full === true, maxTailBytes: options.maxTailBytes ?? DEFAULT_TRANSCRIPT_TAIL_BYTES };
+	const readOptions = {
+		full: options.full === true,
+		maxTailBytes: options.maxTailBytes ?? DEFAULT_TRANSCRIPT_TAIL_BYTES,
+	};
 	const lines = readTranscriptLinesCached(transcriptPath, (text) => formatTranscriptText(text), Date.now(), readOptions);
 	const entry = getTranscriptCacheEntry(transcriptPath, readOptions);
-	return { title: `${manifest.runId}:${selectedTaskId}`, path: transcriptPath, lines: lines.length ? lines : ["(no transcript content)"], bytesRead: entry?.bytesRead ?? 0, size: entry?.size ?? 0, truncated: entry?.truncated ?? false };
+	return {
+		title: `${manifest.runId}:${selectedTaskId}`,
+		path: transcriptPath,
+		lines: lines.length ? lines : ["(no transcript content)"],
+		bytesRead: entry?.bytesRead ?? 0,
+		size: entry?.size ?? 0,
+		truncated: entry?.truncated ?? false,
+	};
 }
 
 interface ViewerState {
@@ -161,13 +195,7 @@ interface ViewerState {
 	scroll: number;
 }
 
-function renderViewerBase(
-	state: ViewerState,
-	width: number,
-	lines: string[],
-	title: string,
-	subtitle: string,
-): string[] {
+function renderViewerBase(state: ViewerState, width: number, lines: string[], title: string, subtitle: string): string[] {
 	const inner = Math.max(20, width - 4);
 	const bodyText = lines.join("\n");
 	const { visualLines, skippedCount } = truncateToVisualLines(bodyText, state.lastHeight, inner);
@@ -193,7 +221,6 @@ function renderViewerBase(
 	}
 	return linesOut.map((line) => truncate(line, width));
 }
-
 
 export class DurableTextViewer implements Component {
 	private scroll = 0;
@@ -252,7 +279,12 @@ export class DurableTextViewer implements Component {
 
 	render(width: number): string[] {
 		return renderViewerBase(
-			{ theme: this.theme, autoScroll: this.autoScroll, lastHeight: this.lastHeight, scroll: this.scroll },
+			{
+				theme: this.theme,
+				autoScroll: this.autoScroll,
+				lastHeight: this.lastHeight,
+				scroll: this.scroll,
+			},
 			width,
 			this.lines,
 			this.title,
@@ -273,7 +305,13 @@ export class DurableTranscriptViewer implements Component {
 	private maxTailBytes: number;
 	private readonly unsubscribeTheme: () => void;
 
-	constructor(manifest: TeamRunManifest, theme: unknown, done: (result: undefined) => void, taskId?: string, options: { maxTailBytes?: number } = {}) {
+	constructor(
+		manifest: TeamRunManifest,
+		theme: unknown,
+		done: (result: undefined) => void,
+		taskId?: string,
+		options: { maxTailBytes?: number } = {},
+	) {
 		this.manifest = manifest;
 		this.theme = asCrewTheme(theme);
 		this.done = done;
@@ -293,7 +331,10 @@ export class DurableTranscriptViewer implements Component {
 			this.done(undefined);
 			return;
 		}
-		const content = readRunTranscript(this.manifest, this.taskId, { full: this.fullTranscript, maxTailBytes: this.maxTailBytes }).lines;
+		const content = readRunTranscript(this.manifest, this.taskId, {
+			full: this.fullTranscript,
+			maxTailBytes: this.maxTailBytes,
+		}).lines;
 		const maxScroll = Math.max(0, content.length - this.lastHeight);
 		if (data === "k" || data === "\u001b[A") {
 			this.scroll = Math.max(0, this.scroll - 1);
@@ -323,9 +364,17 @@ export class DurableTranscriptViewer implements Component {
 	}
 
 	render(width: number): string[] {
-		const data = readRunTranscript(this.manifest, this.taskId, { full: this.fullTranscript, maxTailBytes: this.maxTailBytes });
+		const data = readRunTranscript(this.manifest, this.taskId, {
+			full: this.fullTranscript,
+			maxTailBytes: this.maxTailBytes,
+		});
 		return renderViewerBase(
-			{ theme: this.theme, autoScroll: this.autoScroll, lastHeight: this.lastHeight, scroll: this.scroll },
+			{
+				theme: this.theme,
+				autoScroll: this.autoScroll,
+				lastHeight: this.lastHeight,
+				scroll: this.scroll,
+			},
 			width,
 			data.lines,
 			"pi-crew transcript",

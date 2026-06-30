@@ -10,13 +10,10 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createRunSnapshotCache } from "../src/ui/run-snapshot-cache.ts";
-import { runEventBus } from "../src/ui/run-event-bus.ts";
-import {
-	createRunManifest,
-	saveRunManifest,
-} from "../src/state/state-store.ts";
 import { saveCrewAgents } from "../src/runtime/crew-agent-records.ts";
+import { createRunManifest, saveRunManifest } from "../src/state/state-store.ts";
+import { runEventBus } from "../src/ui/run-event-bus.ts";
+import { createRunSnapshotCache } from "../src/ui/run-snapshot-cache.ts";
 
 const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "verify-flicker-"));
 fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
@@ -35,19 +32,32 @@ const workflow = {
 	source: "test",
 	filePath: "builtin",
 };
-const created = createRunManifest({ cwd, team, workflow, goal: "verify-flicker-fix" });
+const created = createRunManifest({
+	cwd,
+	team,
+	workflow,
+	goal: "verify-flicker-fix",
+});
 saveRunManifest({ ...created.manifest, status: "running" });
-saveCrewAgents(created.manifest, [{
-	id: `${created.manifest.runId}:01`,
-	runId: created.manifest.runId,
-	taskId: created.tasks[0]?.id ?? "explore",
-	agent: "explorer",
-	role: "explorer",
-	runtime: "child-process",
-	status: "running",
-	startedAt: created.manifest.createdAt,
-	progress: { recentTools: [], recentOutput: ["first"], toolCount: 1, currentTool: "read", tokens: 10 },
-}]);
+saveCrewAgents(created.manifest, [
+	{
+		id: `${created.manifest.runId}:01`,
+		runId: created.manifest.runId,
+		taskId: created.tasks[0]?.id ?? "explore",
+		agent: "explorer",
+		role: "explorer",
+		runtime: "child-process",
+		status: "running",
+		startedAt: created.manifest.createdAt,
+		progress: {
+			recentTools: [],
+			recentOutput: ["first"],
+			toolCount: 1,
+			currentTool: "read",
+			tokens: 10,
+		},
+	},
+]);
 
 const cache = createRunSnapshotCache(cwd, { ttlMs: 60_000 });
 const initial = cache.refresh(created.manifest.runId);
@@ -57,7 +67,11 @@ const runId = created.manifest.runId;
 // Burst simulating the exact event sequence that fired the OLD flicker:
 // every run:state and worker:lifecycle event in this list would have
 // deleted the cache entry pre-fix.
-const burst: { type: string; channel: "run:state" | "worker:lifecycle"; taskId?: string }[] = [
+const burst: {
+	type: string;
+	channel: "run:state" | "worker:lifecycle";
+	taskId?: string;
+}[] = [
 	{ type: "run.started", channel: "worker:lifecycle" },
 	{ type: "task.started", channel: "worker:lifecycle" },
 	{ type: "manifest.saved", channel: "run:state" },

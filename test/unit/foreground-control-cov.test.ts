@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
 import {
 	foregroundControlPath,
 	readForegroundControlStatus,
@@ -34,7 +34,7 @@ describe("foregroundControlPath", () => {
 	it("returns path inside stateRoot", () => {
 		const manifest = makeManifest("/tmp/test-state");
 		const p = foregroundControlPath(manifest);
-			assert.equal(p, path.join("/tmp/test-state", "foreground-control.json"));
+		assert.equal(p, path.join("/tmp/test-state", "foreground-control.json"));
 	});
 });
 
@@ -64,8 +64,28 @@ describe("readForegroundControlStatus", () => {
 			fs.mkdirSync(stateRoot, { recursive: true });
 			const manifest = makeManifest(stateRoot);
 			const tasks: TeamTaskState[] = [
-				{ id: "t1", runId: "run-fg-test", stepId: "s1", role: "agent", agent: "a", title: "T1", status: "running", dependsOn: [], cwd: "/tmp" },
-				{ id: "t2", runId: "run-fg-test", stepId: "s2", role: "agent", agent: "a", title: "T2", status: "completed", dependsOn: [], cwd: "/tmp" },
+				{
+					id: "t1",
+					runId: "run-fg-test",
+					stepId: "s1",
+					role: "agent",
+					agent: "a",
+					title: "T1",
+					status: "running",
+					dependsOn: [],
+					cwd: "/tmp",
+				},
+				{
+					id: "t2",
+					runId: "run-fg-test",
+					stepId: "s2",
+					role: "agent",
+					agent: "a",
+					title: "T2",
+					status: "completed",
+					dependsOn: [],
+					cwd: "/tmp",
+				},
 			];
 			const status = readForegroundControlStatus(manifest, tasks);
 			assert.deepEqual(status.runningTasks, ["t1"]);
@@ -106,7 +126,11 @@ describe("readForegroundControlStatus", () => {
 			const stateRoot = path.join(tmp, "state");
 			fs.mkdirSync(stateRoot, { recursive: true });
 			const manifest = makeManifest(stateRoot, {
-				async: { pid: process.pid, logPath: "/tmp/log", spawnedAt: new Date().toISOString() },
+				async: {
+					pid: process.pid,
+					logPath: "/tmp/log",
+					spawnedAt: new Date().toISOString(),
+				},
 			});
 			const status = readForegroundControlStatus(manifest, []);
 			assert.equal(status.asyncPid, process.pid);

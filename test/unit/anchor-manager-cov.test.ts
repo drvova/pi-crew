@@ -1,12 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	AnchorManager,
-	AnchorNotFoundError,
-	NoHandoffsError,
-	createAnchorManager,
-} from "../../src/runtime/anchor-manager.ts";
+import { describe, it } from "node:test";
 import type { Anchor, AnchorManagerOptions } from "../../src/runtime/anchor-manager.ts";
+import { AnchorManager, AnchorNotFoundError, createAnchorManager, NoHandoffsError } from "../../src/runtime/anchor-manager.ts";
 import type { HandoffSummary } from "../../src/runtime/handoff-manager.ts";
 
 function makeHandoff(taskId: string, runId: string, outcome: "success" | "failure" | "partial" = "success"): HandoffSummary {
@@ -22,7 +17,12 @@ function makeHandoff(taskId: string, runId: string, outcome: "success" | "failur
 		decisions: [],
 		blockers: [],
 		nextSteps: [],
-		metrics: { tokensUsed: 100, duration: 2000, iterations: 1, toolsUsed: ["bash"] },
+		metrics: {
+			tokensUsed: 100,
+			duration: 2000,
+			iterations: 1,
+			toolsUsed: ["bash"],
+		},
 		contextSnapshot: "test context",
 	};
 }
@@ -60,7 +60,11 @@ describe("AnchorManager.setAnchor / getAnchor", () => {
 	it("emits anchor:created event", () => {
 		const events: { event: string; data: unknown }[] = [];
 		const mgr = new AnchorManager({
-			eventEmitter: { emit: (event, data) => { events.push({ event, data }); } },
+			eventEmitter: {
+				emit: (event, data) => {
+					events.push({ event, data });
+				},
+			},
 		});
 		mgr.setAnchor("sess-1");
 		assert.strictEqual(events.length, 1);
@@ -106,11 +110,14 @@ describe("AnchorManager.clearAnchor", () => {
 
 	it("throws AnchorNotFoundError for unknown anchor", () => {
 		const mgr = new AnchorManager();
-		assert.throws(() => mgr.clearAnchor("no-such"), (err: unknown) => {
-			assert.ok(err instanceof AnchorNotFoundError);
-			assert.strictEqual(err.anchorId, "no-such");
-			return true;
-		});
+		assert.throws(
+			() => mgr.clearAnchor("no-such"),
+			(err: unknown) => {
+				assert.ok(err instanceof AnchorNotFoundError);
+				assert.strictEqual(err.anchorId, "no-such");
+				return true;
+			},
+		);
 	});
 
 	it("throws NoHandoffsError when no handoffs accumulated", () => {
@@ -122,7 +129,11 @@ describe("AnchorManager.clearAnchor", () => {
 	it("emits anchor:cleared event", () => {
 		const events: { event: string; data: unknown }[] = [];
 		const mgr = new AnchorManager({
-			eventEmitter: { emit: (event, data) => { events.push({ event, data }); } },
+			eventEmitter: {
+				emit: (event, data) => {
+					events.push({ event, data });
+				},
+			},
 		});
 		const id = mgr.setAnchor("sess-1");
 		mgr.accumulateHandoff(id, makeHandoff("t1", "r1"));
@@ -342,7 +353,11 @@ describe("AnchorManager.clearAll", () => {
 	it("emits anchor:cleared_all event", () => {
 		const events: { event: string }[] = [];
 		const mgr = new AnchorManager({
-			eventEmitter: { emit: (event) => { events.push({ event }); } },
+			eventEmitter: {
+				emit: (event) => {
+					events.push({ event });
+				},
+			},
 		});
 		mgr.clearAll();
 		assert.ok(events.some((e) => e.event === "anchor:cleared_all"));
@@ -356,7 +371,15 @@ describe("AnchorManager accumulation merging", () => {
 		const mgr = new AnchorManager();
 		const id = mgr.setAnchor("sess-1");
 		mgr.accumulateHandoff(id, makeHandoff("t1", "r1"));
-		mgr.accumulateHandoff(id, { ...makeHandoff("t2", "r1"), metrics: { tokensUsed: 200, duration: 3000, iterations: 2, toolsUsed: ["edit"] } });
+		mgr.accumulateHandoff(id, {
+			...makeHandoff("t2", "r1"),
+			metrics: {
+				tokensUsed: 200,
+				duration: 3000,
+				iterations: 2,
+				toolsUsed: ["edit"],
+			},
+		});
 		const summary = mgr.getAnchorHandoff(id);
 		assert.ok(summary);
 		assert.strictEqual(summary.metrics.tokensUsed, 300);
@@ -397,7 +420,11 @@ describe("createAnchorManager", () => {
 	it("creates an AnchorManager with options", () => {
 		const events: unknown[] = [];
 		const mgr = createAnchorManager({
-			eventEmitter: { emit: (_e, d) => { events.push(d); } },
+			eventEmitter: {
+				emit: (_e, d) => {
+					events.push(d);
+				},
+			},
 		});
 		mgr.setAnchor("s1");
 		assert.strictEqual(events.length, 1);

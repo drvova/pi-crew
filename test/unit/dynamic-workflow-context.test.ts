@@ -5,26 +5,27 @@
  * makeWorkflowCtx surface (capability lock + setResult + semaphore).
  * The agent() path is exercised via PI_TEAMS_MOCK_CHILD_PI (no real pi spawn).
  */
+
+import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { Type } from "@sinclair/typebox";
+import type { AgentCallOpts } from "../../src/runtime/dynamic-workflow-context.ts";
 import {
+	classifyReviewOutcome,
+	getWorkflowCheckpoint,
+	getWorkflowFinalResult,
+	getWorkflowLogs,
+	getWorkflowPhaseState,
+	makeWorkflowCtx,
 	resolveAgentForRole,
 	synthesizeAgentConfig,
-	makeWorkflowCtx,
-	getWorkflowFinalResult,
-	getWorkflowPhaseState,
-	getWorkflowLogs,
-	getWorkflowCheckpoint,
-	classifyReviewOutcome,
 } from "../../src/runtime/dynamic-workflow-context.ts";
-import { prepareAgentWorktree, cleanupAgentWorktree } from "../../src/worktree/worktree-manager.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
-import type { AgentCallOpts } from "../../src/runtime/dynamic-workflow-context.ts";
+import { cleanupAgentWorktree, prepareAgentWorktree } from "../../src/worktree/worktree-manager.ts";
 
 function tmpCwd(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-dwf-ctx-"));
@@ -74,7 +75,10 @@ test("resolveAgentForRole tier-1 explicit agent wins over role name", () => {
 	try {
 		// No real agents in tmp cwd → tier-1 miss falls through to tier-4 synthesis,
 		// but with the explicit name preserved.
-		const cfg = resolveAgentForRole("some-role", { explicitAgent: "my-explicit", cwd });
+		const cfg = resolveAgentForRole("some-role", {
+			explicitAgent: "my-explicit",
+			cwd,
+		});
 		assert.equal(cfg.name, "my-explicit", "explicit agent name preserved in fallback");
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -85,7 +89,9 @@ test("makeWorkflowCtx exposes ONLY documented methods (capability lock)", () => 
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		// Public surface.
 		assert.equal(typeof ctx.agent, "function");
 		assert.equal(typeof ctx.fanOut, "function");
@@ -105,11 +111,16 @@ test("ctx.setResult records the final result; runner reads it via getWorkflowFin
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		assert.equal(getWorkflowFinalResult(ctx), undefined, "no final result until setResult is called");
 		ctx.setResult("/tmp/fake-artifact.md", { ok: true });
 		const final = getWorkflowFinalResult(ctx);
-		assert.deepEqual(final, { artifactPath: "/tmp/fake-artifact.md", meta: { ok: true } });
+		assert.deepEqual(final, {
+			artifactPath: "/tmp/fake-artifact.md",
+			meta: { ok: true },
+		});
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
@@ -121,8 +132,15 @@ test("ctx.agent() returns ok:false on spawn failure (mock without PI_CREW_ALLOW_
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 		// PI_CREW_ALLOW_MOCK intentionally NOT set → mock returns exit 1.
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
-		const res = await ctx.agent({ role: "executor", prompt: "say hi", maxTurns: 1 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
+		const res = await ctx.agent({
+			role: "executor",
+			prompt: "say hi",
+			maxTurns: 1,
+		});
 		assert.equal(res.ok, false, "without PI_CREW_ALLOW_MOCK, mock child-pi fails");
 		assert.ok(res.error);
 	} finally {
@@ -158,13 +176,15 @@ test("classifyReviewOutcome: reject wins over accept (verdict signal dominates)"
 
 test("classifyReviewOutcome: REGRESSION — real MiniMax-M3 buggy-code review → reject", () => {
 	// Exact prose captured from the runtime test-review-final run (scenario 1, buggy code).
-	const realProse = "The add function uses subtraction (-) instead of addition (+), which produces incorrect results and contradicts the function's purpose. Although the bug is flagged in a comment, shipping broken code is unacceptable; replace 'a - b' with 'a + b' and remove the placeholder bug note.";
+	const realProse =
+		"The add function uses subtraction (-) instead of addition (+), which produces incorrect results and contradicts the function's purpose. Although the bug is flagged in a comment, shipping broken code is unacceptable; replace 'a - b' with 'a + b' and remove the placeholder bug note.";
 	assert.equal(classifyReviewOutcome(realProse), "reject", "buggy-code review must NOT be classified accept/changes");
 });
 
 test("classifyReviewOutcome: REGRESSION — real MiniMax-M3 correct-code review → accept", () => {
 	// Exact prose captured from the runtime test-review-final run (scenario 2, correct code).
-	const realProse = "The add function correctly returns the sum of two numbers and includes input validation that throws a TypeError for non-number arguments, matching the expected behavior implied by the task name.";
+	const realProse =
+		"The add function correctly returns the sum of two numbers and includes input validation that throws a TypeError for non-number arguments, matching the expected behavior implied by the task name.";
 	assert.equal(classifyReviewOutcome(realProse), "accept", "correct-code review must be classified accept");
 });
 
@@ -172,13 +192,25 @@ test("review(): returns verdict directly when reviewer emits JSON (1-step)", asy
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
 		const calls: { disableTools?: boolean; systemPrompt?: string }[] = [];
 		ctx.agent = (async (call: { disableTools?: boolean; systemPrompt?: string; prompt: string }) => {
-			calls.push({ disableTools: call.disableTools, systemPrompt: call.systemPrompt });
-			return { ok: true, text: '{"outcome":"accept","feedback":"looks good"}', structured: { outcome: "accept", feedback: "looks good" } };
+			calls.push({
+				disableTools: call.disableTools,
+				systemPrompt: call.systemPrompt,
+			});
+			return {
+				ok: true,
+				text: '{"outcome":"accept","feedback":"looks good"}',
+				structured: { outcome: "accept", feedback: "looks good" },
+			};
 		}) as typeof ctx.agent;
-		const r = await ctx.review("task-1", "reviewer", { content: "work here" });
+		const r = await ctx.review("task-1", "reviewer", {
+			content: "work here",
+		});
 		assert.equal(r.outcome, "accept");
 		assert.equal(r.feedback, "looks good");
 		assert.equal(calls.length, 1, "1-step: no judge fallback when reviewer emits JSON");
@@ -193,19 +225,35 @@ test("review(): 2-step fallback converts prose review → JSON verdict when mode
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
 		let callNo = 0;
 		ctx.agent = (async (call: { prompt: string }) => {
 			callNo += 1;
 			if (callNo === 1) {
 				// Reviewer ignores JSON instruction, returns prose (real MiniMax-M3 behavior).
-				return { ok: true, text: "The add function subtracts instead of adds. Critical bug.", structured: undefined };
+				return {
+					ok: true,
+					text: "The add function subtracts instead of adds. Critical bug.",
+					structured: undefined,
+				};
 			}
 			// Call 2 = judge fallback: converts prose → JSON verdict.
 			assert.match(call.prompt, /Convert the following code review/, "2nd call is the judge fallback");
-			return { ok: true, text: '{"outcome":"reject","feedback":"subtracts instead of adds"}', structured: { outcome: "reject", feedback: "subtracts instead of adds" } };
+			return {
+				ok: true,
+				text: '{"outcome":"reject","feedback":"subtracts instead of adds"}',
+				structured: {
+					outcome: "reject",
+					feedback: "subtracts instead of adds",
+				},
+			};
 		}) as typeof ctx.agent;
-		const r = await ctx.review("task-add", "reviewer", { content: "function add(a,b){return a-b;}" });
+		const r = await ctx.review("task-add", "reviewer", {
+			content: "function add(a,b){return a-b;}",
+		});
 		assert.equal(callNo, 2, "2-step fallback ran exactly one extra judge call");
 		assert.equal(r.outcome, "reject", "judge verdict propagated");
 		assert.equal(r.feedback, "subtracts instead of adds");
@@ -218,7 +266,10 @@ test("review(): when reviewer produces NO text (killed), skips judge + returns f
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
 		let callNo = 0;
 		ctx.agent = (async () => {
 			callNo += 1;
@@ -238,13 +289,22 @@ test("review(): content option is injected into the reviewer prompt", async () =
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
 		let capturedPrompt = "";
 		ctx.agent = (async (call: { prompt: string }) => {
 			capturedPrompt = call.prompt;
-			return { ok: true, text: '{"outcome":"accept","feedback":"ok"}', structured: { outcome: "accept", feedback: "ok" } };
+			return {
+				ok: true,
+				text: '{"outcome":"accept","feedback":"ok"}',
+				structured: { outcome: "accept", feedback: "ok" },
+			};
 		}) as typeof ctx.agent;
-		await ctx.review("task-x", "reviewer", { content: "UNIQUE_WORK_MARKER_42" });
+		await ctx.review("task-x", "reviewer", {
+			content: "UNIQUE_WORK_MARKER_42",
+		});
 		assert.match(capturedPrompt, /UNIQUE_WORK_MARKER_42/, "content is passed to the reviewer");
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -261,14 +321,23 @@ test("round-13 P0-3: ctx.agent() with matching schema returns structured result"
 		// Use the real path with PI_TEAMS_MOCK_CHILD_PI=json-success so the schema
 		// validator actually runs end-to-end against canned output.
 		const manifest = fakeManifest(cwd);
-		const schema = Type.Object({ name: Type.String(), value: Type.Number() });
+		const schema = Type.Object({
+			name: Type.String(),
+			value: Type.Number(),
+		});
 		const savedMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
 		const savedAllow = process.env.PI_CREW_ALLOW_MOCK;
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 		process.env.PI_CREW_ALLOW_MOCK = "1";
 		try {
-			const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
-			const res = await ctx.agent({ prompt: "test", role: "executor", schema });
+			const ctx = makeWorkflowCtx(manifest, {
+				signal: new AbortController().signal,
+			});
+			const res = await ctx.agent({
+				prompt: "test",
+				role: "executor",
+				schema,
+			});
 			// The mock emits text '[MOCK] JSON success for {agent.name}'. We don't validate
 			// the schema against the mock text (it won't match). Instead, we assert that
 			// the agent() integration with schema works without throwing — the error
@@ -290,14 +359,23 @@ test("round-13 P0-3: ctx.agent() with non-matching schema returns ok:false + err
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const schema = Type.Object({ name: Type.String(), value: Type.Number() });
+		const schema = Type.Object({
+			name: Type.String(),
+			value: Type.Number(),
+		});
 		const savedMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
 		const savedAllow = process.env.PI_CREW_ALLOW_MOCK;
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 		process.env.PI_CREW_ALLOW_MOCK = "1";
 		try {
-			const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
-			const res = await ctx.agent({ prompt: "test", role: "executor", schema });
+			const ctx = makeWorkflowCtx(manifest, {
+				signal: new AbortController().signal,
+			});
+			const res = await ctx.agent({
+				prompt: "test",
+				role: "executor",
+				schema,
+			});
 			// Mock output ('[MOCK] JSON success for ...') does NOT match our schema
 			// (no 'name' or 'value' fields), so the call should report ok:false.
 			assert.equal(res.ok, false, "schema mismatch should yield ok:false");
@@ -322,7 +400,9 @@ test("round-13 P0-3: ctx.agent() without schema preserves existing behavior", as
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 		process.env.PI_CREW_ALLOW_MOCK = "1";
 		try {
-			const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+			const ctx = makeWorkflowCtx(manifest, {
+				signal: new AbortController().signal,
+			});
 			const res = await ctx.agent({ prompt: "test", role: "executor" });
 			// Without a schema, behavior is unchanged: ok=true, structured=undefined
 			// because mock text '[MOCK] JSON success for ...' isn't valid JSON.
@@ -362,7 +442,9 @@ test("round-12 ctx.phase(title): emits dwf.phase_started event with phase in dat
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		ctx.phase("Scan");
 		const events = readEvents(manifest.eventsPath);
 		const phaseStarted = events.find((e) => e.type === "dwf.phase_started");
@@ -377,7 +459,9 @@ test("round-12 ctx.phase(title): idempotent on same title — no duplicate event
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		ctx.phase("Scan");
 		ctx.phase("Scan");
 		ctx.phase("Scan");
@@ -393,7 +477,9 @@ test("round-12 ctx.phase(title): empty string throws TypeError", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		assert.throws(() => ctx.phase(""), /non-empty string/);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -404,7 +490,9 @@ test("round-12 ctx.phase(title): non-string throws TypeError", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		assert.throws(() => ctx.phase(123 as unknown as string), /non-empty string/);
 		assert.throws(() => ctx.phase(null as unknown as string), /non-empty string/);
 		assert.throws(() => ctx.phase(undefined as unknown as string), /non-empty string/);
@@ -417,7 +505,9 @@ test("round-12 ctx.phase(title): sequence phase('A') → phase('B') emits phase_
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		ctx.phase("A");
 		ctx.phase("B");
 		const events = readEvents(manifest.eventsPath);
@@ -434,8 +524,13 @@ test("round-12 getWorkflowPhaseState: returns currentPhase and deduped phases[]"
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
-		assert.deepEqual(getWorkflowPhaseState(ctx), { currentPhase: undefined, phases: [] });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
+		assert.deepEqual(getWorkflowPhaseState(ctx), {
+			currentPhase: undefined,
+			phases: [],
+		});
 		ctx.phase("Scan");
 		ctx.phase("Audit");
 		ctx.phase("Scan"); // re-opens Scan (current was Audit), but phases[] is deduped
@@ -451,7 +546,9 @@ test("round-12 ctx.phase(title): 100-cap bounds in-memory phases[] but events st
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		// Append 105 distinct phase titles.
 		for (let i = 0; i < 105; i++) {
 			ctx.phase(`phase-${i}`);
@@ -475,7 +572,9 @@ test("round-14 ctx.budget: total is null by default (unbounded)", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		assert.equal(ctx.budget.total, null, "no tokenBudget → total is null (unbounded)");
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -486,7 +585,10 @@ test("round-14 ctx.budget: total reflects opts.tokenBudget", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, tokenBudget: 500 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			tokenBudget: 500,
+		});
 		assert.equal(ctx.budget.total, 500);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -497,7 +599,10 @@ test("round-14 ctx.budget: spent() starts at 0", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, tokenBudget: 500 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			tokenBudget: 500,
+		});
 		assert.equal(ctx.budget.spent(), 0);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -508,7 +613,9 @@ test("round-14 ctx.budget: remaining() is Infinity when total is null", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		assert.equal(ctx.budget.remaining(), Infinity);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -519,7 +626,10 @@ test("round-14 ctx.budget: remaining() = total - spent when set", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, tokenBudget: 500 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			tokenBudget: 500,
+		});
 		assert.equal(ctx.budget.remaining(), 500);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -531,8 +641,16 @@ test("round-14 ctx.budget: agent() returns ok:false when budget exhausted (total
 	try {
 		const manifest = fakeManifest(cwd);
 		// tokenBudget: 0 → total=0, remaining()=0 → exhausted before first spawn (no mock needed).
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1, tokenBudget: 0 });
-		const res = await ctx.agent({ role: "executor", prompt: "say hi", maxTurns: 1 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+			tokenBudget: 0,
+		});
+		const res = await ctx.agent({
+			role: "executor",
+			prompt: "say hi",
+			maxTurns: 1,
+		});
 		assert.equal(res.ok, false, "exhausted budget must reject the call without spawning");
 		assert.match(res.error ?? "", /budget exhausted/);
 		assert.equal(res.durationMs, 0);
@@ -550,9 +668,17 @@ test("round-14 ctx.budget: after an agent run, spent accumulates from reported u
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 		process.env.PI_CREW_ALLOW_MOCK = "1";
 		try {
-			const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1, tokenBudget: 100000 });
+			const ctx = makeWorkflowCtx(manifest, {
+				signal: new AbortController().signal,
+				concurrency: 1,
+				tokenBudget: 100000,
+			});
 			assert.equal(ctx.budget.spent(), 0, "spent starts at 0");
-			const res = await ctx.agent({ role: "executor", prompt: "say hi", maxTurns: 1 });
+			const res = await ctx.agent({
+				role: "executor",
+				prompt: "say hi",
+				maxTurns: 1,
+			});
 			assert.equal(res.ok, true, "mock agent should succeed");
 			// The json-success mock reports usage {input:10, output:5}.
 			assert.equal(ctx.budget.spent(), 15, "spent accumulates input(10)+output(5)");
@@ -572,7 +698,10 @@ test("round-14 ctx.budget: is frozen (immutable surface)", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, tokenBudget: 100 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			tokenBudget: 100,
+		});
 		assert.ok(Object.isFrozen(ctx.budget), "budget object is frozen");
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -587,7 +716,9 @@ test("round-14 ctx.log('hello'): appends to in-memory logs", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		ctx.log("hello");
 		assert.deepEqual(getWorkflowLogs(ctx), ["hello"]);
 	} finally {
@@ -599,7 +730,9 @@ test("round-14 ctx.log({a:1}): stringifies non-string messages", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		ctx.log({ a: 1 });
 		assert.deepEqual(getWorkflowLogs(ctx), ['{"a":1}']);
 	} finally {
@@ -611,7 +744,9 @@ test("round-14 ctx.log: emits dwf.log event with the message in data", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		ctx.log("a log line");
 		ctx.log({ nested: true });
 		const events = readEvents(manifest.eventsPath);
@@ -628,7 +763,9 @@ test("round-14 ctx.log: 1000-cap bounds in-memory logs but events still flow", (
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		for (let i = 0; i < 1001; i++) {
 			ctx.log(`line-${i}`);
 		}
@@ -649,7 +786,9 @@ test("round-14 ctx.args(): returns {} by default when no args provided", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		assert.deepEqual(ctx.args(), {});
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
@@ -660,7 +799,10 @@ test("round-14 ctx.args<T>(): returns the typed value passed via opts.args", () 
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, args: { foo: "bar", count: 3 } });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			args: { foo: "bar", count: 3 },
+		});
 		const args = ctx.args<{ foo: string; count: number }>();
 		assert.equal(args.foo, "bar");
 		assert.equal(args.count, 3);
@@ -673,7 +815,10 @@ test("round-14 ctx.args(): accepts non-object args (e.g. an array)", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, args: ["a", "b"] });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			args: ["a", "b"],
+		});
 		const args = ctx.args<string[]>();
 		assert.deepEqual(args, ["a", "b"]);
 	} finally {
@@ -688,7 +833,9 @@ test("round-14 ctx.args(): accepts non-object args (e.g. an array)", () => {
 test("ctx.pipeline — single stage transform", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
 		const result = await ctx.pipeline([1, 2, 3], (x) => (x as number) * 2);
 		assert.deepEqual(result, [2, 4, 6]);
 	} finally {
@@ -699,7 +846,9 @@ test("ctx.pipeline — single stage transform", async () => {
 test("ctx.pipeline — multiple sequential stages", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
 		const result = await ctx.pipeline(
 			[1, 2, 3],
 			(x) => (x as number) * 2,
@@ -714,7 +863,9 @@ test("ctx.pipeline — multiple sequential stages", async () => {
 test("ctx.pipeline — empty array returns empty", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
 		const result = await ctx.pipeline([], (x) => x);
 		assert.deepEqual(result, []);
 	} finally {
@@ -725,7 +876,9 @@ test("ctx.pipeline — empty array returns empty", async () => {
 test("ctx.pipeline — failed stage yields null + logs, other items continue", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
 		const result = await ctx.pipeline([1, 2, 3], (x, _orig, i) => {
 			if (i === 1) throw new Error("boom");
 			return (x as number) * 10;
@@ -744,11 +897,10 @@ test("ctx.pipeline — failed stage yields null + logs, other items continue", a
 test("ctx.pipeline — non-array first arg throws TypeError", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
-		await assert.rejects(
-			() => ctx.pipeline("not-array" as unknown as never[], (x) => x),
-			/expects an array/,
-		);
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
+		await assert.rejects(() => ctx.pipeline("not-array" as unknown as never[], (x) => x), /expects an array/);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
@@ -757,11 +909,10 @@ test("ctx.pipeline — non-array first arg throws TypeError", async () => {
 test("ctx.pipeline — non-function stage throws TypeError", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
-		await assert.rejects(
-			() => ctx.pipeline([1], "not-a-function" as unknown as never),
-			/stages must be functions/,
-		);
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
+		await assert.rejects(() => ctx.pipeline([1], "not-a-function" as unknown as never), /stages must be functions/);
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
@@ -770,7 +921,9 @@ test("ctx.pipeline — non-function stage throws TypeError", async () => {
 test("ctx.pipeline — stage receives (previous, original, index)", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
 		const calls: Array<[unknown, number, number]> = [];
 		await ctx.pipeline([10, 20], (prev, original, index) => {
 			calls.push([prev, original, index]);
@@ -788,7 +941,9 @@ test("ctx.pipeline — stage receives (previous, original, index)", async () => 
 test("ctx.pipeline — stage receives previous stage output as 'previous'", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
 		const seen: number[] = [];
 		await ctx.pipeline(
 			[5],
@@ -808,7 +963,9 @@ test("ctx.pipeline — stage receives previous stage output as 'previous'", asyn
 test("ctx.pipeline — async stages work", async () => {
 	const cwd = tmpCwd();
 	try {
-		const ctx = makeWorkflowCtx(fakeManifest(cwd), { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(fakeManifest(cwd), {
+			signal: new AbortController().signal,
+		});
 		const result = await ctx.pipeline([1, 2, 3], async (x) => {
 			await new Promise((r) => setTimeout(r, 5));
 			return (x as number) * 3;
@@ -849,7 +1006,10 @@ test("ctx.pipeline — execution bounded by workflow concurrency", async () => {
 /** Initialize a clean git repo (with an initial commit) in `cwd`. */
 function initGitRepo(cwd: string): void {
 	execSync("git init -q", { cwd, encoding: "utf-8" });
-	execSync("git config user.email test@test.test", { cwd, encoding: "utf-8" });
+	execSync("git config user.email test@test.test", {
+		cwd,
+		encoding: "utf-8",
+	});
 	execSync("git config user.name test", { cwd, encoding: "utf-8" });
 	fs.writeFileSync(path.join(cwd, "README.md"), "init\n");
 	execSync("git add -A", { cwd, encoding: "utf-8" });
@@ -861,7 +1021,12 @@ function escapeRe(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-test("round-17 P2-4: prepareAgentWorktree creates an isolated worktree (cwd === worktreePath)", { skip: process.platform === "win32" ? "git worktree path-normalization is flaky on Windows (forward/back-slash mismatch); covered on ubuntu/macos CI" : false }, () => {
+test("round-17 P2-4: prepareAgentWorktree creates an isolated worktree (cwd === worktreePath)", {
+	skip:
+		process.platform === "win32"
+			? "git worktree path-normalization is flaky on Windows (forward/back-slash mismatch); covered on ubuntu/macos CI"
+			: false,
+}, () => {
 	const cwd = tmpCwd();
 	try {
 		initGitRepo(cwd);
@@ -890,7 +1055,9 @@ test("round-17 P2-4: prepareAgentWorktree creates an isolated worktree (cwd === 
 	}
 });
 
-test("round-17 P2-4: cleanupAgentWorktree removes the worktree dir + branch (no leak)", { skip: process.platform === "win32" ? "git worktree path-normalization is flaky on Windows" : false }, () => {
+test("round-17 P2-4: cleanupAgentWorktree removes the worktree dir + branch (no leak)", {
+	skip: process.platform === "win32" ? "git worktree path-normalization is flaky on Windows" : false,
+}, () => {
 	const cwd = tmpCwd();
 	try {
 		initGitRepo(cwd);
@@ -901,7 +1068,10 @@ test("round-17 P2-4: cleanupAgentWorktree removes the worktree dir + branch (no 
 		const branch = wt.branch;
 		const wtPath = wt.worktreePath;
 		// Branch exists before cleanup.
-		const branchesBefore = execSync("git branch --list", { cwd, encoding: "utf-8" });
+		const branchesBefore = execSync("git branch --list", {
+			cwd,
+			encoding: "utf-8",
+		});
 		assert.match(branchesBefore, new RegExp(escapeRe(branch)), "branch exists before cleanup");
 		cleanupAgentWorktree(manifest, wtPath, branch);
 		// Worktree directory gone.
@@ -910,14 +1080,19 @@ test("round-17 P2-4: cleanupAgentWorktree removes the worktree dir + branch (no 
 		const list = execSync("git worktree list", { cwd, encoding: "utf-8" }).trim().split("\n");
 		assert.equal(list.length, 1, `only the leader worktree should remain, got: ${list.join(" | ")}`);
 		// Ephemeral branch deleted.
-		const branchesAfter = execSync("git branch --list", { cwd, encoding: "utf-8" });
+		const branchesAfter = execSync("git branch --list", {
+			cwd,
+			encoding: "utf-8",
+		});
 		assert.doesNotMatch(branchesAfter, new RegExp(escapeRe(branch)), "ephemeral branch deleted after cleanup");
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}
 });
 
-test("round-17 P2-4: cleanupAgentWorktree captures a diff artifact when the worktree has changes", { skip: process.platform === "win32" ? "git worktree path-normalization is flaky on Windows" : false }, () => {
+test("round-17 P2-4: cleanupAgentWorktree captures a diff artifact when the worktree has changes", {
+	skip: process.platform === "win32" ? "git worktree path-normalization is flaky on Windows" : false,
+}, () => {
 	const cwd = tmpCwd();
 	try {
 		initGitRepo(cwd);
@@ -961,17 +1136,30 @@ test("round-17 P2-4: ctx.agent({worktree:true}) isolates the agent and cleans up
 		const manifest = fakeManifest(cwd);
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 		process.env.PI_CREW_ALLOW_MOCK = "1";
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
-		const res = await ctx.agent({ role: "executor", prompt: "edit files", worktree: true });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
+		const res = await ctx.agent({
+			role: "executor",
+			prompt: "edit files",
+			worktree: true,
+		});
 		assert.equal(res.ok, true, "agent should succeed in a worktree (mock child-pi)");
 		// The worktree isolation log was emitted (proves the worktree path was computed).
 		const logs = getWorkflowLogs(ctx) ?? [];
-		assert.ok(logs.some((l) => l.includes("worktree: agent isolated at")), `expected worktree isolation log, got: ${logs.join(" | ")}`);
+		assert.ok(
+			logs.some((l) => l.includes("worktree: agent isolated at")),
+			`expected worktree isolation log, got: ${logs.join(" | ")}`,
+		);
 		// No worktree directory leak: only the leader remains in `git worktree list`.
 		const list = execSync("git worktree list", { cwd, encoding: "utf-8" }).trim().split("\n");
 		assert.equal(list.length, 1, `no worktree should remain after agent completes, got: ${list.join(" | ")}`);
 		// No leftover agent branches.
-		const branches = execSync("git branch --list", { cwd, encoding: "utf-8" });
+		const branches = execSync("git branch --list", {
+			cwd,
+			encoding: "utf-8",
+		});
 		assert.doesNotMatch(branches, /pi-crew\/.+\/dwf-agent-/, "no leftover dwf-agent branches");
 	} finally {
 		if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
@@ -991,7 +1179,10 @@ test("round-17 P2-4: ctx.agent({worktree:false}) uses normal cwd — no worktree
 		const manifest = fakeManifest(cwd);
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 		process.env.PI_CREW_ALLOW_MOCK = "1";
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
 		// worktree omitted → default false → normal cwd, no isolation.
 		const res = await ctx.agent({ role: "executor", prompt: "hi" });
 		assert.equal(res.ok, true, "agent should succeed (mock)");
@@ -1017,11 +1208,21 @@ test("round-17 P2-4: ctx.agent({worktree:true}) falls back gracefully in a non-g
 		const manifest = fakeManifest(cwd);
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
 		process.env.PI_CREW_ALLOW_MOCK = "1";
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
-		const res = await ctx.agent({ role: "executor", prompt: "hi", worktree: true });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
+		const res = await ctx.agent({
+			role: "executor",
+			prompt: "hi",
+			worktree: true,
+		});
 		assert.equal(res.ok, true, "agent should still run after falling back to the normal cwd");
 		const logs = getWorkflowLogs(ctx) ?? [];
-		assert.ok(logs.some((l) => l.includes("worktree: creation unavailable")), `expected fallback warning log, got: ${logs.join(" | ")}`);
+		assert.ok(
+			logs.some((l) => l.includes("worktree: creation unavailable")),
+			`expected fallback warning log, got: ${logs.join(" | ")}`,
+		);
 	} finally {
 		if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
 		else process.env.PI_TEAMS_MOCK_CHILD_PI = savedMock;
@@ -1041,13 +1242,23 @@ test("round-17 P2-4: ctx.agent({worktree:true}) cleans up the worktree even when
 		// Mock that returns a non-zero exit (agent "fails").
 		process.env.PI_TEAMS_MOCK_CHILD_PI = "retryable-failure";
 		process.env.PI_CREW_ALLOW_MOCK = "1";
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
-		const res = await ctx.agent({ role: "executor", prompt: "fail", worktree: true });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
+		const res = await ctx.agent({
+			role: "executor",
+			prompt: "fail",
+			worktree: true,
+		});
 		assert.equal(res.ok, false, "agent should report failure");
 		// The worktree must still be cleaned up (no leak) even on the failure path.
 		const list = execSync("git worktree list", { cwd, encoding: "utf-8" }).trim().split("\n");
 		assert.equal(list.length, 1, `no worktree should remain after a failed agent, got: ${list.join(" | ")}`);
-		const branches = execSync("git branch --list", { cwd, encoding: "utf-8" });
+		const branches = execSync("git branch --list", {
+			cwd,
+			encoding: "utf-8",
+		});
 		assert.doesNotMatch(branches, /pi-crew\/.+\/dwf-agent-/, "no leftover dwf-agent branches on failure path");
 	} finally {
 		if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
@@ -1074,7 +1285,9 @@ test("round-18 ctx.agent() fires onCheckpoint after each call (success path)", a
 		const ctx = makeWorkflowCtx(manifest, {
 			signal: new AbortController().signal,
 			concurrency: 1,
-			onCheckpoint: (state) => { checkpoints.push(state); },
+			onCheckpoint: (state) => {
+				checkpoints.push(state);
+			},
 		});
 		ctx.vars.lastPhase = "init";
 		ctx.phase("scan");
@@ -1108,7 +1321,9 @@ test("round-18 ctx.agent() fires onCheckpoint even when the agent fails", async 
 		const ctx = makeWorkflowCtx(manifest, {
 			signal: new AbortController().signal,
 			concurrency: 1,
-			onCheckpoint: (state) => { checkpoints.push(state); },
+			onCheckpoint: (state) => {
+				checkpoints.push(state);
+			},
 		});
 		await ctx.agent({ role: "executor", prompt: "will fail", maxTurns: 1 });
 		assert.equal(checkpoints.length, 1, "checkpoint fires on the failure path too");
@@ -1131,7 +1346,9 @@ test("round-18 onCheckpoint agentCount accumulates across multiple calls", async
 		const ctx = makeWorkflowCtx(manifest, {
 			signal: new AbortController().signal,
 			concurrency: 1,
-			onCheckpoint: (state) => { counts.push(state.agentCount); },
+			onCheckpoint: (state) => {
+				counts.push(state.agentCount);
+			},
 		});
 		await ctx.agent({ role: "executor", prompt: "a" });
 		await ctx.agent({ role: "executor", prompt: "b" });
@@ -1155,7 +1372,10 @@ test("round-18 onCheckpoint never fires when the callback is omitted (backward c
 		process.env.PI_CREW_ALLOW_MOCK = "1";
 		const manifest = fakeManifest(cwd);
 		// No onCheckpoint — must not throw and must not checkpoint.
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, concurrency: 1 });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			concurrency: 1,
+		});
 		await assert.doesNotReject(() => ctx.agent({ role: "executor", prompt: "x" }));
 	} finally {
 		if (savedMock === undefined) delete process.env.PI_TEAMS_MOCK_CHILD_PI;
@@ -1180,7 +1400,10 @@ test("round-18 makeWorkflowCtx hydrates vars/phases/logs/spent/agentCount from r
 			agentCount: 4,
 			updatedAt: "2026-06-23T00:00:00.000Z",
 		};
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, resumedState });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			resumedState,
+		});
 		// vars hydrated.
 		assert.deepEqual(ctx.vars, { lastPhase: "analyze", items: ["a", "b"] });
 		// phaseState hydrated.
@@ -1202,7 +1425,9 @@ test("round-18 makeWorkflowCtx without resumedState starts empty (fresh run, bac
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		assert.deepEqual(ctx.vars, {});
 		assert.equal(getWorkflowPhaseState(ctx)?.currentPhase, undefined);
 		assert.deepEqual(getWorkflowPhaseState(ctx)?.phases, []);
@@ -1228,7 +1453,10 @@ test("round-18 resumedState ctx.vars is a copy (mutating it does not affect the 
 			agentCount: 0,
 			updatedAt: "x",
 		};
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal, resumedState: resumed });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+			resumedState: resumed,
+		});
 		ctx.vars.x = 99;
 		assert.equal(resumed.vars.x, 1, "hydrated ctx.vars is a shallow copy — source checkpoint untouched");
 	} finally {
@@ -1240,7 +1468,9 @@ test("round-18 getWorkflowCheckpoint() snapshots the current ctx state", () => {
 	const cwd = tmpCwd();
 	try {
 		const manifest = fakeManifest(cwd);
-		const ctx = makeWorkflowCtx(manifest, { signal: new AbortController().signal });
+		const ctx = makeWorkflowCtx(manifest, {
+			signal: new AbortController().signal,
+		});
 		ctx.vars.k = "v";
 		ctx.phase("build");
 		ctx.log("snap");

@@ -16,7 +16,10 @@ export function sleepSync(ms: number): void {
 		// On Unix, try spawning the `sleep` command to avoid CPU busy-wait.
 		if (process.platform !== "win32" && ms >= 10) {
 			try {
-				execFileSync("sleep", [(ms / 1000).toFixed(3)], { timeout: ms + 1000, stdio: "pipe" });
+				execFileSync("sleep", [(ms / 1000).toFixed(3)], {
+					timeout: ms + 1000,
+					stdio: "pipe",
+				});
 				return;
 			} catch {
 				// sleep command unavailable — fall through to busy-wait
@@ -39,9 +42,13 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 	if (signal?.aborted) return Promise.reject(new Error("aborted"));
 	return new Promise<void>((resolve, reject) => {
 		const timer = setTimeout(resolve, ms);
-		signal?.addEventListener("abort", () => {
-			clearTimeout(timer);
-			reject(new Error("aborted"));
-		}, { once: true });
+		signal?.addEventListener(
+			"abort",
+			() => {
+				clearTimeout(timer);
+				reject(new Error("aborted"));
+			},
+			{ once: true },
+		);
 	});
 }

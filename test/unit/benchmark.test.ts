@@ -19,9 +19,17 @@
  *   length, cost=0) still pass on Windows because the failure path is captured
  *   in judgeResults and the suite returns the same shape.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
-import { runBenchmark, runBenchmarkSuite, aggregateBenchmarkMetrics, generateBenchmarkReport, type BenchmarkTask, type BenchmarkResult } from "../../src/benchmark/benchmark-runner.ts";
+import test from "node:test";
+import {
+	aggregateBenchmarkMetrics,
+	type BenchmarkResult,
+	type BenchmarkTask,
+	generateBenchmarkReport,
+	runBenchmark,
+	runBenchmarkSuite,
+} from "../../src/benchmark/benchmark-runner.ts";
 
 /** Skip helper: tests that depend on `echo ok` actually succeeding only run
  *  on POSIX because `echo` is shipped as a separate executable on Linux/macOS
@@ -40,7 +48,14 @@ test("runBenchmark grep judge: matches pattern in output", async () => {
 		name: "grep task",
 		prompt: "search",
 		// grep with simple args is allowed by validateCommand
-		judges: [{ type: "grep", command: "grep hello", pattern: "hello", description: "Has hello" }],
+		judges: [
+			{
+				type: "grep",
+				command: "grep hello",
+				pattern: "hello",
+				description: "Has hello",
+			},
+		],
 	};
 	const result = await runBenchmark(task);
 	// grep with no input file fails (exit code 2), so judge is "not passed"
@@ -78,7 +93,13 @@ test("runBenchmark fails on shell metacharacter", async () => {
 		id: "t4",
 		name: "metachar",
 		prompt: "test",
-		judges: [{ type: "command", command: "npx foo; rm -rf /", description: "Injection" }],
+		judges: [
+			{
+				type: "command",
+				command: "npx foo; rm -rf /",
+				description: "Injection",
+			},
+		],
 	};
 	const result = await runBenchmark(task);
 	assert.equal(result.passed, false);
@@ -89,7 +110,13 @@ test("runBenchmark fails on command substitution", async () => {
 		id: "t5",
 		name: "subst",
 		prompt: "test",
-		judges: [{ type: "command", command: "npx $(whoami)", description: "Substitution" }],
+		judges: [
+			{
+				type: "command",
+				command: "npx $(whoami)",
+				description: "Substitution",
+			},
+		],
 	};
 	const result = await runBenchmark(task);
 	assert.equal(result.passed, false);
@@ -149,9 +176,27 @@ test("runBenchmark cost defaults to 0", async (t) => {
 test("runBenchmarkSuite filters by taskType", async (t) => {
 	if (skipIfWindows(t, "echo shell builtin unsupported via execFileSync on win32; benchmark H-7 disallows `node` substitute")) return;
 	const tasks: BenchmarkTask[] = [
-		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "A" }], taskType: "unit" },
-		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "B" }], taskType: "integration" },
-		{ id: "c", name: "C", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "C" }], taskType: "unit" },
+		{
+			id: "a",
+			name: "A",
+			prompt: "p",
+			judges: [{ type: "command", command: "echo ok", description: "A" }],
+			taskType: "unit",
+		},
+		{
+			id: "b",
+			name: "B",
+			prompt: "p",
+			judges: [{ type: "command", command: "echo ok", description: "B" }],
+			taskType: "integration",
+		},
+		{
+			id: "c",
+			name: "C",
+			prompt: "p",
+			judges: [{ type: "command", command: "echo ok", description: "C" }],
+			taskType: "unit",
+		},
 	];
 	const suite = await runBenchmarkSuite(tasks, ["unit"]);
 	assert.equal(suite.results.length, 2);
@@ -160,8 +205,20 @@ test("runBenchmarkSuite filters by taskType", async (t) => {
 test("runBenchmarkSuite runs all tasks without taskTypes filter", async (t) => {
 	if (skipIfWindows(t, "echo shell builtin unsupported via execFileSync on win32; benchmark H-7 disallows `node` substitute")) return;
 	const tasks: BenchmarkTask[] = [
-		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "A" }], taskType: "unit" },
-		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "B" }], taskType: "integration" },
+		{
+			id: "a",
+			name: "A",
+			prompt: "p",
+			judges: [{ type: "command", command: "echo ok", description: "A" }],
+			taskType: "unit",
+		},
+		{
+			id: "b",
+			name: "B",
+			prompt: "p",
+			judges: [{ type: "command", command: "echo ok", description: "B" }],
+			taskType: "integration",
+		},
 	];
 	const suite = await runBenchmarkSuite(tasks);
 	assert.equal(suite.results.length, 2);
@@ -170,8 +227,18 @@ test("runBenchmarkSuite runs all tasks without taskTypes filter", async (t) => {
 test("runBenchmarkSuite computes total counts", async (t) => {
 	if (skipIfWindows(t, "echo shell builtin unsupported via execFileSync on win32; benchmark H-7 disallows `node` substitute")) return;
 	const tasks: BenchmarkTask[] = [
-		{ id: "a", name: "A", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "A" }] },
-		{ id: "b", name: "B", prompt: "p", judges: [{ type: "command", command: "echo ok", description: "B" }] },
+		{
+			id: "a",
+			name: "A",
+			prompt: "p",
+			judges: [{ type: "command", command: "echo ok", description: "A" }],
+		},
+		{
+			id: "b",
+			name: "B",
+			prompt: "p",
+			judges: [{ type: "command", command: "echo ok", description: "B" }],
+		},
 	];
 	const suite = await runBenchmarkSuite(tasks);
 	assert.equal(suite.totalFailed, 0);
@@ -187,9 +254,30 @@ test("runBenchmarkSuite handles empty task list", async () => {
 
 test("aggregateBenchmarkMetrics buckets by taskType", () => {
 	const results: BenchmarkResult[] = [
-		{ taskId: "1", passed: true, judgeResults: [], durationMs: 100, cost: 0, taskType: "unit" },
-		{ taskId: "2", passed: false, judgeResults: [], durationMs: 200, cost: 0, taskType: "unit" },
-		{ taskId: "3", passed: true, judgeResults: [], durationMs: 300, cost: 0, taskType: "integration" },
+		{
+			taskId: "1",
+			passed: true,
+			judgeResults: [],
+			durationMs: 100,
+			cost: 0,
+			taskType: "unit",
+		},
+		{
+			taskId: "2",
+			passed: false,
+			judgeResults: [],
+			durationMs: 200,
+			cost: 0,
+			taskType: "unit",
+		},
+		{
+			taskId: "3",
+			passed: true,
+			judgeResults: [],
+			durationMs: 300,
+			cost: 0,
+			taskType: "integration",
+		},
 	];
 	const metrics = aggregateBenchmarkMetrics(results);
 	assert.equal(metrics["unit"]?.totalTasks, 2);
@@ -201,8 +289,20 @@ test("aggregateBenchmarkMetrics buckets by taskType", () => {
 
 test("aggregateBenchmarkMetrics groups untagged under __default__", () => {
 	const results: BenchmarkResult[] = [
-		{ taskId: "1", passed: true, judgeResults: [], durationMs: 100, cost: 0 },
-		{ taskId: "2", passed: true, judgeResults: [], durationMs: 200, cost: 0 },
+		{
+			taskId: "1",
+			passed: true,
+			judgeResults: [],
+			durationMs: 100,
+			cost: 0,
+		},
+		{
+			taskId: "2",
+			passed: true,
+			judgeResults: [],
+			durationMs: 200,
+			cost: 0,
+		},
 	];
 	const metrics = aggregateBenchmarkMetrics(results);
 	assert.equal(metrics["__default__"]?.totalTasks, 2);
@@ -215,8 +315,22 @@ test("aggregateBenchmarkMetrics handles empty results", () => {
 
 test("aggregateBenchmarkMetrics computes avg cost per task", () => {
 	const results: BenchmarkResult[] = [
-		{ taskId: "1", passed: true, judgeResults: [], durationMs: 100, cost: 0.002, taskType: "unit" },
-		{ taskId: "2", passed: true, judgeResults: [], durationMs: 200, cost: 0.004, taskType: "unit" },
+		{
+			taskId: "1",
+			passed: true,
+			judgeResults: [],
+			durationMs: 100,
+			cost: 0.002,
+			taskType: "unit",
+		},
+		{
+			taskId: "2",
+			passed: true,
+			judgeResults: [],
+			durationMs: 200,
+			cost: 0.004,
+			taskType: "unit",
+		},
 	];
 	const metrics = aggregateBenchmarkMetrics(results);
 	assert.equal(metrics["unit"]?.avgCost, 0.003);
@@ -225,8 +339,22 @@ test("aggregateBenchmarkMetrics computes avg cost per task", () => {
 
 test("generateBenchmarkReport produces markdown table", () => {
 	const results: BenchmarkResult[] = [
-		{ taskId: "1", passed: true, judgeResults: [], durationMs: 100, cost: 0.001, taskType: "unit" },
-		{ taskId: "2", passed: false, judgeResults: [], durationMs: 200, cost: 0, taskType: "integration" },
+		{
+			taskId: "1",
+			passed: true,
+			judgeResults: [],
+			durationMs: 100,
+			cost: 0.001,
+			taskType: "unit",
+		},
+		{
+			taskId: "2",
+			passed: false,
+			judgeResults: [],
+			durationMs: 200,
+			cost: 0,
+			taskType: "integration",
+		},
 	];
 	const report = generateBenchmarkReport(results);
 	assert.ok(report.includes("# Benchmark Results"));
@@ -239,8 +367,20 @@ test("generateBenchmarkReport produces markdown table", () => {
 
 test("generateBenchmarkReport includes total count", () => {
 	const results: BenchmarkResult[] = [
-		{ taskId: "1", passed: true, judgeResults: [], durationMs: 100, cost: 0 },
-		{ taskId: "2", passed: false, judgeResults: [], durationMs: 200, cost: 0 },
+		{
+			taskId: "1",
+			passed: true,
+			judgeResults: [],
+			durationMs: 100,
+			cost: 0,
+		},
+		{
+			taskId: "2",
+			passed: false,
+			judgeResults: [],
+			durationMs: 200,
+			cost: 0,
+		},
 	];
 	const report = generateBenchmarkReport(results);
 	assert.ok(report.includes("**Total: 1/2 passed**"));
@@ -248,7 +388,13 @@ test("generateBenchmarkReport includes total count", () => {
 
 test("generateBenchmarkReport without per-type table", () => {
 	const results: BenchmarkResult[] = [
-		{ taskId: "1", passed: true, judgeResults: [], durationMs: 100, cost: 0 },
+		{
+			taskId: "1",
+			passed: true,
+			judgeResults: [],
+			durationMs: 100,
+			cost: 0,
+		},
 	];
 	const report = generateBenchmarkReport(results, false);
 	assert.ok(!report.includes("Per-Task-Type Comparison"));

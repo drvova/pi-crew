@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { computePhaseProgress, formatPhaseProgressLine } from "../../src/runtime/phase-progress.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
@@ -53,8 +53,16 @@ test("computePhaseProgress groups tasks by adaptive.phase", () => {
 
 test("computePhaseProgress infers phase from stepId when adaptive.phase is absent", () => {
 	const tasks = [
-		makeTask({ id: "t1", stepId: "adaptive-1-1-explorer", status: "completed" }),
-		makeTask({ id: "t2", stepId: "adaptive-2-1-executor", status: "running" }),
+		makeTask({
+			id: "t1",
+			stepId: "adaptive-1-1-explorer",
+			status: "completed",
+		}),
+		makeTask({
+			id: "t2",
+			stepId: "adaptive-2-1-executor",
+			status: "running",
+		}),
 	];
 
 	const result = computePhaseProgress(tasks);
@@ -64,10 +72,7 @@ test("computePhaseProgress infers phase from stepId when adaptive.phase is absen
 });
 
 test("computePhaseProgress uses 'default' for tasks without phase info", () => {
-	const tasks = [
-		makeTask({ id: "t1", status: "completed" }),
-		makeTask({ id: "t2", status: "running" }),
-	];
+	const tasks = [makeTask({ id: "t1", status: "completed" }), makeTask({ id: "t2", status: "running" })];
 
 	const result = computePhaseProgress(tasks);
 	assert.equal(result.phases.length, 1);
@@ -104,10 +109,7 @@ test("computePhaseProgress calculates overallPercentage", () => {
 });
 
 test("computePhaseProgress counts failed as terminal for percentage", () => {
-	const tasks = [
-		adaptiveTask("t1", "explore", "failed"),
-		adaptiveTask("t2", "explore", "completed"),
-	];
+	const tasks = [adaptiveTask("t1", "explore", "failed"), adaptiveTask("t2", "explore", "completed")];
 
 	const result = computePhaseProgress(tasks);
 	assert.equal(result.phases[0]!.percentage, 100);
@@ -140,20 +142,14 @@ test("computePhaseProgress identifies currentPhase as phase with running tasks",
 });
 
 test("computePhaseProgress identifies currentPhase as phase with queued tasks (no running)", () => {
-	const tasks = [
-		adaptiveTask("t1", "explore", "completed"),
-		adaptiveTask("t2", "execute", "queued"),
-	];
+	const tasks = [adaptiveTask("t1", "explore", "completed"), adaptiveTask("t2", "execute", "queued")];
 
 	const result = computePhaseProgress(tasks);
 	assert.equal(result.currentPhase, "execute");
 });
 
 test("computePhaseProgress returns null currentPhase when all done", () => {
-	const tasks = [
-		adaptiveTask("t1", "explore", "completed"),
-		adaptiveTask("t2", "execute", "completed"),
-	];
+	const tasks = [adaptiveTask("t1", "explore", "completed"), adaptiveTask("t2", "execute", "completed")];
 
 	const result = computePhaseProgress(tasks);
 	assert.equal(result.currentPhase, null);
@@ -187,7 +183,7 @@ test("computePhaseProgress counts task statuses correctly", () => {
 test("computePhaseProgress estimates remaining time from avg task duration", () => {
 	const now = Date.now();
 	const tasks = [
-		adaptiveTask("t1", "explore", "completed", new Date(now - 60_000).toISOString(), new Date(now).toISOString()),          // 60s
+		adaptiveTask("t1", "explore", "completed", new Date(now - 60_000).toISOString(), new Date(now).toISOString()), // 60s
 		adaptiveTask("t2", "explore", "completed", new Date(now - 120_000).toISOString(), new Date(now - 30_000).toISOString()), // 90s
 		adaptiveTask("t3", "execute", "queued"),
 		adaptiveTask("t4", "execute", "queued"),
@@ -199,10 +195,7 @@ test("computePhaseProgress estimates remaining time from avg task duration", () 
 });
 
 test("computePhaseProgress returns 0 estimated time when no completed tasks", () => {
-	const tasks = [
-		adaptiveTask("t1", "explore", "running"),
-		adaptiveTask("t2", "execute", "queued"),
-	];
+	const tasks = [adaptiveTask("t1", "explore", "running"), adaptiveTask("t2", "execute", "queued")];
 
 	const result = computePhaseProgress(tasks);
 	assert.equal(result.estimatedRemainingMs, 0);
@@ -210,9 +203,7 @@ test("computePhaseProgress returns 0 estimated time when no completed tasks", ()
 
 test("computePhaseProgress returns 0 estimated time when all tasks are terminal", () => {
 	const now = Date.now();
-	const tasks = [
-		adaptiveTask("t1", "explore", "completed", new Date(now - 60_000).toISOString(), new Date(now).toISOString()),
-	];
+	const tasks = [adaptiveTask("t1", "explore", "completed", new Date(now - 60_000).toISOString(), new Date(now).toISOString())];
 
 	const result = computePhaseProgress(tasks);
 	assert.equal(result.estimatedRemainingMs, 0);
@@ -243,10 +234,7 @@ test("formatPhaseProgressLine shows current phase info", () => {
 });
 
 test("formatPhaseProgressLine shows all done when currentPhase is null", () => {
-	const tasks = [
-		adaptiveTask("t1", "explore", "completed"),
-		adaptiveTask("t2", "execute", "completed"),
-	];
+	const tasks = [adaptiveTask("t1", "explore", "completed"), adaptiveTask("t2", "execute", "completed")];
 
 	const result = computePhaseProgress(tasks);
 	const line = formatPhaseProgressLine(result);

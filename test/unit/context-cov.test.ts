@@ -1,8 +1,15 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { result, formatScoped, buildParentContext, configRecord, withSessionId, type TeamContext } from "../../src/extension/team-tool/context.ts";
+import { describe, it } from "node:test";
+import {
+	buildParentContext,
+	configRecord,
+	formatScoped,
+	result,
+	type TeamContext,
+	withSessionId,
+} from "../../src/extension/team-tool/context.ts";
 
-	describe("result", () => {
+describe("result", () => {
 	it("creates a tool result with isError false by default", () => {
 		const r = result("hello", { action: "test", status: "ok" });
 		assert.equal(r.isError, false);
@@ -16,7 +23,11 @@ import { result, formatScoped, buildParentContext, configRecord, withSessionId, 
 	});
 
 	it("preserves all detail fields", () => {
-		const r = result("msg", { action: "cancel", status: "ok", runId: "r1" });
+		const r = result("msg", {
+			action: "cancel",
+			status: "ok",
+			runId: "r1",
+		});
 		assert.equal(r.details.runId, "r1");
 	});
 });
@@ -40,7 +51,10 @@ describe("formatScoped", () => {
 
 describe("buildParentContext", () => {
 	it("returns undefined for empty branch", () => {
-		const ctx: TeamContext = { cwd: "/tmp", sessionManager: { getBranch: () => [] } };
+		const ctx: TeamContext = {
+			cwd: "/tmp",
+			sessionManager: { getBranch: () => [] },
+		};
 		assert.equal(buildParentContext(ctx), undefined);
 	});
 
@@ -51,9 +65,15 @@ describe("buildParentContext", () => {
 
 	it("extracts user message text from branch", () => {
 		const branch = [
-			{ type: "message", message: { role: "user", content: "hello world" } },
+			{
+				type: "message",
+				message: { role: "user", content: "hello world" },
+			},
 		];
-		const ctx: TeamContext = { cwd: "/tmp", sessionManager: { getBranch: () => branch } };
+		const ctx: TeamContext = {
+			cwd: "/tmp",
+			sessionManager: { getBranch: () => branch },
+		};
 		const text = buildParentContext(ctx);
 		assert.ok(text);
 		assert.ok(text!.includes("hello world"));
@@ -61,19 +81,29 @@ describe("buildParentContext", () => {
 
 	it("extracts assistant message text from branch", () => {
 		const branch = [
-			{ type: "message", message: { role: "assistant", content: [{ type: "text", text: "response" }] } },
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "response" }],
+				},
+			},
 		];
-		const ctx: TeamContext = { cwd: "/tmp", sessionManager: { getBranch: () => branch } };
+		const ctx: TeamContext = {
+			cwd: "/tmp",
+			sessionManager: { getBranch: () => branch },
+		};
 		const text = buildParentContext(ctx);
 		assert.ok(text);
 		assert.ok(text!.includes("response"));
 	});
 
 	it("handles compaction summary", () => {
-		const branch = [
-			{ type: "compaction", summary: "Summarized conversation" },
-		];
-		const ctx: TeamContext = { cwd: "/tmp", sessionManager: { getBranch: () => branch } };
+		const branch = [{ type: "compaction", summary: "Summarized conversation" }];
+		const ctx: TeamContext = {
+			cwd: "/tmp",
+			sessionManager: { getBranch: () => branch },
+		};
 		const text = buildParentContext(ctx);
 		assert.ok(text);
 		assert.ok(text!.includes("Summarized conversation"));
@@ -81,13 +111,19 @@ describe("buildParentContext", () => {
 
 	it("skips non-object entries", () => {
 		const branch = [null, 42, "string"];
-		const ctx: TeamContext = { cwd: "/tmp", sessionManager: { getBranch: () => branch } };
+		const ctx: TeamContext = {
+			cwd: "/tmp",
+			sessionManager: { getBranch: () => branch },
+		};
 		assert.equal(buildParentContext(ctx), undefined);
 	});
 
 	it("skips entries with no relevant content", () => {
 		const branch = [{ type: "other" }];
-		const ctx: TeamContext = { cwd: "/tmp", sessionManager: { getBranch: () => branch } };
+		const ctx: TeamContext = {
+			cwd: "/tmp",
+			sessionManager: { getBranch: () => branch },
+		};
 		assert.equal(buildParentContext(ctx), undefined);
 	});
 });
@@ -124,7 +160,9 @@ describe("withSessionId", () => {
 	});
 
 	it("omits sessionId when not available", () => {
-		const ctx = { sessionManager: { getSessionId: () => undefined } as any };
+		const ctx = {
+			sessionManager: { getSessionId: () => undefined } as any,
+		};
 		const result = withSessionId(ctx);
 		assert.equal(result.sessionId, undefined);
 	});

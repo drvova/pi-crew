@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import { createHash } from "node:crypto";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import test from "node:test";
 import { writeArtifact } from "../../src/state/artifact-store.ts";
 
 // Use realpath to resolve symlinks (macOS /var/folders → /private/var/folders).
@@ -28,12 +28,16 @@ test("writeArtifact: contentHash matches sha256 of bytes on disk", () => {
 
 test("writeArtifact: rejects path traversal", () => {
 	const root = fs.mkdtempSync(path.join(realTmp, "pi-crew-art-"));
-	assert.throws(() => writeArtifact(root, {
-		kind: "log",
-		relativePath: "../escape.log",
-		content: "x",
-		producer: "t",
-	}), /Invalid artifact path/);
+	assert.throws(
+		() =>
+			writeArtifact(root, {
+				kind: "log",
+				relativePath: "../escape.log",
+				content: "x",
+				producer: "t",
+			}),
+		/Invalid artifact path/,
+	);
 	fs.rmSync(root, { recursive: true, force: true });
 });
 

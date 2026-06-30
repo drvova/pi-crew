@@ -38,6 +38,7 @@ export function shouldAppendProgressEventUpdate(input: ProgressEventCoalesceInpu
 	if (numericIncrease(input.previous.turns, input.next.turns) > 0) return { shouldAppend: true, reason: "turns_increased" };
 	const tokenIncrease = numericIncrease(input.previous.tokens, input.next.tokens);
 	if (tokenIncrease >= (input.tokenThreshold ?? DEFAULT_TOKEN_THRESHOLD)) return { shouldAppend: true, reason: "tokens_increased" };
-	if (input.lastAppendMs === undefined || input.nowMs - input.lastAppendMs >= input.minIntervalMs) return { shouldAppend: true, reason: "interval" };
+	if (input.lastAppendMs === undefined || input.nowMs - input.lastAppendMs >= input.minIntervalMs)
+		return { shouldAppend: true, reason: "interval" };
 	return { shouldAppend: false, reason: "coalesced" };
 }

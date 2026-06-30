@@ -1,19 +1,19 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
 import type { ContextEvent } from "@earendil-works/pi-coding-agent";
-import type { TeamRunManifest } from "../../src/state/types.ts";
+import {
+	AMBIENT_STATUS_SENTINEL,
+	buildStatusMessage,
+	formatAmbientStatus,
+	handleContextEvent,
+} from "../../src/extension/context-status-injection.ts";
 import { createRunManifest } from "../../src/state/state-store.ts";
+import type { TeamRunManifest } from "../../src/state/types.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
-import {
-	formatAmbientStatus,
-	buildStatusMessage,
-	handleContextEvent,
-	AMBIENT_STATUS_SENTINEL,
-} from "../../src/extension/context-status-injection.ts";
 
 /** Build a minimal manifest fixture for testing. */
 function makeRun(overrides: Partial<TeamRunManifest> = {}): TeamRunManifest {
@@ -56,7 +56,12 @@ test("formatAmbientStatus: single run includes sentinel, runId, team, status, go
 test("formatAmbientStatus: includes run recency (updated/age) when timestamps set", () => {
 	const now = Date.now();
 	const fiveMinAgo = new Date(now - 5 * 60_000).toISOString();
-	const text = formatAmbientStatus([makeRun({ createdAt: fiveMinAgo, updatedAt: new Date(now - 30_000).toISOString() })]);
+	const text = formatAmbientStatus([
+		makeRun({
+			createdAt: fiveMinAgo,
+			updatedAt: new Date(now - 30_000).toISOString(),
+		}),
+	]);
 	// updated ~30s ago → "just now" OR "updated" phrasing
 	assert.match(text, /updated/i, "should mention update recency");
 });
@@ -68,10 +73,7 @@ test("formatAmbientStatus: shows running age when only createdAt is set", () => 
 });
 
 test("formatAmbientStatus: multiple runs use plural and list each", () => {
-	const text = formatAmbientStatus([
-		makeRun({ runId: "run_a", goal: "A" }),
-		makeRun({ runId: "run_b", goal: "B", status: "queued" }),
-	]);
+	const text = formatAmbientStatus([makeRun({ runId: "run_a", goal: "A" }), makeRun({ runId: "run_b", goal: "B", status: "queued" })]);
 	assert.ok(text.includes("2 pi-crew runs in flight"), "plural count");
 	assert.ok(text.includes("run_a"));
 	assert.ok(text.includes("run_b"));
@@ -128,17 +130,17 @@ test("handleContextEvent: returns undefined when cwd has no in-flight runs", () 
 	assert.ok(res.messages, "result must have messages");
 	const injected = res.messages.find((m) => {
 		const content = (m as { content?: unknown }).content;
-		return Array.isArray(content) &&
-			content.some((p) => typeof (p as { text?: string })?.text === "string" &&
-				((p as { text: string }).text.includes(AMBIENT_STATUS_SENTINEL)));
+		return (
+			Array.isArray(content) &&
+			content.some(
+				(p) => typeof (p as { text?: string })?.text === "string" && (p as { text: string }).text.includes(AMBIENT_STATUS_SENTINEL),
+			)
+		);
 	});
 	if (injected) {
 		const content = (injected as { content: Array<{ text?: string }> }).content;
 		const text = content.map((p) => p.text ?? "").join("\n");
-		assert.ok(
-			!/\/nonexistent\/empty\/cwd\/for\/test/.test(text),
-			"ambient status must not attribute runs to our nonexistent cwd",
-		);
+		assert.ok(!/\/nonexistent\/empty\/cwd\/for\/test/.test(text), "ambient status must not attribute runs to our nonexistent cwd");
 	}
 });
 
@@ -149,18 +151,38 @@ test("handleContextEvent: preserves original messages and inserts status before 
 	fs.mkdirSync(path.join(realTmp, ".crew"), { recursive: true });
 	try {
 		const team: TeamConfig = {
-			name: "default", description: "d", source: "builtin", filePath: "default.team.md",
+			name: "default",
+			description: "d",
+			source: "builtin",
+			filePath: "default.team.md",
 			roles: [{ name: "planner", agent: "planner" }],
 		};
 		const workflow: WorkflowConfig = {
-			name: "default", description: "d", source: "builtin", filePath: "default.workflow.md",
+			name: "default",
+			description: "d",
+			source: "builtin",
+			filePath: "default.workflow.md",
 			steps: [{ id: "plan", role: "planner", task: "Plan {goal}" }],
 		};
-		const created = createRunManifest({ cwd: realTmp, team, workflow, goal: "Ship feature Z" });
+		const created = createRunManifest({
+			cwd: realTmp,
+			team,
+			workflow,
+			goal: "Ship feature Z",
+		});
 
 		const baseMessages = [
 			{ role: "user" as const, content: "earlier turn", timestamp: 1 },
-			{ role: "assistant" as const, content: [{ type: "text" as const, text: "ok" }], api: "anthropic" as never, provider: "anthropic" as never, model: "claude", usage: {} as never, stopReason: "stop" as const, timestamp: 2 },
+			{
+				role: "assistant" as const,
+				content: [{ type: "text" as const, text: "ok" }],
+				api: "anthropic" as never,
+				provider: "anthropic" as never,
+				model: "claude",
+				usage: {} as never,
+				stopReason: "stop" as const,
+				timestamp: 2,
+			},
 			{ role: "user" as const, content: "current prompt", timestamp: 3 },
 		];
 		const event: ContextEvent = { type: "context", messages: baseMessages };
@@ -169,11 +191,16 @@ test("handleContextEvent: preserves original messages and inserts status before 
 		assert.ok(result!.messages, "messages present");
 		// Status note inserted BEFORE the last message, so the last stays 'current prompt'
 		assert.equal(result!.messages.length, baseMessages.length + 1, "exactly one status note added");
-		const last = result!.messages[result!.messages.length - 1] as { content: unknown };
+		const last = result!.messages[result!.messages.length - 1] as {
+			content: unknown;
+		};
 		const lastText = typeof last.content === "string" ? last.content : "";
 		assert.equal(lastText, "current prompt", "last message preserved as turn driver");
 		// The injected note is the second-to-last and carries the sentinel + run goal.
-		const injected = result!.messages[result!.messages.length - 2] as { role: string; content: { text?: string }[] };
+		const injected = result!.messages[result!.messages.length - 2] as {
+			role: string;
+			content: { text?: string }[];
+		};
 		assert.equal(injected.role, "user");
 		const injectedText = injected.content[0]?.text ?? "";
 		assert.ok(injectedText.startsWith(AMBIENT_STATUS_SENTINEL), "injected note has sentinel");
@@ -187,7 +214,11 @@ test("handleContextEvent: preserves original messages and inserts status before 
 test("registerContextStatusInjection: enabled=false registers nothing (no throw)", async () => {
 	const { registerContextStatusInjection } = await import("../../src/extension/context-status-injection.ts");
 	let registered = false;
-	const fakePi = { on: () => { registered = true; } } as unknown as Parameters<typeof registerContextStatusInjection>[0];
+	const fakePi = {
+		on: () => {
+			registered = true;
+		},
+	} as unknown as Parameters<typeof registerContextStatusInjection>[0];
 	// disabled → no registration
 	registerContextStatusInjection(fakePi, { enabled: false });
 	assert.equal(registered, false, "disabled does not register a handler");
@@ -197,7 +228,9 @@ test("registerContextStatusInjection: enabled (default) registers a context hand
 	const { registerContextStatusInjection } = await import("../../src/extension/context-status-injection.ts");
 	const registered: string[] = [];
 	const fakePi = {
-		on: (event: string) => { registered.push(event); },
+		on: (event: string) => {
+			registered.push(event);
+		},
 	} as unknown as Parameters<typeof registerContextStatusInjection>[0];
 	registerContextStatusInjection(fakePi); // default enabled
 	assert.ok(registered.includes("context"), "registers a 'context' event handler");
@@ -207,7 +240,9 @@ test("registerContextStatusInjection: handler is a no-op when no runs in-flight"
 	const { registerContextStatusInjection } = await import("../../src/extension/context-status-injection.ts");
 	let capturedHandler: ((e: ContextEvent) => unknown) | null = null;
 	const fakePi = {
-		on: (_event: string, handler: (e: ContextEvent) => unknown) => { capturedHandler = handler; },
+		on: (_event: string, handler: (e: ContextEvent) => unknown) => {
+			capturedHandler = handler;
+		},
 	} as unknown as Parameters<typeof registerContextStatusInjection>[0];
 	registerContextStatusInjection(fakePi);
 	assert.ok(capturedHandler, "handler captured");
@@ -226,14 +261,23 @@ test("registerContextStatusInjection: handler is a no-op when no runs in-flight"
 		assert.ok(true, "no in-flight runs → no-op (undefined)");
 		return;
 	}
-	const msgs = (res as { messages?: Array<{ content?: string | Array<{ text?: string }> }> }).messages ?? [];
+	const msgs =
+		(
+			res as {
+				messages?: Array<{
+					content?: string | Array<{ text?: string }>;
+				}>;
+			}
+		).messages ?? [];
 	const injected = msgs.find(
-		(m) => Array.isArray(m.content) &&
-			m.content.some((p) => typeof (p as { text?: string }).text === "string" &&
-				((p as { text: string }).text.includes(AMBIENT_STATUS_SENTINEL))),
+		(m) =>
+			Array.isArray(m.content) &&
+			m.content.some(
+				(p) => typeof (p as { text?: string }).text === "string" && (p as { text: string }).text.includes(AMBIENT_STATUS_SENTINEL),
+			),
 	);
 	if (injected) {
-		const text = ((injected.content as Array<{ text?: string }>).map((p) => p.text ?? "").join("\n"));
+		const text = (injected.content as Array<{ text?: string }>).map((p) => p.text ?? "").join("\n");
 		assert.ok(
 			!/0 pi-crew runs? in flight:/.test(text) || /\d+ pi-crew runs? in flight:/.test(text),
 			"if a status note is injected it must reflect real in-flight runs",

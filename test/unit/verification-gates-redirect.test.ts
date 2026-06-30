@@ -3,17 +3,14 @@
  * in verification gate commands while other dangerous patterns remain blocked.
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 
 // Import the internal validateGateCommand by re-exporting through a test wrapper.
 // Since validateGateCommand is not exported, we test via the exported NPM_TYPESCRIPT_GATES
 // which contain 2>&1 and should be valid.
 
-import {
-	NPM_TYPESCRIPT_GATES,
-	CARGO_RUST_GATES,
-} from "../../src/runtime/verification-gates.ts";
+import { CARGO_RUST_GATES, NPM_TYPESCRIPT_GATES } from "../../src/runtime/verification-gates.ts";
 
 test("NPM_TYPESCRIPT_GATES commands contain 2>&1 and are valid", () => {
 	// All built-in gates should use 2>&1 which should NOT be blocked

@@ -6,7 +6,11 @@ import type { TeamTaskState, UsageState } from "./types.ts";
  * prefix re-read on that one call — summing across turns would count it N times.
  * See: https://github.com/nichekate/pi-subagents3/issues/38
  */
-export type LifetimeUsage = { input: number; output: number; cacheWrite: number };
+export type LifetimeUsage = {
+	input: number;
+	output: number;
+	cacheWrite: number;
+};
 
 /** Sum of lifetime usage components, or 0 if undefined. */
 export function getLifetimeTotal(u?: LifetimeUsage): number {
@@ -80,7 +84,15 @@ export function aggregateUsageByRole(tasks: TeamTaskState[]): RoleUsage[] {
 		const role = task.role || "unknown";
 		let bucket = byRole.get(role);
 		if (!bucket) {
-			bucket = { role, input: 0, output: 0, cacheWrite: 0, cost: 0, turns: 0, taskCount: 0 };
+			bucket = {
+				role,
+				input: 0,
+				output: 0,
+				cacheWrite: 0,
+				cost: 0,
+				turns: 0,
+				taskCount: 0,
+			};
 			byRole.set(role, bucket);
 		}
 		bucket.taskCount++;
@@ -105,7 +117,9 @@ export function formatCostReport(tasks: TeamTaskState[]): string {
 	const totalTokens = (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheWrite ?? 0);
 	const lines: string[] = [];
 	lines.push("═══ Cost Report ═══");
-	lines.push(`Tokens: ${formatTokens(totalTokens)} (in ${formatTokens(usage.input ?? 0)}, out ${formatTokens(usage.output ?? 0)}, cache-write ${formatTokens(usage.cacheWrite ?? 0)})`);
+	lines.push(
+		`Tokens: ${formatTokens(totalTokens)} (in ${formatTokens(usage.input ?? 0)}, out ${formatTokens(usage.output ?? 0)}, cache-write ${formatTokens(usage.cacheWrite ?? 0)})`,
+	);
 	lines.push(`Cost: ${formatCost(usage.cost)}${usage.turns ? ` across ${usage.turns} turn(s)` : ""}`);
 	if (byRole.length > 1) {
 		lines.push("");
@@ -113,7 +127,9 @@ export function formatCostReport(tasks: TeamTaskState[]): string {
 		for (const r of byRole) {
 			const pct = usage.cost && usage.cost > 0 ? Math.round((r.cost / usage.cost) * 100) : 0;
 			const tok = r.input + r.output + r.cacheWrite;
-			lines.push(`  ${r.role} (${r.taskCount} task${r.taskCount === 1 ? "" : "s"}): ${formatCost(r.cost)}${pct ? ` — ${pct}%` : ""}, ${formatTokens(tok)} tok, ${r.turns} turns`);
+			lines.push(
+				`  ${r.role} (${r.taskCount} task${r.taskCount === 1 ? "" : "s"}): ${formatCost(r.cost)}${pct ? ` — ${pct}%` : ""}, ${formatTokens(tok)} tok, ${r.turns} turns`,
+			);
 		}
 	}
 	lines.push("");

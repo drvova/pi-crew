@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { createMetricRegistry } from "../../src/observability/metric-registry.ts";
+import test from "node:test";
 import { wireEventToMetrics } from "../../src/observability/event-to-metric.ts";
+import { createMetricRegistry } from "../../src/observability/metric-registry.ts";
 
 function eventBus() {
 	const handlers = new Map<string, Set<(data: unknown) => void>>();
@@ -15,7 +15,9 @@ function eventBus() {
 		emit(channel: string, data: unknown) {
 			for (const handler of handlers.get(channel) ?? []) handler(data);
 		},
-		count(channel: string) { return handlers.get(channel)?.size ?? 0; },
+		count(channel: string) {
+			return handlers.get(channel)?.size ?? 0;
+		},
 	};
 }
 
@@ -44,6 +46,18 @@ test("wireEventToMetrics labels cancelled runs by structured reason", () => {
 	wireEventToMetrics(bus, registry);
 	bus.emit("crew.run.cancelled", { reason: "leader_interrupted" });
 	bus.emit("crew.run.cancelled", { reason: "unexpected-provider-text" });
-	assert.equal(counterValue(registry, "crew.run.count", { reason: "leader_interrupted", status: "cancelled" }), 1);
-	assert.equal(counterValue(registry, "crew.run.count", { reason: "unknown", status: "cancelled" }), 1);
+	assert.equal(
+		counterValue(registry, "crew.run.count", {
+			reason: "leader_interrupted",
+			status: "cancelled",
+		}),
+		1,
+	);
+	assert.equal(
+		counterValue(registry, "crew.run.count", {
+			reason: "unknown",
+			status: "cancelled",
+		}),
+		1,
+	);
 });

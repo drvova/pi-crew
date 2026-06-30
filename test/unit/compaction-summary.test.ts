@@ -1,17 +1,13 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { buildCompactionSummary, summaryPathsFor } from "../../src/runtime/compaction-summary.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
 
 /** Create a temporary directory with run state files for testing. */
-function createTestStateDir(files: {
-	manifest?: Partial<TeamRunManifest>;
-	tasks?: Partial<TeamTaskState>[];
-	events?: string[];
-}): string {
+function createTestStateDir(files: { manifest?: Partial<TeamRunManifest>; tasks?: Partial<TeamTaskState>[]; events?: string[] }): string {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-test-"));
 
 	if (files.manifest) {
@@ -37,17 +33,20 @@ function createTestStateDir(files: {
 	}
 
 	if (files.tasks) {
-		const tasks: TeamTaskState[] = files.tasks.map((t, i) => ({
-			id: t.id ?? `task-${i + 1}`,
-			runId: t.runId ?? "test-run-001",
-			role: t.role ?? "agent",
-			agent: t.agent ?? "default",
-			title: t.title ?? "Test task",
-			status: t.status ?? "completed",
-			dependsOn: [],
-			cwd: "/tmp",
-			...t,
-		} as TeamTaskState));
+		const tasks: TeamTaskState[] = files.tasks.map(
+			(t, i) =>
+				({
+					id: t.id ?? `task-${i + 1}`,
+					runId: t.runId ?? "test-run-001",
+					role: t.role ?? "agent",
+					agent: t.agent ?? "default",
+					title: t.title ?? "Test task",
+					status: t.status ?? "completed",
+					dependsOn: [],
+					cwd: "/tmp",
+					...t,
+				}) as TeamTaskState,
+		);
 		fs.writeFileSync(path.join(dir, "tasks.json"), JSON.stringify(tasks, null, 2));
 	}
 
@@ -103,8 +102,19 @@ describe("buildCompactionSummary", () => {
 		const dir = createTestStateDir({
 			manifest: {},
 			tasks: [
-				{ id: "01_agent", role: "agent", status: "completed", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:30.000Z" },
-				{ id: "02_review", role: "reviewer", status: "running", startedAt: "2026-01-01T00:00:31.000Z" },
+				{
+					id: "01_agent",
+					role: "agent",
+					status: "completed",
+					startedAt: "2026-01-01T00:00:00.000Z",
+					finishedAt: "2026-01-01T00:00:30.000Z",
+				},
+				{
+					id: "02_review",
+					role: "reviewer",
+					status: "running",
+					startedAt: "2026-01-01T00:00:31.000Z",
+				},
 			],
 		});
 		try {
@@ -154,9 +164,24 @@ describe("buildCompactionSummary", () => {
 		const dir = createTestStateDir({
 			manifest: {},
 			tasks: [
-				{ id: "01_done", role: "agent", status: "completed", title: "First task" },
-				{ id: "02_pending", role: "agent", status: "queued", title: "Second task" },
-				{ id: "03_running", role: "reviewer", status: "running", title: "Third task" },
+				{
+					id: "01_done",
+					role: "agent",
+					status: "completed",
+					title: "First task",
+				},
+				{
+					id: "02_pending",
+					role: "agent",
+					status: "queued",
+					title: "Second task",
+				},
+				{
+					id: "03_running",
+					role: "reviewer",
+					status: "running",
+					title: "Third task",
+				},
 			],
 		});
 		try {
@@ -165,7 +190,11 @@ describe("buildCompactionSummary", () => {
 			assert.ok(summary.includes("02_pending"));
 			assert.ok(summary.includes("03_running"));
 			// Completed task should NOT be in next steps
-			assert.ok(!summary.includes("## Next Steps") || summary.indexOf("01_done") < summary.indexOf("## Next Steps") || summary.includes("[completed] 01_done") === false);
+			assert.ok(
+				!summary.includes("## Next Steps") ||
+					summary.indexOf("01_done") < summary.indexOf("## Next Steps") ||
+					summary.includes("[completed] 01_done") === false,
+			);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}

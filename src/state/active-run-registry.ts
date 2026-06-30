@@ -2,13 +2,13 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { DEFAULT_CACHE, DEFAULT_PATHS } from "../config/defaults.ts";
-import type { TeamRunManifest } from "./types.ts";
-import { atomicWriteJson, renameWithRetry, isSymlinkSafePath } from "./atomic-write.ts";
+import { logInternalError } from "../utils/internal-error.ts";
 import { userCrewRoot } from "../utils/paths.ts";
 import { isSafePathId } from "../utils/safe-paths.ts";
 import { sharedScanCache } from "../utils/scan-cache.ts";
 import { sleepSync } from "../utils/sleep.ts";
-import { logInternalError } from "../utils/internal-error.ts";
+import { atomicWriteJson, isSymlinkSafePath, renameWithRetry } from "./atomic-write.ts";
+import type { TeamRunManifest } from "./types.ts";
 
 /** Magic bytes prefix for binary registry to prevent deserialization of hostile files. */
 const BINARY_MAGIC = Buffer.from("PICREW2BIN", "utf-8");
@@ -36,8 +36,6 @@ function registryBinaryPath(): string {
 function registryLockPath(): string {
 	return `${registryPath()}.lock`;
 }
-
-
 
 function lockCreatedAt(raw: string): number | undefined {
 	try {
@@ -73,7 +71,13 @@ function withRegistryLock<T>(fn: () => T): T {
 		try {
 			const fd = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o644);
 			try {
-				fs.writeSync(fd, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+				fs.writeSync(
+					fd,
+					JSON.stringify({
+						pid: process.pid,
+						createdAt: new Date().toISOString(),
+					}),
+				);
 			} finally {
 				fs.closeSync(fd);
 			}
@@ -81,7 +85,8 @@ function withRegistryLock<T>(fn: () => T): T {
 		} catch (error) {
 			const code = (error as NodeJS.ErrnoException).code;
 			if (code !== "EEXIST") throw error;
-			if (!removeStaleRegistryLock(filePath, staleMs) && Date.now() > deadline) throw new Error("Active-run registry is locked by another operation.");
+			if (!removeStaleRegistryLock(filePath, staleMs) && Date.now() > deadline)
+				throw new Error("Active-run registry is locked by another operation.");
 			sleepSync(Math.min(250, 25 * 2 ** attempt));
 			attempt += 1;
 		}
@@ -139,7 +144,9 @@ export function readActiveRunRegistry(maxEntries = DEFAULT_CACHE.manifestMaxEntr
 			return [];
 		}
 	}
-	const entries = Array.isArray(parsed) ? parsed.map(normalizeEntry).filter((entry): entry is ActiveRunRegistryEntry => entry !== undefined) : [];
+	const entries = Array.isArray(parsed)
+		? parsed.map(normalizeEntry).filter((entry): entry is ActiveRunRegistryEntry => entry !== undefined)
+		: [];
 	const byId = new Map<string, ActiveRunRegistryEntry>();
 	for (const entry of entries.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))) {
 		if (!byId.has(entry.runId)) byId.set(entry.runId, entry);
@@ -152,7 +159,8 @@ export function readActiveRunRegistry(maxEntries = DEFAULT_CACHE.manifestMaxEntr
  * Writes to temp file first, then renames. Includes version field for forward compatibility.
  */
 function atomicWriteBinary(filePath: string, entries: ActiveRunRegistryEntry[]): void {
-	if (!isSymlinkSafePath(filePath)) throw new Error(`Refusing to write binary registry: target is a symlink or inside untrusted directory: ${filePath}`);
+	if (!isSymlinkSafePath(filePath))
+		throw new Error(`Refusing to write binary registry: target is a symlink or inside untrusted directory: ${filePath}`);
 	fs.mkdirSync(path.dirname(filePath), { recursive: true });
 	const tempPath = `${filePath}.${crypto.randomUUID()}.tmp`;
 	const O_NOFOLLOW = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
@@ -175,7 +183,11 @@ function atomicWriteBinary(filePath: string, entries: ActiveRunRegistryEntry[]):
 		fs.closeSync(fd);
 		renameWithRetry(tempPath, filePath);
 	} catch (error) {
-		try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
+		try {
+			fs.rmSync(tempPath, { force: true });
+		} catch {
+			/* best-effort */
+		}
 		throw error;
 	}
 }
@@ -214,26 +226,52 @@ function writeEntries(entries: ActiveRunRegistryEntry[], skipTerminalRunIds?: Se
 		// instead of deleting both. This preserves whichever registry was successfully written.
 		if (jsonRenamed && !binRenamed) {
 			// JSON succeeded, binary failed — try to recover binary from temp
-			try { renameWithRetry(tempBin, registryBinaryPath()); binRenamed = true; } catch { /* recovery failed */ }
+			try {
+				renameWithRetry(tempBin, registryBinaryPath());
+				binRenamed = true;
+			} catch {
+				/* recovery failed */
+			}
 		} else if (binRenamed && !jsonRenamed) {
 			// Binary succeeded, JSON failed — try to recover JSON from temp
-			try { renameWithRetry(tempJson, registryPath()); jsonRenamed = true; } catch { /* recovery failed */ }
+			try {
+				renameWithRetry(tempJson, registryPath());
+				jsonRenamed = true;
+			} catch {
+				/* recovery failed */
+			}
 		}
 		// FIX Issue 2: If recovery failed, do NOT delete the final files — they may contain valid
 		// data from a prior write cycle. Leave temp files for manual recovery and throw error.
 		if (!binRenamed || !jsonRenamed) {
 			// Attempt to clean up temp files only (not final files)
-			try { fs.rmSync(tempJson, { force: true }); } catch { /* best-effort */ }
-			try { fs.rmSync(tempBin, { force: true }); } catch { /* best-effort */ }
+			try {
+				fs.rmSync(tempJson, { force: true });
+			} catch {
+				/* best-effort */
+			}
+			try {
+				fs.rmSync(tempBin, { force: true });
+			} catch {
+				/* best-effort */
+			}
 			throw error;
 		}
 		// FIX Issue 1: Ensure temp file cleanup executes even when recovery rename fails.
 		// If recovery throws, the error propagates before reaching the cleanup below.
 		// Wrapping in nested try-catch guarantees cleanup runs regardless of recovery outcome.
-		try { fs.rmSync(tempJson, { force: true }); } catch { /* best-effort */ }
-		try { fs.rmSync(tempBin, { force: true }); } catch { /* best-effort */ }
+		try {
+			fs.rmSync(tempJson, { force: true });
+		} catch {
+			/* best-effort */
+		}
+		try {
+			fs.rmSync(tempBin, { force: true });
+		} catch {
+			/* best-effort */
+		}
 		throw error;
-}
+	}
 }
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "blocked"]);
@@ -246,7 +284,10 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "blocked"
  * Status filtering is best-effort at read time. The terminal runIds set is returned so callers
  * can pass them to writeEntries to skip entries that transitioned to terminal since filtering.
  */
-function filterAliveEntries(entries: ActiveRunRegistryEntry[]): { alive: ActiveRunRegistryEntry[]; terminalRunIds: Set<string> } {
+function filterAliveEntries(entries: ActiveRunRegistryEntry[]): {
+	alive: ActiveRunRegistryEntry[];
+	terminalRunIds: Set<string>;
+} {
 	const terminalRunIds = new Set<string>();
 	const alive = entries.filter((entry) => {
 		try {
@@ -259,7 +300,11 @@ function filterAliveEntries(entries: ActiveRunRegistryEntry[]): { alive: ActiveR
 			return false;
 		}
 		try {
-			const raw = JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8")) as { status?: string; async?: { pid?: number }; updatedAt?: string };
+			const raw = JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8")) as {
+				status?: string;
+				async?: { pid?: number };
+				updatedAt?: string;
+			};
 			if (TERMINAL_STATUSES.has(raw.status ?? "")) {
 				terminalRunIds.add(entry.runId);
 				return false;
@@ -268,7 +313,9 @@ function filterAliveEntries(entries: ActiveRunRegistryEntry[]): { alive: ActiveR
 			// EPERM means process exists but we can't signal it (different security context).
 			// Also check manifest age to guard against PID reuse.
 			if (raw.async?.pid) {
-				try { process.kill(raw.async.pid, 0); } catch (err) {
+				try {
+					process.kill(raw.async.pid, 0);
+				} catch (err) {
 					// Only treat "process does not exist" as dead (ESRCH/ENOENT).
 					// EPERM means process is alive but protected; treat as alive.
 					const code = (err as NodeJS.ErrnoException).code;
@@ -277,13 +324,13 @@ function filterAliveEntries(entries: ActiveRunRegistryEntry[]): { alive: ActiveR
 				}
 				// FIX Issue 2: Async runs older than 30 min are stale even if PID is alive.
 				// This guards against PID reuse after the original process exits.
-				const updatedAt = typeof raw.updatedAt === 'string' ? Date.parse(raw.updatedAt) : NaN;
+				const updatedAt = typeof raw.updatedAt === "string" ? Date.parse(raw.updatedAt) : NaN;
 				if (Number.isFinite(updatedAt) && Date.now() - updatedAt > 30 * 60 * 1000) return false;
 			}
 			// 2.19 — Stale non-async run: live-session/scaffold runs older than 30 min
 			// Without this, test runs that crash/leak would stay in the registry forever.
 			if (!raw.async) {
-				const updatedAt = typeof raw.updatedAt === 'string' ? Date.parse(raw.updatedAt) : NaN;
+				const updatedAt = typeof raw.updatedAt === "string" ? Date.parse(raw.updatedAt) : NaN;
 				if (Number.isFinite(updatedAt) && Date.now() - updatedAt > 30 * 60 * 1000) return false;
 			}
 		} catch {
@@ -355,17 +402,29 @@ export function activeRunEntries(): ActiveRunRegistryEntry[] {
 			if (!isSymlinkSafePath(entry.stateRoot)) continue;
 			// FIX Issue 4: Use cached manifest content directly when available.
 			// sharedScanCache.readAndCache already read the file; avoid redundant re-read.
-			const manifest = (cached?.raw !== undefined
-				? cached.raw
-				: JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8"))) as { status?: unknown; updatedAt?: string; async?: { pid?: number } };
-			if (manifest.status !== "queued" && manifest.status !== "planning" && manifest.status !== "running" && manifest.status !== "blocked") continue;
+			const manifest = (cached?.raw !== undefined ? cached.raw : JSON.parse(fs.readFileSync(entry.manifestPath, "utf-8"))) as {
+				status?: unknown;
+				updatedAt?: string;
+				async?: { pid?: number };
+			};
+			if (
+				manifest.status !== "queued" &&
+				manifest.status !== "planning" &&
+				manifest.status !== "running" &&
+				manifest.status !== "blocked"
+			)
+				continue;
 			// PID liveness check: async runs with dead PID are stale — don't surface them
 			if (manifest.async?.pid) {
-				try { process.kill(manifest.async.pid, 0); } catch { continue; }
+				try {
+					process.kill(manifest.async.pid, 0);
+				} catch {
+					continue;
+				}
 			}
 			// Stale non-async run: live-session/scaffold runs older than 30 min
 			if (!manifest.async) {
-				const updatedAt = typeof manifest.updatedAt === 'string' ? Date.parse(manifest.updatedAt) : NaN;
+				const updatedAt = typeof manifest.updatedAt === "string" ? Date.parse(manifest.updatedAt) : NaN;
 				if (Number.isFinite(updatedAt) && Date.now() - updatedAt > 30 * 60 * 1000) continue;
 			}
 			entries.push(entry);

@@ -1,11 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
 	checkProcessLiveness,
+	hasStaleAsyncProcess,
 	isActiveRunStatus,
 	isFinishedRunStatus,
 	isLikelyOrphanedActiveRun,
-	hasStaleAsyncProcess,
 } from "../../src/runtime/process-status.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 
@@ -85,7 +85,10 @@ test("isFinishedRunStatus: false for active statuses", () => {
 // ─── isLikelyOrphanedActiveRun ──────────────────────────────────────────────
 
 test("isLikelyOrphanedActiveRun: false for completed runs", () => {
-	const manifest = { status: "completed", updatedAt: new Date().toISOString() } as TeamRunManifest;
+	const manifest = {
+		status: "completed",
+		updatedAt: new Date().toISOString(),
+	} as TeamRunManifest;
 	assert.equal(isLikelyOrphanedActiveRun(manifest), false);
 });
 

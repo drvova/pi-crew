@@ -17,7 +17,7 @@ export abstract class CrewError extends Error {
 	abstract readonly code: string;
 
 	/** Returns the class name. Use `instanceof` for discrimination. */
-toString(): string {
+	toString(): string {
 		return `[${this.constructor.name}] ${this.message}`;
 	}
 }
@@ -123,11 +123,11 @@ export class CrewSessionError extends CrewError {
  * Used by RunTracker and health monitoring for outcome classification.
  */
 export type CrewRunOutcome =
-	| "ok"       // Completed successfully
+	| "ok" // Completed successfully
 	| "cancelled" // Explicitly cancelled by user or API
 	| "deadletter" // Agent encountered unrecoverable error
-	| "failed"   // Workflow step failed (gate error, etc.)
-	| "timeout"  // Exceeded max duration
+	| "failed" // Workflow step failed (gate error, etc.)
+	| "timeout" // Exceeded max duration
 	| "aborted"; // Operator interrupt (Esc, SIGINT)
 
 /**
@@ -150,9 +150,7 @@ export function classifyError(error: unknown): CrewRunOutcome {
  * (cancelled, aborted, or timed out) vs a genuine failure.
  */
 export function isInterruptError(error: unknown): boolean {
-	return error instanceof CrewCancelledError
-		|| error instanceof CrewAbortError
-		|| error instanceof CrewTimeoutError;
+	return error instanceof CrewCancelledError || error instanceof CrewAbortError || error instanceof CrewTimeoutError;
 }
 
 /**
@@ -160,7 +158,5 @@ export function isInterruptError(error: unknown): boolean {
  * rather than workflow logic or user action.
  */
 export function isAgentError(error: unknown): boolean {
-	return error instanceof CrewDeadletterError
-		|| error instanceof CrewTurnLimitError
-		|| error instanceof CrewSessionError;
+	return error instanceof CrewDeadletterError || error instanceof CrewTurnLimitError || error instanceof CrewSessionError;
 }

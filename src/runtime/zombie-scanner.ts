@@ -69,7 +69,10 @@ function readProcStat(pid: number): { ppid: number; elapsedSec: number | undefin
 		// comm may contain spaces/parens, so parse from the LAST ')' backwards.
 		const closeParen = stat.lastIndexOf(")");
 		if (closeParen < 0) return undefined;
-		const rest = stat.slice(closeParen + 2).trim().split(/\s+/);
+		const rest = stat
+			.slice(closeParen + 2)
+			.trim()
+			.split(/\s+/);
 		// rest[0] = state, rest[1] = ppid
 		const ppid = Number.parseInt(rest[1] ?? "", 10);
 		// starttime (clock ticks since boot) is field 22 in the full stat → index 19 in `rest`
@@ -236,9 +239,7 @@ export function formatZombieReport(scan: ZombieScanResult): string {
 	const lines: string[] = [];
 	lines.push("## Zombie sub-agent scan (read-only — nothing killed)");
 	lines.push("");
-	lines.push(
-		`Sub-agents identified by PI_CREW_KIND=subagent marker. Main sessions (no marker) are never listed.`,
-	);
+	lines.push(`Sub-agents identified by PI_CREW_KIND=subagent marker. Main sessions (no marker) are never listed.`);
 	lines.push("");
 
 	if (scan.zombies.length === 0 && scan.live.length === 0) {

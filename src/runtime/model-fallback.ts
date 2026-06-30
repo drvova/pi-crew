@@ -2,8 +2,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { errors } from "../errors.ts";
-import { checkModelScope } from "./model-scope.ts";
 import { fuzzyResolveModelId } from "./model-resolver.ts";
+import { checkModelScope } from "./model-scope.ts";
 
 export interface AvailableModelInfo {
 	provider: string;
@@ -46,13 +46,22 @@ function modelInfoFromUnknown(value: unknown): AvailableModelInfo | undefined {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
 	const record = value as ModelLike;
 	if (typeof record.provider !== "string" || typeof record.id !== "string") return undefined;
-	return { provider: record.provider, id: record.id, fullId: `${record.provider}/${record.id}` };
+	return {
+		provider: record.provider,
+		id: record.id,
+		fullId: `${record.provider}/${record.id}`,
+	};
 }
 
 export function availableModelInfosFromRegistry(registry: unknown): AvailableModelInfo[] | undefined {
 	if (!registry || typeof registry !== "object" || Array.isArray(registry)) return undefined;
 	const candidate = registry as ModelRegistryLike;
-	const raw = typeof candidate.getAvailable === "function" ? candidate.getAvailable() : typeof candidate.getAll === "function" ? candidate.getAll() : undefined;
+	const raw =
+		typeof candidate.getAvailable === "function"
+			? candidate.getAvailable()
+			: typeof candidate.getAll === "function"
+				? candidate.getAll()
+				: undefined;
 	if (!Array.isArray(raw)) return undefined;
 	return raw.map(modelInfoFromUnknown).filter((entry): entry is AvailableModelInfo => entry !== undefined);
 }
@@ -74,7 +83,7 @@ function readJsonObject(filePath: string): Record<string, unknown> | undefined {
 	try {
 		if (!fs.existsSync(filePath)) return undefined;
 		const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-		return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+		return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
 	} catch {
 		return undefined;
 	}
@@ -92,7 +101,11 @@ function piAgentDir(): string {
 
 function settingsModelInfo(settings: PiSettingsLike | undefined): AvailableModelInfo | undefined {
 	if (typeof settings?.defaultProvider !== "string" || typeof settings.defaultModel !== "string") return undefined;
-	return { provider: settings.defaultProvider, id: settings.defaultModel, fullId: `${settings.defaultProvider}/${settings.defaultModel}` };
+	return {
+		provider: settings.defaultProvider,
+		id: settings.defaultModel,
+		fullId: `${settings.defaultProvider}/${settings.defaultModel}`,
+	};
 }
 
 function modelsJsonInfos(modelsJson: PiModelsJsonLike | undefined): AvailableModelInfo[] {
@@ -118,8 +131,11 @@ function modelsJsonInfos(modelsJson: PiModelsJsonLike | undefined): AvailableMod
 export function configuredModelInfosFromPiConfig(cwd?: string): AvailableModelInfo[] {
 	const agentDir = piAgentDir();
 	const globalSettings = readJsonObject(path.join(agentDir, "settings.json")) as PiSettingsLike | undefined;
-	const projectSettings = cwd ? readJsonObject(path.join(cwd, ".pi", "settings.json")) as PiSettingsLike | undefined : undefined;
-	const effectiveSettings = { ...(globalSettings ?? {}), ...(projectSettings ?? {}) };
+	const projectSettings = cwd ? (readJsonObject(path.join(cwd, ".pi", "settings.json")) as PiSettingsLike | undefined) : undefined;
+	const effectiveSettings = {
+		...(globalSettings ?? {}),
+		...(projectSettings ?? {}),
+	};
 	const defaultModel = settingsModelInfo(effectiveSettings);
 	return uniqueModelInfos([
 		...(defaultModel ? [defaultModel] : []),
@@ -127,7 +143,10 @@ export function configuredModelInfosFromPiConfig(cwd?: string): AvailableModelIn
 	]);
 }
 
-export function splitThinkingSuffix(model: string): { baseModel: string; thinkingSuffix: string } {
+export function splitThinkingSuffix(model: string): {
+	baseModel: string;
+	thinkingSuffix: string;
+} {
 	const colonIdx = model.lastIndexOf(":");
 	if (colonIdx === -1) return { baseModel: model, thinkingSuffix: "" };
 	return {
@@ -251,7 +270,9 @@ export function isRetryableModelFailure(error: string | undefined): boolean {
 
 export function formatModelAttemptNote(attempt: ModelAttemptSummary, nextModel?: string): string {
 	const failure = attempt.error?.trim() || `exit ${attempt.exitCode ?? 1}`;
-	return nextModel ? `[fallback] ${attempt.model} failed: ${failure}. Retrying with ${nextModel}.` : `[fallback] ${attempt.model} failed: ${failure}.`;
+	return nextModel
+		? `[fallback] ${attempt.model} failed: ${failure}. Retrying with ${nextModel}.`
+		: `[fallback] ${attempt.model} failed: ${failure}.`;
 }
 
 export function buildModelCandidates(
@@ -321,16 +342,31 @@ export function buildConfiguredModelRouting(input: {
 }): ConfiguredModelRouting {
 	const registryModels = availableModelInfosFromRegistry(input.modelRegistry);
 	const configModels = configuredModelInfosFromPiConfig(input.cwd);
-	const availableModels = registryModels && registryModels.length > 0 ? registryModels : configModels.length > 0 ? configModels : registryModels;
+	const availableModels =
+		registryModels && registryModels.length > 0 ? registryModels : configModels.length > 0 ? configModels : registryModels;
 	const parentModel = modelStringFromUnknown(input.parentModel);
 	const preferredProvider = parentModel?.split("/")[0] ?? availableModels?.[0]?.provider;
 	// B3: Parent model inheritance — when agent has no model specified,
 	// inherit from parent session model before falling back to defaults.
 	const effectiveAgentModel = input.agentModel?.trim() ? input.agentModel : parentModel;
-	const requested = [input.overrideModel, input.stepModel, input.teamRoleModel, effectiveAgentModel].find((model): model is string => Boolean(model?.trim()));
-	if (availableModels && availableModels.length === 0) return { requested, candidates: [], reason: "no configured Pi models available" };
+	const requested = [input.overrideModel, input.stepModel, input.teamRoleModel, effectiveAgentModel].find((model): model is string =>
+		Boolean(model?.trim()),
+	);
+	if (availableModels && availableModels.length === 0)
+		return {
+			requested,
+			candidates: [],
+			reason: "no configured Pi models available",
+		};
 	const rawModels = availableModels
-		? [input.overrideModel, input.stepModel, input.teamRoleModel, effectiveAgentModel, ...(input.fallbackModels ?? []), ...availableModels.map((model) => model.fullId)]
+		? [
+				input.overrideModel,
+				input.stepModel,
+				input.teamRoleModel,
+				effectiveAgentModel,
+				...(input.fallbackModels ?? []),
+				...availableModels.map((model) => model.fullId),
+			]
 		: [input.overrideModel, input.stepModel, input.teamRoleModel, effectiveAgentModel, ...(input.fallbackModels ?? []), parentModel];
 	// Fix (Round 18): when an agent has `model: false` (frontmatter) the
 	// inherited `parentModel` (= session chính's model, e.g. minimax-M3) IS the
@@ -345,11 +381,12 @@ export function buildConfiguredModelRouting(input: {
 			return isAvailableModel(model.trim(), availableModels);
 		});
 	const candidates = buildModelCandidates(configuredModels[0], configuredModels.slice(1), availableModels, preferredProvider);
-	const reason = requested && candidates[0] && resolveModelCandidate(requested, availableModels, preferredProvider) !== candidates[0]
-		? "requested model unavailable; selected configured Pi fallback"
-		: candidates.length > 1
-			? "configured Pi fallback chain"
-			: undefined;
+	const reason =
+		requested && candidates[0] && resolveModelCandidate(requested, availableModels, preferredProvider) !== candidates[0]
+			? "requested model unavailable; selected configured Pi fallback"
+			: candidates.length > 1
+				? "configured Pi fallback chain"
+				: undefined;
 	// F7 scope gate: when `scopeModelsPatterns` is configured, check the
 	// resolved model. Caller-supplied (override/step/team role) out-of-scope
 	// is a HARD ERROR (we surface it via the verdict AND throw, so spawn aborts

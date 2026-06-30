@@ -8,7 +8,7 @@
  */
 
 import { createHash, type Hash } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { logInternalError } from "../utils/internal-error.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ export function computeStructuralSignature(content: string, filePath: string): s
 		if (
 			// Function/method declarations
 			/^(export\s+)?(async\s+)?function\s/.test(trimmed) ||
-			/^\w+\s*\(/.test(trimmed) && !/^(if|for|while|switch|return|throw|await)/.test(trimmed) ||
+			(/^\w+\s*\(/.test(trimmed) && !/^(if|for|while|switch|return|throw|await)/.test(trimmed)) ||
 			// Class declarations
 			/^(export\s+)?(abstract\s+)?class\s/.test(trimmed) ||
 			/^(public|private|protected|static|readonly|abstract)\s/.test(trimmed) ||
@@ -147,10 +147,7 @@ export function saveFingerprintBaseline(storePath: string, fingerprints: Map<str
  *
  * Only returns STRUCTURAL changes in the `modified` field.
  */
-export function computeFingerprintDelta(
-	baseline: Map<string, FileFingerprint>,
-	current: Map<string, FileFingerprint>,
-): FingerprintDelta {
+export function computeFingerprintDelta(baseline: Map<string, FileFingerprint>, current: Map<string, FileFingerprint>): FingerprintDelta {
 	const added: string[] = [];
 	const removed: string[] = [];
 	const modified: FileFingerprint[] = [];

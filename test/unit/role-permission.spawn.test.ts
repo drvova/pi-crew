@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { checkSubagentSpawnPermission, currentCrewRole } from "../../src/runtime/role-permission.ts";
 
 test("read-only crew roles are denied recursive Agent/crew_agent spawning", () => {
@@ -23,6 +23,12 @@ test("write roles and parent sessions may spawn subagents", () => {
 });
 
 test("currentCrewRole prefers canonical PI_CREW_ROLE over legacy env", () => {
-	assert.equal(currentCrewRole({ PI_CREW_ROLE: "executor", PI_TEAMS_ROLE: "explorer" } as NodeJS.ProcessEnv), "executor");
+	assert.equal(
+		currentCrewRole({
+			PI_CREW_ROLE: "executor",
+			PI_TEAMS_ROLE: "explorer",
+		} as NodeJS.ProcessEnv),
+		"executor",
+	);
 	assert.equal(currentCrewRole({ PI_TEAMS_ROLE: "explorer" } as NodeJS.ProcessEnv), "explorer");
 });

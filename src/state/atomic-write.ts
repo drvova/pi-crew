@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { logInternalError } from "../utils/internal-error.ts";
-import { isWorkerAtomicWriterEnabled, atomicWriteFileViaWorker } from "./worker-atomic-writer.ts";
 import { sleepSync } from "../utils/sleep.ts";
+import { atomicWriteFileViaWorker, isWorkerAtomicWriterEnabled } from "./worker-atomic-writer.ts";
 
 function hashContent(content: string): string {
 	return crypto.createHash("sha256").update(content, "utf-8").digest("hex");
@@ -68,7 +68,9 @@ export function isSymlinkSafePath(filePath: string): boolean {
 							// Found existing ancestor — join with remaining non-existent parts
 							realBase = path.join(resolved, path.relative(walk, baseDir));
 							break;
-						} catch { /* not found yet, keep walking */ }
+						} catch {
+							/* not found yet, keep walking */
+						}
 					}
 					const realDirNorm = realDir.endsWith(path.sep) ? realDir : realDir + path.sep;
 					const realBaseNorm = realBase.endsWith(path.sep) ? realBase : realBase + path.sep;
@@ -84,7 +86,11 @@ export function isSymlinkSafePath(filePath: string): boolean {
 					if (typeof process.getuid === "function" && realStat.uid !== process.getuid()) {
 						const systemTmp = (typeof os.tmpdir === "function" ? os.tmpdir() : "/tmp").toLowerCase();
 						let realSystemTmp = systemTmp;
-						try { realSystemTmp = fs.realpathSync(systemTmp).toLowerCase(); } catch { /* ok */ }
+						try {
+							realSystemTmp = fs.realpathSync(systemTmp).toLowerCase();
+						} catch {
+							/* ok */
+						}
 						const realDirLower = realDir.toLowerCase();
 						const dirNorm = realDirLower.endsWith(path.sep) ? realDirLower : realDirLower + path.sep;
 						const tmpNorm = realSystemTmp.endsWith(path.sep) ? realSystemTmp : realSystemTmp + path.sep;
@@ -95,11 +101,14 @@ export function isSymlinkSafePath(filePath: string): boolean {
 						// Also accept canonical system temp paths:
 						// - /tmp → /private/tmp (macOS)
 						// - /var/folders → /private/var/folders (macOS)
-						const isSystemTmp = process.platform === "darwin" && (
-							realDirLower === "/tmp" || realDirLower === "/private/tmp" ||
-							realDirLower === "/var/folders" || realDirLower === "/private/var/folders" ||
-							realDirLower.startsWith("/var/folders/") || realDirLower.startsWith("/private/var/folders/")
-						);
+						const isSystemTmp =
+							process.platform === "darwin" &&
+							(realDirLower === "/tmp" ||
+								realDirLower === "/private/tmp" ||
+								realDirLower === "/var/folders" ||
+								realDirLower === "/private/var/folders" ||
+								realDirLower.startsWith("/var/folders/") ||
+								realDirLower.startsWith("/private/var/folders/"));
 						if (!isInsideTmp && !isAncestorOfTmp && !isSystemTmp) {
 							return false;
 						}
@@ -123,7 +132,6 @@ export function isSymlinkSafePath(filePath: string): boolean {
 			}
 			currentPath = dir;
 		}
-
 
 		// Issue 1 fix: verify baseDir itself is not a symlink.
 		// The while loop above walks ancestors but stops when currentPath reaches
@@ -152,18 +160,20 @@ export function isSymlinkSafePath(filePath: string): boolean {
 	}
 }
 
-
-
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isRetryableRenameError(error: unknown): boolean {
-	return Boolean(error && typeof error === "object" && "code" in error && RETRYABLE_RENAME_CODES.has(String((error as NodeJS.ErrnoException).code)));
+	return Boolean(
+		error && typeof error === "object" && "code" in error && RETRYABLE_RENAME_CODES.has(String((error as NodeJS.ErrnoException).code)),
+	);
 }
 
 function isRetryableLinkError(error: unknown): boolean {
-	return Boolean(error && typeof error === "object" && "code" in error && RETRYABLE_LINK_CODES.has(String((error as NodeJS.ErrnoException).code)));
+	return Boolean(
+		error && typeof error === "object" && "code" in error && RETRYABLE_LINK_CODES.has(String((error as NodeJS.ErrnoException).code)),
+	);
 }
 
 /**
@@ -181,7 +191,11 @@ function renameWithLinkSync(tempPath: string, filePath: string, retries = 8): vo
 			// path aliases are mixed (e.g. RUNNER~1 vs runneradmin). Use
 			// renameSync which handles this correctly via MoveFileEx.
 			if (process.platform === "win32") {
-				try { fs.unlinkSync(filePath); } catch { /* destination may not exist */ }
+				try {
+					fs.unlinkSync(filePath);
+				} catch {
+					/* destination may not exist */
+				}
 				try {
 					fs.renameSync(tempPath, filePath);
 					return;
@@ -191,7 +205,11 @@ function renameWithLinkSync(tempPath: string, filePath: string, retries = 8): vo
 				}
 			} else {
 				// First try to unlink any existing file at destination (hard links don't follow symlinks)
-				try { fs.unlinkSync(filePath); } catch { /* destination may not exist */ }
+				try {
+					fs.unlinkSync(filePath);
+				} catch {
+					/* destination may not exist */
+				}
 				// Create hard link - does NOT follow symlinks at filePath
 				fs.linkSync(tempPath, filePath);
 				// Successfully linked - now unlink the temp file
@@ -214,7 +232,11 @@ async function renameWithLinkAsync(tempPath: string, filePath: string, retries =
 	for (let attempt = 0; attempt <= retries; attempt++) {
 		try {
 			if (process.platform === "win32") {
-				try { await fs.promises.unlink(filePath); } catch { /* destination may not exist */ }
+				try {
+					await fs.promises.unlink(filePath);
+				} catch {
+					/* destination may not exist */
+				}
 				try {
 					await fs.promises.rename(tempPath, filePath);
 					return;
@@ -223,7 +245,11 @@ async function renameWithLinkAsync(tempPath: string, filePath: string, retries =
 					if (!isRetryableLinkError(renameError) || attempt === retries) break;
 				}
 			} else {
-				try { await fs.promises.unlink(filePath); } catch { /* destination may not exist */ }
+				try {
+					await fs.promises.unlink(filePath);
+				} catch {
+					/* destination may not exist */
+				}
 				await fs.promises.link(tempPath, filePath);
 				await fs.promises.unlink(tempPath);
 				return;
@@ -239,7 +265,12 @@ async function renameWithLinkAsync(tempPath: string, filePath: string, retries =
 	throw lastError;
 }
 
-export function renameWithRetry(tempPath: string, filePath: string, retries = 8, rename: (oldPath: string, newPath: string) => void = fs.renameSync): void {
+export function renameWithRetry(
+	tempPath: string,
+	filePath: string,
+	retries = 8,
+	rename: (oldPath: string, newPath: string) => void = fs.renameSync,
+): void {
 	let lastError: unknown;
 	for (let attempt = 0; attempt <= retries; attempt++) {
 		try {
@@ -262,7 +293,12 @@ export function renameWithRetry(tempPath: string, filePath: string, retries = 8,
 /** Test alias for renameWithRetry. */
 export const __test__renameWithRetry = renameWithRetry;
 
-export async function renameWithRetryAsync(tempPath: string, filePath: string, retries = 8, rename: (oldPath: string, newPath: string) => Promise<void> = (source, destination) => fs.promises.rename(source, destination)): Promise<void> {
+export async function renameWithRetryAsync(
+	tempPath: string,
+	filePath: string,
+	retries = 8,
+	rename: (oldPath: string, newPath: string) => Promise<void> = (source, destination) => fs.promises.rename(source, destination),
+): Promise<void> {
 	let lastError: unknown;
 	for (let attempt = 0; attempt <= retries; attempt++) {
 		try {
@@ -303,7 +339,11 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 			const r = fs.realpathSync.native(p);
 			return r.startsWith("\\\\?\\") ? r.slice(4) : r;
 		} catch {
-			try { return fs.realpathSync(p); } catch { return p; }
+			try {
+				return fs.realpathSync(p);
+			} catch {
+				return p;
+			}
 		}
 	};
 	const dirPath = path.dirname(filePath);
@@ -312,7 +352,7 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 	} catch (error) {
 		if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") {
 			// mkdir hit a short/long-name alias wall — retry with the canonical
-		// form. The write itself still targets the original filePath below.
+			// form. The write itself still targets the original filePath below.
 			const realDir = canonicalize(dirPath);
 			if (realDir !== dirPath) fs.mkdirSync(realDir, { recursive: true });
 		} else {
@@ -374,11 +414,14 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 		// Issue 4 fix: always clean up temp file, regardless of success or error path.
 		// This ensures no orphaned temp files remain when errors occur at any point.
 		if (fd !== undefined) {
-			try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort */ }
+			try {
+				fs.rmSync(tempPath, { force: true });
+			} catch {
+				/* best-effort */
+			}
 		}
 	}
 }
-
 
 export async function atomicWriteFileAsync(filePath: string, content: string): Promise<void> {
 	// Phase 1.5 (RFC 15): when the worker-thread atomic writer is enabled
@@ -412,7 +455,11 @@ export async function atomicWriteFileAsync(filePath: string, content: string): P
 			// The post-rename lstat check only runs on rename failure, so we must
 			// check BEFORE the rename to catch this TOCTOU race.
 			if (!isSymlinkSafePath(filePath)) {
-				try { await fs.promises.rm(tempPath, { force: true }); } catch { /* best-effort */ }
+				try {
+					await fs.promises.rm(tempPath, { force: true });
+				} catch {
+					/* best-effort */
+				}
 				throw new Error(`Refusing to rename: target became a symlink or inside untrusted directory: ${filePath}`);
 			}
 			// Issue 1 fix: use link+unlink instead of rename to avoid following symlinks
@@ -444,7 +491,6 @@ export async function atomicWriteFileAsync(filePath: string, content: string): P
 		throw error;
 	}
 }
-
 
 export function atomicWriteJson<T>(filePath: string, value: T): void {
 	atomicWriteFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
@@ -500,7 +546,13 @@ export function atomicWriteJsonCoalesced<T>(filePath: string, value: T, coalesce
 	timer.unref();
 	// Issue 2 fix: increment generation for each new entry
 	const generation = ++writeGeneration;
-	pendingAtomicWrites.set(filePath, { content, timer, coalesceMs, retryCount: 0, generation });
+	pendingAtomicWrites.set(filePath, {
+		content,
+		timer,
+		coalesceMs,
+		retryCount: 0,
+		generation,
+	});
 }
 
 function flushOnePendingAtomicWrite(filePath: string): void {

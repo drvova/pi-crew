@@ -1,28 +1,36 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	registerLiveAgent,
-	getLiveAgent,
-	listLiveAgents,
-	listActiveLiveAgents,
-	listLiveAgentsByWorkspace,
-	updateLiveAgentStatus,
-	clearLiveAgentsForTest,
-	steerLiveAgent,
-	followUpLiveAgent,
-	trackLiveAgentToolStart,
-	trackLiveAgentToolEnd,
-	trackLiveAgentTurnEnd,
-	trackLiveAgentResponseText,
-	markLiveAgentCompleted,
-	evictStaleLiveAgentHandles,
-	sendIrcMessage,
-	broadcastIrcMessage,
-	terminateLiveAgent,
-} from "../../src/runtime/live-agent-manager.ts";
+import { describe, it } from "node:test";
 import type { CrewAgentStatus } from "../../src/runtime/crew-agent-runtime.ts";
+import {
+	broadcastIrcMessage,
+	clearLiveAgentsForTest,
+	evictStaleLiveAgentHandles,
+	followUpLiveAgent,
+	getLiveAgent,
+	listActiveLiveAgents,
+	listLiveAgents,
+	listLiveAgentsByWorkspace,
+	markLiveAgentCompleted,
+	registerLiveAgent,
+	sendIrcMessage,
+	steerLiveAgent,
+	terminateLiveAgent,
+	trackLiveAgentResponseText,
+	trackLiveAgentToolEnd,
+	trackLiveAgentToolStart,
+	trackLiveAgentTurnEnd,
+	updateLiveAgentStatus,
+} from "../../src/runtime/live-agent-manager.ts";
 
-function makeHandle(overrides: { agentId?: string; taskId?: string; workspaceId?: string; status?: CrewAgentStatus; session?: Record<string, unknown> } = {}) {
+function makeHandle(
+	overrides: {
+		agentId?: string;
+		taskId?: string;
+		workspaceId?: string;
+		status?: CrewAgentStatus;
+		session?: Record<string, unknown>;
+	} = {},
+) {
 	return {
 		agentId: overrides.agentId ?? "agent_1",
 		taskId: overrides.taskId ?? "task_1",
@@ -31,7 +39,7 @@ function makeHandle(overrides: { agentId?: string; taskId?: string; workspaceId?
 		role: "executor",
 		agent: "test-agent",
 		session: overrides.session ?? {},
-		status: overrides.status ?? "running" as CrewAgentStatus,
+		status: overrides.status ?? ("running" as CrewAgentStatus),
 	};
 }
 
@@ -82,7 +90,9 @@ describe("live-agent-manager", () => {
 				runId: "run_1",
 				workspaceId: "ws_1",
 				session: {
-					steer: async (_text: string) => { steered = true; },
+					steer: async (_text: string) => {
+						steered = true;
+					},
 				},
 				status: "running",
 			});
@@ -232,7 +242,11 @@ describe("live-agent-manager", () => {
 				taskId: "task_1",
 				runId: "run_1",
 				workspaceId: "ws_1",
-				session: { steer: async (msg: string) => { steered = msg; } },
+				session: {
+					steer: async (msg: string) => {
+						steered = msg;
+					},
+				},
 				status: "running",
 			});
 			await steerLiveAgent("steer2", "go!");
@@ -262,7 +276,11 @@ describe("live-agent-manager", () => {
 				taskId: "task_1",
 				runId: "run_1",
 				workspaceId: "ws_1",
-				session: { prompt: async (msg: string) => { prompted = msg; } },
+				session: {
+					prompt: async (msg: string) => {
+						prompted = msg;
+					},
+				},
 				status: "running",
 			});
 			await followUpLiveAgent("fu2", "prompt msg");
@@ -364,7 +382,12 @@ describe("live-agent-manager", () => {
 		it("sendIrcMessage queues message for agent", () => {
 			clearLiveAgentsForTest();
 			registerLiveAgent(makeHandle({ agentId: "irc1" }));
-			sendIrcMessage("irc1", { from: "user", to: "irc1", content: "hello", timestamp: new Date().toISOString() });
+			sendIrcMessage("irc1", {
+				from: "user",
+				to: "irc1",
+				content: "hello",
+				timestamp: new Date().toISOString(),
+			});
 			const handle = getLiveAgent("irc1");
 			assert.equal(handle!.pendingMessages.length, 1);
 			assert.equal(handle!.pendingMessages[0].content, "hello");
@@ -376,7 +399,12 @@ describe("live-agent-manager", () => {
 			const handle = getLiveAgent("irc3")!;
 			// Fill up to 1000
 			for (let i = 0; i < 1001; i++) {
-				sendIrcMessage("irc3", { from: "user", to: "irc3", content: `msg_${i}`, timestamp: new Date().toISOString() });
+				sendIrcMessage("irc3", {
+					from: "user",
+					to: "irc3",
+					content: `msg_${i}`,
+					timestamp: new Date().toISOString(),
+				});
 			}
 			assert.equal(handle.pendingMessages.length, 1000);
 		});
@@ -386,7 +414,12 @@ describe("live-agent-manager", () => {
 			registerLiveAgent(makeHandle({ agentId: "bc1", status: "running" }));
 			registerLiveAgent(makeHandle({ agentId: "bc2", status: "running" }));
 			registerLiveAgent(makeHandle({ agentId: "bc3", status: "completed" }));
-			const recipients = broadcastIrcMessage("bc1", { from: "bc1", to: "*", content: "broadcast!", timestamp: new Date().toISOString() });
+			const recipients = broadcastIrcMessage("bc1", {
+				from: "bc1",
+				to: "*",
+				content: "broadcast!",
+				timestamp: new Date().toISOString(),
+			});
 			assert.ok(recipients.includes("bc2"));
 			assert.ok(!recipients.includes("bc1"));
 		});

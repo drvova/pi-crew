@@ -24,27 +24,24 @@
  * @see src/extension/team-tool/run.ts (handleRun — the reused machinery)
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { ChainTaskRunner } from "../../runtime/chain-runner.ts";
-import type { TaskPacket, TaskResult, Decision } from "../../runtime/handoff-manager.ts";
-import { loadRunManifestById, createRunPaths } from "../../state/state-store.ts";
+import type { Decision, TaskPacket, TaskResult } from "../../runtime/handoff-manager.ts";
 import { readIfSmallWithTee } from "../../runtime/task-output-context.ts";
+import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
+import { createRunPaths, loadRunManifestById } from "../../state/state-store.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../state/types.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
 import { textFromToolResult } from "../tool-result.ts";
-import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 import type { TeamContext } from "./context.ts";
-import * as fs from "node:fs";
-import * as path from "node:path";
 
 /**
  * Signature of `handleRun`, declared locally (type-only) to break the
  * import cycle with run.ts. Structurally identical to
  * `(params, ctx) => Promise<PiTeamsToolResult>`.
  */
-export type HandleRunFn = (
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-) => Promise<PiTeamsToolResult>;
+export type HandleRunFn = (params: TeamToolParamsValue, ctx: TeamContext) => Promise<PiTeamsToolResult>;
 
 /** Per-step team/workflow/model overrides forwarded from the chain invocation. */
 export interface ChainExecutorOverrides {
@@ -94,8 +91,8 @@ export function formatChainHistory(context: Record<string, unknown>): string {
 		if (entry.decisions?.length) {
 			lines.push("Decisions:");
 			for (const d of entry.decisions) {
-				const rationale = (d && typeof d === "object" && "rationale" in d) ? String(d.rationale) : "(undocumented)";
-				const decisionOutcome = (d && typeof d === "object" && "outcome" in d) ? String(d.outcome) : "";
+				const rationale = d && typeof d === "object" && "rationale" in d ? String(d.rationale) : "(undocumented)";
+				const decisionOutcome = d && typeof d === "object" && "outcome" in d ? String(d.outcome) : "";
 				lines.push(`- ${rationale}${decisionOutcome ? ` → ${decisionOutcome}` : ""}`);
 			}
 		}
@@ -133,19 +130,12 @@ export function formatChainHistory(context: Record<string, unknown>): string {
  *
  * Extracted as a pure function for unit testability (acceptance criterion 6b).
  */
-export function mapRunToTaskResult(
-	manifest: TeamRunManifest,
-	tasks: TeamTaskState[],
-): TaskResult {
+export function mapRunToTaskResult(manifest: TeamRunManifest, tasks: TeamTaskState[]): TaskResult {
 	// Determine outcome from manifest status.
 	let outcome: TaskResult["outcome"];
 	if (manifest.status === "completed") {
 		outcome = "success";
-	} else if (
-		manifest.status === "failed" ||
-		manifest.status === "blocked" ||
-		manifest.status === "cancelled"
-	) {
+	} else if (manifest.status === "failed" || manifest.status === "blocked" || manifest.status === "cancelled") {
 		outcome = "failure";
 	} else {
 		// queued / planning / running → not terminal yet
@@ -196,10 +186,7 @@ export function mapRunToTaskResult(
  *
  * Returns the concatenated output text, or undefined if no artifacts were readable.
  */
-export function readChainStepOutput(
-	manifest: TeamRunManifest,
-	tasks: TeamTaskState[],
-): string | undefined {
+export function readChainStepOutput(manifest: TeamRunManifest, tasks: TeamTaskState[]): string | undefined {
 	const parts: string[] = [];
 	for (const t of tasks) {
 		if (t.status !== "completed" || !t.resultArtifact?.path) continue;
@@ -247,21 +234,12 @@ export class ChainTeamRunExecutor implements ChainTaskRunner {
 		// 1. Format chain history into the goal — this is how context reaches the worker.
 		//    Mirrors the parentContext pattern in child-pi.ts (parent context + task delimiter).
 		const historyPrefix = formatChainHistory(context);
-		const enrichedGoal = historyPrefix
-			? `${historyPrefix}\n\n---\n# Current Chain Step\n${packet.goal}`
-			: packet.goal;
+		const enrichedGoal = historyPrefix ? `${historyPrefix}\n\n---\n# Current Chain Step\n${packet.goal}` : packet.goal;
 
 		// 2. Resolve team/workflow/model: step config (set by executeStep) → overrides → default.
-		const stepTeam =
-			(context.__chainStepTeam as string | undefined) ??
-			this.overrides.team ??
-			"default";
-		const stepWorkflow =
-			(context.__chainStepWorkflow as string | undefined) ??
-			this.overrides.workflow;
-		const stepModel =
-			(context.__chainStepModel as string | undefined) ??
-			this.overrides.model;
+		const stepTeam = (context.__chainStepTeam as string | undefined) ?? this.overrides.team ?? "default";
+		const stepWorkflow = (context.__chainStepWorkflow as string | undefined) ?? this.overrides.workflow;
+		const stepModel = (context.__chainStepModel as string | undefined) ?? this.overrides.model;
 
 		// 3. Call handleRun for the heavy lifting. async:false forces each step to
 		//    complete synchronously (overrides asyncByDefault) so the chain is sequential.
@@ -341,22 +319,22 @@ export function writeRunFixture(
 			retention: "run" as const,
 		};
 		if (!tasks || tasks.length === 0) {
-			tasks = [{
-				id: taskId,
-				runId,
-				role: "executor",
-				agent: "executor",
-				title: "(chain step fixture)",
-				status: "completed",
-				dependsOn: [],
-				cwd,
-				resultArtifact,
-			}];
+			tasks = [
+				{
+					id: taskId,
+					runId,
+					role: "executor",
+					agent: "executor",
+					title: "(chain step fixture)",
+					status: "completed",
+					dependsOn: [],
+					cwd,
+					resultArtifact,
+				},
+			];
 		} else {
 			// Attach resultArtifact to the first task if it doesn't have one.
-			tasks = tasks.map((t, i) => i === 0 && !t.resultArtifact
-				? { ...t, resultArtifact }
-				: t);
+			tasks = tasks.map((t, i) => (i === 0 && !t.resultArtifact ? { ...t, resultArtifact } : t));
 		}
 	}
 

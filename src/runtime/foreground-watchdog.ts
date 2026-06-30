@@ -90,11 +90,12 @@ export function startForegroundWatchdog(opts: WatchdogOptions): void {
 			if (!isActiveRunStatus(manifest.status)) {
 				const teamName = manifest.team ?? "unknown";
 				try {
-					pi.sendUserMessage(
-						`pi-crew run ${manifest.status}: ${runId} (${teamName}/${manifest.workflow ?? "default"})`,
-						{ deliverAs: "followUp" },
-					);
-				} catch { /* non-critical */ }
+					pi.sendUserMessage(`pi-crew run ${manifest.status}: ${runId} (${teamName}/${manifest.workflow ?? "default"})`, {
+						deliverAs: "followUp",
+					});
+				} catch {
+					/* non-critical */
+				}
 				activeWatchdogs.delete(runId);
 				return;
 			}
@@ -109,7 +110,9 @@ export function startForegroundWatchdog(opts: WatchdogOptions): void {
 						`pi-crew watchdog: run ${runId} appears hung (${detail}). Consider running team action='cancel' runId='${runId}' or team action='doctor'.`,
 						{ deliverAs: "followUp" },
 					);
-				} catch { /* non-critical */ }
+				} catch {
+					/* non-critical */
+				}
 				// Don't stop — keep monitoring. The assistant or user may intervene.
 			}
 		} catch {

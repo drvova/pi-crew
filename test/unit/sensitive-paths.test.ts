@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { describe, it } from "node:test";
 import { isSensitivePath } from "../../src/runtime/sensitive-paths.ts";
 
 describe("sensitive-paths", () => {

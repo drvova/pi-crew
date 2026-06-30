@@ -1,17 +1,9 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import {
-	saveRunMetrics,
-	loadRunMetrics,
-	getRunMetricsSummary,
-	type RunMetrics,
-} from "../../src/state/run-metrics.ts";
-import {
-	createTrackedTempDir,
-	removeTrackedTempDir,
-} from "../fixtures/test-tempdir.ts";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { getRunMetricsSummary, loadRunMetrics, type RunMetrics, saveRunMetrics } from "../../src/state/run-metrics.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 const SAMPLE_METRICS: RunMetrics = {
 	runId: "run-001",
@@ -136,12 +128,7 @@ describe("getRunMetricsSummary", () => {
 	});
 
 	it("skips non-JSON files gracefully", () => {
-		const metricsDir = path.join(
-			tmpDir,
-			".crew",
-			"state",
-			"metrics",
-		);
+		const metricsDir = path.join(tmpDir, ".crew", "state", "metrics");
 		fs.mkdirSync(metricsDir, { recursive: true });
 		fs.writeFileSync(path.join(metricsDir, "notes.txt"), "not json");
 		saveRunMetrics(tmpDir, SAMPLE_METRICS);

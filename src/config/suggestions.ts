@@ -30,9 +30,9 @@ export function levenshtein(a: string, b: string): number {
 		for (let j = 1; j <= lb; j++) {
 			const cost = a[i - 1] === b[j - 1] ? 0 : 1;
 			curr[j] = Math.min(
-				prev[j] + 1,       // deletion
-				curr[j - 1] + 1,   // insertion
-				prev[j - 1] + cost // substitution
+				prev[j] + 1, // deletion
+				curr[j - 1] + 1, // insertion
+				prev[j - 1] + cost, // substitution
 			);
 		}
 		const swap = prev;
@@ -49,11 +49,7 @@ const DEFAULT_MAX_DISTANCE = 3;
  * Find the closest matching key from a list of valid keys.
  * Case-insensitive. Returns null if no match within `maxDistance`.
  */
-export function findClosestKey(
-	input: string,
-	validKeys: readonly string[],
-	maxDistance: number = DEFAULT_MAX_DISTANCE,
-): string | null {
+export function findClosestKey(input: string, validKeys: readonly string[], maxDistance: number = DEFAULT_MAX_DISTANCE): string | null {
 	if (validKeys.length === 0) return null;
 
 	const lower = input.toLowerCase();
@@ -74,9 +70,6 @@ export function findClosestKey(
 /**
  * Convenience wrapper — suggest the closest known config key for a potentially mistyped input.
  */
-export function suggestConfigKey(
-	input: string,
-	knownKeys: readonly string[],
-): string | null {
+export function suggestConfigKey(input: string, knownKeys: readonly string[]): string | null {
 	return findClosestKey(input, knownKeys);
 }

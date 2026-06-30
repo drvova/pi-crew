@@ -1,11 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	t,
-	addTranslations,
-	listLocales,
-	__test__resetI18n,
-} from "../../src/i18n.ts";
+import test from "node:test";
+import { __test__resetI18n, addTranslations, listLocales, t } from "../../src/i18n.ts";
 
 /**
  * Round 26 (test coverage gaps): `i18n.ts` provides internationalization

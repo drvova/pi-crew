@@ -1,17 +1,10 @@
 import { statSync } from "node:fs";
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-	ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { loadConfig } from "../../config/config.ts";
 import type { MetricRegistry } from "../../observability/metric-registry.ts";
 import type { createManifestCache } from "../../runtime/manifest-cache.ts";
-import {
-	TeamToolParams,
-	type TeamToolParamsValue,
-} from "../../schema/team-tool-schema.ts";
+import { TeamToolParams, type TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 import { updatePiCrewPowerbar } from "../../ui/powerbar-publisher.ts";
 import type { createRunSnapshotCache } from "../../ui/run-snapshot-cache.ts";
 import { statusIcon, teamToolRenderer } from "../../ui/tool-renderers/index.ts";
@@ -47,17 +40,11 @@ type OnUpdate = (chunk: { content: { type: "text"; text: string }[] }) => void;
 
 export interface RegisterTeamToolDeps {
 	foregroundControllers: Map<string | symbol, AbortController>;
-	startForegroundRun: (
-		ctx: ExtensionContext,
-		runner: (signal?: AbortSignal) => Promise<void>,
-		runId?: string,
-	) => void;
+	startForegroundRun: (ctx: ExtensionContext, runner: (signal?: AbortSignal) => Promise<void>, runId?: string) => void;
 	abortForegroundRun: (runId: string) => boolean;
 	openLiveSidebar: (ctx: ExtensionContext, runId: string) => void;
 	getManifestCache: (cwd: string) => ReturnType<typeof createManifestCache>;
-	getRunSnapshotCache?: (
-		cwd: string,
-	) => ReturnType<typeof createRunSnapshotCache>;
+	getRunSnapshotCache?: (cwd: string) => ReturnType<typeof createRunSnapshotCache>;
 	getMetricRegistry?: () => MetricRegistry | undefined;
 	widgetState: CrewWidgetState;
 	onJsonEvent?: (taskId: string, runId: string, event: unknown) => void;
@@ -83,10 +70,7 @@ export function resolveCwdOverride(
 	}
 }
 
-export function registerTeamTool(
-	pi: ExtensionAPI,
-	deps: RegisterTeamToolDeps,
-): void {
+export function registerTeamTool(pi: ExtensionAPI, deps: RegisterTeamToolDeps): void {
 	const tool: ToolDefinition = {
 		name: "team",
 		label: "Team",
@@ -112,37 +96,22 @@ export function registerTeamTool(
 			deps.foregroundControllers.set(toolKey, controller);
 			const abort = (): void => controller.abort();
 			signal?.addEventListener("abort", abort, { once: true });
-			const stopProgress = startTeamToolProgressBinder(
-				onUpdate as OnUpdate | undefined,
-			);
+			const stopProgress = startTeamToolProgressBinder(onUpdate as OnUpdate | undefined);
 			try {
 				const resolved = params as TeamToolParamsValue;
 				const cwdOverride = resolveCwdOverride(ctx.cwd, resolved.cwd);
-				if (!cwdOverride.ok)
-					return toolResult(
-						cwdOverride.error,
-						{ action: resolved.action ?? "list", status: "error" },
-						true,
-					);
+				if (!cwdOverride.ok) return toolResult(cwdOverride.error, { action: resolved.action ?? "list", status: "error" }, true);
 				const toolCtx = withSessionId({ ...ctx, cwd: cwdOverride.cwd });
 				// Phase 1.5: Auto-set session name from team run context
-				if (
-					resolved.action === "run" &&
-					resolved.goal &&
-					!pi.getSessionName()
-				) {
-					const runLabel =
-						resolved.team ?? resolved.agent ?? "direct";
-					pi.setSessionName(
-						`pi-crew: ${runLabel}/${resolved.workflow ?? "default"} — ${resolved.goal.slice(0, 60)}`,
-					);
+				if (resolved.action === "run" && resolved.goal && !pi.getSessionName()) {
+					const runLabel = resolved.team ?? resolved.agent ?? "direct";
+					pi.setSessionName(`pi-crew: ${runLabel}/${resolved.workflow ?? "default"} — ${resolved.goal.slice(0, 60)}`);
 				}
 				const output = await handleTeamTool(resolved, {
 					...toolCtx,
 					signal: controller.signal,
 					metricRegistry: deps.getMetricRegistry?.(),
-					startForegroundRun: (runner, runId) =>
-						deps.startForegroundRun(toolCtx, runner, runId),
+					startForegroundRun: (runner, runId) => deps.startForegroundRun(toolCtx, runner, runId),
 					abortForegroundRun: deps.abortForegroundRun,
 					onRunStarted: (runId) => {
 						stopProgress.attach(toolCtx.cwd, runId);
@@ -151,11 +120,7 @@ export function registerTeamTool(
 					onJsonEvent: deps.onJsonEvent,
 					getRunSnapshotCache: deps.getRunSnapshotCache,
 				});
-				if (
-					resolved.action === "run" &&
-					!output.isError &&
-					typeof output.details?.runId === "string"
-				) {
+				if (resolved.action === "run" && !output.isError && typeof output.details?.runId === "string") {
 					pi.appendEntry("crew:run-started", {
 						runId: output.details.runId,
 						team: resolved.team,
@@ -169,21 +134,8 @@ export function registerTeamTool(
 				const config = loadConfig(toolCtx.cwd).config.ui;
 				const cache = deps.getManifestCache(toolCtx.cwd);
 				const snapshotCache = deps.getRunSnapshotCache?.(toolCtx.cwd);
-				updateCrewWidget(
-					toolCtx,
-					deps.widgetState,
-					config,
-					cache,
-					snapshotCache,
-				);
-				updatePiCrewPowerbar(
-					pi.events,
-					toolCtx.cwd,
-					config,
-					cache,
-					snapshotCache,
-					toolCtx,
-				);
+				updateCrewWidget(toolCtx, deps.widgetState, config, cache, snapshotCache);
+				updatePiCrewPowerbar(pi.events, toolCtx.cwd, config, cache, snapshotCache, toolCtx);
 				return output;
 			} finally {
 				signal?.removeEventListener("abort", abort);
@@ -198,12 +150,7 @@ export function registerTeamTool(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		renderResult(result: any, options: any, theme: any, context: any): any {
 			try {
-				return teamToolRenderer.renderResult(
-					result,
-					options,
-					theme,
-					context,
-				);
+				return teamToolRenderer.renderResult(result, options, theme, context);
 			} catch {
 				return new Text(statusIcon("completed", theme) + " done", 0, 0);
 			}
@@ -217,9 +164,7 @@ interface TeamToolProgressBinder {
 	stop: () => void;
 }
 
-function startTeamToolProgressBinder(
-	onUpdate: OnUpdate | undefined,
-): TeamToolProgressBinder {
+function startTeamToolProgressBinder(onUpdate: OnUpdate | undefined): TeamToolProgressBinder {
 	if (!onUpdate) {
 		return { attach: () => {}, stop: () => {} };
 	}
@@ -229,20 +174,14 @@ function startTeamToolProgressBinder(
 	const tick = (): void => {
 		try {
 			if (!cwd || !runId) {
-				const elapsed = Math.max(
-					0,
-					Math.round((Date.now() - startedAt) / 1000),
-				);
+				const elapsed = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
 				const msg = `team status=starting elapsed=${elapsed}s`;
 				onUpdate({ content: [{ type: "text", text: msg }] });
 				return;
 			}
 			const loaded = loadRunManifestById(cwd, runId);
 			if (!loaded) {
-				const elapsed = Math.max(
-					0,
-					Math.round((Date.now() - startedAt) / 1000),
-				);
+				const elapsed = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
 				const msg = `team run=${runId} elapsed=${elapsed}s (manifest pending)`;
 				onUpdate({ content: [{ type: "text", text: msg }] });
 				return;
@@ -264,11 +203,7 @@ function startTeamToolProgressBinder(
 			});
 			onUpdate({ content: [{ type: "text", text }] });
 		} catch (error) {
-			logInternalError(
-				"team-tool.progress",
-				error,
-				`runId=${runId ?? ""}`,
-			);
+			logInternalError("team-tool.progress", error, `runId=${runId ?? ""}`);
 		}
 	};
 	tick();

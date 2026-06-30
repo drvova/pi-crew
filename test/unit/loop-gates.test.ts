@@ -1,10 +1,10 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { shouldAutoResume, computeTaskProgressSignal } from "../../src/runtime/loop-gates.ts";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import type { AutoResumeRuntime, TaskProgressSignal } from "../../src/runtime/loop-gates.ts";
+import { computeTaskProgressSignal, shouldAutoResume } from "../../src/runtime/loop-gates.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
 /** Helper to create a minimal TeamTaskState. */
@@ -25,43 +25,83 @@ function makeTask(overrides: Partial<TeamTaskState> = {}): TeamTaskState {
 describe("shouldAutoResume", () => {
 	it("returns true when both gates pass", () => {
 		const runtime: AutoResumeRuntime = { autoResumeTurns: 0, maxTurns: 20 };
-		const progress: TaskProgressSignal = { editedFiles: true, producedArtifacts: false, ranTests: false };
+		const progress: TaskProgressSignal = {
+			editedFiles: true,
+			producedArtifacts: false,
+			ranTests: false,
+		};
 		assert.equal(shouldAutoResume(runtime, progress), true);
 	});
 
 	it("returns false when no progress signals are true (Gate 1 fails)", () => {
 		const runtime: AutoResumeRuntime = { autoResumeTurns: 0, maxTurns: 20 };
-		const progress: TaskProgressSignal = { editedFiles: false, producedArtifacts: false, ranTests: false };
+		const progress: TaskProgressSignal = {
+			editedFiles: false,
+			producedArtifacts: false,
+			ranTests: false,
+		};
 		assert.equal(shouldAutoResume(runtime, progress), false);
 	});
 
 	it("returns false when turn limit is reached (Gate 2 fails)", () => {
-		const runtime: AutoResumeRuntime = { autoResumeTurns: 20, maxTurns: 20 };
-		const progress: TaskProgressSignal = { editedFiles: true, producedArtifacts: true, ranTests: true };
+		const runtime: AutoResumeRuntime = {
+			autoResumeTurns: 20,
+			maxTurns: 20,
+		};
+		const progress: TaskProgressSignal = {
+			editedFiles: true,
+			producedArtifacts: true,
+			ranTests: true,
+		};
 		assert.equal(shouldAutoResume(runtime, progress), false);
 	});
 
 	it("returns true with producedArtifacts only", () => {
 		const runtime: AutoResumeRuntime = { autoResumeTurns: 5, maxTurns: 20 };
-		const progress: TaskProgressSignal = { editedFiles: false, producedArtifacts: true, ranTests: false };
+		const progress: TaskProgressSignal = {
+			editedFiles: false,
+			producedArtifacts: true,
+			ranTests: false,
+		};
 		assert.equal(shouldAutoResume(runtime, progress), true);
 	});
 
 	it("returns true with ranTests only", () => {
-		const runtime: AutoResumeRuntime = { autoResumeTurns: 19, maxTurns: 20 };
-		const progress: TaskProgressSignal = { editedFiles: false, producedArtifacts: false, ranTests: true };
+		const runtime: AutoResumeRuntime = {
+			autoResumeTurns: 19,
+			maxTurns: 20,
+		};
+		const progress: TaskProgressSignal = {
+			editedFiles: false,
+			producedArtifacts: false,
+			ranTests: true,
+		};
 		assert.equal(shouldAutoResume(runtime, progress), true);
 	});
 
 	it("returns false when exactly at turn limit with progress", () => {
-		const runtime: AutoResumeRuntime = { autoResumeTurns: 20, maxTurns: 20 };
-		const progress: TaskProgressSignal = { editedFiles: true, producedArtifacts: false, ranTests: false };
+		const runtime: AutoResumeRuntime = {
+			autoResumeTurns: 20,
+			maxTurns: 20,
+		};
+		const progress: TaskProgressSignal = {
+			editedFiles: true,
+			producedArtifacts: false,
+			ranTests: false,
+		};
 		assert.equal(shouldAutoResume(runtime, progress), false);
 	});
 
 	it("returns true when one below turn limit", () => {
-		const runtime: AutoResumeRuntime = { autoResumeTurns: 19, maxTurns: 20 };
-		const progress: TaskProgressSignal = { editedFiles: true, producedArtifacts: false, ranTests: false };
+		const runtime: AutoResumeRuntime = {
+			autoResumeTurns: 19,
+			maxTurns: 20,
+		};
+		const progress: TaskProgressSignal = {
+			editedFiles: true,
+			producedArtifacts: false,
+			ranTests: false,
+		};
 		assert.equal(shouldAutoResume(runtime, progress), true);
 	});
 });
@@ -153,7 +193,9 @@ describe("computeTaskProgressSignal", () => {
 
 	it("detects ranTests from task diagnostics with test keywords", () => {
 		const task = makeTask({
-			diagnostics: { result: "all tests passed: 42 tests ran successfully" },
+			diagnostics: {
+				result: "all tests passed: 42 tests ran successfully",
+			},
 		});
 		const signal = computeTaskProgressSignal(task, "/tmp");
 		assert.equal(signal.ranTests, true);
@@ -161,7 +203,17 @@ describe("computeTaskProgressSignal", () => {
 
 	it("detects ranTests from task result field with test keywords", () => {
 		const task = makeTask({
-			terminalEvidence: [{ operation: "worker", status: "completed", finishedAt: "2026-01-01T00:01:00Z", reason: { code: "success", message: "Test suite completed: 15 passed, 0 failed" } }],
+			terminalEvidence: [
+				{
+					operation: "worker",
+					status: "completed",
+					finishedAt: "2026-01-01T00:01:00Z",
+					reason: {
+						code: "success",
+						message: "Test suite completed: 15 passed, 0 failed",
+					},
+				},
+			],
 		});
 		const signal = computeTaskProgressSignal(task, "/tmp");
 		assert.equal(signal.ranTests, true);

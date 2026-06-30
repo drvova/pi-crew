@@ -3,16 +3,12 @@
  * @see src/extension/team-tool/handle-schedule.ts
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	handleSchedule,
-	handleListScheduled,
-	registerCrewScheduler,
-} from "../../src/extension/team-tool/handle-schedule.ts";
-import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
+import { describe, it } from "node:test";
 import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import { handleListScheduled, handleSchedule, registerCrewScheduler } from "../../src/extension/team-tool/handle-schedule.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
+import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeCtx(cwd: string): TeamContext {
@@ -42,10 +38,7 @@ describe("handleSchedule", () => {
 	it("returns error when no schedule spec (cron/interval/once) is given", () => {
 		const tmp = createTrackedTempDir("sched-test-");
 		try {
-			const res = handleSchedule(
-				makeParams({ goal: "run tests" }),
-				makeCtx(tmp),
-			);
+			const res = handleSchedule(makeParams({ goal: "run tests" }), makeCtx(tmp));
 
 			assert.strictEqual(res.isError, true);
 			const text = textFromToolResult(res);
@@ -154,16 +147,10 @@ describe("handleSchedule", () => {
 		const tmp = createTrackedTempDir("sched-test-");
 		try {
 			const future = new Date(Date.now() + 3600_000).toISOString();
-			const res = handleSchedule(
-				makeParams({ goal: "test", once: future }),
-				makeCtx(tmp),
-			);
+			const res = handleSchedule(makeParams({ goal: "test", once: future }), makeCtx(tmp));
 
 			const text = textFromToolResult(res);
-			assert.ok(
-				text.includes("Team: default"),
-				`Expected Team: default, got: ${text}`,
-			);
+			assert.ok(text.includes("Team: default"), `Expected Team: default, got: ${text}`);
 		} finally {
 			removeTrackedTempDir(tmp);
 		}

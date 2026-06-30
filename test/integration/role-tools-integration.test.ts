@@ -1,12 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { handleTeamTool } from "../../src/extension/team-tool.ts";
-import { firstText } from "../fixtures/tool-result-helpers.ts";
-import { unregisterActiveRun } from "../../src/state/active-run-registry.ts";
+import * as path from "node:path";
+import test from "node:test";
 import { getToolConfig, hasToolRestrictions } from "../../src/config/role-tools.ts";
+import { handleTeamTool } from "../../src/extension/team-tool.ts";
+import { unregisterActiveRun } from "../../src/state/active-run-registry.ts";
+import { firstText } from "../fixtures/tool-result-helpers.ts";
 
 test("fast-fix team uses explorer role with tool restrictions", async () => {
 	// Set mock mode
@@ -29,23 +29,16 @@ test("fast-fix team uses explorer role with tool restrictions", async () => {
 		assert.ok(hasToolRestrictions("explorer"), "explorer should have tool restrictions");
 
 		// Run fast-fix (uses explorer)
-		const run = await handleTeamTool(
-			{ action: "run", team: "fast-fix", goal: "test role tools" },
-			{ cwd }
-		);
+		const run = await handleTeamTool({ action: "run", team: "fast-fix", goal: "test role tools" }, { cwd });
 
 		runId = run.details.runId;
 
 		// Check that run completed
 		const status = await handleTeamTool({ action: "status", runId }, { cwd });
 		const statusText = firstText(status);
-		
-		// Run should complete (even in mock mode)
-		assert.ok(
-			statusText.includes("completed") || statusText.includes("failed"),
-			`Expected run to complete, got: ${statusText}`
-		);
 
+		// Run should complete (even in mock mode)
+		assert.ok(statusText.includes("completed") || statusText.includes("failed"), `Expected run to complete, got: ${statusText}`);
 	} finally {
 		if (runId) unregisterActiveRun(runId);
 		process.env.PI_TEAMS_MOCK_CHILD_PI = previousMock ?? "";
@@ -74,21 +67,14 @@ test("default team uses executor role without restrictions", async () => {
 		assert.equal(hasToolRestrictions("executor"), false);
 
 		// Run default (uses executor)
-		const run = await handleTeamTool(
-			{ action: "run", team: "default", goal: "test executor" },
-			{ cwd }
-		);
+		const run = await handleTeamTool({ action: "run", team: "default", goal: "test executor" }, { cwd });
 
 		runId = run.details.runId;
 
 		const status = await handleTeamTool({ action: "status", runId }, { cwd });
 		const statusText = firstText(status);
-		
-		assert.ok(
-			statusText.includes("completed") || statusText.includes("failed"),
-			`Expected run to complete, got: ${statusText}`
-		);
 
+		assert.ok(statusText.includes("completed") || statusText.includes("failed"), `Expected run to complete, got: ${statusText}`);
 	} finally {
 		if (runId) unregisterActiveRun(runId);
 		process.env.PI_TEAMS_MOCK_CHILD_PI = previousMock ?? "";
@@ -100,7 +86,18 @@ test("default team uses executor role without restrictions", async () => {
 
 test("role-tools config exports are available", () => {
 	// Sanity check that all expected roles have configs
-	const roles = ["explorer", "analyst", "planner", "executor", "reviewer", "writer", "security-reviewer", "test-engineer", "critic", "verifier"];
+	const roles = [
+		"explorer",
+		"analyst",
+		"planner",
+		"executor",
+		"reviewer",
+		"writer",
+		"security-reviewer",
+		"test-engineer",
+		"critic",
+		"verifier",
+	];
 	for (const role of roles) {
 		const config = getToolConfig(role);
 		// executor is intentionally unrestricted; all others must have a real

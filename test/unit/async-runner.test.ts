@@ -1,12 +1,23 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import * as path from "node:path";
 import * as os from "node:os";
-import { getBackgroundRunnerCommand, resolveJitiRegisterPath, resolveTypeScriptLoader, nodeSupportsStripTypes, BACKGROUND_RUNNER_ENV_ALLOWLIST } from "../../src/runtime/async-runner.ts";
+import * as path from "node:path";
+import test from "node:test";
+import {
+	BACKGROUND_RUNNER_ENV_ALLOWLIST,
+	getBackgroundRunnerCommand,
+	nodeSupportsStripTypes,
+	resolveJitiRegisterPath,
+	resolveTypeScriptLoader,
+} from "../../src/runtime/async-runner.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 
 test("background runner uses the jiti runtime loader for installed TypeScript", () => {
-	const command = getBackgroundRunnerCommand("/tmp/node_modules/pi-crew/src/runtime/background-runner.ts", "/tmp/project", "run_123", "/tmp/node_modules/pi-crew/node_modules/jiti/lib/jiti-register.mjs");
+	const command = getBackgroundRunnerCommand(
+		"/tmp/node_modules/pi-crew/src/runtime/background-runner.ts",
+		"/tmp/project",
+		"run_123",
+		"/tmp/node_modules/pi-crew/node_modules/jiti/lib/jiti-register.mjs",
+	);
 	assert.equal(command.loader, "jiti");
 	// Memory limit is prepended first
 	assert.equal(command.args[0], "--max-old-space-size=512");
@@ -26,13 +37,19 @@ test("background runner uses the jiti runtime loader for installed TypeScript", 
 test("background runner resolves hoisted jiti loader path", () => {
 	const root = path.join("tmp", "workspace", "node_modules", "pi-crew");
 	const hoisted = path.resolve(path.join("tmp", "workspace", "node_modules", "jiti", "lib", "jiti-register.mjs"));
-	assert.equal(resolveJitiRegisterPath(root, (candidate) => candidate === hoisted), hoisted);
+	assert.equal(
+		resolveJitiRegisterPath(root, (candidate) => candidate === hoisted),
+		hoisted,
+	);
 });
 
 test("background runner resolves local-source jiti loader in parent node_modules", () => {
 	const root = path.join(os.tmpdir(), "pi-crew-local");
 	const local = path.resolve(path.join(os.tmpdir(), "pi-crew-local", "node_modules", "jiti", "lib", "jiti-register.mjs"));
-	assert.equal(resolveJitiRegisterPath(root, (candidate) => candidate === local), local);
+	assert.equal(
+		resolveJitiRegisterPath(root, (candidate) => candidate === local),
+		local,
+	);
 });
 
 test("background runner command fails fast when no loader is available", () => {
@@ -131,13 +148,20 @@ test("M1 regression: background-runner env allowlist omits model provider API ke
 	// fatal-error reports (--report-on-fatalerror writes environmentVariables
 	// unredacted). See security review M1.
 	const PROVIDER_KEYS = [
-		"MINIMAX_API_KEY", "MINIMAX_GROUP_ID",
-		"OPENAI_API_KEY", "OPENAI_ORG_ID",
+		"MINIMAX_API_KEY",
+		"MINIMAX_GROUP_ID",
+		"OPENAI_API_KEY",
+		"OPENAI_ORG_ID",
 		"ANTHROPIC_API_KEY",
-		"GOOGLE_API_KEY", "GOOGLE_GENERATIVE_LANGUAGE_API_KEY",
-		"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
-		"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION",
-		"ZEU_API_KEY", "ZERODEV_API_KEY",
+		"GOOGLE_API_KEY",
+		"GOOGLE_GENERATIVE_LANGUAGE_API_KEY",
+		"AZURE_OPENAI_API_KEY",
+		"AZURE_OPENAI_ENDPOINT",
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_REGION",
+		"ZEU_API_KEY",
+		"ZERODEV_API_KEY",
 	];
 	for (const key of PROVIDER_KEYS) {
 		assert.ok(

@@ -6,9 +6,9 @@
  * session reloads via pi.appendEntry().
  */
 
-import type { CrewTheme } from "../theme-adapter.ts";
-import { formatTokens, formatDuration, truncLine } from "../tool-render.ts";
 import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
+import type { CrewTheme } from "../theme-adapter.ts";
+import { formatDuration, formatTokens, truncLine } from "../tool-render.ts";
 
 // ── State ──────────────────────────────────────────────────────────────
 
@@ -37,9 +37,12 @@ export function makeBriefEntry(enabled: boolean): BriefStateEntry {
 export function restoreBriefState(entries: Iterable<unknown>): void {
 	for (const entry of entries) {
 		if (
-			typeof entry === "object" && entry !== null &&
-			"type" in entry && (entry as Record<string, unknown>).type === "custom" &&
-			"customType" in entry && (entry as Record<string, unknown>).customType === BRIEF_ENTRY_TYPE &&
+			typeof entry === "object" &&
+			entry !== null &&
+			"type" in entry &&
+			(entry as Record<string, unknown>).type === "custom" &&
+			"customType" in entry &&
+			(entry as Record<string, unknown>).customType === BRIEF_ENTRY_TYPE &&
 			"data" in entry
 		) {
 			const data = (entry as Record<string, unknown>).data;
@@ -58,16 +61,26 @@ export { BRIEF_ENTRY_TYPE };
 export function briefToolResult(toolName: string, result: { content?: unknown[] }, theme: CrewTheme): string {
 	const text = extractText(result?.content);
 	switch (toolName) {
-		case "read": return briefRead(text, theme);
-		case "bash": return briefBash(text, theme);
-		case "edit": return briefEdit(text, theme);
-		case "write": return briefWrite(text, theme);
-		case "find": return briefFind(text, theme);
-		case "grep": return briefGrep(text, theme);
-		case "ls": return briefLs(text, theme);
-		case "team": return briefTeam(result, theme);
-		case "agent": return briefAgent(result, theme);
-		default: return briefDefault(text, theme);
+		case "read":
+			return briefRead(text, theme);
+		case "bash":
+			return briefBash(text, theme);
+		case "edit":
+			return briefEdit(text, theme);
+		case "write":
+			return briefWrite(text, theme);
+		case "find":
+			return briefFind(text, theme);
+		case "grep":
+			return briefGrep(text, theme);
+		case "ls":
+			return briefLs(text, theme);
+		case "team":
+			return briefTeam(result, theme);
+		case "agent":
+			return briefAgent(result, theme);
+		default:
+			return briefDefault(text, theme);
 	}
 }
 
@@ -96,9 +109,7 @@ function briefEdit(text: string, theme: CrewTheme): string {
 	if (added === 0 && removed === 0) {
 		return theme.fg("success", "→ edited");
 	}
-	return theme.fg("success", "→ edited ") +
-		theme.fg("toolDiffAdded", `+${added} `) +
-		theme.fg("toolDiffRemoved", `-${removed}`);
+	return theme.fg("success", "→ edited ") + theme.fg("toolDiffAdded", `+${added} `) + theme.fg("toolDiffRemoved", `-${removed}`);
 }
 
 function briefWrite(text: string, theme: CrewTheme): string {
@@ -127,13 +138,17 @@ function briefLs(text: string, theme: CrewTheme): string {
 function briefTeam(result: { content?: unknown[] }, theme: CrewTheme): string {
 	// Try to extract structured details
 	const details = (result as Record<string, unknown>).details ?? result;
-	const d = typeof details === "object" && details !== null ? details as Record<string, unknown> : {};
+	const d = typeof details === "object" && details !== null ? (details as Record<string, unknown>) : {};
 	const status = typeof d.status === "string" ? d.status : "";
 	const runId = typeof d.runId === "string" ? d.runId : "";
-	const icon = status === "completed" ? theme.fg("success", "✓")
-		: status === "failed" ? theme.fg("error", "✗")
-		: status === "running" ? theme.fg("warning", "⟳")
-		: theme.fg("dim", "○");
+	const icon =
+		status === "completed"
+			? theme.fg("success", "✓")
+			: status === "failed"
+				? theme.fg("error", "✗")
+				: status === "running"
+					? theme.fg("warning", "⟳")
+					: theme.fg("dim", "○");
 
 	// Agent records summary
 	const records = (d.agentRecords ?? d.results) as CrewAgentRecord[] | undefined;
@@ -154,12 +169,15 @@ function briefTeam(result: { content?: unknown[] }, theme: CrewTheme): string {
 
 function briefAgent(result: { content?: unknown[] }, theme: CrewTheme): string {
 	const d = (result as Record<string, unknown>).details ?? result;
-	const data = typeof d === "object" && d !== null ? d as Record<string, unknown> : {};
+	const data = typeof d === "object" && d !== null ? (d as Record<string, unknown>) : {};
 	const status = typeof data.status === "string" ? data.status : "";
 	const agentId = typeof data.agentId === "string" ? data.agentId : "agent";
-	const icon = status === "completed" ? theme.fg("success", "\u2713")
-		: status === "failed" ? theme.fg("error", "\u2717")
-		: theme.fg("dim", "\u25CB");
+	const icon =
+		status === "completed"
+			? theme.fg("success", "\u2713")
+			: status === "failed"
+				? theme.fg("error", "\u2717")
+				: theme.fg("dim", "\u25CB");
 	// P3: Show duration and tokens when available
 	const parts: string[] = [agentId];
 	if (data.durationMs) parts.push(formatDuration(data.durationMs as number));

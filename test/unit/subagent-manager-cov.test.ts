@@ -1,12 +1,8 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	SubagentManager,
-	savePersistedSubagentRecord,
-	readPersistedSubagentRecord,
-} from "../../src/runtime/subagent-manager.ts";
-import type { SubagentRecord, SubagentSpawnOptions } from "../../src/runtime/subagent-manager.ts";
+import { describe, it } from "node:test";
 import type { PiTeamsToolResult } from "../../src/extension/tool-result.ts";
+import type { SubagentRecord, SubagentSpawnOptions } from "../../src/runtime/subagent-manager.ts";
+import { readPersistedSubagentRecord, SubagentManager, savePersistedSubagentRecord } from "../../src/runtime/subagent-manager.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeSpawnOptions(cwd: string, overrides: Partial<SubagentSpawnOptions> = {}): SubagentSpawnOptions {
@@ -84,10 +80,7 @@ describe("subagent-manager", () => {
 				runnerCalled = true;
 				return makeResult();
 			};
-			const record = mgr.spawn(
-				makeSpawnOptions(tmpDir, { background: false }),
-				runner,
-			);
+			const record = mgr.spawn(makeSpawnOptions(tmpDir, { background: false }), runner);
 			assert.ok(record.id);
 			assert.equal(record.status, "running");
 			// Wait for completion (no runId → immediate completion)
@@ -100,10 +93,7 @@ describe("subagent-manager", () => {
 			const tmpDir = createTrackedTempDir("pi-crew-subagent-");
 			const mgr = new SubagentManager(4);
 			const runner = async () => makeResult();
-			const record = mgr.spawn(
-				makeSpawnOptions(tmpDir, { background: false }),
-				runner,
-			);
+			const record = mgr.spawn(makeSpawnOptions(tmpDir, { background: false }), runner);
 			assert.ok(mgr.getRecord(record.id));
 			assert.equal(mgr.getRecord(record.id)!.id, record.id);
 			await mgr.waitForAll();
@@ -129,10 +119,7 @@ describe("subagent-manager", () => {
 				await new Promise(() => {});
 				return makeResult();
 			};
-			const record = mgr.spawn(
-				makeSpawnOptions(tmpDir, { background: false }),
-				runner,
-			);
+			const record = mgr.spawn(makeSpawnOptions(tmpDir, { background: false }), runner);
 			assert.equal(mgr.abort(record.id), true);
 			const updated = mgr.getRecord(record.id);
 			assert.equal(updated!.status, "stopped");

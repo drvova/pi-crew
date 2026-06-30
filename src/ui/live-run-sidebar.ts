@@ -1,20 +1,20 @@
 import * as fs from "node:fs";
 import type { CrewUiConfig } from "../config/config.ts";
-import { readCrewAgents } from "../runtime/crew-agent-records.ts";
 import { applyAttentionState, resolveCrewControlConfig } from "../runtime/agent-control.ts";
+import { readCrewAgents } from "../runtime/crew-agent-records.ts";
 import { formatTaskGraphLines, waitingReason } from "../runtime/task-display.ts";
 import { loadRunManifestById } from "../state/state-store.ts";
-import { aggregateUsage, formatUsage } from "../state/usage.ts";
 import type { TeamTaskState } from "../state/types.ts";
+import { aggregateUsage, formatUsage } from "../state/usage.ts";
 import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
 import { pad, truncate } from "../utils/visual.ts";
+import { Box, Text } from "./layout-primitives.ts";
+import { runEventBus } from "./run-event-bus.ts";
+import type { RunSnapshotCache, RunUiSnapshot } from "./snapshot-types.ts";
+import { spinnerBucket, spinnerFrame } from "./spinner.ts";
 import { colorizeStatusGlyphs, iconForStatus } from "./status-colors.ts";
 import type { CrewTheme } from "./theme-adapter.ts";
 import { asCrewTheme, subscribeThemeChange } from "./theme-adapter.ts";
-import { Box, Text } from "./layout-primitives.ts";
-import type { RunSnapshotCache, RunUiSnapshot } from "./snapshot-types.ts";
-import { spinnerBucket, spinnerFrame } from "./spinner.ts";
-import { runEventBus } from "./run-event-bus.ts";
 
 const TASK_READ_TTL_MS = 200;
 
@@ -68,7 +68,14 @@ export class LiveRunSidebar {
 	private autoCloseTimeout?: NodeJS.Timeout;
 	private hasAutoClosed = false;
 
-	constructor(input: { cwd: string; runId: string; done: Done; theme?: unknown; config?: CrewUiConfig; snapshotCache?: RunSnapshotCache }) {
+	constructor(input: {
+		cwd: string;
+		runId: string;
+		done: Done;
+		theme?: unknown;
+		config?: CrewUiConfig;
+		snapshotCache?: RunSnapshotCache;
+	}) {
 		this.cwd = input.cwd;
 		this.runId = input.runId;
 		this.done = input.done;
@@ -77,18 +84,49 @@ export class LiveRunSidebar {
 		this.snapshotCache = input.snapshotCache;
 		this.unsubscribeTheme = subscribeThemeChange(input.theme, () => this.invalidate());
 		this.unsubscribeEventBus = (() => {
-		const unsub1 = runEventBus.onChannel("run:state", () => this.invalidate());
-		const unsub2 = runEventBus.onChannel("worker:lifecycle", () => this.invalidate());
-		const unsub3 = runEventBus.onChannel("ui:invalidate", () => this.invalidate());
-		return () => { unsub1(); unsub2(); unsub3(); };
-	})();
+			const unsub1 = runEventBus.onChannel("run:state", () => this.invalidate());
+			const unsub2 = runEventBus.onChannel("worker:lifecycle", () => this.invalidate());
+			const unsub3 = runEventBus.onChannel("ui:invalidate", () => this.invalidate());
+			return () => {
+				unsub1();
+				unsub2();
+				unsub3();
+			};
+		})();
 	}
 
-	private buildSignature(manifestStatus: string, tasks: TeamTaskState[], agents: ReturnType<typeof readCrewAgents>, waitingCount: number, snapshot?: RunUiSnapshot): string {
+	private buildSignature(
+		manifestStatus: string,
+		tasks: TeamTaskState[],
+		agents: ReturnType<typeof readCrewAgents>,
+		waitingCount: number,
+		snapshot?: RunUiSnapshot,
+	): string {
 		const animation = agents.some((agent) => agent.status === "running") ? `:spin=${spinnerBucket()}` : "";
 		if (snapshot) return `${snapshot.signature}:${waitingCount}${animation}`;
-		const taskSig = tasks.map((task) => `${task.id}:${task.status}:${task.startedAt ?? ""}:${task.finishedAt ?? ""}:${task.agentProgress?.currentTool ?? ""}:${task.agentProgress?.toolCount ?? 0}:${task.agentProgress?.tokens ?? 0}:${task.usage ? JSON.stringify(task.usage) : ""}`).join("|");
-		const agentSig = agents.map((agent) => [agent.id, agent.status, agent.startedAt, agent.completedAt ?? "", agent.progress?.currentTool ?? "", agent.progress?.toolCount ?? 0, agent.progress?.tokens ?? 0, agent.progress?.turns ?? 0, agent.progress?.lastActivityAt ?? "", agent.progress?.recentOutput?.at(-1) ?? "", agent.toolUses ?? 0].join(":")).join("|");
+		const taskSig = tasks
+			.map(
+				(task) =>
+					`${task.id}:${task.status}:${task.startedAt ?? ""}:${task.finishedAt ?? ""}:${task.agentProgress?.currentTool ?? ""}:${task.agentProgress?.toolCount ?? 0}:${task.agentProgress?.tokens ?? 0}:${task.usage ? JSON.stringify(task.usage) : ""}`,
+			)
+			.join("|");
+		const agentSig = agents
+			.map((agent) =>
+				[
+					agent.id,
+					agent.status,
+					agent.startedAt,
+					agent.completedAt ?? "",
+					agent.progress?.currentTool ?? "",
+					agent.progress?.toolCount ?? 0,
+					agent.progress?.tokens ?? 0,
+					agent.progress?.turns ?? 0,
+					agent.progress?.lastActivityAt ?? "",
+					agent.progress?.recentOutput?.at(-1) ?? "",
+					agent.toolUses ?? 0,
+				].join(":"),
+			)
+			.join("|");
 		return `${manifestStatus}|${agents.length}|${waitingCount}|${taskSig}|${agentSig}${animation}`;
 	}
 
@@ -152,9 +190,10 @@ export class LiveRunSidebar {
 			// user sees *why* a run ended without having to switch panes. The reason
 			// is already computed on the consumed snapshot (cancellationReason).
 			const TERMINAL_WITH_REASON = ["failed", "cancelled", "stopped"];
-			const reasonSuffix = TERMINAL_WITH_REASON.includes(run.status) && snapshot?.cancellationReason
-				? ` · ${truncate(snapshot.cancellationReason, 40)}`
-				: "";
+			const reasonSuffix =
+				TERMINAL_WITH_REASON.includes(run.status) && snapshot?.cancellationReason
+					? ` · ${truncate(snapshot.cancellationReason, 40)}`
+					: "";
 			const lines: string[] = [
 				border("╭", "─", "╮", w),
 				line(`${this.theme.fg("accent", "▐")} ${this.theme.bold("pi-crew live sidebar")}`, w),
@@ -164,11 +203,27 @@ export class LiveRunSidebar {
 				line(`Active agents (${active.length})`, w),
 			];
 			for (const agent of active.slice(0, 8)) {
-				const status = iconForStatus(agent.status, { runningGlyph: spinnerFrame(agent.taskId) });
-				const usage = agent.usage ? formatUsage(agent.usage) : agent.progress?.tokens ? `tokens=${agent.progress.tokens}` : "usage=pending";
+				const status = iconForStatus(agent.status, {
+					runningGlyph: spinnerFrame(agent.taskId),
+				});
+				const usage = agent.usage
+					? formatUsage(agent.usage)
+					: agent.progress?.tokens
+						? `tokens=${agent.progress.tokens}`
+						: "usage=pending";
 				lines.push(line(`${status} ${agent.taskId} ${agent.role}->${agent.agent}`, w));
-				lines.push(line(`  ${agent.routing ? `model ${agent.routing.requested ? `${agent.routing.requested} → ` : ""}${agent.routing.resolved}` : agent.model ? `model ${agent.model}` : "model pending"}`, w));
-				lines.push(line(`  ${agent.progress?.currentTool ? `tool ${agent.progress.currentTool} · ` : ""}${agent.toolUses ?? 0} tools · ${usage}`, w));
+				lines.push(
+					line(
+						`  ${agent.routing ? `model ${agent.routing.requested ? `${agent.routing.requested} → ` : ""}${agent.routing.resolved}` : agent.model ? `model ${agent.model}` : "model pending"}`,
+						w,
+					),
+				);
+				lines.push(
+					line(
+						`  ${agent.progress?.currentTool ? `tool ${agent.progress.currentTool} · ` : ""}${agent.toolUses ?? 0} tools · ${usage}`,
+						w,
+					),
+				);
 			}
 			if (!active.length) lines.push(line("- none", w));
 			lines.push(border("├", "─", "┤", w), line(`Waiting tasks (${waiting.length})`, w));
@@ -180,7 +235,12 @@ export class LiveRunSidebar {
 			lines.push(border("├", "─", "┤", w), line(`Completed agents (${completed.length})`, w));
 			for (const agent of completed) {
 				const status = iconForStatus(agent.status === "running" ? "stopped" : agent.status);
-				lines.push(line(`${status} ${agent.taskId} ${agent.model ? `· ${agent.model}` : ""}${agent.usage ? ` · ${formatUsage(agent.usage)}` : ""}`, w));
+				lines.push(
+					line(
+						`${status} ${agent.taskId} ${agent.model ? `· ${agent.model}` : ""}${agent.usage ? ` · ${formatUsage(agent.usage)}` : ""}`,
+						w,
+					),
+				);
 			}
 			if (completed.length === 0) lines.push(line("- none", w));
 			lines.push(border("├", "─", "┤", w));
@@ -192,7 +252,7 @@ export class LiveRunSidebar {
 			const isTerminal = ["completed", "failed", "cancelled", "blocked"].includes(run.status);
 			const hasActiveAgents = agents.some((a) => a.status === "running");
 			if (isTerminal && !hasActiveAgents && !this.hasAutoClosed) {
-				const autoCloseMs = (this.config?.autoCloseDashboardMs ?? 3000);
+				const autoCloseMs = this.config?.autoCloseDashboardMs ?? 3000;
 				if (autoCloseMs > 0) {
 					this.autoCloseTimeout = setTimeout(() => {
 						this.hasAutoClosed = true;
@@ -207,7 +267,10 @@ export class LiveRunSidebar {
 				this.autoCloseTimeout = undefined;
 			}
 			lines.push(border("╰", "─", "╯", w));
-			this.cachedLines = renderLines(lines.map((entry) => this.colorLine(entry)), w);
+			this.cachedLines = renderLines(
+				lines.map((entry) => this.colorLine(entry)),
+				w,
+			);
 			this.cachedSignature = signature;
 			this.cachedWidth = w;
 		}

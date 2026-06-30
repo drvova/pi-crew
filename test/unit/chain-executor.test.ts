@@ -13,12 +13,12 @@
  * @see src/extension/team-tool/chain-dispatch.ts
  */
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import { execSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { test } from "node:test";
 
 // bug-023: the chain feature's writeRunFixture → loadRunManifestById roundtrip
 // fails on Windows CI temp paths (O_NOFOLLOW + 8.3/junction canonicalization in
@@ -26,23 +26,25 @@ import { execSync } from "node:child_process";
 // not a v0.9.14 regression; needs a Windows VM to verify a security-sensitive
 // fix. See docs/bugs/bug-023-chain-windows-path-resolution.md.
 const isWindows = process.platform === "win32";
-const WIN32_SKIP = { skip: isWindows ? "bug-023: Windows path resolution — see docs/bugs/bug-023-chain-windows-path-resolution.md" : false } as const;
+const WIN32_SKIP = {
+	skip: isWindows ? "bug-023: Windows path resolution — see docs/bugs/bug-023-chain-windows-path-resolution.md" : false,
+} as const;
 
-import { ChainRunner, parseChainString } from "../../src/runtime/chain-runner.ts";
-import { HandoffManager, type TaskPacket } from "../../src/runtime/handoff-manager.ts";
+import { handleChainRun } from "../../src/extension/team-tool/chain-dispatch.ts";
 import {
 	ChainTeamRunExecutor,
 	formatChainHistory,
+	type HandleRunFn,
 	mapRunToTaskResult,
 	readChainStepOutput,
 	writeRunFixture,
-	type HandleRunFn,
 } from "../../src/extension/team-tool/chain-executor.ts";
-import { handleChainRun } from "../../src/extension/team-tool/chain-dispatch.ts";
+import type { TeamContext } from "../../src/extension/team-tool/context.ts";
+import type { PiTeamsToolResult } from "../../src/extension/tool-result.ts";
+import { ChainRunner, parseChainString } from "../../src/runtime/chain-runner.ts";
+import { HandoffManager, type TaskPacket } from "../../src/runtime/handoff-manager.ts";
 import { __test__clearManifestCache, loadRunManifestById } from "../../src/state/state-store.ts";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
-import type { PiTeamsToolResult } from "../../src/extension/tool-result.ts";
-import type { TeamContext } from "../../src/extension/team-tool/context.ts";
 
 // ─── fixtures / helpers ──────────────────────────────────────────────────
 
@@ -54,7 +56,10 @@ function makeTempCwd(): string {
 	// pi-crew/state/runs/) — the one the crew UI reads — creating persistent
 	// "zombie agent" rows after every test run. git-init keeps every fixture
 	// inside <tmpdir>/.crew/, auto-cleaned by rmSync(dir) in each test.
-	execSync("git init -q", { cwd: dir, stdio: ["ignore", "ignore", "ignore"] });
+	execSync("git init -q", {
+		cwd: dir,
+		stdio: ["ignore", "ignore", "ignore"],
+	});
 	return dir;
 }
 
@@ -211,10 +216,7 @@ test("(b) mapRunToTaskResult: failed manifest → failure + error", () => {
 
 test("(b) mapRunToTaskResult: completed run with a failed task → partial", () => {
 	const manifest = makeManifest({ status: "completed" });
-	const tasks = [
-		makeTask({ status: "completed" }),
-		makeTask({ status: "failed", error: "one failed" }),
-	];
+	const tasks = [makeTask({ status: "completed" }), makeTask({ status: "failed", error: "one failed" })];
 	const res = mapRunToTaskResult(manifest, tasks);
 	assert.equal(res.outcome, "partial");
 });
@@ -232,7 +234,10 @@ test("(d)(empirical) 3-step chain runs sequentially and captures 3 runIds", WIN3
 	const cwd = makeTempCwd();
 	const mock = makeMockHandleRun({ cwd });
 	const ctx: TeamContext = { cwd };
-	const executor = new ChainTeamRunExecutor({ handleRun: mock.handleRun, ctx });
+	const executor = new ChainTeamRunExecutor({
+		handleRun: mock.handleRun,
+		ctx,
+	});
 	const runner = new ChainRunner(executor, new HandoffManager());
 
 	const spec = parseChainString('"Count to 3" -> "Add 2 to the previous number" -> "Write the result"');
@@ -256,7 +261,10 @@ test("(empirical) @team reference step resolves to that team in handleRun params
 	const cwd = makeTempCwd();
 	const mock = makeMockHandleRun({ cwd });
 	const ctx: TeamContext = { cwd };
-	const executor = new ChainTeamRunExecutor({ handleRun: mock.handleRun, ctx });
+	const executor = new ChainTeamRunExecutor({
+		handleRun: mock.handleRun,
+		ctx,
+	});
 	const runner = new ChainRunner(executor, new HandoffManager());
 
 	const spec = parseChainString("@research -> @implement");
@@ -271,7 +279,10 @@ test("(empirical) inline-goal step resolves to default team", async () => {
 	const cwd = makeTempCwd();
 	const mock = makeMockHandleRun({ cwd });
 	const ctx: TeamContext = { cwd };
-	const executor = new ChainTeamRunExecutor({ handleRun: mock.handleRun, ctx });
+	const executor = new ChainTeamRunExecutor({
+		handleRun: mock.handleRun,
+		ctx,
+	});
 	const runner = new ChainRunner(executor, new HandoffManager());
 
 	const spec = parseChainString('"just a goal"');
@@ -307,7 +318,10 @@ test("(e) failed step (no runId) → failure; chain stops by default", async () 
 	const cwd = makeTempCwd();
 	const mock = makeMockHandleRun({ cwd, failRunId: true });
 	const ctx: TeamContext = { cwd };
-	const executor = new ChainTeamRunExecutor({ handleRun: mock.handleRun, ctx });
+	const executor = new ChainTeamRunExecutor({
+		handleRun: mock.handleRun,
+		ctx,
+	});
 	const runner = new ChainRunner(executor, new HandoffManager());
 
 	const spec = parseChainString('"step one" -> "step two" -> "step three"');
@@ -325,7 +339,10 @@ test("(e) continueOnError=true runs all steps despite failures", async () => {
 	const cwd = makeTempCwd();
 	const mock = makeMockHandleRun({ cwd, failRunId: true });
 	const ctx: TeamContext = { cwd };
-	const executor = new ChainTeamRunExecutor({ handleRun: mock.handleRun, ctx });
+	const executor = new ChainTeamRunExecutor({
+		handleRun: mock.handleRun,
+		ctx,
+	});
 	const runner = new ChainRunner(executor, new HandoffManager());
 
 	const spec = parseChainString('"a" -> "b" -> "c"');
@@ -346,11 +363,18 @@ test("(e) a failed team-run manifest maps to outcome failure mid-chain", WIN32_S
 		call += 1;
 		const runId = `mixed-${call}`;
 		const status = call === 2 ? "failed" : "completed";
-		writeRunFixture(cwd, runId, { status, summary: call === 2 ? "mid fail" : undefined });
+		writeRunFixture(cwd, runId, {
+			status,
+			summary: call === 2 ? "mid fail" : undefined,
+		});
 		void params;
 		return {
 			content: [{ type: "text", text: runId }],
-			details: { action: "run", status: status === "failed" ? "error" : "ok", runId },
+			details: {
+				action: "run",
+				status: status === "failed" ? "error" : "ok",
+				runId,
+			},
 		};
 	};
 	const ctx: TeamContext = { cwd };
@@ -375,11 +399,7 @@ test("handleChainRun returns a structured summary with runIds in data", WIN32_SK
 	const mock = makeMockHandleRun({ cwd });
 	const ctx: TeamContext = { cwd };
 
-	const res = await handleChainRun(
-		{ chain: '"Count to 3" -> "Write result"' },
-		ctx,
-		mock.handleRun,
-	);
+	const res = await handleChainRun({ chain: '"Count to 3" -> "Write result"' }, ctx, mock.handleRun);
 
 	assert.equal(res.isError, false);
 	assert.equal(res.details.status, "ok");
@@ -397,7 +417,10 @@ test("handleChainRun returns a structured summary with runIds in data", WIN32_SK
 test("handleChainRun errors on empty chain string", async () => {
 	const cwd = makeTempCwd();
 	const ctx: TeamContext = { cwd };
-	const noopHandle: HandleRunFn = async () => ({ content: [], details: { action: "run", status: "ok" } });
+	const noopHandle: HandleRunFn = async () => ({
+		content: [],
+		details: { action: "run", status: "ok" },
+	});
 
 	const res = await handleChainRun({ chain: "   " }, ctx, noopHandle);
 	assert.equal(res.isError, true);
@@ -432,11 +455,13 @@ test("(b) readChainStepOutput returns undefined when no completed tasks have res
 
 test("(c) formatChainHistory renders entry.outputText in Output section", () => {
 	const out = formatChainHistory({
-		__chainHistory: [{
-			step: "s1",
-			outcome: "success",
-			outputText: "1, 2, 3",
-		}],
+		__chainHistory: [
+			{
+				step: "s1",
+				outcome: "success",
+				outputText: "1, 2, 3",
+			},
+		],
 	});
 	assert.match(out, /Output:/);
 	assert.match(out, /1, 2, 3/);
@@ -447,7 +472,10 @@ test("(d)(semantic) step 1's worker output appears in step 2's goal", WIN32_SKIP
 	const cwd = makeTempCwd();
 	const mock = makeMockHandleRun({ cwd, resultText: "1, 2, 3" });
 	const ctx: TeamContext = { cwd };
-	const executor = new ChainTeamRunExecutor({ handleRun: mock.handleRun, ctx });
+	const executor = new ChainTeamRunExecutor({
+		handleRun: mock.handleRun,
+		ctx,
+	});
 	const runner = new ChainRunner(executor, new HandoffManager());
 
 	const spec = parseChainString('"Say the numbers 1, 2, 3" -> "What was the last number?"');

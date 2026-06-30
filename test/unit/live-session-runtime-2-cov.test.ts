@@ -1,19 +1,16 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import test from "node:test";
-import {
-	probeLiveSessionRuntime,
-} from "../../src/runtime/live-session-runtime.ts";
+import test, { describe, it } from "node:test";
 import {
 	clearLiveAgentsForTest,
-	registerLiveAgent,
 	getLiveAgent,
-	trackLiveAgentToolStart,
-	trackLiveAgentToolEnd,
-	trackLiveAgentTurnEnd,
 	markLiveAgentCompleted,
+	registerLiveAgent,
+	trackLiveAgentToolEnd,
+	trackLiveAgentToolStart,
+	trackLiveAgentTurnEnd,
 } from "../../src/runtime/live-agent-manager.ts";
 import { clearLiveControlRealtimeForTest } from "../../src/runtime/live-control-realtime.ts";
+import { probeLiveSessionRuntime } from "../../src/runtime/live-session-runtime.ts";
 
 test.afterEach(() => {
 	clearLiveAgentsForTest();
@@ -79,10 +76,34 @@ describe("live agent lifecycle (session-runtime context)", () => {
 	});
 
 	it("supports multiple concurrent agents with independent state", () => {
-		const s1 = { steer: async () => {}, prompt: async () => {}, abort: async () => {}, dispose: () => {} };
-		const s2 = { steer: async () => {}, prompt: async () => {}, abort: async () => {}, dispose: () => {} };
-		registerLiveAgent({ agentId: "multi-1", taskId: "t1", runId: "r1", workspaceId: "ws", session: s1, status: "running" });
-		registerLiveAgent({ agentId: "multi-2", taskId: "t2", runId: "r1", workspaceId: "ws", session: s2, status: "running" });
+		const s1 = {
+			steer: async () => {},
+			prompt: async () => {},
+			abort: async () => {},
+			dispose: () => {},
+		};
+		const s2 = {
+			steer: async () => {},
+			prompt: async () => {},
+			abort: async () => {},
+			dispose: () => {},
+		};
+		registerLiveAgent({
+			agentId: "multi-1",
+			taskId: "t1",
+			runId: "r1",
+			workspaceId: "ws",
+			session: s1,
+			status: "running",
+		});
+		registerLiveAgent({
+			agentId: "multi-2",
+			taskId: "t2",
+			runId: "r1",
+			workspaceId: "ws",
+			session: s2,
+			status: "running",
+		});
 
 		trackLiveAgentToolStart("multi-1", "tool-a");
 		trackLiveAgentToolStart("multi-2", "tool-b");
@@ -98,8 +119,20 @@ describe("live agent lifecycle (session-runtime context)", () => {
 	});
 
 	it("handles turn with compaction tracking", () => {
-		const s = { steer: async () => {}, prompt: async () => {}, abort: async () => {}, dispose: () => {} };
-		registerLiveAgent({ agentId: "compact", taskId: "t", runId: "r", workspaceId: "ws", session: s, status: "running" });
+		const s = {
+			steer: async () => {},
+			prompt: async () => {},
+			abort: async () => {},
+			dispose: () => {},
+		};
+		registerLiveAgent({
+			agentId: "compact",
+			taskId: "t",
+			runId: "r",
+			workspaceId: "ws",
+			session: s,
+			status: "running",
+		});
 
 		trackLiveAgentTurnEnd("compact", false);
 		trackLiveAgentTurnEnd("compact", true);

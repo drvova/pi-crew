@@ -1,11 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	trackTaskUsage,
-	getTaskUsage,
-	getRunUsage,
-	clearAllTaskUsage,
-} from "../../src/runtime/usage-tracker.ts";
+import test from "node:test";
+import { clearAllTaskUsage, getRunUsage, getTaskUsage, trackTaskUsage } from "../../src/runtime/usage-tracker.ts";
 
 test("trackTaskUsage accumulates usage for same taskId", () => {
 	clearAllTaskUsage();
@@ -36,8 +31,16 @@ test("clearAllTaskUsage resets all tracked data", () => {
 	trackTaskUsage("task-a", { input: 1 });
 	trackTaskUsage("task-b", { output: 2 });
 	clearAllTaskUsage();
-	assert.deepEqual(getTaskUsage("task-a"), { input: 0, output: 0, cacheWrite: 0 });
-	assert.deepEqual(getTaskUsage("task-b"), { input: 0, output: 0, cacheWrite: 0 });
+	assert.deepEqual(getTaskUsage("task-a"), {
+		input: 0,
+		output: 0,
+		cacheWrite: 0,
+	});
+	assert.deepEqual(getTaskUsage("task-b"), {
+		input: 0,
+		output: 0,
+		cacheWrite: 0,
+	});
 });
 
 test("concurrent tracking does not lose increments (simulate rapid sequential calls)", () => {

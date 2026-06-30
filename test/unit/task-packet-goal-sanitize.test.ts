@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeTaskText, buildTaskPacket } from "../../src/runtime/task-packet.ts";
+import { describe, it } from "node:test";
 import type { BuildTaskPacketInput } from "../../src/runtime/task-packet.ts";
+import { buildTaskPacket, sanitizeTaskText } from "../../src/runtime/task-packet.ts";
 
 describe("task-packet goal sanitization", () => {
 	it("sanitizeTaskText strips zero-width characters", () => {

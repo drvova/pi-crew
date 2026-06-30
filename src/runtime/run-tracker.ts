@@ -7,20 +7,14 @@ import { isFinishedRunStatus } from "./process-status.ts";
 
 export interface ActiveRunPromise {
 	promise: Promise<{ manifest: TeamRunManifest; tasks: TeamTaskState[] }>;
-	resolve: (value: {
-		manifest: TeamRunManifest;
-		tasks: TeamTaskState[];
-	}) => void;
+	resolve: (value: { manifest: TeamRunManifest; tasks: TeamTaskState[] }) => void;
 	reject: (reason: unknown) => void;
 }
 
 const activeRunPromises = new Map<string, ActiveRunPromise>();
 
 export function registerRunPromise(runId: string): ActiveRunPromise {
-	let resolve!: (value: {
-		manifest: TeamRunManifest;
-		tasks: TeamTaskState[];
-	}) => void;
+	let resolve!: (value: { manifest: TeamRunManifest; tasks: TeamTaskState[] }) => void;
 	let reject!: (reason: unknown) => void;
 	const promise = new Promise<{
 		manifest: TeamRunManifest;
@@ -34,10 +28,7 @@ export function registerRunPromise(runId: string): ActiveRunPromise {
 	return entry;
 }
 
-export function resolveRunPromise(
-	runId: string,
-	result: { manifest: TeamRunManifest; tasks: TeamTaskState[] },
-): void {
+export function resolveRunPromise(runId: string, result: { manifest: TeamRunManifest; tasks: TeamTaskState[] }): void {
 	const entry = activeRunPromises.get(runId);
 	if (entry) {
 		entry.resolve(result);
@@ -78,13 +69,7 @@ export async function waitForRun(
 	if (entry) {
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const timeoutPromise = new Promise<never>((_, reject) => {
-			timer = setTimeout(
-				() =>
-					reject(
-						new Error(`waitForRun timed out after ${timeoutMs}ms`),
-					),
-				timeoutMs,
-			);
+			timer = setTimeout(() => reject(new Error(`waitForRun timed out after ${timeoutMs}ms`)), timeoutMs);
 		});
 		try {
 			return await Promise.race([entry.promise, timeoutPromise]);
@@ -102,16 +87,9 @@ export async function waitForRun(
 			// projects (see issue #29). Without this, the hardcoded `.crew/state/runs/`
 			// path never resolves in projects that use the `.pi/` layout, the throw
 			// escapes via subagent-manager.ts:281, and pi crashes with uncaughtException.
-			const runDir = path.join(
-				projectCrewRoot(cwd),
-				"state",
-				"runs",
-				runId,
-			);
+			const runDir = path.join(projectCrewRoot(cwd), "state", "runs", runId);
 			if (!fs.existsSync(runDir)) {
-				throw new Error(
-					`Run ${runId} not found. No run directory at ${runDir}`,
-				);
+				throw new Error(`Run ${runId} not found. No run directory at ${runDir}`);
 			}
 		}
 		const fresh = loadRunManifestById(cwd, runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency;

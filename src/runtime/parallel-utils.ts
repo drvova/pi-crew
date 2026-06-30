@@ -76,9 +76,7 @@ async function mapConcurrentWithSignal<T, R>(
 	let aborted = false;
 
 	const abortController = new AbortController();
-	const workerSignal = signal
-		? AbortSignal.any([signal, abortController.signal])
-		: abortController.signal;
+	const workerSignal = signal ? AbortSignal.any([signal, abortController.signal]) : abortController.signal;
 
 	let rejectFirst: (error: unknown) => void;
 	const firstErrorPromise = new Promise<never>((_, reject) => {
@@ -140,14 +138,14 @@ export function aggregateParallelOutputs(
 				r.exitCode === -1
 					? "SKIPPED"
 					: r.exitCode == null || r.exitCode !== 0
-							? `FAILED (exit code ${r.exitCode})${r.error ? `: ${r.error}` : ""}`
-							: r.error
-								? `WARNING: ${r.error}`
-								: !hasOutput && r.outputTargetPath && r.outputTargetExists === false
-									? `EMPTY OUTPUT (expected output file missing: ${r.outputTargetPath})`
-									: !hasOutput && !r.outputTargetPath
-										? "EMPTY OUTPUT (no textual response returned)"
-										: "";
+						? `FAILED (exit code ${r.exitCode})${r.error ? `: ${r.error}` : ""}`
+						: r.error
+							? `WARNING: ${r.error}`
+							: !hasOutput && r.outputTargetPath && r.outputTargetExists === false
+								? `EMPTY OUTPUT (expected output file missing: ${r.outputTargetPath})`
+								: !hasOutput && !r.outputTargetPath
+									? "EMPTY OUTPUT (no textual response returned)"
+									: "";
 			const body = status ? (hasOutput ? `${status}\n${r.output}` : status) : r.output;
 			return `${header}\n${body}`;
 		})

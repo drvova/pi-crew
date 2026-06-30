@@ -12,10 +12,7 @@ const MAX_EVENT_LINES = 1000;
 const MAX_DATA_SIZE = 100000; // 100KB per line
 
 /** Read newline-delimited lines from a text ReadableStream, buffering partial chunks. */
-async function* readLines(
-	stream: ReadableStream<string>,
-	signal?: AbortSignal,
-): AsyncGenerator<string> {
+async function* readLines(stream: ReadableStream<string>, signal?: AbortSignal): AsyncGenerator<string> {
 	const reader = stream.getReader();
 	let buffer = "";
 	try {
@@ -29,9 +26,7 @@ async function* readLines(
 			buffer += value;
 			let idx: number;
 			while ((idx = buffer.indexOf("\n")) !== -1) {
-				const line = buffer.endsWith("\r\n", idx + 1)
-					? buffer.slice(0, idx - 1)
-					: buffer.slice(0, idx);
+				const line = buffer.endsWith("\r\n", idx + 1) ? buffer.slice(0, idx - 1) : buffer.slice(0, idx);
 				yield line;
 				buffer = buffer.slice(idx + 1);
 			}
@@ -42,10 +37,7 @@ async function* readLines(
 }
 
 /** Parse SSE events from a byte stream */
-export async function* readSseEvents(
-	stream: ReadableStream<Uint8Array>,
-	signal?: AbortSignal,
-): AsyncGenerator<ServerSentEvent> {
+export async function* readSseEvents(stream: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<ServerSentEvent> {
 	const textStream = stream.pipeThrough(new TextDecoderStream() as unknown as TransformStream<Uint8Array, string>);
 	let currentEvent: string | null = null;
 	let currentData: string[] = [];
@@ -127,15 +119,11 @@ export async function* readSseEvents(
 }
 
 /** Parse SSE events and yield parsed JSON data objects */
-export async function* readSseJson<T>(
-	stream: ReadableStream<Uint8Array>,
-	signal?: AbortSignal,
-): AsyncGenerator<T> {
+export async function* readSseJson<T>(stream: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<T> {
 	for await (const evt of readSseEvents(stream, signal)) {
 		try {
 			const parsed: T = JSON.parse(evt.data) as T;
 			yield parsed;
-		} catch {
-		}
+		} catch {}
 	}
 }

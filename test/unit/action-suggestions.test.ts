@@ -1,10 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	KNOWN_TEAM_ACTIONS,
-	suggestAction,
-	formatActionSuggestion,
-} from "../../src/extension/action-suggestions.ts";
+import test from "node:test";
+import { formatActionSuggestion, KNOWN_TEAM_ACTIONS, suggestAction } from "../../src/extension/action-suggestions.ts";
 
 test("KNOWN_TEAM_ACTIONS includes the core lifecycle actions", () => {
 	for (const a of ["run", "status", "wait", "list", "get", "cancel", "summary", "help"]) {

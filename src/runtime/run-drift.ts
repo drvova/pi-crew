@@ -6,19 +6,19 @@
  * Repair handlers are idempotent — safe to run multiple times.
  */
 
-import { existsSync, statSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { logInternalError } from "../utils/internal-error.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
 export type DriftKind =
-	| "stale-process"         // Heartbeat timeout (existing)
-	| "orphaned-claim"        // Task claim without task
-	| "orphaned-worktree"     // Worktree dir without active run
-	| "missing-timestamps"    // State files without timestamps
-	| "status-divergence"     // Manifest status ≠ status file
-	| "unregistered-run";     // State dir but no manifest
+	| "stale-process" // Heartbeat timeout (existing)
+	| "orphaned-claim" // Task claim without task
+	| "orphaned-worktree" // Worktree dir without active run
+	| "missing-timestamps" // State files without timestamps
+	| "status-divergence" // Manifest status ≠ status file
+	| "unregistered-run"; // State dir but no manifest
 
 export interface DriftReport {
 	kind: DriftKind;
@@ -34,7 +34,12 @@ export interface DriftContext {
 	/** Active run IDs (from registry) */
 	activeRunIds: Set<string>;
 	/** Manifest content if available */
-	manifest?: { runId: string; status: string; cwd: string; [k: string]: unknown };
+	manifest?: {
+		runId: string;
+		status: string;
+		cwd: string;
+		[k: string]: unknown;
+	};
 }
 
 // ── Detectors ────────────────────────────────────────────────────────────
@@ -180,13 +185,7 @@ export function detectUnregisteredRun(ctx: DriftContext): DriftReport | null {
 
 // ── Reconciliation Loop ─────────────────────────────────────────────────
 
-const ALL_DETECTORS = [
-	detectOrphanedClaim,
-	detectOrphanedWorktree,
-	detectMissingTimestamps,
-	detectStatusDivergence,
-	detectUnregisteredRun,
-];
+const ALL_DETECTORS = [detectOrphanedClaim, detectOrphanedWorktree, detectMissingTimestamps, detectStatusDivergence, detectUnregisteredRun];
 
 /**
  * Run all drift detectors and collect reports.

@@ -4,8 +4,9 @@
  * Previously only added to TeamToolParamsValue interface → Pi's schema validation
  * rejected them at the tool boundary.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { Value } from "@sinclair/typebox/value";
 import { TeamToolParams } from "../../src/schema/team-tool-schema.ts";
 

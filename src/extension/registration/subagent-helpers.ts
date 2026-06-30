@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadRunManifestById } from "../../state/state-store.ts";
-import { savePersistedSubagentRecord, type SubagentRecord, type SubagentSpawnOptions } from "../../subagents/manager.ts";
+import { type SubagentRecord, type SubagentSpawnOptions, savePersistedSubagentRecord } from "../../subagents/manager.ts";
 import { resolveRealContainedPath } from "../../utils/safe-paths.ts";
 
 interface FollowUpCapablePi {
@@ -12,18 +12,33 @@ interface FollowUpCapablePi {
 export function sendFollowUp(pi: ExtensionAPI, content: string): void {
 	const api = pi as unknown as FollowUpCapablePi;
 	if (typeof api.sendMessage !== "function") return;
-	api.sendMessage.call(pi, { customType: "pi-crew-subagent-notification", content, display: true }, { deliverAs: "followUp", triggerTurn: true });
+	api.sendMessage.call(
+		pi,
+		{ customType: "pi-crew-subagent-notification", content, display: true },
+		{ deliverAs: "followUp", triggerTurn: true },
+	);
 }
 
 export function sendAgentWakeUp(pi: ExtensionAPI, content: string): boolean {
 	const api = pi as unknown as FollowUpCapablePi;
 	try {
 		if (typeof api.sendUserMessage === "function") {
-			api.sendUserMessage.call(pi, content, { deliverAs: "followUp", triggerTurn: true });
+			api.sendUserMessage.call(pi, content, {
+				deliverAs: "followUp",
+				triggerTurn: true,
+			});
 			return true;
 		}
 		if (typeof api.sendMessage === "function") {
-			api.sendMessage.call(pi, { customType: "pi-crew-subagent-wakeup", content, display: true }, { deliverAs: "followUp", triggerTurn: true });
+			api.sendMessage.call(
+				pi,
+				{
+					customType: "pi-crew-subagent-wakeup",
+					content,
+					display: true,
+				},
+				{ deliverAs: "followUp", triggerTurn: true },
+			);
 			return true;
 		}
 	} catch {
@@ -36,12 +51,17 @@ export function refreshPersistedSubagentRecord(ctx: ExtensionContext | Extension
 	if (!record.runId) return record;
 	const loaded = loadRunManifestById(ctx.cwd, record.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 	if (!loaded) return record;
-	if (loaded.manifest.status === "completed" || loaded.manifest.status === "failed" || loaded.manifest.status === "cancelled" || loaded.manifest.status === "blocked") {
+	if (
+		loaded.manifest.status === "completed" ||
+		loaded.manifest.status === "failed" ||
+		loaded.manifest.status === "cancelled" ||
+		loaded.manifest.status === "blocked"
+	) {
 		const refreshed = {
 			...record,
 			status: loaded.manifest.status,
 			error: loaded.manifest.status === "completed" || loaded.manifest.status === "blocked" ? undefined : loaded.manifest.summary,
-			completedAt: loaded.manifest.status === "blocked" ? undefined : record.completedAt ?? Date.now(),
+			completedAt: loaded.manifest.status === "blocked" ? undefined : (record.completedAt ?? Date.now()),
 		};
 		savePersistedSubagentRecord(ctx.cwd, refreshed);
 		return refreshed;
@@ -60,7 +80,9 @@ export function formatSubagentRecord(record: SubagentRecord): string {
 		record.model ? `Model: ${record.model}` : undefined,
 		`Duration: ${duration}`,
 		record.error ? `Error: ${record.error}` : undefined,
-	].filter((line): line is string => Boolean(line)).join("\n");
+	]
+		.filter((line): line is string => Boolean(line))
+		.join("\n");
 }
 
 export function readSubagentRunResult(ctx: ExtensionContext | ExtensionCommandContext, record: SubagentRecord): string | undefined {

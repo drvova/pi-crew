@@ -9,7 +9,7 @@
  * - Debugging (inspect intermediate outputs)
  */
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { logInternalError } from "../utils/internal-error.ts";
 import { isSafePathId } from "../utils/safe-paths.ts";
@@ -55,12 +55,7 @@ export function ensureIntermediateDir(config: Partial<IntermediateStoreConfig> =
  * @param data - Phase output data
  * @returns Path to the written file
  */
-export function writeIntermediate(
-	config: Partial<IntermediateStoreConfig>,
-	phase: string,
-	stepId: string,
-	data: unknown,
-): string {
+export function writeIntermediate(config: Partial<IntermediateStoreConfig>, phase: string, stepId: string, data: unknown): string {
 	const dir = ensureIntermediateDir(config);
 	const filename = `${phase}-${stepId}.json`;
 	const filePath = path.join(dir, filename);
@@ -84,11 +79,7 @@ export function writeIntermediate(
  * @param stepId - Step ID
  * @returns Parsed intermediate output, or undefined if not found
  */
-export function readIntermediate(
-	config: Partial<IntermediateStoreConfig>,
-	phase: string,
-	stepId: string,
-): IntermediateOutput | undefined {
+export function readIntermediate(config: Partial<IntermediateStoreConfig>, phase: string, stepId: string): IntermediateOutput | undefined {
 	// M-2 fix (code-review 2026-06-23): validate phase/stepId before building the
 	// filename to prevent path traversal via a poisoned stepId.
 	if (!isSafePathId(phase) || !isSafePathId(stepId)) return undefined;
@@ -113,10 +104,7 @@ export function readIntermediate(
  * Useful when you don't know the exact stepId but want the latest
  * output from a phase (e.g., for incremental re-runs).
  */
-export function readLatestIntermediate(
-	config: Partial<IntermediateStoreConfig>,
-	phase: string,
-): IntermediateOutput | undefined {
+export function readLatestIntermediate(config: Partial<IntermediateStoreConfig>, phase: string): IntermediateOutput | undefined {
 	const dir = config.intermediateDir ?? DEFAULT_CONFIG.intermediateDir;
 	if (!existsSync(dir)) return undefined;
 
@@ -168,10 +156,6 @@ export function cleanupIntermediates(config: Partial<IntermediateStoreConfig> = 
 /**
  * Check if a phase has completed (intermediate exists).
  */
-export function hasPhaseCompleted(
-	config: Partial<IntermediateStoreConfig>,
-	phase: string,
-	stepId: string,
-): boolean {
+export function hasPhaseCompleted(config: Partial<IntermediateStoreConfig>, phase: string, stepId: string): boolean {
 	return readIntermediate(config, phase, stepId) !== undefined;
 }

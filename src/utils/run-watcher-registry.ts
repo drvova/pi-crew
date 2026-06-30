@@ -46,29 +46,26 @@ export class RunWatcherRegistry {
 	 * brand-new run, because `crew.run.created` is never emitted by the runtime
 	 * (confirmed: only `crew.run.completed/failed/cancelled` are emitted).
 	 */
-	setRootWatcher(
-		runsDir: string,
-		onNewRun: RunChangeCallback,
-		onError?: ErrorCallback,
-	): void {
+	setRootWatcher(runsDir: string, onNewRun: RunChangeCallback, onError?: ErrorCallback): void {
 		if (this.closed) return;
 		// Replace any prior root watcher.
 		closeWatcher(this.rootWatcher);
-		this.rootWatcher = watchWithErrorHandler(
-			runsDir,
-			(_eventType, filename) => {
-				if (typeof filename !== "string" || filename.length === 0) return;
-				// fs.watch reports directory entries as bare names (no slash on Linux).
-				// A new run dir appears as `runs/<runId>` → filename = "<runId>".
-				// Filter obviously-not-run-id noise (files, temp, etc.) defensively.
-				const candidate = filename.replace(/\\/g, "/").split("/")[0];
-				if (candidate.length === 0) return;
-				onNewRun(candidate);
-			},
-			(error) => {
-				if (onError) onError(error);
-			},
-		) ?? undefined;
+		this.rootWatcher =
+			watchWithErrorHandler(
+				runsDir,
+				(_eventType, filename) => {
+					if (typeof filename !== "string" || filename.length === 0) return;
+					// fs.watch reports directory entries as bare names (no slash on Linux).
+					// A new run dir appears as `runs/<runId>` → filename = "<runId>".
+					// Filter obviously-not-run-id noise (files, temp, etc.) defensively.
+					const candidate = filename.replace(/\\/g, "/").split("/")[0];
+					if (candidate.length === 0) return;
+					onNewRun(candidate);
+				},
+				(error) => {
+					if (onError) onError(error);
+				},
+			) ?? undefined;
 	}
 
 	/**
@@ -76,12 +73,7 @@ export class RunWatcherRegistry {
 	 * inotify watch. If a watcher for this runId already exists, close + replace.
 	 * Returns true if a watcher is now active for this runId.
 	 */
-	addRunWatcher(
-		runId: string,
-		runDir: string,
-		onChange: RunChangeCallback,
-		onError?: ErrorCallback,
-	): boolean {
+	addRunWatcher(runId: string, runDir: string, onChange: RunChangeCallback, onError?: ErrorCallback): boolean {
 		if (this.closed) return false;
 		const existing = this.runWatchers.get(runId);
 		if (existing) closeWatcher(existing);
@@ -121,11 +113,7 @@ export class RunWatcherRegistry {
 	 * not yet watched, remove watchers for runs that left the active set. Returns
 	 * which runIds were added / removed (useful for logging + tests).
 	 */
-	reconcile(
-		activeRuns: ActiveRun[],
-		onChange: RunChangeCallback,
-		onError?: ErrorCallback,
-	): ReconcileResult {
+	reconcile(activeRuns: ActiveRun[], onChange: RunChangeCallback, onError?: ErrorCallback): ReconcileResult {
 		if (this.closed) return { added: [], removed: [] };
 		const activeIds = new Set(activeRuns.map((r) => r.runId));
 		const added: string[] = [];

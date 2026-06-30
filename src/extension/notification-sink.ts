@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { NotificationDescriptor } from "./notification-router.ts";
-import { redactSecrets } from "../utils/redaction.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { redactSecrets } from "../utils/redaction.ts";
+import type { NotificationDescriptor } from "./notification-router.ts";
 
 export interface NotificationSink {
 	write(notification: NotificationDescriptor): void;
@@ -36,7 +36,10 @@ export function createJsonlSink(crewRoot: string, retentionDays = 7): Notificati
 					lastRotateDate = date;
 				}
 				fs.mkdirSync(dir, { recursive: true });
-				const payload = redactSecrets({ ...notification, timestamp }) as NotificationDescriptor;
+				const payload = redactSecrets({
+					...notification,
+					timestamp,
+				}) as NotificationDescriptor;
 				fs.appendFileSync(path.join(dir, `${date}.jsonl`), `${JSON.stringify(payload)}\n`, "utf-8");
 			} catch (error) {
 				logInternalError("notification-sink.write", error);

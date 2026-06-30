@@ -1,18 +1,15 @@
+import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface PiSpawnCommand {
 	command: string;
 	args: string[];
 }
 
-const PI_PACKAGE_NAMES = [
-	"@earendil-works/pi-coding-agent",
-	"@mariozechner/pi-coding-agent",
-];
+const PI_PACKAGE_NAMES = ["@earendil-works/pi-coding-agent", "@mariozechner/pi-coding-agent"];
 
 function isRunnableNodeScript(filePath: string): boolean {
 	return fs.existsSync(filePath) && /\.(?:mjs|cjs|js)$/i.test(filePath);
@@ -33,7 +30,9 @@ function isWithinAllowedPrefixes(resolvedPath: string): boolean {
 		const execDir = path.dirname(fs.realpathSync.native(process.execPath));
 		allowedPrefixes.push(execDir.toLowerCase());
 		allowedPrefixes.push(path.join(path.dirname(execDir), "lib", "node_modules").toLowerCase());
-	} catch { /* ignore */ }
+	} catch {
+		/* ignore */
+	}
 
 	// npm global bin via APPDATA
 	if (process.env.APPDATA) {
@@ -50,19 +49,25 @@ function isWithinAllowedPrefixes(resolvedPath: string): boolean {
 	try {
 		const projectBin = path.resolve("node_modules", ".bin");
 		allowedPrefixes.push(projectBin.toLowerCase());
-	} catch { /* ignore */ }
+	} catch {
+		/* ignore */
+	}
 
 	// User home npm-global
 	try {
 		const homeNpm = path.join(os.homedir(), ".npm-global", "bin");
 		allowedPrefixes.push(homeNpm.toLowerCase());
-	} catch { /* ignore */ }
+	} catch {
+		/* ignore */
+	}
 
 	// User home .local/bin
 	try {
 		const homeLocal = path.join(os.homedir(), ".local", "bin");
 		allowedPrefixes.push(homeLocal.toLowerCase());
-	} catch { /* ignore */ }
+	} catch {
+		/* ignore */
+	}
 
 	return allowedPrefixes.some((prefix) => normalized.startsWith(prefix));
 }
@@ -89,8 +94,10 @@ function resolvePiPackageRoot(): string | undefined {
 
 function packageBinScript(packageJsonPath: string): string | undefined {
 	try {
-		const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8")) as { bin?: string | Record<string, string> };
-		const binPath = typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.pi ?? Object.values(pkg.bin ?? {})[0];
+		const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8")) as {
+			bin?: string | Record<string, string>;
+		};
+		const binPath = typeof pkg.bin === "string" ? pkg.bin : (pkg.bin?.pi ?? Object.values(pkg.bin ?? {})[0]);
 		if (!binPath) return undefined;
 		const candidate = path.resolve(path.dirname(packageJsonPath), binPath);
 		return isRunnableNodeScript(candidate) ? candidate : undefined;
@@ -104,7 +111,9 @@ function findPiPackageJsonFrom(startDir: string): string | undefined {
 	while (dir !== path.dirname(dir)) {
 		const direct = path.join(dir, "package.json");
 		try {
-			const pkg = JSON.parse(fs.readFileSync(direct, "utf-8")) as { name?: string };
+			const pkg = JSON.parse(fs.readFileSync(direct, "utf-8")) as {
+				name?: string;
+			};
 			if (pkg.name && PI_PACKAGE_NAMES.includes(pkg.name)) return direct;
 		} catch {
 			// Continue searching upward and in node_modules.
@@ -200,7 +209,7 @@ function resolvePiCliScript(): string | undefined {
 	].filter((entry): entry is string => Boolean(entry));
 
 	for (const root of roots) {
-		const packageJsonPath = root.endsWith("package.json") ? root : findPiPackageJsonFrom(root) ?? path.join(root, "package.json");
+		const packageJsonPath = root.endsWith("package.json") ? root : (findPiPackageJsonFrom(root) ?? path.join(root, "package.json"));
 		const script = packageBinScript(packageJsonPath);
 		if (script) return script;
 	}
@@ -214,16 +223,14 @@ function validateExplicitBin(explicit: string): string | undefined {
 	if (!isWithinAllowedPrefixes(resolved)) {
 		throw new Error(
 			`PI_TEAMS_PI_BIN path '${resolved}' is outside allowed prefixes. ` +
-			`Allowed: npm global bin, project node_modules/.bin, APPDATA/npm, or process execPath directory.`,
+				`Allowed: npm global bin, project node_modules/.bin, APPDATA/npm, or process execPath directory.`,
 		);
 	}
 	// Reject if symlink points outside expected directories
 	try {
 		const real = fs.realpathSync(resolved);
 		if (!isWithinAllowedPrefixes(real)) {
-			throw new Error(
-				`PI_TEAMS_PI_BIN symlink target '${real}' is outside allowed prefixes.`,
-			);
+			throw new Error(`PI_TEAMS_PI_BIN symlink target '${real}' is outside allowed prefixes.`);
 		}
 	} catch (e) {
 		if (e instanceof Error && e.message.includes("allowed prefixes")) throw e;
@@ -238,7 +245,11 @@ export function getPiSpawnCommand(args: string[]): PiSpawnCommand {
 	if (explicit) {
 		const validated = validateExplicitBin(explicit);
 		if (validated) {
-			if (isRunnableNodeScript(validated)) return { command: process.execPath, args: [validated, ...args] };
+			if (isRunnableNodeScript(validated))
+				return {
+					command: process.execPath,
+					args: [validated, ...args],
+				};
 			return { command: validated, args };
 		}
 	}

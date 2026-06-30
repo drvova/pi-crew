@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { parseChainDSL } from "../../src/runtime/chain-parser.ts";
 
 describe("chain-parser: parseChainDSL", () => {
@@ -10,10 +10,7 @@ describe("chain-parser: parseChainDSL", () => {
 
 	it("parses a two-step chain with arrow", () => {
 		const result = parseChainDSL("step1 -> step2");
-		assert.deepEqual(result, [
-			{ name: "step1" },
-			{ name: "step2" },
-		]);
+		assert.deepEqual(result, [{ name: "step1" }, { name: "step2" }]);
 	});
 
 	it("parses a chain with parallel group", () => {
@@ -47,39 +44,27 @@ describe("chain-parser: parseChainDSL", () => {
 
 	it("parses loop count modifier with colon", () => {
 		const result = parseChainDSL("step1:3 -> step2");
-		assert.deepEqual(result, [
-			{ name: "step1", loopCount: 3 },
-			{ name: "step2" },
-		]);
+		assert.deepEqual(result, [{ name: "step1", loopCount: 3 }, { name: "step2" }]);
 	});
 
 	it("parses --with-context flag", () => {
 		const result = parseChainDSL("step1 --with-context -> step2");
-		assert.deepEqual(result, [
-			{ name: "step1", withContext: true },
-			{ name: "step2" },
-		]);
+		assert.deepEqual(result, [{ name: "step1", withContext: true }, { name: "step2" }]);
 	});
 
 	it("parses quoted arguments", () => {
 		const result = parseChainDSL('step1 "arg1" "arg2"');
-		assert.deepEqual(result, [
-			{ name: "step1", args: ["arg1", "arg2"] },
-		]);
+		assert.deepEqual(result, [{ name: "step1", args: ["arg1", "arg2"] }]);
 	});
 
 	it("parses quoted arguments with escape sequences", () => {
 		const result = parseChainDSL('step1 "arg\\"1"');
-		assert.deepEqual(result, [
-			{ name: "step1", args: ['arg"1'] },
-		]);
+		assert.deepEqual(result, [{ name: "step1", args: ['arg"1'] }]);
 	});
 
 	it("parses single-quoted arguments", () => {
 		const result = parseChainDSL("step1 'hello world'");
-		assert.deepEqual(result, [
-			{ name: "step1", args: ["hello world"] },
-		]);
+		assert.deepEqual(result, [{ name: "step1", args: ["hello world"] }]);
 	});
 
 	it("parses complex chain with all modifiers", () => {
@@ -96,46 +81,28 @@ describe("chain-parser: parseChainDSL", () => {
 
 	it("handles extra whitespace gracefully", () => {
 		const result = parseChainDSL("  step1   ->   step2  ");
-		assert.deepEqual(result, [
-			{ name: "step1" },
-			{ name: "step2" },
-		]);
+		assert.deepEqual(result, [{ name: "step1" }, { name: "step2" }]);
 	});
 
 	it("throws on unclosed parenthesis", () => {
-		assert.throws(
-			() => parseChainDSL("parallel(step1, step2"),
-			/Expected RPAREN|end of chain/,
-		);
+		assert.throws(() => parseChainDSL("parallel(step1, step2"), /Expected RPAREN|end of chain/);
 	});
 
 	it("throws on unclosed quoted string", () => {
-		assert.throws(
-			() => parseChainDSL('step1 "unterminated'),
-			/Unclosed quoted/,
-		);
+		assert.throws(() => parseChainDSL('step1 "unterminated'), /Unclosed quoted/);
 	});
 
 	it("throws on unexpected character", () => {
-		assert.throws(
-			() => parseChainDSL("step1 @ step2"),
-			/Unexpected character/,
-		);
+		assert.throws(() => parseChainDSL("step1 @ step2"), /Unexpected character/);
 	});
 
 	it("throws on empty parallel group", () => {
 		// parallel() with no args would fail because NAME is expected
-		assert.throws(
-			() => parseChainDSL("parallel()"),
-			/Expected NAME/,
-		);
+		assert.throws(() => parseChainDSL("parallel()"), /Expected NAME/);
 	});
 
 	it("parses step names with dots and hyphens", () => {
 		const result = parseChainDSL("my-step.v2 -> other_step");
-		assert.deepEqual(result, [
-			{ name: "my-step.v2" },
-			{ name: "other_step" },
-		]);
+		assert.deepEqual(result, [{ name: "my-step.v2" }, { name: "other_step" }]);
 	});
 });

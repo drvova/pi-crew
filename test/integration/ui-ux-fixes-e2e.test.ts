@@ -12,39 +12,35 @@
  * to a finding ID in that report.
  */
 
-import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { after, before, describe, it } from "node:test";
 
 import { TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 
-import {
-	CREW_SHORTCUT_KEYS,
-} from "../../src/extension/crew-shortcuts.ts";
-import {
-	colorizeStatusGlyphs,
-	iconForStatus,
-} from "../../src/ui/status-colors.ts";
-import { agentStats, formatTokensCompact } from "../../src/ui/widget/widget-formatters.ts";
-import { pad, truncate, visibleWidth } from "../../src/utils/visual.ts";
-import { isDisplayActiveRun } from "../../src/runtime/process-status.ts";
-import { HelpOverlay } from "../../src/ui/overlays/help-overlay.ts";
-import { RunDashboard } from "../../src/ui/run-dashboard.ts";
-import { LiveRunSidebar } from "../../src/ui/live-run-sidebar.ts";
-import { LiveConversationOverlay } from "../../src/ui/live-conversation-overlay.ts";
-import { DASHBOARD_KEYS } from "../../src/ui/keybinding-map.ts";
-
-import type { CrewTheme } from "../../src/ui/theme-adapter.ts";
+import { CREW_SHORTCUT_KEYS } from "../../src/extension/crew-shortcuts.ts";
 import type { CrewAgentRecord } from "../../src/runtime/crew-agent-runtime.ts";
 import type { LiveAgentHandle } from "../../src/runtime/live-agent-manager.ts";
+import { isDisplayActiveRun } from "../../src/runtime/process-status.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
+import { DASHBOARD_KEYS } from "../../src/ui/keybinding-map.ts";
+import { LiveConversationOverlay } from "../../src/ui/live-conversation-overlay.ts";
+import { LiveRunSidebar } from "../../src/ui/live-run-sidebar.ts";
+import { HelpOverlay } from "../../src/ui/overlays/help-overlay.ts";
+import { RunDashboard } from "../../src/ui/run-dashboard.ts";
+import { colorizeStatusGlyphs, iconForStatus } from "../../src/ui/status-colors.ts";
+import type { CrewTheme } from "../../src/ui/theme-adapter.ts";
+import { agentStats, formatTokensCompact } from "../../src/ui/widget/widget-formatters.ts";
+import { pad, truncate, visibleWidth } from "../../src/utils/visual.ts";
 
 // ── Test helpers ──────────────────────────────────────────────────────
 
 /** Mock theme that records every fg() call so we can assert colorization. */
-function recordingTheme(): CrewTheme & { _calls: Array<{ color: string; text: string }> } {
+function recordingTheme(): CrewTheme & {
+	_calls: Array<{ color: string; text: string }>;
+} {
 	const calls: Array<{ color: string; text: string }> = [];
 	const wrap = (color: string) => (text: string) => {
 		calls.push({ color, text });
@@ -61,7 +57,9 @@ function recordingTheme(): CrewTheme & { _calls: Array<{ color: string; text: st
 		underline: (text: string) => `_${text}_`,
 		inverse: (text: string) => `!${text}!`,
 		_calls: calls,
-	} as unknown as CrewTheme & { _calls: Array<{ color: string; text: string }> };
+	} as unknown as CrewTheme & {
+		_calls: Array<{ color: string; text: string }>;
+	};
 }
 
 /** A flat no-op theme that returns text verbatim (for raw-render assertions).
@@ -84,9 +82,17 @@ function flatTheme(): CrewTheme {
 function flatDashboardKeys(): string[] {
 	const out: string[] = [];
 	const walk = (v: unknown): void => {
-		if (typeof v === "string") { out.push(v); return; }
-		if (Array.isArray(v)) { for (const x of v) walk(x); return; }
-		if (v && typeof v === "object") { for (const x of Object.values(v)) walk(x); }
+		if (typeof v === "string") {
+			out.push(v);
+			return;
+		}
+		if (Array.isArray(v)) {
+			for (const x of v) walk(x);
+			return;
+		}
+		if (v && typeof v === "object") {
+			for (const x of Object.values(v)) walk(x);
+		}
 	};
 	walk(DASHBOARD_KEYS);
 	return out;
@@ -149,7 +155,9 @@ function makeHandle(overrides: Partial<LiveAgentHandle> = {}): LiveAgentHandle {
 			responseText: "thinking…",
 		},
 		session: {
-			getSessionStats: () => ({ contextUsage: { percent: 42, used: 42_000, total: 100_000 } }),
+			getSessionStats: () => ({
+				contextUsage: { percent: 42, used: 42_000, total: 100_000 },
+			}),
 			subscribe: () => () => undefined,
 			on: () => undefined,
 			off: () => undefined,
@@ -187,11 +195,7 @@ describe("E2E: shortcut collision (user-reported bug)", () => {
 			}
 		}
 		const altCUsers = usedBy.get("alt+c") ?? [];
-		assert.deepEqual(
-			altCUsers,
-			[],
-			`alt+c must be free for crew dashboard; currently used by: ${altCUsers.join(", ")}`,
-		);
+		assert.deepEqual(altCUsers, [], `alt+c must be free for crew dashboard; currently used by: ${altCUsers.join(", ")}`);
 	});
 
 	it("proves the original alt+d bug existed: alt+d IS a built-in default (for deleteWordForward)", () => {
@@ -238,8 +242,10 @@ describe("E2E: F-3 — ANSI + CJK border math (visual.ts ops the overlay now use
 		const out = truncate(row, innerW);
 		assert.ok(visibleWidth(out) <= innerW + 1, `truncate overshot: ${visibleWidth(out)} > ${innerW}`);
 		// Must not end with a bare escape start (would corrupt the next border)
-		assert.ok(!/[\x1b-[\x1b-\x1f]$/.test(out) || out.endsWith("│") || visibleWidth(out) <= innerW,
-			"truncate must not leave a dangling ESC at end");
+		assert.ok(
+			!/[\x1b-[\x1b-\x1f]$/.test(out) || out.endsWith("│") || visibleWidth(out) <= innerW,
+			"truncate must not leave a dangling ESC at end",
+		);
 	});
 });
 
@@ -300,8 +306,28 @@ describe("E2E: V-1 — agentStats keeps numeric columns aligned across tick tran
 
 	it("duration column width is stable across transitions", () => {
 		// Both use the same shape from computeLiveDurationMs + alignMetric.
-		const a = agentStats(makeAgent({ progress: { tokens: 950, recentTools: [], recentOutput: [], toolCount: 0 } }), handle);
-		const b = agentStats(makeAgent({ progress: { tokens: 1_234, recentTools: [], recentOutput: [], toolCount: 0 } }), handle);
+		const a = agentStats(
+			makeAgent({
+				progress: {
+					tokens: 950,
+					recentTools: [],
+					recentOutput: [],
+					toolCount: 0,
+				},
+			}),
+			handle,
+		);
+		const b = agentStats(
+			makeAgent({
+				progress: {
+					tokens: 1_234,
+					recentTools: [],
+					recentOutput: [],
+					toolCount: 0,
+				},
+			}),
+			handle,
+		);
 		const w = (s: string) => visibleWidth(s.match(/(\d+\.\d+s)/)?.[0] ?? "");
 		assert.equal(w(a), w(b), "duration width must not jitter between same-format values");
 	});
@@ -309,7 +335,15 @@ describe("E2E: V-1 — agentStats keeps numeric columns aligned across tick tran
 	it("formatTokensCompact output is padded by agentStats to a fixed visible width", () => {
 		// Use the non-liveHandle path so tokens come from agent.progress.tokens
 		// (avoids getTaskUsage dependency which needs a registered task).
-		const a = makeAgent({ toolUses: 7, progress: { tokens: 1_234, recentTools: [], recentOutput: [], toolCount: 7 } });
+		const a = makeAgent({
+			toolUses: 7,
+			progress: {
+				tokens: 1_234,
+				recentTools: [],
+				recentOutput: [],
+				toolCount: 7,
+			},
+		});
 		const out = agentStats(a);
 		const parts = out.split(" · ");
 		const tokensPart = parts.find((p) => /\s+tok$/.test(p));
@@ -333,7 +367,15 @@ describe("E2E: V-1 — agentStats keeps numeric columns aligned across tick tran
 	});
 
 	it("agentStats produces a non-empty string even for zero-everything agent", () => {
-		const a = makeAgent({ toolUses: 0, progress: { tokens: 0, recentTools: [], recentOutput: [], toolCount: 0 } });
+		const a = makeAgent({
+			toolUses: 0,
+			progress: {
+				tokens: 0,
+				recentTools: [],
+				recentOutput: [],
+				toolCount: 0,
+			},
+		});
 		const out = agentStats(a);
 		assert.ok(typeof out === "string" && out.length > 0, "agentStats must always emit something");
 	});
@@ -459,10 +501,7 @@ describe("E2E: K-1 — '?' opens a HelpOverlay rendering BINDINGS grouped by sco
 			linesAfterHelp.length > 5,
 			`after '?' the render should include help overlay content (more lines); got ${linesAfterHelp.length} lines`,
 		);
-		assert.ok(
-			joined.includes("?"),
-			`help overlay output should mention "?"; sample: ${joined.slice(0, 200)}`,
-		);
+		assert.ok(joined.includes("?"), `help overlay output should mention "?"; sample: ${joined.slice(0, 200)}`);
 	});
 });
 
@@ -479,7 +518,10 @@ describe("E2E: F-5 — isDisplayActiveRun gives errors a 10-min grace, completed
 	it("failed run with last activity 5 min ago is STILL active (10-min grace)", () => {
 		const run = manifestAt("failed", 5 * 60_000);
 		const agents = [
-			makeAgent({ status: "failed", completedAt: new Date(Date.now() - 5 * 60_000).toISOString() }),
+			makeAgent({
+				status: "failed",
+				completedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+			}),
 		];
 		assert.equal(isDisplayActiveRun(run, agents), true, "failed@5min must stay visible (10min grace)");
 	});
@@ -487,7 +529,10 @@ describe("E2E: F-5 — isDisplayActiveRun gives errors a 10-min grace, completed
 	it("failed run with last activity 11 min ago is NO longer active", () => {
 		const run = manifestAt("failed", 11 * 60_000);
 		const agents = [
-			makeAgent({ status: "failed", completedAt: new Date(Date.now() - 11 * 60_000).toISOString() }),
+			makeAgent({
+				status: "failed",
+				completedAt: new Date(Date.now() - 11 * 60_000).toISOString(),
+			}),
 		];
 		assert.equal(isDisplayActiveRun(run, agents), false, "failed@11min must drop (10min grace expired)");
 	});
@@ -495,7 +540,10 @@ describe("E2E: F-5 — isDisplayActiveRun gives errors a 10-min grace, completed
 	it("completed run with last activity 30s ago is NOT active (8s grace already passed)", () => {
 		const run = manifestAt("completed", 30_000);
 		const agents = [
-			makeAgent({ status: "completed", completedAt: new Date(Date.now() - 30_000).toISOString() }),
+			makeAgent({
+				status: "completed",
+				completedAt: new Date(Date.now() - 30_000).toISOString(),
+			}),
 		];
 		assert.equal(isDisplayActiveRun(run, agents), false, "completed@30s must drop (8s grace expired)");
 	});
@@ -503,7 +551,10 @@ describe("E2E: F-5 — isDisplayActiveRun gives errors a 10-min grace, completed
 	it("failed run with last activity 30s ago IS active (within 10-min grace)", () => {
 		const run = manifestAt("failed", 30_000);
 		const agents = [
-			makeAgent({ status: "failed", completedAt: new Date(Date.now() - 30_000).toISOString() }),
+			makeAgent({
+				status: "failed",
+				completedAt: new Date(Date.now() - 30_000).toISOString(),
+			}),
 		];
 		assert.equal(isDisplayActiveRun(run, agents), true, "failed@30s must stay (10-min grace)");
 	});
@@ -545,7 +596,11 @@ describe("E2E: F-6 — LiveRunSidebar renders the auto-close countdown INSIDE it
 	});
 
 	after(() => {
-		try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
+		try {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		} catch {
+			/* best effort */
+		}
 	});
 
 	it("auto-close countdown line appears BEFORE the bottom border line", () => {
@@ -562,7 +617,9 @@ describe("E2E: F-6 — LiveRunSidebar renders the auto-close countdown INSIDE it
 				refreshIfStale: (_id: string) => {
 					snapshotCalls++;
 					return {
-						manifest: { ...makeManifest(0, { runId, status: "completed" }) },
+						manifest: {
+							...makeManifest(0, { runId, status: "completed" }),
+						},
 						agents: [],
 						tasks: [],
 						updatedAt: new Date().toISOString(),
@@ -614,10 +671,7 @@ describe("E2E: F-3 — LiveConversationOverlay renders ANSI+CJK without border d
 			// Must end with the right border; the local `pad` bug would
 			// have produced zero-width padding and shifted the border left
 			// (or leaked an ANSI escape past it).
-			assert.ok(
-				row.endsWith("│"),
-				`bordered row must end with │; row: ${JSON.stringify(row)}`,
-			);
+			assert.ok(row.endsWith("│"), `bordered row must end with │; row: ${JSON.stringify(row)}`);
 		}
 		overlay.dispose();
 	});

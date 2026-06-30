@@ -2,15 +2,16 @@
  * Phase 1.5 #2 — git-worktree verification sandbox unit tests.
  * RFC: research-findings/goal-workflow/16-PHASE1.5-WORKTREE-SANDBOX-RFC.md
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import test from "node:test";
 import {
-	isWorktreeSandboxEnabled,
 	checkWorktreeSandboxAvailable,
+	isWorktreeSandboxEnabled,
 	prepareVerificationWorktree,
 	withVerificationWorktree,
 } from "../../src/runtime/verification-worktree.ts";
@@ -34,7 +35,9 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => Promise<voi
 function makeTempGitRepo(): string {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-wt-test-"));
 	execFileSync("git", ["init", "-q"], { cwd: dir });
-	execFileSync("git", ["config", "user.email", "test@test.test"], { cwd: dir });
+	execFileSync("git", ["config", "user.email", "test@test.test"], {
+		cwd: dir,
+	});
 	execFileSync("git", ["config", "user.name", "Test"], { cwd: dir });
 	// Prevent CRLF conversion on Windows (core.autocrlf=true is the default on
 	// GitHub Actions windows-latest runners) so the worktree content matches
@@ -48,13 +51,23 @@ function makeTempGitRepo(): string {
 }
 
 function rmrf(p: string): void {
-	try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* best-effort */ }
+	try {
+		fs.rmSync(p, { recursive: true, force: true });
+	} catch {
+		/* best-effort */
+	}
 }
 
 test("isWorktreeSandboxEnabled: defaults to false (opt-in)", async () => {
-	await withEnv({ PI_CREW_VERIFICATION_WORKTREE: undefined, PI_TEAMS_VERIFICATION_WORKTREE: undefined }, async () => {
-		assert.equal(isWorktreeSandboxEnabled(), false);
-	});
+	await withEnv(
+		{
+			PI_CREW_VERIFICATION_WORKTREE: undefined,
+			PI_TEAMS_VERIFICATION_WORKTREE: undefined,
+		},
+		async () => {
+			assert.equal(isWorktreeSandboxEnabled(), false);
+		},
+	);
 });
 
 test("isWorktreeSandboxEnabled: true when PI_CREW_VERIFICATION_WORKTREE=1", async () => {
@@ -64,9 +77,15 @@ test("isWorktreeSandboxEnabled: true when PI_CREW_VERIFICATION_WORKTREE=1", asyn
 });
 
 test("isWorktreeSandboxEnabled: true when PI_TEAMS_VERIFICATION_WORKTREE=true", async () => {
-	await withEnv({ PI_CREW_VERIFICATION_WORKTREE: undefined, PI_TEAMS_VERIFICATION_WORKTREE: "true" }, async () => {
-		assert.equal(isWorktreeSandboxEnabled(), true);
-	});
+	await withEnv(
+		{
+			PI_CREW_VERIFICATION_WORKTREE: undefined,
+			PI_TEAMS_VERIFICATION_WORKTREE: "true",
+		},
+		async () => {
+			assert.equal(isWorktreeSandboxEnabled(), true);
+		},
+	);
 });
 
 test("checkWorktreeSandboxAvailable: false when opt-in env not set", async () => {
@@ -77,7 +96,9 @@ test("checkWorktreeSandboxAvailable: false when opt-in env not set", async () =>
 			assert.equal(result.available, false);
 			assert.match(result.reason, /not set/i);
 		});
-	} finally { rmrf(repo); }
+	} finally {
+		rmrf(repo);
+	}
 });
 
 test("checkWorktreeSandboxAvailable: false when cwd is not a git repo", async () => {
@@ -88,7 +109,9 @@ test("checkWorktreeSandboxAvailable: false when cwd is not a git repo", async ()
 			assert.equal(result.available, false);
 			assert.match(result.reason, /git precondition|not a git repo|fatal/i);
 		});
-	} finally { rmrf(nonRepo); }
+	} finally {
+		rmrf(nonRepo);
+	}
 });
 
 test("checkWorktreeSandboxAvailable: false when git index is dirty", async () => {
@@ -101,7 +124,9 @@ test("checkWorktreeSandboxAvailable: false when git index is dirty", async () =>
 			assert.equal(result.available, false);
 			assert.match(result.reason, /dirty git index/i);
 		});
-	} finally { rmrf(repo); }
+	} finally {
+		rmrf(repo);
+	}
 });
 
 test("checkWorktreeSandboxAvailable: true + returns commitSha when clean git repo", async () => {
@@ -112,12 +137,17 @@ test("checkWorktreeSandboxAvailable: true + returns commitSha when clean git rep
 			assert.equal(result.available, true);
 			assert.ok((result as { commitSha: string }).commitSha.length >= 7, "commitSha must be a real SHA");
 		});
-	} finally { rmrf(repo); }
+	} finally {
+		rmrf(repo);
+	}
 });
 
 test("prepareVerificationWorktree: creates pristine checkout at commitSha", async () => {
 	const repo = makeTempGitRepo();
-	const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf-8" }).trim();
+	const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: repo,
+		encoding: "utf-8",
+	}).trim();
 	try {
 		const wt = prepareVerificationWorktree(repo, sha);
 		try {
@@ -134,7 +164,14 @@ test("prepareVerificationWorktree: creates pristine checkout at commitSha", asyn
 	} finally {
 		rmrf(repo);
 		// Prune any leftover worktree registrations.
-		try { execFileSync("git", ["worktree", "prune"], { cwd: repo, stdio: "ignore" }); } catch { /* gone */ }
+		try {
+			execFileSync("git", ["worktree", "prune"], {
+				cwd: repo,
+				stdio: "ignore",
+			});
+		} catch {
+			/* gone */
+		}
 	}
 });
 
@@ -142,7 +179,10 @@ test("prepareVerificationWorktree: worktree does NOT see main-workspace edits af
 	// This is the KEY security property: edit main workspace AFTER worktree is
 	// created → worktree still has the ORIGINAL content (round-trip tamper blocked).
 	const repo = makeTempGitRepo();
-	const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf-8" }).trim();
+	const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: repo,
+		encoding: "utf-8",
+	}).trim();
 	try {
 		const wt = prepareVerificationWorktree(repo, sha);
 		try {
@@ -156,13 +196,23 @@ test("prepareVerificationWorktree: worktree does NOT see main-workspace edits af
 		}
 	} finally {
 		rmrf(repo);
-		try { execFileSync("git", ["worktree", "prune"], { cwd: repo, stdio: "ignore" }); } catch { /* gone */ }
+		try {
+			execFileSync("git", ["worktree", "prune"], {
+				cwd: repo,
+				stdio: "ignore",
+			});
+		} catch {
+			/* gone */
+		}
 	}
 });
 
 test("withVerificationWorktree: RAII cleanup on success", async () => {
 	const repo = makeTempGitRepo();
-	const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf-8" }).trim();
+	const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: repo,
+		encoding: "utf-8",
+	}).trim();
 	let capturedPath: string | undefined;
 	try {
 		await withVerificationWorktree(repo, sha, async (wt) => {
@@ -175,13 +225,23 @@ test("withVerificationWorktree: RAII cleanup on success", async () => {
 		assert.equal(fs.existsSync(capturedPath!), false, "RAII: worktree removed after fn returns");
 	} finally {
 		rmrf(repo);
-		try { execFileSync("git", ["worktree", "prune"], { cwd: repo, stdio: "ignore" }); } catch { /* gone */ }
+		try {
+			execFileSync("git", ["worktree", "prune"], {
+				cwd: repo,
+				stdio: "ignore",
+			});
+		} catch {
+			/* gone */
+		}
 	}
 });
 
 test("withVerificationWorktree: RAII cleanup on EXCEPTION (finally always runs)", async () => {
 	const repo = makeTempGitRepo();
-	const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf-8" }).trim();
+	const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: repo,
+		encoding: "utf-8",
+	}).trim();
 	let capturedPath: string | undefined;
 	try {
 		await assert.rejects(
@@ -196,13 +256,23 @@ test("withVerificationWorktree: RAII cleanup on EXCEPTION (finally always runs)"
 		assert.equal(fs.existsSync(capturedPath!), false, "RAII: worktree removed even when fn throws");
 	} finally {
 		rmrf(repo);
-		try { execFileSync("git", ["worktree", "prune"], { cwd: repo, stdio: "ignore" }); } catch { /* gone */ }
+		try {
+			execFileSync("git", ["worktree", "prune"], {
+				cwd: repo,
+				stdio: "ignore",
+			});
+		} catch {
+			/* gone */
+		}
 	}
 });
 
 test("prepareVerificationWorktree cleanup is idempotent (safe to call twice)", async () => {
 	const repo = makeTempGitRepo();
-	const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf-8" }).trim();
+	const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: repo,
+		encoding: "utf-8",
+	}).trim();
 	try {
 		const wt = prepareVerificationWorktree(repo, sha);
 		wt.cleanup();
@@ -210,6 +280,13 @@ test("prepareVerificationWorktree cleanup is idempotent (safe to call twice)", a
 		assert.doesNotThrow(() => wt.cleanup());
 	} finally {
 		rmrf(repo);
-		try { execFileSync("git", ["worktree", "prune"], { cwd: repo, stdio: "ignore" }); } catch { /* gone */ }
+		try {
+			execFileSync("git", ["worktree", "prune"], {
+				cwd: repo,
+				stdio: "ignore",
+			});
+		} catch {
+			/* gone */
+		}
 	}
 });

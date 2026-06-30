@@ -9,8 +9,9 @@
  * (the mock returns before the spawn lifecycle handlers run). Therefore the
  * redaction boundary is tested directly here against real secret patterns.
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { redactStderrExcerpt } from "../../src/runtime/child-pi.ts";
 
 // Real-shaped secrets matching the anchored patterns in redaction.ts.

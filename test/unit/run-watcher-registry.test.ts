@@ -6,11 +6,12 @@
  * runs) non-recursive per-run watchers plus a single root watcher for new-run
  * detection.
  */
-import { describe, it, beforeEach, afterEach } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { RunWatcherRegistry } from "../../src/utils/run-watcher-registry.ts";
 
 function tmpRoot(): string {
@@ -104,7 +105,10 @@ describe("RunWatcherRegistry — reconcile", () => {
 		const a = makeRunDir(root, "run_a");
 		const b = makeRunDir(root, "run_b");
 		const res = reg.reconcile(
-			[{ runId: "run_a", runDir: a }, { runId: "run_b", runDir: b }],
+			[
+				{ runId: "run_a", runDir: a },
+				{ runId: "run_b", runDir: b },
+			],
 			() => {},
 		);
 		assert.deepEqual(res.added.sort(), ["run_a", "run_b"]);
@@ -115,7 +119,13 @@ describe("RunWatcherRegistry — reconcile", () => {
 	it("reconcile removes watchers for runs that left the active set", () => {
 		const a = makeRunDir(root, "run_a");
 		const b = makeRunDir(root, "run_b");
-		reg.reconcile([{ runId: "run_a", runDir: a }, { runId: "run_b", runDir: b }], () => {});
+		reg.reconcile(
+			[
+				{ runId: "run_a", runDir: a },
+				{ runId: "run_b", runDir: b },
+			],
+			() => {},
+		);
 		// run_b completes → leaves active set
 		const res = reg.reconcile([{ runId: "run_a", runDir: a }], () => {});
 		assert.deepEqual(res.added, []);

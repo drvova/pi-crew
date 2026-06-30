@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { handleTeamTool } from "../../src/extension/team-tool.ts";
+import test from "node:test";
 import { decomposeGoal, recommendTeam } from "../../src/extension/team-recommendation.ts";
+import { handleTeamTool } from "../../src/extension/team-tool.ts";
 import { firstText } from "../fixtures/tool-result-helpers.ts";
 
 test("recommendTeam maps goals to teams", () => {
@@ -30,7 +30,9 @@ test("recommendTeam routes actionable task lists to implementation", () => {
 });
 
 test("recommendTeam can suggest async and worktree", () => {
-	const recommendation = recommendTeam("large risky refactor migration across multiple packages with tests", { preferAsyncForLongTasks: true });
+	const recommendation = recommendTeam("large risky refactor migration across multiple packages with tests", {
+		preferAsyncForLongTasks: true,
+	});
 	assert.equal(recommendation.team, "implementation");
 	assert.equal(recommendation.async, true);
 	assert.equal(recommendation.workspaceMode, "worktree");
@@ -43,4 +45,3 @@ test("team tool recommend returns suggested call", async () => {
 	assert.match(text, /Team: review/);
 	assert.match(text, /Suggested tool call/);
 });
-

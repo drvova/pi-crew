@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { errors } from "../errors.ts";
+import { saveRunManifest } from "../state/state-store.ts";
+import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { recordFromTask, upsertCrewAgent } from "./crew-agent-records.ts";
 import { checkProcessLiveness } from "./process-status.ts";
-import { saveRunManifest } from "../state/state-store.ts";
 
 /** Age threshold for orphaned temp directory cleanup: 1 hour. */
 const ORPHAN_TEMP_DIR_AGE_THRESHOLD_MS = 60 * 60 * 1000;
@@ -22,13 +22,7 @@ const ORPHAN_TEMP_SCAN_BATCH_SIZE = 50;
 export interface ReconcileResult {
 	runId: string;
 	/** What was found and what action was taken */
-	verdict:
-		| "healthy"
-		| "blocked_awaiting_approval"
-		| "result_exists"
-		| "pid_dead"
-		| "pid_alive_stale"
-		| "no_status";
+	verdict: "healthy" | "blocked_awaiting_approval" | "result_exists" | "pid_dead" | "pid_alive_stale" | "no_status";
 	/** Whether repair was applied */
 	repaired: boolean;
 	/** Human-readable detail */
@@ -47,11 +41,7 @@ export interface ReconcileResult {
  * original analysis of this failure mode.
  */
 export function isPlanApprovalPending(manifest: TeamRunManifest): boolean {
-	return (
-		manifest.status === "blocked" &&
-		manifest.planApproval?.required === true &&
-		manifest.planApproval.status === "pending"
-	);
+	return manifest.status === "blocked" && manifest.planApproval?.required === true && manifest.planApproval.status === "pending";
 }
 
 const STALE_ALIVE_PID_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -63,10 +53,7 @@ const NO_PID_HEARTBEAT_STALE_MS = 5 * 60 * 1000; // 5 minutes — same as heartb
  * Phase 1: Check if a result file already exists for the run.
  * If so, the run completed but status wasn't updated — repair it.
  */
-function checkResultFile(
-	manifest: TeamRunManifest,
-	tasks: TeamTaskState[],
-): { found: boolean; repaired: boolean } {
+function checkResultFile(manifest: TeamRunManifest, tasks: TeamTaskState[]): { found: boolean; repaired: boolean } {
 	// Check if all tasks already have terminal status (result was written but manifest wasn't updated)
 	const allTerminal =
 		tasks.length > 0 &&
@@ -87,10 +74,7 @@ function checkResultFile(
 		// (e.g., a previous reconcile fixed tasks but crashed before updating agents)
 		for (const task of tasks) {
 			try {
-				upsertCrewAgent(
-					manifest,
-					recordFromTask(manifest, task, "scaffold"),
-				);
+				upsertCrewAgent(manifest, recordFromTask(manifest, task, "scaffold"));
 			} catch {
 				/* non-critical */
 			}
@@ -114,7 +98,10 @@ function getProcessStartTime(pid: number): number | undefined {
 		const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf-8");
 		const lastParen = stat.lastIndexOf(")");
 		if (lastParen === -1) return undefined;
-		const fieldsAfterComm = stat.slice(lastParen + 1).trim().split(/\s+/);
+		const fieldsAfterComm = stat
+			.slice(lastParen + 1)
+			.trim()
+			.split(/\s+/);
 		// starttime is at index 19 (the 20th field after comm)
 		const startTimeClockTicks = Number(fieldsAfterComm[19]);
 		if (!Number.isFinite(startTimeClockTicks)) return undefined;
@@ -151,11 +138,7 @@ function checkPidLiveness(
 	// Re-verify startTime after kill(0) to close the TOCTOU window.
 	// If startTime changed, the PID was recycled to a different process.
 	const startTimeAfter = getProcessStartTime(pid);
-	if (
-		startTimeBefore !== undefined &&
-		startTimeAfter !== undefined &&
-		startTimeBefore !== startTimeAfter
-	) {
+	if (startTimeBefore !== undefined && startTimeAfter !== undefined && startTimeBefore !== startTimeAfter) {
 		// PID was recycled — treat as dead to avoid acting on wrong process.
 		return { alive: false, detail: "pid_recycled" };
 	}
@@ -166,9 +149,7 @@ function checkPidLiveness(
 		const heartbeatPath = path.join(stateRoot, "heartbeat.json");
 		try {
 			if (fs.existsSync(heartbeatPath)) {
-				const hb = JSON.parse(
-					fs.readFileSync(heartbeatPath, "utf-8"),
-				) as { pid?: number; at?: number };
+				const hb = JSON.parse(fs.readFileSync(heartbeatPath, "utf-8")) as { pid?: number; at?: number };
 				if (hb?.pid === pid && hb?.at) {
 					const ageMs = Date.now() - hb.at;
 					// Heartbeat written < 5 min ago → process was alive recently.
@@ -192,11 +173,7 @@ function checkPidLiveness(
  * Phase 3: For dead PIDs, repair immediately.
  * For alive PIDs, only mark stale if status hasn't updated in STALE_ALIVE_PID_MS.
  */
-function evaluateStaleness(
-	manifest: TeamRunManifest,
-	pidAlive: boolean,
-	now: number,
-): { stale: boolean; reason: string } {
+function evaluateStaleness(manifest: TeamRunManifest, pidAlive: boolean, now: number): { stale: boolean; reason: string } {
 	if (!pidAlive) {
 		return { stale: true, reason: "pid_dead" };
 	}
@@ -215,24 +192,11 @@ function evaluateStaleness(
 
 function hasRecentActiveEvidence(tasks: TeamTaskState[], now: number): boolean {
 	return tasks.some((task) => {
-		if (task.status !== "running" && task.status !== "waiting")
-			return false;
-		const heartbeatAt = task.heartbeat?.lastSeenAt
-			? new Date(task.heartbeat.lastSeenAt).getTime()
-			: Number.NaN;
-		if (
-			task.heartbeat?.alive !== false &&
-			Number.isFinite(heartbeatAt) &&
-			now - heartbeatAt <= ACTIVE_EVIDENCE_TTL_MS
-		)
-			return true;
-		const activityAt = task.agentProgress?.lastActivityAt
-			? new Date(task.agentProgress.lastActivityAt).getTime()
-			: Number.NaN;
-		return (
-			Number.isFinite(activityAt) &&
-			now - activityAt <= ACTIVE_EVIDENCE_TTL_MS
-		);
+		if (task.status !== "running" && task.status !== "waiting") return false;
+		const heartbeatAt = task.heartbeat?.lastSeenAt ? new Date(task.heartbeat.lastSeenAt).getTime() : Number.NaN;
+		if (task.heartbeat?.alive !== false && Number.isFinite(heartbeatAt) && now - heartbeatAt <= ACTIVE_EVIDENCE_TTL_MS) return true;
+		const activityAt = task.agentProgress?.lastActivityAt ? new Date(task.agentProgress.lastActivityAt).getTime() : Number.NaN;
+		return Number.isFinite(activityAt) && now - activityAt <= ACTIVE_EVIDENCE_TTL_MS;
 	});
 }
 
@@ -242,15 +206,10 @@ function hasRecentActiveEvidence(tasks: TeamTaskState[], now: number): boolean {
  * are considered NOT stale (they may be newly spawned and haven't reported yet).
  */
 function isTaskHeartbeatStale(task: TeamTaskState, now: number): boolean {
-	const heartbeatAt = task.heartbeat?.lastSeenAt
-		? new Date(task.heartbeat.lastSeenAt).getTime()
-		: Number.NaN;
-	const activityAt = task.agentProgress?.lastActivityAt
-		? new Date(task.agentProgress.lastActivityAt).getTime()
-		: Number.NaN;
+	const heartbeatAt = task.heartbeat?.lastSeenAt ? new Date(task.heartbeat.lastSeenAt).getTime() : Number.NaN;
+	const activityAt = task.agentProgress?.lastActivityAt ? new Date(task.agentProgress.lastActivityAt).getTime() : Number.NaN;
 	// If no heartbeat AND no activity, we can't determine staleness — not stale
-	if (!Number.isFinite(heartbeatAt) && !Number.isFinite(activityAt))
-		return false;
+	if (!Number.isFinite(heartbeatAt) && !Number.isFinite(activityAt)) return false;
 	// Compute elapsed from both sources and use the fresher (minimum) one,
 	// mirroring heartbeat-watcher logic: if either source has recent activity,
 	// the task is not stale even if the other is stale.
@@ -268,13 +227,8 @@ function isTaskHeartbeatStale(task: TeamTaskState, now: number): boolean {
  * Merged from the former allRunningTasksHeartbeatStale and
  * findIndividuallyStaleTaskIds to avoid redundant duplicate checks.
  */
-function getRunningTaskStaleness(
-	tasks: TeamTaskState[],
-	now: number,
-): { allStale: boolean; staleTaskIds: string[] } {
-	const runningTasks = tasks.filter(
-		(t) => t.status === "running" || t.status === "waiting",
-	);
+function getRunningTaskStaleness(tasks: TeamTaskState[], now: number): { allStale: boolean; staleTaskIds: string[] } {
+	const runningTasks = tasks.filter((t) => t.status === "running" || t.status === "waiting");
 	if (runningTasks.length === 0) return { allStale: false, staleTaskIds: [] };
 	const staleTaskIds: string[] = [];
 	for (const task of runningTasks) {
@@ -299,7 +253,9 @@ function getRunningTaskStaleness(
  * readable code + help hint; `.message` carries the same rich text as before.
  */
 function buildStaleReconcileError(task: TeamTaskState, reason: string): Error {
-	const heartbeatAgeSeconds = task.heartbeat?.lastSeenAt ? Math.round((Date.now() - new Date(task.heartbeat.lastSeenAt).getTime()) / 1000) : undefined;
+	const heartbeatAgeSeconds = task.heartbeat?.lastSeenAt
+		? Math.round((Date.now() - new Date(task.heartbeat.lastSeenAt).getTime()) / 1000)
+		: undefined;
 	return errors.runStale(reason, heartbeatAgeSeconds);
 }
 
@@ -308,18 +264,10 @@ function formatStaleReconcileError(task: TeamTaskState, reason: string): string 
 	return buildStaleReconcileError(task, reason).message;
 }
 
-function repairStaleRun(
-	manifest: TeamRunManifest,
-	tasks: TeamTaskState[],
-	reason: string,
-): TeamTaskState[] {
+function repairStaleRun(manifest: TeamRunManifest, tasks: TeamTaskState[], reason: string): TeamTaskState[] {
 	const now = new Date().toISOString();
 	const repairedTasks = tasks.map((task) => {
-		if (
-			task.status === "running" ||
-			task.status === "queued" ||
-			task.status === "waiting"
-		) {
+		if (task.status === "running" || task.status === "queued" || task.status === "waiting") {
 			return {
 				...task,
 				status: "cancelled" as const,
@@ -333,10 +281,7 @@ function repairStaleRun(
 	// Update agent records so widget sees cancelled status immediately
 	for (const task of repairedTasks) {
 		try {
-			upsertCrewAgent(
-				manifest,
-				recordFromTask(manifest, task, "scaffold"),
-			);
+			upsertCrewAgent(manifest, recordFromTask(manifest, task, "scaffold"));
 		} catch {
 			/* non-critical */
 		}
@@ -358,11 +303,7 @@ function repairStaleRun(
  * /tmp workspaces where concurrent access is a known benign race (separate
  * dirs, low consequence of redundant repair).
  */
-export function reconcileStaleRun(
-	manifest: TeamRunManifest,
-	tasks: TeamTaskState[],
-	now = Date.now(),
-): ReconcileResult {
+export function reconcileStaleRun(manifest: TeamRunManifest, tasks: TeamTaskState[], now = Date.now()): ReconcileResult {
 	const runId = manifest.runId;
 
 	// Preserve runs intentionally blocked on human plan approval. These are not
@@ -414,11 +355,7 @@ export function reconcileStaleRun(
 		// Merged with individual stale task check to avoid redundant duplicate checks.
 		const { allStale, staleTaskIds } = getRunningTaskStaleness(tasks, now);
 		if (allStale) {
-			const repaired = repairStaleRun(
-				manifest,
-				tasks,
-				"no_pid_heartbeat_stale",
-			);
+			const repaired = repairStaleRun(manifest, tasks, "no_pid_heartbeat_stale");
 			return {
 				runId,
 				verdict: "no_status",
@@ -449,10 +386,7 @@ export function reconcileStaleRun(
 		// Fall through: no recent activity but not all tasks stale enough yet.
 		// Check the longer STALE_ALIVE_PID_MS threshold for very old runs.
 		const updatedAt = new Date(manifest.updatedAt).getTime();
-		if (
-			Number.isFinite(updatedAt) &&
-			now - updatedAt > STALE_ALIVE_PID_MS
-		) {
+		if (Number.isFinite(updatedAt) && now - updatedAt > STALE_ALIVE_PID_MS) {
 			const repaired = repairStaleRun(manifest, tasks, "no_pid_stale");
 			return {
 				runId,
@@ -515,7 +449,11 @@ export interface OrphanReconcileResult {
  */
 export function reconcileOrphanedTempWorkspaces(
 	now = Date.now(),
-	options?: { cleanupOrphanedTempDirs?: boolean; tmpDir?: string; scanBatchSize?: number },
+	options?: {
+		cleanupOrphanedTempDirs?: boolean;
+		tmpDir?: string;
+		scanBatchSize?: number;
+	},
 ): OrphanReconcileResult {
 	// Injectable tmpDir + scanBatchSize for deterministic unit testing
 	// (Round 19: tests must not depend on global /tmp cleanliness; the
@@ -536,8 +474,7 @@ export function reconcileOrphanedTempWorkspaces(
 			.sort((a, b) => a.name.localeCompare(b.name))
 			.slice(0, scanBatch);
 		for (const entry of candidates) {
-			if (!entry.isDirectory() || !entry.name.startsWith("pi-crew-"))
-				continue;
+			if (!entry.isDirectory() || !entry.name.startsWith("pi-crew-")) continue;
 			const workspaceDir = path.join(tmpDir, entry.name);
 			const crewDir = path.join(workspaceDir, ".crew");
 			if (!fs.existsSync(crewDir)) continue;
@@ -546,36 +483,17 @@ export function reconcileOrphanedTempWorkspaces(
 			let hasRunning = false;
 			try {
 				for (const runDir of fs.readdirSync(stateRunsDir)) {
-					const manifestPath = path.join(
-						stateRunsDir,
-						runDir,
-						"manifest.json",
-					);
-					const tasksPath = path.join(
-						stateRunsDir,
-						runDir,
-						"tasks.json",
-					);
-					if (
-						!fs.existsSync(manifestPath) ||
-						!fs.existsSync(tasksPath)
-					)
-						continue;
+					const manifestPath = path.join(stateRunsDir, runDir, "manifest.json");
+					const tasksPath = path.join(stateRunsDir, runDir, "tasks.json");
+					if (!fs.existsSync(manifestPath) || !fs.existsSync(tasksPath)) continue;
 					try {
-						const manifest: TeamRunManifest = JSON.parse(
-							fs.readFileSync(manifestPath, "utf-8"),
-						);
+						const manifest: TeamRunManifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 						if (manifest.status !== "running") continue;
-						const tasks: TeamTaskState[] = JSON.parse(
-							fs.readFileSync(tasksPath, "utf-8"),
-						);
+						const tasks: TeamTaskState[] = JSON.parse(fs.readFileSync(tasksPath, "utf-8"));
 						const result = reconcileStaleRun(manifest, tasks, now);
 						if (result.repaired && result.repairedTasks) {
 							// Persist repaired tasks
-							fs.writeFileSync(
-								tasksPath,
-								JSON.stringify(result.repairedTasks, null, 2),
-							);
+							fs.writeFileSync(tasksPath, JSON.stringify(result.repairedTasks, null, 2));
 							// Update manifest status
 							const updated = {
 								...manifest,
@@ -583,21 +501,11 @@ export function reconcileOrphanedTempWorkspaces(
 								updatedAt: new Date(now).toISOString(),
 								summary: `Stale run reconciled: ${result.detail}`,
 							};
-							fs.writeFileSync(
-								manifestPath,
-								JSON.stringify(updated, null, 2),
-							);
+							fs.writeFileSync(manifestPath, JSON.stringify(updated, null, 2));
 							// Update agent records
 							for (const task of result.repairedTasks) {
 								try {
-									upsertCrewAgent(
-										updated,
-										recordFromTask(
-											updated,
-											task,
-											"scaffold",
-										),
-									);
+									upsertCrewAgent(updated, recordFromTask(updated, task, "scaffold"));
 								} catch {
 									/* non-critical */
 								}
@@ -605,48 +513,38 @@ export function reconcileOrphanedTempWorkspaces(
 							repaired++;
 						}
 						// Persist result_exists manifest status update
-							if (result.verdict === "result_exists") {
-								// checkResultFile (called by reconcileStaleRun at line 518)
-								// already saved manifest.status='completed' at line 66.
-								// No additional manifest write needed here — avoids TOCTOU
-								// window between checkResultFile save and re-write.
-								// Sync agent records (checkResultFile also does this but
-								// we sync here for consistency)
-								for (const task of tasks) {
-									try {
-										upsertCrewAgent(
-											manifest,
-											recordFromTask(manifest, task, "scaffold"),
-										);
-									} catch {
-										/* non-critical */
-									}
+						if (result.verdict === "result_exists") {
+							// checkResultFile (called by reconcileStaleRun at line 518)
+							// already saved manifest.status='completed' at line 66.
+							// No additional manifest write needed here — avoids TOCTOU
+							// window between checkResultFile save and re-write.
+							// Sync agent records (checkResultFile also does this but
+							// we sync here for consistency)
+							for (const task of tasks) {
+								try {
+									upsertCrewAgent(manifest, recordFromTask(manifest, task, "scaffold"));
+								} catch {
+									/* non-critical */
 								}
 							}
-							// If still running after reconciliation attempt, mark for dir-preserving
-							if (
-								result.verdict === "healthy" ||
-								(result.verdict === "no_status" && !result.repaired)
-							) {
-								hasRunning = true;
-							}
+						}
+						// If still running after reconciliation attempt, mark for dir-preserving
+						if (result.verdict === "healthy" || (result.verdict === "no_status" && !result.repaired)) {
+							hasRunning = true;
+						}
 					} catch (err) {
 						// Log warning when skipping a directory due to error.
 						// Note: manifestPath here refers to the variable defined in the
 						// for loop at line 442 (outer scope of this catch block).
 						const scanManifestPath = manifestPath;
-						console.warn(
-							`[stale-reconciler] Skipping manifest due to parse error: ${scanManifestPath}: ${err}`,
-						);
+						console.warn(`[stale-reconciler] Skipping manifest due to parse error: ${scanManifestPath}: ${err}`);
 					}
 				}
 			} catch (err) {
 				// Cannot determine running state — treat as if running to prevent
 				// premature cleanup of a potentially active workspace.
 				hasRunning = true;
-				console.warn(
-					`[stale-reconciler] Skipping unreadable runs dir: ${stateRunsDir}: ${err}`,
-				);
+				console.warn(`[stale-reconciler] Skipping unreadable runs dir: ${stateRunsDir}: ${err}`);
 			}
 
 			// Post-loop: check if this workspace dir can be cleaned up.
@@ -696,22 +594,14 @@ export function reconcileOrphanedTempWorkspaces(
 				if (fs.existsSync(stateRunsDir)) {
 					try {
 						for (const runDir of fs.readdirSync(stateRunsDir)) {
-							const manifestPath = path.join(
-								stateRunsDir,
-								runDir,
-								"manifest.json",
-							);
+							const manifestPath = path.join(stateRunsDir, runDir, "manifest.json");
 							if (!fs.existsSync(manifestPath)) continue;
 							let manifest: TeamRunManifest | undefined;
 							try {
-								manifest = JSON.parse(
-									fs.readFileSync(manifestPath, "utf-8"),
-								);
+								manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 							} catch (err) {
 								// Log warning when skipping a directory due to error
-								console.warn(
-									`[stale-reconciler] Skipping manifest due to parse error: ${manifestPath}: ${err}`,
-								);
+								console.warn(`[stale-reconciler] Skipping manifest due to parse error: ${manifestPath}: ${err}`);
 								continue;
 							}
 							if (manifest?.status === "running") {
@@ -720,9 +610,7 @@ export function reconcileOrphanedTempWorkspaces(
 							}
 						}
 					} catch (err) {
-						console.warn(
-							`[stale-reconciler] Skipping unreadable runs dir: ${stateRunsDir}: ${err}`,
-						);
+						console.warn(`[stale-reconciler] Skipping unreadable runs dir: ${stateRunsDir}: ${err}`);
 					}
 				}
 			}
@@ -733,16 +621,10 @@ export function reconcileOrphanedTempWorkspaces(
 					if (fs.existsSync(stateRunsDir)) {
 						try {
 							for (const runDir of fs.readdirSync(stateRunsDir)) {
-								const manifestPath = path.join(
-									stateRunsDir,
-									runDir,
-									"manifest.json",
-								);
+								const manifestPath = path.join(stateRunsDir, runDir, "manifest.json");
 								if (!fs.existsSync(manifestPath)) continue;
 								try {
-									const manifest: TeamRunManifest = JSON.parse(
-										fs.readFileSync(manifestPath, "utf-8"),
-									);
+									const manifest: TeamRunManifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 									if (manifest.status === "running") {
 										stillClean = false;
 										break;
@@ -777,16 +659,10 @@ export function reconcileOrphanedTempWorkspaces(
 				if (fs.existsSync(stateRunsDir)) {
 					try {
 						for (const runDir of fs.readdirSync(stateRunsDir)) {
-							const manifestPath = path.join(
-								stateRunsDir,
-								runDir,
-								"manifest.json",
-							);
+							const manifestPath = path.join(stateRunsDir, runDir, "manifest.json");
 							if (!fs.existsSync(manifestPath)) continue;
 							try {
-								const m = JSON.parse(
-									fs.readFileSync(manifestPath, "utf-8"),
-								) as TeamRunManifest;
+								const m = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as TeamRunManifest;
 								if (m.status === "running") {
 									hasRunningManifest = true;
 									break;

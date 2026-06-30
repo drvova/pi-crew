@@ -25,18 +25,12 @@ const CREW_GITIGNORE_ENTRIES = [
  */
 export async function updateGitignore(gitignorePath: string): Promise<void> {
 	if (!fs.existsSync(gitignorePath)) {
-		fs.writeFileSync(
-			gitignorePath,
-			CREW_GITIGNORE_ENTRIES.join("\n") + "\n",
-			"utf-8",
-		);
+		fs.writeFileSync(gitignorePath, CREW_GITIGNORE_ENTRIES.join("\n") + "\n", "utf-8");
 		return;
 	}
 
 	const current = fs.readFileSync(gitignorePath, "utf-8");
-	const existingLines = new Set(
-		current.split("\n").map((line) => line.trim()),
-	);
+	const existingLines = new Set(current.split("\n").map((line) => line.trim()));
 
 	let appended = "";
 	for (const entry of CREW_GITIGNORE_ENTRIES) {

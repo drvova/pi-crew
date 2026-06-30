@@ -1,10 +1,10 @@
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { randomUUID, timingSafeEqual } from "node:crypto";
-import type { TeamRunManifest } from "./types.ts";
 import { DEFAULT_LOCKS } from "../config/defaults.ts";
 import { sleepSync } from "../utils/sleep.ts";
 import { isSymlinkSafePath } from "./atomic-write.ts";
+import type { TeamRunManifest } from "./types.ts";
 
 export interface RunLockOptions {
 	staleMs?: number;
@@ -15,8 +15,6 @@ const DEFAULT_STALE_MS = DEFAULT_LOCKS.staleMs;
 function lockPath(manifest: TeamRunManifest): string {
 	return path.join(manifest.stateRoot, "run.lock");
 }
-
-
 
 function parseCreatedAtFromLock(raw: string): number | undefined {
 	try {
@@ -112,7 +110,9 @@ function readLockSnapshot(filePath: string, staleMs: number): { canSteal: boolea
 				isAlive = false;
 			}
 		}
-	} catch { /* malformed payload — keep isAlive=true */ }
+	} catch {
+		/* malformed payload — keep isAlive=true */
+	}
 	// Steal if stale OR holder dead — matches the original intent.
 	return { canSteal: isStale || !isAlive };
 }
@@ -148,7 +148,15 @@ function writeLockFile(filePath: string, token: string, kind: LockKind = "file")
 	fs.mkdirSync(path.dirname(filePath), { recursive: true });
 	const fd = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
 	try {
-		fs.writeSync(fd, JSON.stringify({ kind, pid: process.pid, createdAt: new Date().toISOString(), token }));
+		fs.writeSync(
+			fd,
+			JSON.stringify({
+				kind,
+				pid: process.pid,
+				createdAt: new Date().toISOString(),
+				token,
+			}),
+		);
 	} finally {
 		fs.closeSync(fd);
 	}
@@ -198,7 +206,9 @@ function releaseLock(filePath: string, token: string): void {
 	let isSymlink = false;
 	try {
 		isSymlink = fs.lstatSync(filePath).isSymbolicLink();
-	} catch { /* file doesn't exist — that's fine, we'll handle ENOENT below */ }
+	} catch {
+		/* file doesn't exist — that's fine, we'll handle ENOENT below */
+	}
 	if (isSymlink) return;
 
 	const stored = readLockToken(filePath);
@@ -240,7 +250,9 @@ function acquireLockWithRetry(filePath: string, staleMs: number, kind: LockKind 
 			// Stale or dead holder — forcibly remove the lock.
 			try {
 				fs.rmSync(filePath, { force: true });
-			} catch { /* race — let loop retry */ }
+			} catch {
+				/* race — let loop retry */
+			}
 			sleepSync(Math.min(250, 25 * 2 ** attempt));
 			attempt++;
 		}
@@ -273,7 +285,9 @@ async function acquireLockWithRetryAsync(filePath: string, staleMs: number, kind
 			// Stale or dead holder — forcibly remove the lock.
 			try {
 				fs.rmSync(filePath, { force: true });
-			} catch { /* race — let loop retry */ }
+			} catch {
+				/* race — let loop retry */
+			}
 			const delay = Math.min(250, 25 * 2 ** attempt);
 			await sleep(delay);
 			attempt++;

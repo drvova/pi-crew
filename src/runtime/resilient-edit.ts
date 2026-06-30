@@ -23,7 +23,7 @@
  *   }
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { replace, type ReplaceResult } from "../runtime/replace.ts";
+import { type ReplaceResult, replace } from "../runtime/replace.ts";
 
 interface ToolLike {
 	name: string;
@@ -50,13 +50,7 @@ interface EditResult {
 	[key: string]: unknown;
 }
 
-const NOT_FOUND_PATTERNS = [
-	/old_string not found/i,
-	/oldstring not found/i,
-	/no match/i,
-	/could not find/i,
-	/string not found/i,
-];
+const NOT_FOUND_PATTERNS = [/old_string not found/i, /oldstring not found/i, /no match/i, /could not find/i, /string not found/i];
 
 function isNotFoundResult(result: unknown): boolean {
 	if (!result || typeof result !== "object") return false;
@@ -72,7 +66,7 @@ function isPiDiffLoaded(pi: ExtensionAPI): boolean {
 		const piAny = pi as any;
 		const extensions = piAny?.extensions ?? piAny?._extensions ?? [];
 		const names = Array.isArray(extensions)
-			? extensions.map((e: unknown) => (typeof e === "string" ? e : (e as { name?: string })?.name ?? ""))
+			? extensions.map((e: unknown) => (typeof e === "string" ? e : ((e as { name?: string })?.name ?? "")))
 			: Object.keys(extensions);
 		return names.some((n: string) => typeof n === "string" && n.includes("pi-diff"));
 	} catch {
@@ -94,7 +88,7 @@ export function wrapEditWithResilientReplace(pi: ExtensionAPI, tools?: { edit: T
 		return false;
 	}
 
-	const t = tools ?? ((pi as unknown as { tools?: { edit?: ToolLike } }).tools);
+	const t = tools ?? (pi as unknown as { tools?: { edit?: ToolLike } }).tools;
 	if (!t?.edit?.execute) return false;
 
 	const nativeExecute = t.edit.execute.bind(t.edit);
@@ -117,12 +111,7 @@ export function wrapEditWithResilientReplace(pi: ExtensionAPI, tools?: { edit: T
 
 	return true;
 
-	async function retryWithReplace(
-		params: EditParams,
-		toolCallId: string,
-		signal: any,
-		onUpdate: any,
-	): Promise<unknown> {
+	async function retryWithReplace(params: EditParams, toolCallId: string, signal: any, onUpdate: any): Promise<unknown> {
 		const filePath = params.path ?? params.filePath;
 		const oldStr = params.oldString ?? params.old_string;
 		const newStr = params.newString ?? params.new_string;
@@ -139,18 +128,14 @@ export function wrapEditWithResilientReplace(pi: ExtensionAPI, tools?: { edit: T
 		try {
 			content = await fs.readFile(filePath, "utf8");
 		} catch (readErr) {
-			throw new Error(
-				`resilient edit: could not read ${filePath}: ${
-					readErr instanceof Error ? readErr.message : String(readErr)
-				}`,
-			);
+			throw new Error(`resilient edit: could not read ${filePath}: ${readErr instanceof Error ? readErr.message : String(readErr)}`);
 		}
 
-		const result: ReplaceResult = replace(content, oldStr, newStr, { replaceAll });
+		const result: ReplaceResult = replace(content, oldStr, newStr, {
+			replaceAll,
+		});
 		if (!result.changed) {
-			throw new Error(
-				`old_string not found (resilient cascade exhausted, strategy=${result.strategy})`,
-			);
+			throw new Error(`old_string not found (resilient cascade exhausted, strategy=${result.strategy})`);
 		}
 
 		await fs.writeFile(filePath, result.content, "utf8");

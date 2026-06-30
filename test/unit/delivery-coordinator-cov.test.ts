@@ -1,9 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	DeliveryCoordinator,
-} from "../../src/runtime/delivery-coordinator.ts";
+import { describe, it } from "node:test";
 import type { NotificationDescriptor } from "../../src/extension/notification-router.ts";
+import { DeliveryCoordinator } from "../../src/runtime/delivery-coordinator.ts";
 
 function makeNotification(overrides: Partial<NotificationDescriptor> = {}): NotificationDescriptor {
 	return {
@@ -90,7 +88,9 @@ describe("DeliveryCoordinator", () => {
 		it("sends follow-up when active", () => {
 			let sent = false;
 			const dc = new DeliveryCoordinator({
-				sendFollowUp: (_title: string, _body: string) => { sent = true; },
+				sendFollowUp: (_title: string, _body: string) => {
+					sent = true;
+				},
 			});
 			dc.activate("session-1");
 			dc.deliverNotification(makeNotification());
@@ -109,7 +109,9 @@ describe("DeliveryCoordinator", () => {
 			let emitted = false;
 			const dc = new DeliveryCoordinator({
 				sendFollowUp: () => {},
-				emit: (event: string) => { if (event === "pi-crew:notification") emitted = true; },
+				emit: (event: string) => {
+					if (event === "pi-crew:notification") emitted = true;
+				},
 			});
 			dc.activate("session-1");
 			dc.deliverNotification(makeNotification());
@@ -122,7 +124,9 @@ describe("DeliveryCoordinator", () => {
 		it("sends wake-up when active", () => {
 			let woken = false;
 			const dc = new DeliveryCoordinator({
-				sendWakeUp: (_msg: string) => { woken = true; },
+				sendWakeUp: (_msg: string) => {
+					woken = true;
+				},
 			});
 			dc.activate("session-1");
 			dc.deliverSteer("run-1", "wake up!");
@@ -140,7 +144,9 @@ describe("DeliveryCoordinator", () => {
 		it("flushes queued steer on activate", () => {
 			let steered = false;
 			const dc = new DeliveryCoordinator({
-				sendWakeUp: (_msg: string) => { steered = true; },
+				sendWakeUp: (_msg: string) => {
+					steered = true;
+				},
 			});
 			dc.deliverSteer("run-1", "steer msg");
 			dc.activate("session-1");
@@ -153,7 +159,9 @@ describe("DeliveryCoordinator", () => {
 		it("stale steers from previous generation are dropped on flush", () => {
 			let steerCount = 0;
 			const dc = new DeliveryCoordinator({
-				sendWakeUp: () => { steerCount++; },
+				sendWakeUp: () => {
+					steerCount++;
+				},
 			});
 			// Enqueue while inactive (generation 0)
 			dc.deliverSteer("run-1", "stale steer");

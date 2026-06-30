@@ -1,28 +1,75 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
 	aggregateParallelOutputs,
-	flattenSteps,	isParallelGroup,	mapConcurrent,
+	flattenSteps,
+	isParallelGroup,
 	MAX_PARALLEL_CONCURRENCY,
-	type ParallelStepGroup,	type RunnerStep,	type RunnerSubagentStep,
+	mapConcurrent,
+	type ParallelStepGroup,
+	type RunnerStep,
+	type RunnerSubagentStep,
 } from "../../src/runtime/parallel-utils.ts";
 
-
 test("isParallelGroup identifies parallel step groups", () => {
-	const parallel: ParallelStepGroup = { parallel: [{ agent: "a", task: "x", inheritProjectContext: false, inheritSkills: false, cwd: ".", model: "m" }] };
-	const sequential: RunnerSubagentStep = { agent: "a", task: "x", inheritProjectContext: false, inheritSkills: false };
+	const parallel: ParallelStepGroup = {
+		parallel: [
+			{
+				agent: "a",
+				task: "x",
+				inheritProjectContext: false,
+				inheritSkills: false,
+				cwd: ".",
+				model: "m",
+			},
+		],
+	};
+	const sequential: RunnerSubagentStep = {
+		agent: "a",
+		task: "x",
+		inheritProjectContext: false,
+		inheritSkills: false,
+	};
 	assert.equal(isParallelGroup(parallel), true);
 	assert.equal(isParallelGroup(sequential), false);
 });
 
 test("flattenSteps expands parallel groups", () => {
 	const steps: RunnerStep[] = [
-		{ agent: "a", task: "x", inheritProjectContext: false, inheritSkills: false },
-		{ parallel: [{ agent: "b", task: "y", inheritProjectContext: false, inheritSkills: false }, { agent: "c", task: "z", inheritProjectContext: false, inheritSkills: false }] },
-		{ agent: "d", task: "w", inheritProjectContext: false, inheritSkills: false },
+		{
+			agent: "a",
+			task: "x",
+			inheritProjectContext: false,
+			inheritSkills: false,
+		},
+		{
+			parallel: [
+				{
+					agent: "b",
+					task: "y",
+					inheritProjectContext: false,
+					inheritSkills: false,
+				},
+				{
+					agent: "c",
+					task: "z",
+					inheritProjectContext: false,
+					inheritSkills: false,
+				},
+			],
+		},
+		{
+			agent: "d",
+			task: "w",
+			inheritProjectContext: false,
+			inheritSkills: false,
+		},
 	];
 	const flat = flattenSteps(steps);
-	assert.deepEqual(flat.map((item) => item.agent), ["a", "b", "c", "d"]);
+	assert.deepEqual(
+		flat.map((item) => item.agent),
+		["a", "b", "c", "d"],
+	);
 });
 
 test("mapConcurrent respects limit and preserves order", async () => {

@@ -38,9 +38,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const tmpDir = fs.mkdtempSync(
-	path.join(os.tmpdir(), "pi-crew-issue-29-runtime-"),
-);
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-issue-29-runtime-"));
 fs.mkdirSync(path.join(tmpDir, ".pi"), { recursive: true });
 // CRITICALLY: no .crew/
 
@@ -50,9 +48,7 @@ console.log("  (spawns REAL detached background-runner.ts process)");
 console.log("=".repeat(72));
 console.log(`Project: ${tmpDir}`);
 console.log(`  Has .pi/  : ${fs.existsSync(path.join(tmpDir, ".pi"))}`);
-console.log(
-	`  Has .crew/: ${fs.existsSync(path.join(tmpDir, ".crew"))} (should be false)`,
-);
+console.log(`  Has .crew/: ${fs.existsSync(path.join(tmpDir, ".crew"))} (should be false)`);
 console.log();
 
 // ── Crash detection ──────────────────────────────────────────────────────
@@ -78,10 +74,7 @@ process.env.PI_TEAMS_EXECUTE_WORKERS = "0";
 // because the background-runner explicitly blocks PI_CREW_EXECUTE_WORKERS
 // from leaking to the child (security feature).
 
-const piCrewRoot = path.resolve(
-	path.dirname(fileURLToPath(import.meta.url)),
-	"..",
-);
+const piCrewRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let pass = 0;
 let fail = 0;
 const failures: string[] = [];
@@ -101,10 +94,7 @@ async function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForFile(
-	filePath: string,
-	timeoutMs: number,
-): Promise<boolean> {
+async function waitForFile(filePath: string, timeoutMs: number): Promise<boolean> {
 	const start = Date.now();
 	while (Date.now() - start < timeoutMs) {
 		if (fs.existsSync(filePath)) return true;
@@ -114,31 +104,16 @@ async function waitForFile(
 }
 
 async function main(): Promise<void> {
-	const { createRunManifest } = await import(
-		path.join(piCrewRoot, "src/state/state-store.ts")
-	);
-	const { discoverTeams, allTeams } = await import(
-		path.join(piCrewRoot, "src/teams/discover-teams.ts")
-	);
-	const { discoverWorkflows, allWorkflows } = await import(
-		path.join(piCrewRoot, "src/workflows/discover-workflows.ts")
-	);
-	const { spawnBackgroundTeamRun } = await import(
-		path.join(piCrewRoot, "src/runtime/async-runner.ts")
-	);
-	const { projectCrewRoot, clearProjectRootCache } = await import(
-		path.join(piCrewRoot, "src/utils/paths.ts")
-	);
-	const { loadRunManifestById } = await import(
-		path.join(piCrewRoot, "src/state/state-store.ts")
-	);
+	const { createRunManifest } = await import(path.join(piCrewRoot, "src/state/state-store.ts"));
+	const { discoverTeams, allTeams } = await import(path.join(piCrewRoot, "src/teams/discover-teams.ts"));
+	const { discoverWorkflows, allWorkflows } = await import(path.join(piCrewRoot, "src/workflows/discover-workflows.ts"));
+	const { spawnBackgroundTeamRun } = await import(path.join(piCrewRoot, "src/runtime/async-runner.ts"));
+	const { projectCrewRoot, clearProjectRootCache } = await import(path.join(piCrewRoot, "src/utils/paths.ts"));
+	const { loadRunManifestById } = await import(path.join(piCrewRoot, "src/state/state-store.ts"));
 
 	clearProjectRootCache();
 	const root = projectCrewRoot(tmpDir);
-	check(
-		`projectCrewRoot returns .pi/teams/`,
-		root === path.join(tmpDir, ".pi", "teams"),
-	);
+	check(`projectCrewRoot returns .pi/teams/`, root === path.join(tmpDir, ".pi", "teams"));
 
 	// ── Set up a team run ─────────────────────────────────────────────
 	console.log();
@@ -178,8 +153,7 @@ async function main(): Promise<void> {
 		...((manifest as { runConfig?: unknown }).runConfig ?? {}),
 		executeWorkers: false,
 		runtime: {
-			...(((manifest as { runConfig?: { runtime?: unknown } }).runConfig
-				?.runtime ?? {}) as Record<string, unknown>),
+			...(((manifest as { runConfig?: { runtime?: unknown } }).runConfig?.runtime ?? {}) as Record<string, unknown>),
 			mode: "scaffold",
 		},
 	};
@@ -196,39 +170,24 @@ async function main(): Promise<void> {
 	};
 	console.log(`  Created run: ${queuedManifest.runId}`);
 	console.log(`  stateRoot:   ${queuedManifest.stateRoot}`);
-	console.log(
-		`  runtime:     ${queuedManifest.runtimeResolution?.kind ?? "(default)"}`,
-	);
+	console.log(`  runtime:     ${queuedManifest.runtimeResolution?.kind ?? "(default)"}`);
 
 	check(
 		`manifest.stateRoot is under .pi/teams/state/runs/`,
-		queuedManifest.stateRoot ===
-			path.join(
-				tmpDir,
-				".pi",
-				"teams",
-				"state",
-				"runs",
-				queuedManifest.runId,
-			),
+		queuedManifest.stateRoot === path.join(tmpDir, ".pi", "teams", "state", "runs", queuedManifest.runId),
 		`got: ${queuedManifest.stateRoot}`,
 	);
 
 	// ── Step 2: Spawn REAL background runner ──────────────────────────
 	console.log();
-	console.log(
-		"Step 2: spawnBackgroundTeamRun() — spawn REAL detached process",
-	);
+	console.log("Step 2: spawnBackgroundTeamRun() — spawn REAL detached process");
 	console.log("-".repeat(72));
 
 	// Pass the queued manifest (background runner expects this format)
 	// We also need to write the manifest to disk so the runner can read it.
 	const stateDir = queuedManifest.stateRoot;
 	fs.mkdirSync(stateDir, { recursive: true });
-	fs.writeFileSync(
-		path.join(stateDir, "manifest.json"),
-		JSON.stringify(queuedManifest, null, 2),
-	);
+	fs.writeFileSync(path.join(stateDir, "manifest.json"), JSON.stringify(queuedManifest, null, 2));
 
 	const tStart = Date.now();
 	const spawnResult = await spawnBackgroundTeamRun(queuedManifest);
@@ -244,10 +203,7 @@ async function main(): Promise<void> {
 		spawnResult.logPath === path.join(stateDir, "background.log"),
 		`got: ${spawnResult.logPath}`,
 	);
-	check(
-		`logPath is NOT under .crew/state/runs/...`,
-		!spawnResult.logPath.includes(".crew/state/runs"),
-	);
+	check(`logPath is NOT under .crew/state/runs/...`, !spawnResult.logPath.includes(".crew/state/runs"));
 
 	// ── Step 4: Wait for the background runner to finish ──────────────
 	console.log();
@@ -295,10 +251,7 @@ async function main(): Promise<void> {
 			break;
 		}
 	}
-	check(
-		`background runner process exited (PID ${spawnResult.pid})`,
-		processExited,
-	);
+	check(`background runner process exited (PID ${spawnResult.pid})`, processExited);
 
 	// ── Step 5: Verify NO files leaked to .crew/ ──────────────────────
 	console.log();
@@ -306,26 +259,13 @@ async function main(): Promise<void> {
 	console.log("-".repeat(72));
 
 	const crewDir = path.join(tmpDir, ".crew");
-	check(
-		`no .crew/ directory was created (would indicate fallback)`,
-		!fs.existsSync(crewDir),
-		`found at: ${crewDir}`,
-	);
+	check(`no .crew/ directory was created (would indicate fallback)`, !fs.existsSync(crewDir), `found at: ${crewDir}`);
 
 	// Also check that all the expected files are under .pi/teams/
-	const expectedFiles = [
-		"manifest.json",
-		"tasks.json",
-		"events.jsonl",
-		"background.log",
-		"exit-code.txt",
-	];
+	const expectedFiles = ["manifest.json", "tasks.json", "events.jsonl", "background.log", "exit-code.txt"];
 	for (const f of expectedFiles) {
 		const p = path.join(stateDir, f);
-		check(
-			`${f} exists at .pi/teams/state/runs/<runId>/${f}`,
-			fs.existsSync(p),
-		);
+		check(`${f} exists at .pi/teams/state/runs/<runId>/${f}`, fs.existsSync(p));
 	}
 
 	// ── Step 6: Verify the runner wrote meaningful content ───────────
@@ -336,13 +276,8 @@ async function main(): Promise<void> {
 	if (logWritten) {
 		const logContent = fs.readFileSync(spawnResult.logPath, "utf-8");
 		const lineCount = logContent.split("\n").filter((l) => l.trim()).length;
-		check(
-			`background.log has content (${lineCount} non-empty lines)`,
-			lineCount > 0,
-		);
-		console.log(
-			`    First 200 chars: ${JSON.stringify(logContent.slice(0, 200))}`,
-		);
+		check(`background.log has content (${lineCount} non-empty lines)`, lineCount > 0);
+		console.log(`    First 200 chars: ${JSON.stringify(logContent.slice(0, 200))}`);
 	}
 
 	// Verify the manifest was updated by the runner
@@ -352,9 +287,7 @@ async function main(): Promise<void> {
 		console.log(`    Final status: ${reloaded.manifest.status}`);
 		check(
 			`final status is completed/failed/cancelled (not 'running')`,
-			["completed", "failed", "cancelled"].includes(
-				reloaded.manifest.status,
-			),
+			["completed", "failed", "cancelled"].includes(reloaded.manifest.status),
 			`got: ${reloaded.manifest.status}`,
 		);
 	}
@@ -362,9 +295,7 @@ async function main(): Promise<void> {
 	// ── Final verdict ───────────────────────────────────────────────────
 	console.log();
 	console.log("=".repeat(72));
-	console.log(
-		`Results: ${pass} passed, ${fail} failed, ${crashed ? "1" : "0"} crashed`,
-	);
+	console.log(`Results: ${pass} passed, ${fail} failed, ${crashed ? "1" : "0"} crashed`);
 	if (failures.length > 0) {
 		console.error("Failures:");
 		for (const f of failures) console.error(`  - ${f}`);

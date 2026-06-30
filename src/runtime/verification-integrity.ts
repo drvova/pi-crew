@@ -88,10 +88,7 @@ export function snapshotManifests(cwd: string): Record<string, string> {
  * @returns Sorted array of relative manifest paths that drifted. Identical
  * snapshots yield `[]`.
  */
-export function compareSnapshot(
-	a: Record<string, string>,
-	b: Record<string, string>,
-): string[] {
+export function compareSnapshot(a: Record<string, string>, b: Record<string, string>): string[] {
 	const drifted = new Set<string>();
 	for (const [key, hash] of Object.entries(a)) {
 		const other = b[key];

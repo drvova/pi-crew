@@ -3,25 +3,20 @@
  * @see src/runtime/retry-runner.ts
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import { HandoffManager, type HandoffSummary, type TaskPacket, type TaskResult } from "../../src/runtime/handoff-manager.ts";
 import {
-	RetryRunner,
+	type AttemptResult,
 	createRetryRunner,
 	DEFAULT_RETRY_CONFIG,
-	TRANSIENT_FAILURE_RETRY_CONFIG,
 	PERSISTENT_FAILURE_RETRY_CONFIG,
 	type RetryConfig,
 	type RetryResult,
-	type AttemptResult,
+	RetryRunner,
 	type TaskRunnerLike,
+	TRANSIENT_FAILURE_RETRY_CONFIG,
 } from "../../src/runtime/retry-runner.ts";
-import {
-	HandoffManager,
-	type TaskPacket,
-	type TaskResult,
-	type HandoffSummary,
-} from "../../src/runtime/handoff-manager.ts";
 
 // Test helpers
 function createTaskPacket(overrides: Partial<TaskPacket> = {}): TaskPacket {
@@ -118,10 +113,9 @@ test("RetryRunner - succeeds on first try with single success result", async () 
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+	});
 
 	assert.strictEqual(result.success, true);
 	assert.strictEqual(result.attempts.length, 1);
@@ -143,10 +137,9 @@ test("RetryRunner - retries failed tasks and succeeds", async () => {
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+	});
 
 	assert.strictEqual(result.success, true);
 	assert.strictEqual(result.attempts.length, 2);
@@ -163,10 +156,9 @@ test("RetryRunner - gives up after max attempts", async () => {
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+	});
 
 	assert.strictEqual(result.success, false);
 	assert.strictEqual(result.attempts.length, 3);
@@ -182,10 +174,10 @@ test("RetryRunner - stops on success when stopOnSuccess is true", async () => {
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 5, stopOnSuccess: true }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 5,
+		stopOnSuccess: true,
+	});
 
 	assert.strictEqual(result.success, true);
 	assert.strictEqual(result.attempts.length, 2); // Stopped after 2nd attempt
@@ -199,10 +191,10 @@ test("RetryRunner - continues when stopOnSuccess is false", async () => {
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3, stopOnSuccess: false }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+		stopOnSuccess: false,
+	});
 
 	// With stopOnSuccess=false, continues through all attempts
 	assert.strictEqual(result.attempts.length, 3);
@@ -217,18 +209,24 @@ test("RetryRunner - accumulates summaries between attempts", async () => {
 		runTask: async () => {
 			callCount++;
 			if (callCount <= 2) {
-				return createTaskResult({ outcome: "failure", usage: { totalTokens: callCount * 100 } });
+				return createTaskResult({
+					outcome: "failure",
+					usage: { totalTokens: callCount * 100 },
+				});
 			}
-			return createTaskResult({ outcome: "success", usage: { totalTokens: callCount * 100 } });
+			return createTaskResult({
+				outcome: "success",
+				usage: { totalTokens: callCount * 100 },
+			});
 		},
 	};
 
 	const retryRunner = new RetryRunner(mockRunner, manager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3, summaryBetweenAttempts: true }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+		summaryBetweenAttempts: true,
+	});
 
 	// With stopOnSuccess=true (default), success on 3rd attempt means 3 total attempts
 	// and 3 summaries (one generated before checking stopOnSuccess)
@@ -241,35 +239,29 @@ test("RetryRunner - accumulates summaries between attempts", async () => {
 test("RetryRunner - skips summaries when summaryBetweenAttempts is false", async () => {
 	const { manager, calls } = createTrackingHandoffManager();
 
-	const mockRunner = createMockTaskRunner([
-		createTaskResult({ outcome: "failure" }),
-		createTaskResult(),
-	]);
+	const mockRunner = createMockTaskRunner([createTaskResult({ outcome: "failure" }), createTaskResult()]);
 
 	const retryRunner = new RetryRunner(mockRunner, manager);
 
-	await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3, summaryBetweenAttempts: false }
-	);
+	await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+		summaryBetweenAttempts: false,
+	});
 
 	// No summaries generated
 	assert.strictEqual(calls.length, 0);
 });
 
 test("RetryRunner - applies backoff between attempts", async () => {
-	const mockRunner = createMockTaskRunner([
-		createTaskResult({ outcome: "failure" }),
-		createTaskResult(),
-	]);
+	const mockRunner = createMockTaskRunner([createTaskResult({ outcome: "failure" }), createTaskResult()]);
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
 	const startTime = Date.now();
-	await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3, backoffMs: 50 }
-	);
+	await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+		backoffMs: 50,
+	});
 	const duration = Date.now() - startTime;
 
 	// Should have waited at least 50ms between attempts
@@ -286,10 +278,11 @@ test("RetryRunner - applies exponential backoff", async () => {
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
 	const startTime = Date.now();
-	await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 5, backoffMs: 100, backoffMultiplier: 2 }
-	);
+	await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 5,
+		backoffMs: 100,
+		backoffMultiplier: 2,
+	});
 	const duration = Date.now() - startTime;
 
 	// Should have waited approximately 100 + 200 = 300ms (with some tolerance)
@@ -307,10 +300,12 @@ test("RetryRunner - caps backoff at maxBackoffMs", async () => {
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
 	const startTime = Date.now();
-	await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 5, backoffMs: 1000, backoffMultiplier: 10, maxBackoffMs: 2000 }
-	);
+	await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 5,
+		backoffMs: 1000,
+		backoffMultiplier: 10,
+		maxBackoffMs: 2000,
+	});
 	const duration = Date.now() - startTime;
 
 	// Attempts: 1 fail (backoff 1000), 2 fail (backoff capped at 2000), 3 fail (backoff capped at 2000)
@@ -332,10 +327,9 @@ test("RetryRunner - handles exceptions and retries", async () => {
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+	});
 
 	assert.strictEqual(result.success, true);
 	assert.strictEqual(result.attempts.length, 3);
@@ -353,15 +347,12 @@ test("RetryRunner - uses custom retryCondition", async () => {
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
 	// Only retry if tokens < 250
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{
-			maxAttempts: 5,
-			retryCondition: (result) => {
-				return (result.usage?.totalTokens ?? 0) < 250;
-			},
-		}
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 5,
+		retryCondition: (result) => {
+			return (result.usage?.totalTokens ?? 0) < 250;
+		},
+	});
 
 	// Should stop at 3rd attempt (300 tokens >= 250)
 	assert.strictEqual(result.attempts.length, 3);
@@ -386,10 +377,10 @@ test("RetryRunner - enriches packet context with handoffs", async () => {
 
 	const retryRunner = new RetryRunner(mockRunner, manager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3, summaryBetweenAttempts: true }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+		summaryBetweenAttempts: true,
+	});
 
 	// Second packet should have handoff context (from attempt 1)
 	assert.ok(enrichedPackets[1].context);
@@ -397,16 +388,14 @@ test("RetryRunner - enriches packet context with handoffs", async () => {
 	assert.ok(enrichedPackets[1].context!.__boomerangHandoffs);
 });
 
-
 test("RetryRunner - calculates totalDuration", async () => {
 	const mockRunner = createMockTaskRunner([createTaskResult()]);
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 1 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 1,
+	});
 
 	assert.ok(result.totalDuration >= 0);
 });
@@ -416,10 +405,9 @@ test("RetryRunner - handles zero maxAttempts", async () => {
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 0 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 0,
+	});
 
 	assert.strictEqual(result.attempts.length, 0);
 	assert.strictEqual(result.success, false);
@@ -471,10 +459,7 @@ test("RetryRunner - first attempt uses original context", async () => {
 
 	const retryRunner = new RetryRunner(mockRunner, manager);
 
-	await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 2 }
-	);
+	await retryRunner.runWithRetry(createTaskPacket(), { maxAttempts: 2 });
 
 	// First packet should not have handoff context
 	assert.strictEqual((firstPacket as unknown as { context?: unknown })?.context, undefined);
@@ -485,10 +470,9 @@ test("RetryRunner - attempt result includes duration", async () => {
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 1 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 1,
+	});
 
 	assert.ok(result.attempts[0].duration >= 0);
 	assert.ok(result.attempts[0].timestamp > 0);
@@ -508,27 +492,23 @@ test("RetryRunner - reports all handoffs in result", async () => {
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3, summaryBetweenAttempts: true }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+		summaryBetweenAttempts: true,
+	});
 
 	// With stopOnSuccess=true, success on 3rd attempt means 3 handoffs
 	assert.strictEqual(result.totalHandoffs.length, 3);
 });
 
 test("RetryRunner - partial outcome triggers retry by default", async () => {
-	const mockRunner = createMockTaskRunner([
-		createTaskResult({ outcome: "partial" }),
-		createTaskResult(),
-	]);
+	const mockRunner = createMockTaskRunner([createTaskResult({ outcome: "partial" }), createTaskResult()]);
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+	});
 
 	// Partial is not success, so should retry
 	assert.strictEqual(result.attempts.length, 2);
@@ -540,10 +520,10 @@ test("RetryRunner - handles first attempt success immediately", async () => {
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
 	const startTime = Date.now();
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3, backoffMs: 100 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+		backoffMs: 100,
+	});
 	const duration = Date.now() - startTime;
 
 	assert.strictEqual(result.success, true);
@@ -573,18 +553,15 @@ test("RetryRunner - handles undefined context in packet", async () => {
 });
 
 test("RetryRunner - backoff of 0 means no wait", async () => {
-	const mockRunner = createMockTaskRunner([
-		createTaskResult({ outcome: "failure" }),
-		createTaskResult(),
-	]);
+	const mockRunner = createMockTaskRunner([createTaskResult({ outcome: "failure" }), createTaskResult()]);
 	const handoffManager = createMockHandoffManager();
 	const retryRunner = new RetryRunner(mockRunner, handoffManager);
 
 	const startTime = Date.now();
-	await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 3, backoffMs: 0 }
-	);
+	await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 3,
+		backoffMs: 0,
+	});
 	const duration = Date.now() - startTime;
 
 	// Should complete quickly with no backoff
@@ -604,14 +581,14 @@ test("RetryRunner - handoffs respect maxHandoffs limit", async () => {
 	const retryRunner = new RetryRunner(mockRunner, manager);
 
 	// Set maxHandoffs to 5, but have 10 attempts
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 10, summaryBetweenAttempts: true, maxHandoffs: 5 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 10,
+		summaryBetweenAttempts: true,
+		maxHandoffs: 5,
+	});
 
 	// Should be capped at maxHandoffs
-	assert.ok(result.totalHandoffs.length <= 5, 
-		`Expected at most 5 handoffs, got ${result.totalHandoffs.length}`);
+	assert.ok(result.totalHandoffs.length <= 5, `Expected at most 5 handoffs, got ${result.totalHandoffs.length}`);
 });
 
 test("RetryRunner - handoffs default limit is 100", async () => {
@@ -627,14 +604,13 @@ test("RetryRunner - handoffs default limit is 100", async () => {
 	const retryRunner = new RetryRunner(mockRunner, manager);
 
 	// Run with many attempts but no explicit maxHandoffs
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 50, summaryBetweenAttempts: true }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 50,
+		summaryBetweenAttempts: true,
+	});
 
 	// Should be capped at default 100
-	assert.ok(result.totalHandoffs.length <= 100,
-		`Expected at most 100 handoffs, got ${result.totalHandoffs.length}`);
+	assert.ok(result.totalHandoffs.length <= 100, `Expected at most 100 handoffs, got ${result.totalHandoffs.length}`);
 });
 
 test("RetryRunner - dispose prevents further operations", async () => {
@@ -652,9 +628,8 @@ test("RetryRunner - dispose prevents further operations", async () => {
 	await assert.rejects(
 		() => retryRunner.runWithRetry(createTaskPacket(), { maxAttempts: 1 }),
 		(error) => {
-			return error instanceof Error && 
-				error.message.includes("disposed");
-		}
+			return error instanceof Error && error.message.includes("disposed");
+		},
 	);
 });
 
@@ -672,14 +647,14 @@ test("RetryRunner - dispose before runWithRetry throws", async () => {
 
 	// Should throw because runner was disposed
 	await assert.rejects(
-		() => retryRunner.runWithRetry(
-			createTaskPacket(),
-			{ maxAttempts: 5, backoffMs: 0 }
-		),
+		() =>
+			retryRunner.runWithRetry(createTaskPacket(), {
+				maxAttempts: 5,
+				backoffMs: 0,
+			}),
 		(error) => {
-			return error instanceof Error && 
-				error.message.includes("disposed");
-		}
+			return error instanceof Error && error.message.includes("disposed");
+		},
 	);
 });
 
@@ -703,10 +678,11 @@ test("RetryRunner - most recent handoffs are kept when trimming", async () => {
 	};
 	const retryRunner = new RetryRunner(mockRunner, manager);
 
-	const result = await retryRunner.runWithRetry(
-		createTaskPacket(),
-		{ maxAttempts: 10, summaryBetweenAttempts: true, maxHandoffs: 3 }
-	);
+	const result = await retryRunner.runWithRetry(createTaskPacket(), {
+		maxAttempts: 10,
+		summaryBetweenAttempts: true,
+		maxHandoffs: 3,
+	});
 
 	// Should have at most 3 handoffs
 	assert.ok(result.totalHandoffs.length <= 3);
@@ -716,10 +692,6 @@ test("RetryRunner - most recent handoffs are kept when trimming", async () => {
 		// The last handoff in result should match the last generated summary
 		const lastResultHandoff = result.totalHandoffs[result.totalHandoffs.length - 1];
 		const lastGeneratedSummary = summaries[summaries.length - 1];
-		assert.strictEqual(
-			lastResultHandoff.task,
-			lastGeneratedSummary.task,
-			"Last handoff should be from most recent attempt"
-		);
+		assert.strictEqual(lastResultHandoff.task, lastGeneratedSummary.task, "Last handoff should be from most recent attempt");
 	}
 });

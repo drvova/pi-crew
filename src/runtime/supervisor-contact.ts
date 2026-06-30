@@ -1,5 +1,5 @@
-import type { TeamRunManifest } from "../state/types.ts";
 import { appendEvent } from "../state/event-log.ts";
+import type { TeamRunManifest } from "../state/types.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 
 export interface SupervisorContactPayload {
@@ -50,10 +50,15 @@ export function parseSupervisorContactFromLine(line: string): Omit<SupervisorCon
 	if (record.type !== "supervisor_contact" && record.type !== "crew_supervisor_contact") return undefined;
 	return {
 		taskId: typeof record.taskId === "string" ? record.taskId : "",
-		reason: typeof record.reason === "string" && ["decision_needed", "clarification", "approval", "error_escalation", "custom"].includes(record.reason)
-			? record.reason as SupervisorContactPayload["reason"]
-			: "custom",
+		reason:
+			typeof record.reason === "string" &&
+			["decision_needed", "clarification", "approval", "error_escalation", "custom"].includes(record.reason)
+				? (record.reason as SupervisorContactPayload["reason"])
+				: "custom",
 		message: typeof record.message === "string" ? record.message : String(record.message ?? ""),
-		data: record.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data as Record<string, unknown> : undefined,
+		data:
+			record.data && typeof record.data === "object" && !Array.isArray(record.data)
+				? (record.data as Record<string, unknown>)
+				: undefined,
 	};
 }

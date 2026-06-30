@@ -6,39 +6,66 @@ const widthCache = new Map<string, number>();
 /** Code-point ranges that render as width 2 in most terminals (CJK + emoji). */
 const WIDE_RANGES: Array<[number, number]> = [
 	// CJK Unified Ideographs
-	[0x4E00, 0x9FFF],
+	[0x4e00, 0x9fff],
 	// CJK Extension A
-	[0x3400, 0x4DBF],
+	[0x3400, 0x4dbf],
 	// CJK Compatibility Ideographs
-	[0xF900, 0xFAFF],
+	[0xf900, 0xfaff],
 	// Hangul Syllables
-	[0xAC00, 0xD7AF],
+	[0xac00, 0xd7af],
 	// CJK Symbols and Punctuation, Hiragana, Katakana
-	[0x3000, 0x33FF],
+	[0x3000, 0x33ff],
 	// Fullwidth forms
-	[0xFF01, 0xFF60],
+	[0xff01, 0xff60],
 	// Emoji blocks
 	// Emoji-presentation codepoints in 0x2600-0x27BF (narrow chars like ✓✗★ excluded)
-	[0x2615, 0x2615], [0x2648, 0x2653], [0x267F, 0x267F], [0x2693, 0x2693],
-	[0x26A1, 0x26A1], [0x26AA, 0x26AB], [0x26BD, 0x26BE], [0x26C4, 0x26C5],
-	[0x26CE, 0x26CE], [0x26D4, 0x26D4], [0x26EA, 0x26EA], [0x26F2, 0x26F3],
-	[0x26F5, 0x26F5], [0x26FA, 0x26FA], [0x26FD, 0x26FD], [0x2702, 0x2702],
-	[0x2705, 0x2705], [0x2708, 0x270D], [0x270F, 0x270F], [0x2712, 0x2712],
-	[0x2714, 0x2714], [0x2716, 0x2716], [0x271D, 0x271D], [0x2721, 0x2721],
-	[0x2728, 0x2728], [0x2733, 0x2734], [0x2744, 0x2744], [0x2747, 0x2747],
-	[0x274C, 0x274C], [0x274E, 0x274E], [0x2753, 0x2755], [0x2757, 0x2757],
-	[0x2763, 0x2764], [0x2795, 0x2797], [0x27A1, 0x27A1], [0x27B0, 0x27B0],
-	[0x27BF, 0x27BF],
+	[0x2615, 0x2615],
+	[0x2648, 0x2653],
+	[0x267f, 0x267f],
+	[0x2693, 0x2693],
+	[0x26a1, 0x26a1],
+	[0x26aa, 0x26ab],
+	[0x26bd, 0x26be],
+	[0x26c4, 0x26c5],
+	[0x26ce, 0x26ce],
+	[0x26d4, 0x26d4],
+	[0x26ea, 0x26ea],
+	[0x26f2, 0x26f3],
+	[0x26f5, 0x26f5],
+	[0x26fa, 0x26fa],
+	[0x26fd, 0x26fd],
+	[0x2702, 0x2702],
+	[0x2705, 0x2705],
+	[0x2708, 0x270d],
+	[0x270f, 0x270f],
+	[0x2712, 0x2712],
+	[0x2714, 0x2714],
+	[0x2716, 0x2716],
+	[0x271d, 0x271d],
+	[0x2721, 0x2721],
+	[0x2728, 0x2728],
+	[0x2733, 0x2734],
+	[0x2744, 0x2744],
+	[0x2747, 0x2747],
+	[0x274c, 0x274c],
+	[0x274e, 0x274e],
+	[0x2753, 0x2755],
+	[0x2757, 0x2757],
+	[0x2763, 0x2764],
+	[0x2795, 0x2797],
+	[0x27a1, 0x27a1],
+	[0x27b0, 0x27b0],
+	[0x27bf, 0x27bf],
 	// Geometric Shapes / Misc Symbols-Arrows emoji that pi-tui upstream counts as
 	// width=2 (RGI emoji). Mismatch here caused the "Rendered line N exceeds
 	// terminal width (160 > 159)" TUI crash: pi-crew truncated to width 159 by
 	// its own (mismatched) measure, then Box padded to 159 chars, but pi-tui
 	// re-measured the padded line at 160 because ⬜ counts as 2 upstream.
-	[0x2B1B, 0x2B1C], // ⬛ BLACK LARGE SQUARE, ⬜ WHITE LARGE SQUARE
-	[0x1F300, 0x1F9FF], // Misc Symbols, Emoticons, Transport, Map, Supplement
-	[0x1FA00, 0x1FAFF], // Symbols Extended-A
-	[0x1F000, 0x1F02F], // Mahjong, Dominos
-	[0xFE00, 0xFE0F],   // Variation Selectors (emoji presentation)
+	[0x2b1b, 0x2b1c], // ⬛ BLACK LARGE SQUARE, ⬜ WHITE LARGE SQUARE
+	[0x1f300, 0x1f9ff], // Misc Symbols, Emoticons, Transport, Map, Supplement
+	[0x1fa00, 0x1faff], // Symbols Extended-A
+	[0x1f000, 0x1f02f], // Mahjong, Dominos
+	[0xfe00, 0xfe0f], // Variation Selectors (emoji presentation)
 ];
 // NOTE: U+200D (Zero Width Joiner, ZWJ) is intentionally NOT listed as wide.
 // ZWJ has zero advance width by Unicode definition; miscounting it as 2 caused
@@ -113,7 +140,7 @@ export function truncateToWidth(value: string, width: number, ellipsis = "…"):
 			continue;
 		}
 		const char = value[i] as string;
-		const nextIndex = ((char.codePointAt(0) ?? 0) > 0xFFFF) ? i + 2 : i + 1;
+		const nextIndex = (char.codePointAt(0) ?? 0) > 0xffff ? i + 2 : i + 1;
 		const segment = value.slice(i, nextIndex);
 		const charWidth = visibleWidth(segment);
 		if (renderedWidth + charWidth > width - ellipsis.length) {
@@ -183,7 +210,7 @@ function readAnsiCode(input: string, index: number): string | undefined {
 function takeCodePoint(input: string, index: number): { chunk: string; nextIndex: number } {
 	const code = input.codePointAt(index);
 	if (code === undefined) return { chunk: "", nextIndex: index + 1 };
-	if (code >= 0xD800 && code <= 0xDBFF && index + 1 < input.length) {
+	if (code >= 0xd800 && code <= 0xdbff && index + 1 < input.length) {
 		return { chunk: input.slice(index, index + 2), nextIndex: index + 2 };
 	}
 	return { chunk: input[index] ?? "", nextIndex: index + 1 };
@@ -231,20 +258,13 @@ export interface VisualTruncateResult {
 	skippedCount: number;
 }
 
-export function truncateToVisualLines(
-	text: string,
-	maxVisualLines: number,
-	width: number,
-	paddingX = 0,
-): VisualTruncateResult {
+export function truncateToVisualLines(text: string, maxVisualLines: number, width: number, paddingX = 0): VisualTruncateResult {
 	if (!text) {
 		return { visualLines: [], skippedCount: 0 };
 	}
 	const effectiveWidth = Math.max(1, width - paddingX * 2);
 	const limit = Math.max(1, maxVisualLines);
-	const visualLines = text
-		.split("\n")
-		.flatMap((line) => wrapHard(pad(line, Math.max(0, effectiveWidth)).trimEnd(), effectiveWidth));
+	const visualLines = text.split("\n").flatMap((line) => wrapHard(pad(line, Math.max(0, effectiveWidth)).trimEnd(), effectiveWidth));
 	if (visualLines.length <= limit) return { visualLines, skippedCount: 0 };
 	const truncated = visualLines.slice(-limit);
 	return { visualLines: truncated, skippedCount: visualLines.length - limit };

@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 
 import { extractCommandTrace } from "../../src/runtime/command-trace.ts";
 
@@ -41,9 +41,7 @@ describe("command-trace — T10 verbatim extraction", () => {
 	});
 
 	it("summary shows cmd=N for command-only runs", () => {
-		const trace = extractCommandTrace([
-			{ tool: "bash", args: '{"command":"echo hi"}' },
-		]);
+		const trace = extractCommandTrace([{ tool: "bash", args: '{"command":"echo hi"}' }]);
 		assert.equal(trace.summary, "cmd=1");
 	});
 
@@ -58,7 +56,10 @@ describe("command-trace — T10 verbatim extraction", () => {
 
 	it("sanitizes multi-line commands to a single line with ⏎ marker", () => {
 		const trace = extractCommandTrace([
-			{ tool: "bash", args: JSON.stringify({ command: "echo a\necho b\nrm -rf x" }) },
+			{
+				tool: "bash",
+				args: JSON.stringify({ command: "echo a\necho b\nrm -rf x" }),
+			},
 		]);
 		assert.equal(trace.commands.length, 1);
 		assert.ok(trace.commands[0].includes("⏎"), "newline replaced with ⏎");
@@ -67,9 +68,7 @@ describe("command-trace — T10 verbatim extraction", () => {
 
 	it("truncates very long commands to a bounded length", () => {
 		const long = "x".repeat(500);
-		const trace = extractCommandTrace([
-			{ tool: "bash", args: JSON.stringify({ command: long }) },
-		]);
+		const trace = extractCommandTrace([{ tool: "bash", args: JSON.stringify({ command: long }) }]);
 		assert.ok(trace.commands[0].length < 500, "must be truncated");
 		assert.ok(trace.commands[0].endsWith("…"), "truncation marker present");
 	});
@@ -96,9 +95,7 @@ describe("command-trace — T10 verbatim extraction", () => {
 	});
 
 	it("falls back to treating raw args as the command when not JSON", () => {
-		const trace = extractCommandTrace([
-			{ tool: "bash", args: "ls -la /tmp" },
-		]);
+		const trace = extractCommandTrace([{ tool: "bash", args: "ls -la /tmp" }]);
 		assert.deepEqual(trace.commands, ["ls -la /tmp"]);
 	});
 

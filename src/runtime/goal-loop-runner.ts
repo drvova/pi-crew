@@ -14,32 +14,26 @@
  * Each turn spawns one executeTeamRun; the loop is the outer coordinator.
  */
 
-import { createRunManifest, saveRunTasks } from "../state/state-store.ts";
-import { appendEvent } from "../state/event-log.ts";
-import { collectRunMetrics } from "../state/run-metrics.ts";
-import { registerActiveRun, unregisterActiveRun } from "../state/active-run-registry.ts";
-import { executeTeamRun } from "./team-runner.ts";
-import { GoalStore } from "./goal-state-store.ts";
-import { evaluateGoal, bundleEvidence } from "./goal-evaluator.ts";
-import { withWorkerSlot } from "./global-worker-cap.ts";
-import { acquireWorkspaceLock, type WorkspaceLockHandle } from "./workspace-lock.ts";
-import { existsSync, readdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { logInternalError } from "../utils/internal-error.ts";
+import { existsSync, readdirSync } from "node:fs";
+import type { AgentConfig } from "../agents/agent-config.ts";
 import { loadConfig } from "../config/config.ts";
 import { effectiveRunConfig } from "../extension/team-tool/config-patch.ts";
-import { resolveCrewRuntime } from "./runtime-resolver.ts";
-import { snapshotManifests, compareSnapshot } from "./verification-integrity.ts";
-import type {
-	GoalLoopState,
-	GoalLoopStatus,
-	GoalVerdict,
-	TeamRunManifest,
-	TeamTaskState,
-} from "../state/types.ts";
+import { registerActiveRun, unregisterActiveRun } from "../state/active-run-registry.ts";
+import { appendEvent } from "../state/event-log.ts";
+import { collectRunMetrics } from "../state/run-metrics.ts";
+import { createRunManifest, saveRunTasks } from "../state/state-store.ts";
+import type { GoalLoopState, GoalLoopStatus, GoalVerdict, TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
+import { logInternalError } from "../utils/internal-error.ts";
 import type { WorkflowConfig } from "../workflows/workflow-config.ts";
-import type { AgentConfig } from "../agents/agent-config.ts";
+import { withWorkerSlot } from "./global-worker-cap.ts";
+import { bundleEvidence, evaluateGoal } from "./goal-evaluator.ts";
+import { GoalStore } from "./goal-state-store.ts";
+import { resolveCrewRuntime } from "./runtime-resolver.ts";
+import { executeTeamRun } from "./team-runner.ts";
+import { compareSnapshot, snapshotManifests } from "./verification-integrity.ts";
+import { acquireWorkspaceLock, type WorkspaceLockHandle } from "./workspace-lock.ts";
 
 /** Required minimal shape for the worker + agents discovery (P0 uses the goal's workerAgent). */
 export interface GoalLoopRuntimeDeps {
@@ -65,7 +59,13 @@ export interface RunGoalLoopResult {
  * Kept for unit tests of the loop's max_turns exit path. The production loop
  * uses `realGoalEvaluator` (P1) which calls the LLM judge.
  */
-export const stubGoalEvaluator = async (goal: GoalLoopState, _turnRunId: string, _m?: import("../state/types.ts").TeamRunManifest, _t?: import("../state/types.ts").TeamTaskState[], _s?: AbortSignal): Promise<GoalVerdict> => ({
+export const stubGoalEvaluator = async (
+	goal: GoalLoopState,
+	_turnRunId: string,
+	_m?: import("../state/types.ts").TeamRunManifest,
+	_t?: import("../state/types.ts").TeamTaskState[],
+	_s?: AbortSignal,
+): Promise<GoalVerdict> => ({
 	turn: goal.turnsUsed,
 	achieved: false,
 	reason: `not-achieved: stub evaluator (P0). Turn ${goal.turnsUsed}/${goal.maxTurns} completed; P1 will judge against objective + verification.`,
@@ -113,7 +113,15 @@ export const realGoalEvaluator = async (
 				const drift = compareSnapshot(snapshot.snapshot, current);
 				if (drift.length > 0) {
 					verificationCompromised = drift;
-					appendEvent(turnManifest.eventsPath, { type: "goal.verification_compromised", runId: turnRunId, data: { goalId: goal.goalId, driftedFiles: drift, phase: "T_snap" } });
+					appendEvent(turnManifest.eventsPath, {
+						type: "goal.verification_compromised",
+						runId: turnRunId,
+						data: {
+							goalId: goal.goalId,
+							driftedFiles: drift,
+							phase: "T_snap",
+						},
+					});
 				}
 			} catch (error) {
 				logInternalError("goal-loop.integritySnap", error, `goalId=${goal.goalId} phase=T_snap`);
@@ -121,9 +129,13 @@ export const realGoalEvaluator = async (
 		}
 		if (!verificationCompromised) {
 			try {
-		// LAZY: defer dynamic import of ./verification-gates.ts to its call site.
+				// LAZY: defer dynamic import of ./verification-gates.ts to its call site.
 				const { executeVerificationCommands } = await import("./verification-gates.ts");
-				const contract = { requiredGreenLevel: "none" as const, commands: goal.verification.commands, allowManualEvidence: goal.verification.allowManualEvidence ?? false };
+				const contract = {
+					requiredGreenLevel: "none" as const,
+					commands: goal.verification.commands,
+					allowManualEvidence: goal.verification.allowManualEvidence ?? false,
+				};
 				// Phase 1.5 #2 (RFC 16): run verification in a pristine git worktree at
 				// T_snap commit SHA when opt-in + clean git repo. Closes the round-trip
 				// manifest tamper residual (MAJ#2) and invoked-script tampering residual
@@ -132,7 +144,8 @@ export const realGoalEvaluator = async (
 				let worktreeCwd: string | undefined;
 				let worktreeCleanup: (() => void) | undefined;
 				try {
-		// LAZY: defer dynamic import of ./verification-worktree.ts to its call site.
+					// LAZY: defer dynamic import of ./verification-worktree.ts to its call site.
+					// LAZY: defer dynamic import of ./verification-worktree.ts to its call site. Multi-line form breaks scripts/check-lazy-imports.mjs (which does `lines[lineNum - 2]`), so keep destructuring + await import on one line.
 					const { checkWorktreeSandboxAvailable, prepareVerificationWorktree } = await import("./verification-worktree.ts");
 					const availability = checkWorktreeSandboxAvailable(goal.cwd);
 					if (availability.available) {
@@ -141,33 +154,57 @@ export const realGoalEvaluator = async (
 						worktreeCleanup = wt.cleanup;
 					} else {
 						// Graceful fallback — log reason so the bypass is traceable.
-						logInternalError("goal-loop.worktreeSandboxBypassed", new Error(availability.reason), `goalId=${goal.goalId} cwd=${goal.cwd}`);
+						logInternalError(
+							"goal-loop.worktreeSandboxBypassed",
+							new Error(availability.reason),
+							`goalId=${goal.goalId} cwd=${goal.cwd}`,
+						);
 					}
 				} catch (error) {
 					logInternalError("goal-loop.worktreeSandboxPrep", error, `goalId=${goal.goalId}`);
 				}
 				try {
-					const cmdResults = await executeVerificationCommands(contract, goal.cwd, turnRunId, "goal-verify", turnManifest.artifactsRoot, signal, worktreeCwd);
-					verificationResults = cmdResults.map((r) => ({ command: r.cmd, exitCode: r.exitCode ?? null, passed: r.status === "passed" }));
-				// T_verify_done: re-hash AFTER the commands ran. If the manifest changed between
-				// command-launch and command-exit (worker edited it mid-run, then the test "passed"
-				// against the modified graph), treat the result as compromised even if exit was 0.
-				// NOTE (RFC v0.5 §P1a residual): this catches PERSISTENT edits only — a round-trip
-				// (edit -> run -> revert) leaves the hash unchanged and is NOT caught here.
-				// Phase 1.5 #2 (RFC 16) closes this residual when worktree sandbox is active:
-				// verification ran in a pristine checkout, so worker edits are invisible.
-				if (snapshot && snapshot !== "none-text-only") {
-					try {
-						const post = snapshotManifests(goal.cwd);
-						const postDrift = compareSnapshot(snapshot.snapshot, post);
-						if (postDrift.length > 0) {
-							verificationCompromised = postDrift;
-							appendEvent(turnManifest.eventsPath, { type: "goal.verification_compromised", runId: turnRunId, data: { goalId: goal.goalId, driftedFiles: postDrift, phase: "T_verify_done" } });
+					const cmdResults = await executeVerificationCommands(
+						contract,
+						goal.cwd,
+						turnRunId,
+						"goal-verify",
+						turnManifest.artifactsRoot,
+						signal,
+						worktreeCwd,
+					);
+					verificationResults = cmdResults.map((r) => ({
+						command: r.cmd,
+						exitCode: r.exitCode ?? null,
+						passed: r.status === "passed",
+					}));
+					// T_verify_done: re-hash AFTER the commands ran. If the manifest changed between
+					// command-launch and command-exit (worker edited it mid-run, then the test "passed"
+					// against the modified graph), treat the result as compromised even if exit was 0.
+					// NOTE (RFC v0.5 §P1a residual): this catches PERSISTENT edits only — a round-trip
+					// (edit -> run -> revert) leaves the hash unchanged and is NOT caught here.
+					// Phase 1.5 #2 (RFC 16) closes this residual when worktree sandbox is active:
+					// verification ran in a pristine checkout, so worker edits are invisible.
+					if (snapshot && snapshot !== "none-text-only") {
+						try {
+							const post = snapshotManifests(goal.cwd);
+							const postDrift = compareSnapshot(snapshot.snapshot, post);
+							if (postDrift.length > 0) {
+								verificationCompromised = postDrift;
+								appendEvent(turnManifest.eventsPath, {
+									type: "goal.verification_compromised",
+									runId: turnRunId,
+									data: {
+										goalId: goal.goalId,
+										driftedFiles: postDrift,
+										phase: "T_verify_done",
+									},
+								});
+							}
+						} catch (error) {
+							logInternalError("goal-loop.integritySnap", error, `goalId=${goal.goalId} phase=T_verify_done`);
 						}
-					} catch (error) {
-						logInternalError("goal-loop.integritySnap", error, `goalId=${goal.goalId} phase=T_verify_done`);
 					}
-				}
 				} catch (error) {
 					logInternalError("goal-loop.verification", error, `goalId=${goal.goalId}`);
 					verificationResults = [];
@@ -223,10 +260,15 @@ function resolveGoalTurnWorkflow(goal: GoalLoopState): WorkflowConfig {
 	const wrapName = (goal as GoalLoopState & { goalWrapWorkflow?: string }).goalWrapWorkflow;
 	if (!wrapName) return buildTurnWorkflow();
 	try {
-		const { discoverWorkflows, allWorkflows } = require("../workflows/discover-workflows.ts") as typeof import("../workflows/discover-workflows.ts");
+		const { discoverWorkflows, allWorkflows } =
+			require("../workflows/discover-workflows.ts") as typeof import("../workflows/discover-workflows.ts");
 		const found = allWorkflows(discoverWorkflows(goal.cwd)).find((w) => w.name === wrapName && w.source === "builtin");
 		if (found) return found;
-		logInternalError("goal-loop.goalWrapWorkflow", new Error(`builtin workflow '${wrapName}' not found; falling back to goal-turn`), `goalId=${goal.goalId}`);
+		logInternalError(
+			"goal-loop.goalWrapWorkflow",
+			new Error(`builtin workflow '${wrapName}' not found; falling back to goal-turn`),
+			`goalId=${goal.goalId}`,
+		);
 	} catch (error) {
 		logInternalError("goal-loop.goalWrapWorkflow", error, `goalId=${goal.goalId} wrapName=${wrapName}`);
 	}
@@ -253,7 +295,13 @@ export function buildGoalTeam(goal: GoalLoopState): TeamConfig {
 		description: `Synthetic team for goal loop ${goal.goalId} (worker=${workerAgent}).`,
 		source: "dynamic",
 		filePath: "<goal-loop>",
-		roles: [{ name: workerAgent, agent: workerAgent, description: `Worker for goal ${goal.goalId}` }],
+		roles: [
+			{
+				name: workerAgent,
+				agent: workerAgent,
+				description: `Worker for goal ${goal.goalId}`,
+			},
+		],
 		workspaceMode: "single",
 	};
 }
@@ -302,9 +350,10 @@ function composeGoalPrompt(goal: GoalLoopState): string {
 		if (reasons[i] === currentReason) priorMatches++;
 		else break; // count consecutive tail matches only (oscillation = exact repeat)
 	}
-	const recurrenceNote = priorMatches >= 1
-		? `\n_Note: this same issue has now been raised ${priorMatches + 1} time(s). If you genuinely cannot resolve it, stop attempting the same fix and explain the blocker instead._`
-		: "";
+	const recurrenceNote =
+		priorMatches >= 1
+			? `\n_Note: this same issue has now been raised ${priorMatches + 1} time(s). If you genuinely cannot resolve it, stop attempting the same fix and explain the blocker instead._`
+			: "";
 	// P1e: per-turn unpredictable nonce. randomBytes(6) -> 12 hex chars (48 bits of entropy),
 	// comfortably unguessable. The worker is told the contents are DATA only.
 	const nonce = randomBytes(6).toString("hex");
@@ -343,13 +392,24 @@ async function yieldBetweenTurns(goal: GoalLoopState, signal: AbortSignal, ms = 
 
 /** Fix round-7: re-read disk before applying terminal state. If an external actor
  * (goal stop/pause) already changed the state, don't overwrite — external cancel wins. */
-function safeSetStatus(store: GoalStore, goalId: string, proposed: GoalLoopStatus, fallback: GoalLoopState, eventsPath: string): GoalLoopState {
+function safeSetStatus(
+	store: GoalStore,
+	goalId: string,
+	proposed: GoalLoopStatus,
+	fallback: GoalLoopState,
+	eventsPath: string,
+): GoalLoopState {
 	const current = store.load(goalId);
 	if (current && current.state !== "running") {
 		// External actor already set a terminal/paused state — respect it.
 		return current;
 	}
-	return store.setStatus(goalId, proposed, eventsPath) ?? { ...fallback, state: proposed };
+	return (
+		store.setStatus(goalId, proposed, eventsPath) ?? {
+			...fallback,
+			state: proposed,
+		}
+	);
 }
 
 /**
@@ -361,10 +421,7 @@ function safeSetStatus(store: GoalStore, goalId: string, proposed: GoalLoopStatu
  *
  * Exported for unit testing.
  */
-export function detectOscillation(
-	verdicts: Array<{ reason: string }>,
-	opts?: { window?: number; threshold?: number },
-): boolean {
+export function detectOscillation(verdicts: Array<{ reason: string }>, opts?: { window?: number; threshold?: number }): boolean {
 	const window = Math.max(2, opts?.window ?? 3);
 	const threshold = opts?.threshold ?? 0.8;
 	if (verdicts.length < window) return false;
@@ -380,7 +437,11 @@ export function detectOscillation(
 
 function normalizeForSimilarity(s: string): Set<string> {
 	// Lowercase, split into word 3-shingles (trigrams of words). Skip non-word tokens.
-	const words = s.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(Boolean);
+	const words = s
+		.toLowerCase()
+		.replace(/[^\w\s]/g, " ")
+		.split(/\s+/)
+		.filter(Boolean);
 	if (words.length < 3) return new Set(words);
 	const shingles = new Set<string>();
 	for (let i = 0; i <= words.length - 3; i++) {
@@ -413,7 +474,9 @@ export function deriveTranscriptPath(artifactsRoot: string, tasks: import("../st
 		try {
 			const matches = readdirSync(transcriptsDir).filter((f) => f.startsWith(`${firstTask.id}.attempt-`));
 			if (matches.length) return `${transcriptsDir}/${matches.sort().pop()}`;
-		} catch { /* dir missing — fall through */ }
+		} catch {
+			/* dir missing — fall through */
+		}
 	}
 	// Fallback: any transcript in the dir (newest).
 	try {
@@ -445,7 +508,15 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 	const workflow = resolveGoalTurnWorkflow(goal);
 	const agents = input.deps.discoverAgents(goal.cwd);
 
-	appendEvent(eventsPath, { type: "goal.loop_start", runId: manifest.runId, data: { goalId: goal.goalId, objective: goal.objective, maxTurns: goal.maxTurns } });
+	appendEvent(eventsPath, {
+		type: "goal.loop_start",
+		runId: manifest.runId,
+		data: {
+			goalId: goal.goalId,
+			objective: goal.objective,
+			maxTurns: goal.maxTurns,
+		},
+	});
 
 	// P1g (RFC v0.5 §P1g, cold-review #2 BLOCKING fix): acquire the workspace lock for the
 	// goal's lifetime. This serializes concurrent goals targeting the same cwd (workspaceMode:
@@ -455,11 +526,20 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 	// for a good error message; this acquisition is the authoritative claim.
 	let workspaceLock: WorkspaceLockHandle | undefined;
 	try {
-		workspaceLock = await acquireWorkspaceLock(goal.cwd, goal.goalId, { signal });
+		workspaceLock = await acquireWorkspaceLock(goal.cwd, goal.goalId, {
+			signal,
+		});
 	} catch (error) {
 		logInternalError("goal-loop.workspaceLock", error, `goalId=${goal.goalId} cwd=${goal.cwd}`);
 		goal = safeSetStatus(store, goal.goalId, "blocked", goal, eventsPath);
-		appendEvent(eventsPath, { type: "goal.workspace_lock_failed", runId: manifest.runId, data: { goalId: goal.goalId, error: error instanceof Error ? error.message : String(error) } });
+		appendEvent(eventsPath, {
+			type: "goal.workspace_lock_failed",
+			runId: manifest.runId,
+			data: {
+				goalId: goal.goalId,
+				error: error instanceof Error ? error.message : String(error),
+			},
+		});
 		return { manifest, tasks: [], goalState: goal };
 	}
 
@@ -477,16 +557,42 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 			if (goal.budgetUnlimited !== true && goal.budgetTotal !== undefined && goal.budgetTotal > 0 && goal.budgetAbort !== undefined) {
 				if (goal.budgetUsed >= goal.budgetAbort * goal.budgetTotal) {
 					goal = safeSetStatus(store, goal.goalId, "budget_exceeded", goal, eventsPath);
-					appendEvent(eventsPath, { type: "goal.budget_warning", runId: manifest.runId, data: { goalId: goal.goalId, budgetUsed: goal.budgetUsed, budgetTotal: goal.budgetTotal, threshold: "abort" } });
+					appendEvent(eventsPath, {
+						type: "goal.budget_warning",
+						runId: manifest.runId,
+						data: {
+							goalId: goal.goalId,
+							budgetUsed: goal.budgetUsed,
+							budgetTotal: goal.budgetTotal,
+							threshold: "abort",
+						},
+					});
 					break;
 				}
 				if (goal.budgetUsed >= (goal.budgetWarning ?? 0.8) * goal.budgetTotal) {
-					appendEvent(eventsPath, { type: "goal.budget_warning", runId: manifest.runId, data: { goalId: goal.goalId, budgetUsed: goal.budgetUsed, budgetTotal: goal.budgetTotal, threshold: "warning" } });
+					appendEvent(eventsPath, {
+						type: "goal.budget_warning",
+						runId: manifest.runId,
+						data: {
+							goalId: goal.goalId,
+							budgetUsed: goal.budgetUsed,
+							budgetTotal: goal.budgetTotal,
+							threshold: "warning",
+						},
+					});
 				}
 			}
 
 			const turnIndex = goal.turnsUsed + 1;
-			appendEvent(eventsPath, { type: "goal.turn_start", runId: manifest.runId, data: { goalId: goal.goalId, turn: turnIndex, maxTurns: goal.maxTurns } });
+			appendEvent(eventsPath, {
+				type: "goal.turn_start",
+				runId: manifest.runId,
+				data: {
+					goalId: goal.goalId,
+					turn: turnIndex,
+					maxTurns: goal.maxTurns,
+				},
+			});
 
 			// ── TURN: fresh manifest per turn (G2) + executeTeamRun ──────────────────
 			const turnGoalText = composeGoalPrompt(goal);
@@ -499,15 +605,34 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 				ownerSessionId: goal.ownerSessionId,
 				runKind: "team-run", // §0a v2 note: turns are normal team-runs; the OUTER loop is goal-loop
 			});
-			goal = store.patch(goal.goalId, { currentRunId: created.manifest.runId, turnsUsed: turnIndex }, eventsPath) ?? goal;
+			goal =
+				store.patch(
+					goal.goalId,
+					{
+						currentRunId: created.manifest.runId,
+						turnsUsed: turnIndex,
+					},
+					eventsPath,
+				) ?? goal;
 			// Fix round-6: re-check state AFTER patching (user may have paused/stopped in the inter-turn gap).
 			// Without this, a pause that lands between store.patch and executeTeamRun lets one extra turn run.
 			if (goal.state !== "running") {
-				appendEvent(eventsPath, { type: "goal.loop_end", runId: manifest.runId, data: { goalId: goal.goalId, state: goal.state, reason: "state changed before turn spawn" } });
+				appendEvent(eventsPath, {
+					type: "goal.loop_end",
+					runId: manifest.runId,
+					data: {
+						goalId: goal.goalId,
+						state: goal.state,
+						reason: "state changed before turn spawn",
+					},
+				});
 				break;
 			}
 			registerActiveRun(created.manifest);
-			let turnResult: { manifest: TeamRunManifest; tasks: TeamTaskState[] };
+			let turnResult: {
+				manifest: TeamRunManifest;
+				tasks: TeamTaskState[];
+			};
 			try {
 				// P1g (RFC v0.5 §P1g): route the worker turn through the GLOBAL worker cap so that
 				// many concurrent goals / dynamic-workflows / fanOuts cannot fork-storm. The JUDGE is
@@ -520,20 +645,22 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 				const turnConfig = loadConfig(goal.cwd);
 				const turnExecutedConfig = effectiveRunConfig(turnConfig.config, {});
 				const turnRuntime = await resolveCrewRuntime(turnExecutedConfig);
-				turnResult = await withWorkerSlot(() => executeTeamRun({
-					manifest: created.manifest,
-					tasks: created.tasks,
-					team,
-					workflow,
-					agents,
-					executeWorkers: true,
-					limits: turnExecutedConfig.limits,
-					runtime: turnRuntime,
-					runtimeConfig: turnExecutedConfig.runtime,
-					reliability: turnExecutedConfig.reliability,
-					workspaceId: goal.ownerSessionId ?? goal.cwd,
-					signal,
-				}));
+				turnResult = await withWorkerSlot(() =>
+					executeTeamRun({
+						manifest: created.manifest,
+						tasks: created.tasks,
+						team,
+						workflow,
+						agents,
+						executeWorkers: true,
+						limits: turnExecutedConfig.limits,
+						runtime: turnRuntime,
+						runtimeConfig: turnExecutedConfig.runtime,
+						reliability: turnExecutedConfig.reliability,
+						workspaceId: goal.ownerSessionId ?? goal.cwd,
+						signal,
+					}),
+				);
 			} finally {
 				unregisterActiveRun(created.manifest.runId);
 			}
@@ -549,20 +676,53 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 			const updatedBudget = accumulateBudget(goal, created.manifest.runId);
 
 			// ── EVALUATE (P1: real LLM judge; pass turn manifest + tasks for transcript lookup) ──
-			const verdict = await evaluator({ ...goal, budgetUsed: updatedBudget }, created.manifest.runId, turnResult.manifest, turnResult.tasks, signal);
-			const historyEntry = { runId: created.manifest.runId, outcome: verdict.achieved ? "achieved" : "not-achieved", learnedAt: new Date().toISOString(), turn: turnIndex };
-			goal = store.patch(goal.goalId, {
-				budgetUsed: updatedBudget,
-				verdicts: [...goal.verdicts, verdict],
-				history: [...goal.history, historyEntry],
-				currentRunId: undefined,
-				// G1/A3: feedback feeds turn N+1's prompt via manifest.goal (NOT session.steer)
-				nextTurnFeedback: verdict.achieved ? undefined : verdict.reason,
-			}, eventsPath) ?? goal;
+			const verdict = await evaluator(
+				{ ...goal, budgetUsed: updatedBudget },
+				created.manifest.runId,
+				turnResult.manifest,
+				turnResult.tasks,
+				signal,
+			);
+			const historyEntry = {
+				runId: created.manifest.runId,
+				outcome: verdict.achieved ? "achieved" : "not-achieved",
+				learnedAt: new Date().toISOString(),
+				turn: turnIndex,
+			};
+			goal =
+				store.patch(
+					goal.goalId,
+					{
+						budgetUsed: updatedBudget,
+						verdicts: [...goal.verdicts, verdict],
+						history: [...goal.history, historyEntry],
+						currentRunId: undefined,
+						// G1/A3: feedback feeds turn N+1's prompt via manifest.goal (NOT session.steer)
+						nextTurnFeedback: verdict.achieved ? undefined : verdict.reason,
+					},
+					eventsPath,
+				) ?? goal;
 
-			appendEvent(eventsPath, { type: "goal.turn_evaluated", runId: manifest.runId, data: { goalId: goal.goalId, turn: turnIndex, achieved: verdict.achieved, reason: verdict.reason } });
+			appendEvent(eventsPath, {
+				type: "goal.turn_evaluated",
+				runId: manifest.runId,
+				data: {
+					goalId: goal.goalId,
+					turn: turnIndex,
+					achieved: verdict.achieved,
+					reason: verdict.reason,
+				},
+			});
 			if (!verdict.achieved && goal.nextTurnFeedback) {
-				appendEvent(eventsPath, { type: "goal.feedback_steered", runId: manifest.runId, data: { goalId: goal.goalId, turn: turnIndex, feedback: goal.nextTurnFeedback } });
+				appendEvent(eventsPath, {
+					type: "goal.feedback_steered",
+					runId: manifest.runId,
+					data: {
+						goalId: goal.goalId,
+						turn: turnIndex,
+						feedback: goal.nextTurnFeedback,
+					},
+				});
 			}
 
 			// ── STOP CONDITIONS (round-7: re-read disk before applying — external cancel/pause wins) ─
@@ -589,7 +749,15 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 				const stuck = store.compareAndSetStatus(goal.goalId, "running", "stuck", eventsPath);
 				if (stuck) {
 					goal = stuck;
-					appendEvent(eventsPath, { type: "goal.stuck", runId: manifest.runId, data: { goalId: goal.goalId, turn: goal.turnsUsed, lastReasons: goal.verdicts.slice(-3).map((v) => v.reason.slice(0, 200)) } });
+					appendEvent(eventsPath, {
+						type: "goal.stuck",
+						runId: manifest.runId,
+						data: {
+							goalId: goal.goalId,
+							turn: goal.turnsUsed,
+							lastReasons: goal.verdicts.slice(-3).map((v) => v.reason.slice(0, 200)),
+						},
+					});
 					break;
 				}
 			}
@@ -606,8 +774,21 @@ export async function runGoalLoop(input: RunGoalLoopInput): Promise<RunGoalLoopR
 		goal = safeSetStatus(store, goal.goalId, "blocked", goal, eventsPath);
 	} finally {
 		// P1g: release the workspace lock (held since loop start).
-		try { workspaceLock?.release(); } catch { /* best-effort */ }
-		appendEvent(eventsPath, { type: "goal.loop_end", runId: manifest.runId, data: { goalId: goal.goalId, state: goal.state, turnsUsed: goal.turnsUsed, budgetUsed: goal.budgetUsed } });
+		try {
+			workspaceLock?.release();
+		} catch {
+			/* best-effort */
+		}
+		appendEvent(eventsPath, {
+			type: "goal.loop_end",
+			runId: manifest.runId,
+			data: {
+				goalId: goal.goalId,
+				state: goal.state,
+				turnsUsed: goal.turnsUsed,
+				budgetUsed: goal.budgetUsed,
+			},
+		});
 	}
 
 	return { manifest, tasks: [], goalState: goal };

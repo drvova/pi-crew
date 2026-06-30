@@ -9,15 +9,16 @@
  * Plan: 07-PLAN.md v3 P0 exit criteria #2 (loop runs N turns) + #5 (budget accumulation).
  * Spec: 00-SPEC.md §2.4.
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { createRunManifest } from "../../src/state/state-store.ts";
-import { runGoalLoop, stubGoalEvaluator, deriveTranscriptPath } from "../../src/runtime/goal-loop-runner.ts";
+import { allAgents, discoverAgents } from "../../src/agents/discover-agents.ts";
+import { deriveTranscriptPath, runGoalLoop, stubGoalEvaluator } from "../../src/runtime/goal-loop-runner.ts";
 import { GoalStore } from "../../src/runtime/goal-state-store.ts";
-import { discoverAgents, allAgents } from "../../src/agents/discover-agents.ts";
+import { createRunManifest } from "../../src/state/state-store.ts";
 import type { GoalLoopState } from "../../src/state/types.ts";
 
 test("runGoalLoop (P1 real evaluator) exits blocked when judge is unreachable or worker unavailable", async () => {

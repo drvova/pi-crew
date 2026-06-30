@@ -17,11 +17,13 @@
  *      truncation]) strips ANSI color codes from artifact file content BEFORE
  *      truncating.
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { test } from "node:test";
+import { compactString } from "../../src/runtime/child-pi.ts";
 import { applyCompactPipeline, type ICompactStage, type PipelineResult } from "../../src/runtime/compact-pipeline.ts";
 import {
 	ANSI_STRIP_STAGE,
@@ -32,7 +34,6 @@ import {
 	DeduplicateStage,
 	TruncationStage,
 } from "../../src/runtime/compact-stages/index.ts";
-import { compactString } from "../../src/runtime/child-pi.ts";
 import { readIfSmall } from "../../src/runtime/task-output-context.ts";
 
 // --- Pipeline core: monotonic-shrink gate (CRITICAL SAFETY PROPERTY) ---
@@ -148,7 +149,9 @@ test("TruncationStage default marker (compacted ... chars) matches compactString
 });
 
 test("TruncationStage with truncated marker (readIfSmall wording)", () => {
-	const stage = new TruncationStage(100, { marker: { verb: "truncated", headSeparator: "\n\n" } });
+	const stage = new TruncationStage(100, {
+		marker: { verb: "truncated", headSeparator: "\n\n" },
+	});
 	const out = stage.apply("A".repeat(500) + "B".repeat(500));
 	assert.match(out, /\[pi-crew truncated \d+ chars, head\+tail preserved\]/);
 	// Double-newline headSeparator: marker line is preceded by "\n\n" not "\n".
@@ -194,14 +197,21 @@ test("compactString pipeline is monotonic-shrink safe across the boundary window
 
 // --- readIfSmall integration (P0-A pipeline = [ansi-strip, blank-collapse, truncation]) ---
 
-function writeTempFile(content: string): { filePath: string; cleanup: () => void } {
+function writeTempFile(content: string): {
+	filePath: string;
+	cleanup: () => void;
+} {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p0a-readifsmall-"));
 	const filePath = path.join(dir, "input.txt");
 	fs.writeFileSync(filePath, content, "utf-8");
 	return {
 		filePath,
 		cleanup: () => {
-			try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ }
+			try {
+				fs.rmSync(dir, { recursive: true, force: true });
+			} catch {
+				/* best-effort */
+			}
 		},
 	};
 }

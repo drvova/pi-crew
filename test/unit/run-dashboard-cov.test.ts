@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { RunDashboard, type RunDashboardSelection } from "../../src/ui/run-dashboard.ts";
+import { describe, it } from "node:test";
 import type { TeamRunManifest } from "../../src/state/types.ts";
+import { RunDashboard, type RunDashboardSelection } from "../../src/ui/run-dashboard.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeRun(id: string, status: TeamRunManifest["status"] = "running", overrides: Partial<TeamRunManifest> = {}): TeamRunManifest {
@@ -52,10 +52,7 @@ describe("RunDashboard constructor", () => {
 
 describe("RunDashboard render", () => {
 	it("renders run list with status icons", () => {
-		const dashboard = new RunDashboard([
-			makeRun("render-1", "completed"),
-			makeRun("render-2", "failed"),
-		], () => {});
+		const dashboard = new RunDashboard([makeRun("render-1", "completed"), makeRun("render-2", "failed")], () => {});
 		const lines = dashboard.render(80);
 		assert.ok(lines.some((l) => l.includes("2 runs")));
 		assert.ok(lines.some((l) => l.includes("render-1")));
@@ -86,7 +83,9 @@ describe("RunDashboard handleInput", () => {
 	it("navigates up and down through runs", () => {
 		let selected: RunDashboardSelection | undefined;
 		const runs = [makeRun("nav-1", "completed"), makeRun("nav-2", "completed"), makeRun("nav-3", "completed")];
-		const dashboard = new RunDashboard(runs, (s) => { selected = s; });
+		const dashboard = new RunDashboard(runs, (s) => {
+			selected = s;
+		});
 
 		// Start on first, press down, select
 		dashboard.handleInput("j"); // down
@@ -98,7 +97,9 @@ describe("RunDashboard handleInput", () => {
 
 	it("navigates up from first item (clamped to 0)", () => {
 		let selected: RunDashboardSelection | undefined;
-		const dashboard = new RunDashboard([makeRun("clamp-1")], (s) => { selected = s; });
+		const dashboard = new RunDashboard([makeRun("clamp-1")], (s) => {
+			selected = s;
+		});
 		dashboard.handleInput("k"); // up from first = stays at 0
 		dashboard.handleInput("\r");
 		assert.ok(selected);
@@ -107,8 +108,13 @@ describe("RunDashboard handleInput", () => {
 	});
 
 	it("closes on Escape", () => {
-		let selected: RunDashboardSelection | undefined = { runId: "sentinel", action: "status" };
-		const dashboard = new RunDashboard([makeRun("esc-run")], (s) => { selected = s; });
+		let selected: RunDashboardSelection | undefined = {
+			runId: "sentinel",
+			action: "status",
+		};
+		const dashboard = new RunDashboard([makeRun("esc-run")], (s) => {
+			selected = s;
+		});
 		dashboard.handleInput("\x1b"); // Escape
 		assert.equal(selected, undefined);
 		dashboard.dispose();
@@ -158,7 +164,9 @@ describe("RunDashboard handleInput", () => {
 
 	it("handles reload action", () => {
 		let selected: RunDashboardSelection | undefined;
-		const dashboard = new RunDashboard([makeRun("reload-run")], (s) => { selected = s; });
+		const dashboard = new RunDashboard([makeRun("reload-run")], (s) => {
+			selected = s;
+		});
 		dashboard.handleInput("r");
 		assert.ok(selected);
 		assert.equal(selected!.action, "reload");
@@ -167,7 +175,9 @@ describe("RunDashboard handleInput", () => {
 
 	it("handles summary action", () => {
 		let selected: RunDashboardSelection | undefined;
-		const dashboard = new RunDashboard([makeRun("summary-run")], (s) => { selected = s; });
+		const dashboard = new RunDashboard([makeRun("summary-run")], (s) => {
+			selected = s;
+		});
 		dashboard.handleInput("u");
 		assert.ok(selected);
 		assert.equal(selected!.action, "summary");
@@ -176,7 +186,9 @@ describe("RunDashboard handleInput", () => {
 
 	it("handles agents action", () => {
 		let selected: RunDashboardSelection | undefined;
-		const dashboard = new RunDashboard([makeRun("agents-act")], (s) => { selected = s; });
+		const dashboard = new RunDashboard([makeRun("agents-act")], (s) => {
+			selected = s;
+		});
 		dashboard.handleInput("d");
 		assert.ok(selected);
 		assert.equal(selected!.action, "agents");
@@ -188,12 +200,17 @@ describe("RunDashboard with runProvider", () => {
 	it("refreshes runs from provider on render", () => {
 		let callCount = 0;
 		const initial = [makeRun("provider-1", "running")];
-		const dashboard = new RunDashboard(initial, () => {}, {}, {
-			runProvider: () => {
-				callCount++;
-				return [makeRun("provider-1", "completed")];
+		const dashboard = new RunDashboard(
+			initial,
+			() => {},
+			{},
+			{
+				runProvider: () => {
+					callCount++;
+					return [makeRun("provider-1", "completed")];
+				},
 			},
-		});
+		);
 		dashboard.render(80);
 		assert.ok(callCount >= 1);
 		dashboard.dispose();
@@ -202,9 +219,16 @@ describe("RunDashboard with runProvider", () => {
 	it("keeps selection on refresh when run still present", () => {
 		const runs = [makeRun("keep-1"), makeRun("keep-2")];
 		let selected: RunDashboardSelection | undefined;
-		const dashboard = new RunDashboard(runs, (s) => { selected = s; }, {}, {
-			runProvider: () => runs,
-		});
+		const dashboard = new RunDashboard(
+			runs,
+			(s) => {
+				selected = s;
+			},
+			{},
+			{
+				runProvider: () => runs,
+			},
+		);
 		dashboard.handleInput("j"); // select keep-2
 		dashboard.handleInput("\r");
 		assert.equal(selected?.runId, "keep-2");

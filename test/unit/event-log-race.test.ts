@@ -1,8 +1,8 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { appendEvent, appendEventAsync, resetEventLogMode } from "../../src/state/event-log.ts";
 
 describe("H2: Event log sync/async coordination", () => {
@@ -43,7 +43,10 @@ describe("H2: Event log sync/async coordination", () => {
 
 		const events = lines.map((l) => JSON.parse(l));
 		assert.equal(events[0].type, "test.async.first");
-		assert.ok(events.some((e) => e.type === "test.sync.after.async"), "Sync event should have been written via async queue");
+		assert.ok(
+			events.some((e) => e.type === "test.sync.after.async"),
+			"Sync event should have been written via async queue",
+		);
 	});
 
 	it("should not corrupt JSONL under concurrent sync and async writes", async () => {

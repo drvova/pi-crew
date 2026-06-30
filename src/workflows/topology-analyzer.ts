@@ -20,19 +20,9 @@
 
 import type { WorkflowConfig, WorkflowStep } from "./workflow-config.ts";
 
-export type WorkflowTopology =
-	| "single"
-	| "sequential"
-	| "concurrent"
-	| "complex-dag"
-	| "dynamic";
+export type WorkflowTopology = "single" | "sequential" | "concurrent" | "complex-dag" | "dynamic";
 
-export type TopologyRecommendation =
-	| "raw_agent"
-	| "fast_fix"
-	| "parallel_research"
-	| "implementation_adaptive"
-	| "any";
+export type TopologyRecommendation = "raw_agent" | "fast_fix" | "parallel_research" | "implementation_adaptive" | "any";
 
 export interface TopologyAnalysis {
 	topology: WorkflowTopology;
@@ -58,10 +48,7 @@ export function fanOutDegreeFromSteps(steps: WorkflowStep[]): number {
 	const counts = new Map<string, number>();
 	for (const step of steps) {
 		if (step.parallelGroup === undefined) continue;
-		counts.set(
-			step.parallelGroup,
-			(counts.get(step.parallelGroup) ?? 0) + 1,
-		);
+		counts.set(step.parallelGroup, (counts.get(step.parallelGroup) ?? 0) + 1);
 	}
 	let max = 0;
 	for (const count of counts.values()) if (count > max) max = count;
@@ -129,9 +116,7 @@ function hasMultiDeps(steps: WorkflowStep[]): boolean {
  * Classify a workflow's topology. See file header for the rule order.
  * Pure function — no I/O, no side effects, no exceptions.
  */
-export function analyzeWorkflowTopology(
-	workflow: WorkflowConfig,
-): TopologyAnalysis {
+export function analyzeWorkflowTopology(workflow: WorkflowConfig): TopologyAnalysis {
 	// Chain/dynamic workflows: runtime decides the topology at execution time.
 	// Don't try to classify the empty `steps: []` (DynamicWorkflowConfig forces
 	// it to be empty).
@@ -186,8 +171,7 @@ export function analyzeWorkflowTopology(
 	if (stepCount === 1) {
 		topology = "single";
 		recommendation = "raw_agent";
-		reason =
-			"Single-task workflow: no concurrency or DAG structure to justify pi-crew overhead.";
+		reason = "Single-task workflow: no concurrency or DAG structure to justify pi-crew overhead.";
 	} else if (parallelGroupCount >= 1 && fanOutDegree >= 3) {
 		topology = "concurrent";
 		recommendation = "parallel_research";

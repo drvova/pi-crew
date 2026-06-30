@@ -6,12 +6,13 @@
  * extractStructuredResult). The runChildPi path is exercised via PI_TEAMS_MOCK_CHILD_PI
  * (returns a fixed assistant text; the evaluator parses it).
  */
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { synthesizeJudgeAgentConfig, bundleEvidence, evaluateGoal } from "../../src/runtime/goal-evaluator.ts";
+import { bundleEvidence, evaluateGoal, synthesizeJudgeAgentConfig } from "../../src/runtime/goal-evaluator.ts";
 
 test("synthesizeJudgeAgentConfig applies full C6 lockdown (NOT just tools:[])", () => {
 	const cfg = synthesizeJudgeAgentConfig();
@@ -34,8 +35,18 @@ test("bundleEvidence reads transcript tail + extracts tool calls", () => {
 	try {
 		const transcript = path.join(dir, "work.attempt-0.jsonl");
 		const events = [
-			{ type: "tool_execution_start", toolName: "bash", args: { command: "npm test" } },
-			{ type: "message", message: { role: "assistant", content: [{ type: "text", text: "Running tests..." }] } },
+			{
+				type: "tool_execution_start",
+				toolName: "bash",
+				args: { command: "npm test" },
+			},
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "Running tests..." }],
+				},
+			},
 			{ type: "toolCall", name: "read", input: { path: "src/foo.ts" } },
 		];
 		fs.writeFileSync(transcript, events.map((e) => JSON.stringify(e)).join("\n") + "\n");

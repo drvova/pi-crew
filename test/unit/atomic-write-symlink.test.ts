@@ -1,8 +1,8 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { atomicWriteFile, atomicWriteJson, isSymlinkSafePath } from "../../src/state/atomic-write.ts";
 
 const realTmp = fs.realpathSync(os.tmpdir());
@@ -14,7 +14,11 @@ function beforeEachFn() {
 }
 
 function afterEachFn() {
-	try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+	try {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	} catch {
+		/* ignore */
+	}
 }
 
 describe("atomicWriteFile — symlink attack prevention", () => {
@@ -37,17 +41,17 @@ describe("atomicWriteFile — symlink attack prevention", () => {
 
 		try {
 			// atomicWriteFile should refuse to write through the symlink
-			assert.throws(
-				() => atomicWriteFile(symlinkPath, "ATTACKER CONTENT"),
-				/symlink/,
-			);
+			assert.throws(() => atomicWriteFile(symlinkPath, "ATTACKER CONTENT"), /symlink/);
 
 			// Verify the original target was NOT modified
 			const content = fs.readFileSync(realTarget, "utf-8");
-			assert.equal(content, "ORIGINAL SECRET",
-				"original target file must not be modified when write target is a symlink");
+			assert.equal(content, "ORIGINAL SECRET", "original target file must not be modified when write target is a symlink");
 		} finally {
-			try { fs.rmSync(targetDir, { recursive: true, force: true }); } catch { /* ignore */ }
+			try {
+				fs.rmSync(targetDir, { recursive: true, force: true });
+			} catch {
+				/* ignore */
+			}
 		}
 	});
 
@@ -62,7 +66,11 @@ describe("atomicWriteFile — symlink attack prevention", () => {
 		try {
 			assert.equal(isSymlinkSafePath(symlinkPath), false);
 		} finally {
-			try { fs.rmSync(targetDir, { recursive: true, force: true }); } catch { /* ignore */ }
+			try {
+				fs.rmSync(targetDir, { recursive: true, force: true });
+			} catch {
+				/* ignore */
+			}
 		}
 	});
 

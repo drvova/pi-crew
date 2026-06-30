@@ -1,6 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { TEAM_TASK_STATUSES, TEAM_TASK_STATUS_TRANSITIONS, canTransitionTaskStatus, isTerminalTaskStatus } from "../../src/state/contracts.ts";
+import { describe, it } from "node:test";
+import {
+	canTransitionTaskStatus,
+	isTerminalTaskStatus,
+	TEAM_TASK_STATUS_TRANSITIONS,
+	TEAM_TASK_STATUSES,
+} from "../../src/state/contracts.ts";
 
 describe("Interactive subagent task status", () => {
 	it("includes waiting in TEAM_TASK_STATUSES", () => {

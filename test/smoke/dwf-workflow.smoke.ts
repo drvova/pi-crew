@@ -10,14 +10,15 @@
  * agent-schema.smoke.ts (this workflow uses a plain agent to keep the tmp-cwd
  * script free of external imports — node_modules can't be resolved from /tmp).
  */
-import { fileURLToPath } from "node:url";
+
+import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createRequire } from "node:module";
 import test from "node:test";
-import assert from "node:assert/strict";
-import { SMOKE_ENABLED, SKIP_REASON } from "./_helpers.ts";
+import { fileURLToPath } from "node:url";
+import { SKIP_REASON, SMOKE_ENABLED } from "./_helpers.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(import.meta.url);
@@ -36,10 +37,10 @@ const WORKFLOW_SOURCE = [
 	'\tctx.log("budget: total=" + ctx.budget.total + " spent=" + ctx.budget.spent());',
 	"",
 	'\tctx.phase("Work");',
-	'\tconst r = await ctx.agent({',
+	"\tconst r = await ctx.agent({",
 	'\t\trole: "executor",',
 	'\t\tprompt: "Reply with exactly: SMOKE-OK",',
-	'\t\tmaxTurns: 2,',
+	"\t\tmaxTurns: 2,",
 	"\t});",
 	'\tctx.log({ event: "agent-done", ok: r.ok, hasText: !!r.text });',
 	"",
@@ -48,10 +49,10 @@ const WORKFLOW_SOURCE = [
 	'\tctx.log({ event: "pipeline-done", result: piped });',
 	"",
 	'\tconst outDir = path.join(os.tmpdir(), "dwf-smoke-e2e");',
-	'\tfs.mkdirSync(outDir, { recursive: true });',
+	"\tfs.mkdirSync(outDir, { recursive: true });",
 	'\tconst outPath = path.join(outDir, ctx.runId + ".md");',
 	'\tfs.writeFileSync(outPath, "smoke-result\\n");',
-	'\tctx.setResult(outPath, { smoke: true });',
+	"\tctx.setResult(outPath, { smoke: true });",
 	"}",
 ].join("\n");
 
@@ -69,18 +70,28 @@ function readEvents(eventsPath: string): DwfEvent[] {
 		.map((line) => JSON.parse(line) as DwfEvent);
 }
 
-test("smoke: full DWF workflow (phase/log/args/budget/pipeline/agent/setResult) end-to-end", { skip: SMOKE_ENABLED ? false : SKIP_REASON }, async () => {
+test("smoke: full DWF workflow (phase/log/args/budget/pipeline/agent/setResult) end-to-end", {
+	skip: SMOKE_ENABLED ? false : SKIP_REASON,
+}, async () => {
 	const jitiMod = require(path.join(repoRoot, "node_modules/jiti/lib/jiti.cjs"));
 	const createJiti = jitiMod.default ?? jitiMod;
 	const jiti = createJiti(thisFile);
 	const dwfMod = (await jiti.import(path.join(repoRoot, "src/runtime/dynamic-workflow-runner.ts") as string)) as {
-		default?: { runDynamicWorkflow: (input: unknown) => Promise<{ manifest: { status: string; summary: string } }> };
+		default?: {
+			runDynamicWorkflow: (input: unknown) => Promise<{ manifest: { status: string; summary: string } }>;
+		};
 	};
-	const { runDynamicWorkflow } = dwfMod.default ?? (dwfMod as unknown as { runDynamicWorkflow: (input: unknown) => Promise<{ manifest: { status: string; summary: string } }> });
+	const { runDynamicWorkflow } =
+		dwfMod.default ??
+		(dwfMod as unknown as {
+			runDynamicWorkflow: (input: unknown) => Promise<{ manifest: { status: string; summary: string } }>;
+		});
 
 	const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-smoke-dwf-"));
 	try {
-		fs.mkdirSync(path.join(tmpCwd, ".crew", "workflows"), { recursive: true });
+		fs.mkdirSync(path.join(tmpCwd, ".crew", "workflows"), {
+			recursive: true,
+		});
 		const dwfPath = path.join(tmpCwd, ".crew", "workflows", "smoke-e2e.dwf.ts");
 		fs.writeFileSync(dwfPath, WORKFLOW_SOURCE);
 
@@ -142,7 +153,10 @@ test("smoke: full DWF workflow (phase/log/args/budget/pipeline/agent/setResult) 
 		assert.ok(types.includes("dwf.completed"), "missing dwf.completed");
 		assert.ok(types.filter((t) => t === "dwf.phase_started").length >= 3, "expected >=3 phase_started (Setup/Work/Pipeline)");
 		assert.ok(types.filter((t) => t === "dwf.phase_completed").length >= 3, "expected >=3 phase_completed");
-		assert.ok(types.filter((t) => t === "dwf.log").length >= 4, "expected >=4 dwf.log events (start, budget, agent-done, pipeline-done)");
+		assert.ok(
+			types.filter((t) => t === "dwf.log").length >= 4,
+			"expected >=4 dwf.log events (start, budget, agent-done, pipeline-done)",
+		);
 		assert.ok(
 			!types.includes("dwf.failed"),
 			`workflow failed; events: ${JSON.stringify(events.filter((e) => e.type === "dwf.failed"))}`,

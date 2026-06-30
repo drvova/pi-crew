@@ -1,14 +1,13 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { injectGuidance, MARKER_END, MARKER_START, standardGuidanceBlocks } from "../../src/config/markers.ts";
+import type { TeamContext } from "../../src/extension/team-tool/context.ts";
 import { handleCleanup } from "../../src/extension/team-tool/lifecycle-actions.ts";
-import { MARKER_START, MARKER_END, injectGuidance, standardGuidanceBlocks } from "../../src/config/markers.ts";
 import { textFromToolResult } from "../../src/extension/tool-result.ts";
 import type { TeamToolParamsValue } from "../../src/schema/team-tool-schema.ts";
-import type { TeamContext } from "../../src/extension/team-tool/context.ts";
 
 /**
  * Issue #35: pi-crew's `team action=init` injects a guidance block into
@@ -39,7 +38,12 @@ function makeFixture(withGuidance: boolean): Fixture {
 }
 
 function ctx(cwd: string): TeamContext {
-	return { cwd, config: undefined, sessionId: "test-session", signal: undefined } as unknown as TeamContext;
+	return {
+		cwd,
+		config: undefined,
+		sessionId: "test-session",
+		signal: undefined,
+	} as unknown as TeamContext;
 }
 
 function params(p: Partial<TeamToolParamsValue> = {}): TeamToolParamsValue {

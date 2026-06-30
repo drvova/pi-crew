@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { runEventBus, teamEventToRunEventType, emitFromTeamEvent, classifyEventChannel } from "../../src/ui/run-event-bus.ts";
+import test from "node:test";
 import type { TeamEvent } from "../../src/state/event-log.ts";
+import { classifyEventChannel, emitFromTeamEvent, runEventBus, teamEventToRunEventType } from "../../src/ui/run-event-bus.ts";
 
 test("runEventBus on/off delivers events to subscribed listeners", () => {
 	const received: string[] = [];
@@ -37,13 +37,55 @@ test("runEventBus listenerCount tracks subscriptions", () => {
 });
 
 test("teamEventToRunEventType maps known event types", () => {
-	assert.equal(teamEventToRunEventType({ type: "task.started", runId: "r1" } as TeamEvent), "task_started");
-	assert.equal(teamEventToRunEventType({ type: "task.completed", runId: "r1" } as TeamEvent), "task_completed");
-	assert.equal(teamEventToRunEventType({ type: "run.running", runId: "r1" } as TeamEvent), "run_started");
-	assert.equal(teamEventToRunEventType({ type: "run.completed", runId: "r1" } as TeamEvent), "run_completed");
-	assert.equal(teamEventToRunEventType({ type: "run.blocked", runId: "r1" } as TeamEvent), "run_blocked");
-	assert.equal(teamEventToRunEventType({ type: "run.cancelled", runId: "r1" } as TeamEvent), "run_cancelled");
-	assert.equal(teamEventToRunEventType({ type: "unknown.event", runId: "r1" } as TeamEvent), undefined);
+	assert.equal(
+		teamEventToRunEventType({
+			type: "task.started",
+			runId: "r1",
+		} as TeamEvent),
+		"task_started",
+	);
+	assert.equal(
+		teamEventToRunEventType({
+			type: "task.completed",
+			runId: "r1",
+		} as TeamEvent),
+		"task_completed",
+	);
+	assert.equal(
+		teamEventToRunEventType({
+			type: "run.running",
+			runId: "r1",
+		} as TeamEvent),
+		"run_started",
+	);
+	assert.equal(
+		teamEventToRunEventType({
+			type: "run.completed",
+			runId: "r1",
+		} as TeamEvent),
+		"run_completed",
+	);
+	assert.equal(
+		teamEventToRunEventType({
+			type: "run.blocked",
+			runId: "r1",
+		} as TeamEvent),
+		"run_blocked",
+	);
+	assert.equal(
+		teamEventToRunEventType({
+			type: "run.cancelled",
+			runId: "r1",
+		} as TeamEvent),
+		"run_cancelled",
+	);
+	assert.equal(
+		teamEventToRunEventType({
+			type: "unknown.event",
+			runId: "r1",
+		} as TeamEvent),
+		undefined,
+	);
 });
 
 // --- Typed channel tests ---

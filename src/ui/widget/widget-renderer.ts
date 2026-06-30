@@ -4,18 +4,18 @@
  * Extracted from crew-widget.ts.
  */
 
-import type { CrewTheme } from "../theme-adapter.ts";
-import { iconForStatus, colorizeStatusGlyphs } from "../status-colors.ts";
-import { truncate } from "../../utils/visual.ts";
-import { Box, Text } from "../layout-primitives.ts";
 import { listLiveAgents } from "../../runtime/live-agent-manager.ts";
 import { computePhaseProgress, formatPhaseProgressLine } from "../../runtime/phase-progress.ts";
-import { spinnerFrame } from "../spinner.ts";
-import { computeLiveDurationMs } from "../live-duration.ts";
+import { isFinishedRunStatus } from "../../runtime/process-status.ts";
 import { getTaskUsage } from "../../runtime/usage-tracker.ts";
+import { truncate } from "../../utils/visual.ts";
+import { Box, Text } from "../layout-primitives.ts";
+import { computeLiveDurationMs } from "../live-duration.ts";
+import { spinnerFrame } from "../spinner.ts";
+import { colorizeStatusGlyphs, iconForStatus } from "../status-colors.ts";
+import type { CrewTheme } from "../theme-adapter.ts";
 import { agentActivity, agentStats, elapsed, formatTokensCompact, notificationBadge } from "./widget-formatters.ts";
 import { activeWidgetRuns, shortRunLabel } from "./widget-model.ts";
-import { isFinishedRunStatus } from "../../runtime/process-status.ts";
 import type { WidgetRun } from "./widget-types.ts";
 
 const MAX_AGENTS_DISPLAY = 3;
@@ -47,7 +47,14 @@ export function widgetHeader(runs: WidgetRun[], runningGlyph: string, maxLines =
 
 // ── Line builder ──────────────────────────────────────────────────────
 
-export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedRuns?: WidgetRun[], notificationCount = 0, width = DEFAULT_WIDGET_WIDTH): string[] {
+export function buildWidgetLines(
+	cwd: string,
+	frame = 0,
+	maxLines = 8,
+	providedRuns?: WidgetRun[],
+	notificationCount = 0,
+	width = DEFAULT_WIDGET_WIDTH,
+): string[] {
 	// Match the legacy `buildCrewWidgetLines` API: when no runs are supplied,
 	// auto-fetch via activeWidgetRuns(cwd). Otherwise widgets calling with
 	// only `(cwd, frame)` would render an empty line set (regression vs. the
@@ -103,10 +110,12 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 		// L-4: prioritize RUNNING > QUEUED > WAITING within the visible window so the
 		// most relevant live workers are always shown. Finished rows fill only the
 		// leftover budget and never steal slots from running agents.
-		const ACTIVE_PRIORITY: Record<string, number> = { running: 0, queued: 1, waiting: 2 };
-		const prioritizedActive = [...activeAgents].sort(
-			(a, b) => (ACTIVE_PRIORITY[a.status] ?? 9) - (ACTIVE_PRIORITY[b.status] ?? 9),
-		);
+		const ACTIVE_PRIORITY: Record<string, number> = {
+			running: 0,
+			queued: 1,
+			waiting: 2,
+		};
+		const prioritizedActive = [...activeAgents].sort((a, b) => (ACTIVE_PRIORITY[a.status] ?? 9) - (ACTIVE_PRIORITY[b.status] ?? 9));
 		// Finished rows only appear in slots not used by active agents (max 2). When
 		// there are >= MAX_AGENTS_DISPLAY live workers, finished rows are suppressed
 		// entirely so they cannot push a live agent's activity line off-screen.
@@ -134,7 +143,8 @@ export function buildWidgetLines(cwd: string, frame = 0, maxLines = 8, providedR
 		for (const [index, agent] of finishedAgents.slice(0, finishedSlots).entries()) {
 			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
 			const name = liveHandle?.agent ?? agent.agent;
-			const icon = agent.status === "completed" ? "✓" : agent.status === "failed" ? "✗" : agent.status === "needs_attention" ? "⚠" : "▪";
+			const icon =
+				agent.status === "completed" ? "✓" : agent.status === "failed" ? "✗" : agent.status === "needs_attention" ? "⚠" : "▪";
 			const stats = agentStats(agent, liveHandle);
 			const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
 			const isLastFinished = index === Math.min(finishedAgents.length, finishedSlots) - 1;

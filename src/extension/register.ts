@@ -1,28 +1,21 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { asRecord, loadConfig } from "../config/config.ts";
+import { clearHooksScoped } from "../hooks/registry.ts";
+import type { ScheduledJob } from "../runtime/scheduler.ts";
 import { applyCrewSettingsToConfig, loadCrewSettings } from "../runtime/settings-store.ts";
 // 2.7: Lazy-load LiveRunSidebar — only constructed when the user actually opens
 // a live run sidebar overlay. The class pulls in transcript-viewer and other
 // heavy UI modules.
 import type { LiveRunSidebar as LiveRunSidebarType } from "../ui/live-run-sidebar.ts";
-import {
-	type AsyncNotifierState,
-	startAsyncRunNotifier,
-	stopAsyncRunNotifier,
-} from "./async-notifier.ts";
+import { type AsyncNotifierState, startAsyncRunNotifier, stopAsyncRunNotifier } from "./async-notifier.ts";
 import { registerAutonomousPolicy } from "./autonomous-policy.ts";
-import { registerKnowledgeInjection } from "./knowledge-injection.ts";
 import { registerCleanupHandler } from "./crew-cleanup.ts";
-import type { ScheduledJob } from "../runtime/scheduler.ts";
-import { clearHooksScoped } from "../hooks/registry.ts";
-import { uninstallCrewGlobalRegistry } from "./team-tool.ts";
+import { registerKnowledgeInjection } from "./knowledge-injection.ts";
 import { notifyActiveRuns } from "./session-summary.ts";
+import { uninstallCrewGlobalRegistry } from "./team-tool.ts";
 
 let _cachedLiveRunSidebar: typeof LiveRunSidebarType | undefined;
 async function importLiveRunSidebar(): Promise<typeof LiveRunSidebarType> {
@@ -35,46 +28,27 @@ async function importLiveRunSidebar(): Promise<typeof LiveRunSidebarType> {
 }
 
 import { DEFAULT_NOTIFICATIONS, DEFAULT_UI } from "../config/defaults.ts";
-import {
-	type EventToMetricSubscription,
-	wireEventToMetrics,
-} from "../observability/event-to-metric.ts";
+import { type EventToMetricSubscription, wireEventToMetrics } from "../observability/event-to-metric.ts";
 // 2.7: Lazy-load OTLPExporter — only loaded when otlp.enabled=true. The
 // exporter pulls in node:http/https and serialization helpers that 99% of
 // users never need.
 import type { OTLPExporter as OTLPExporterType } from "../observability/exporters/otlp-exporter.ts";
-import {
-	createMetricRegistry,
-	type MetricRegistry,
-} from "../observability/metric-registry.ts";
-import {
-	createMetricFileSink,
-	type MetricSink,
-} from "../observability/metric-sink.ts";
+import { createMetricRegistry, type MetricRegistry } from "../observability/metric-registry.ts";
+import { createMetricFileSink, type MetricSink } from "../observability/metric-sink.ts";
+import { BatchBarrier, type BatchMember } from "../runtime/batch-barrier.ts";
 import { listLiveAgents } from "../runtime/live-agent-manager.ts";
 import { createManifestCache } from "../runtime/manifest-cache.ts";
+import { primePeerDep } from "../runtime/peer-dep.ts";
+import { buildValidationBlocker, extractPathFromInput, validateWrittenFile } from "../runtime/per-write-validator.ts";
+import { startRuntimeWarmup } from "../runtime/runtime-warmup.ts";
 import { CrewScheduler } from "../runtime/scheduler.ts";
 import { loadRunManifestById, updateRunStatus } from "../state/state-store.ts";
 import type { TeamRunManifest } from "../state/types.ts";
-import {
-	SubagentManager,
-	readPersistedSubagentRecord,
-} from "../subagents/manager.ts";
-import { BatchBarrier, type BatchMember } from "../runtime/batch-barrier.ts";
+import { readPersistedSubagentRecord, SubagentManager } from "../subagents/manager.ts";
 import { terminateActiveChildPiProcesses } from "../subagents/spawn.ts";
-import {
-	type CrewWidgetState,
-	stopCrewWidget,
-	updateCrewWidget,
-} from "../ui/widget/index.ts";
-import { summarizeHeartbeats } from "../ui/heartbeat-aggregator.ts";
 import { deployBundledThemes } from "../ui/deploy-bundled-themes.ts";
-import {
-	requestRender,
-	setExtensionWidget,
-	setWorkingIndicator,
-	showCustom,
-} from "../ui/pi-ui-compat.ts";
+import { summarizeHeartbeats } from "../ui/heartbeat-aggregator.ts";
+import { requestRender, setExtensionWidget, setWorkingIndicator, showCustom } from "../ui/pi-ui-compat.ts";
 import {
 	clearPiCrewPowerbar,
 	disposePowerbarCoalescer,
@@ -85,49 +59,33 @@ import {
 } from "../ui/powerbar-publisher.ts";
 import { RenderScheduler } from "../ui/render-scheduler.ts";
 import { runEventBus } from "../ui/run-event-bus.ts";
-import { createTerminalStatusController, type TerminalStatusController } from "../ui/terminal-status.ts";
-import { extractPathFromInput, validateWrittenFile, buildValidationBlocker } from "../runtime/per-write-validator.ts";
-import { startRuntimeWarmup } from "../runtime/runtime-warmup.ts";
-import { primePeerDep } from "../runtime/peer-dep.ts";
 import { createRunSnapshotCache } from "../ui/run-snapshot-cache.ts";
+import { createTerminalStatusController, type TerminalStatusController } from "../ui/terminal-status.ts";
+import { type CrewWidgetState, stopCrewWidget, updateCrewWidget } from "../ui/widget/index.ts";
 import { closeWatcher } from "../utils/fs-watch.ts";
-import { RunWatcherRegistry } from "../utils/run-watcher-registry.ts";
 import { logInternalError } from "../utils/internal-error.ts";
-import {
-	clearProjectRootCache,
-	projectCrewRoot,
-	userCrewRoot,
-} from "../utils/paths.ts";
+import { clearProjectRootCache, projectCrewRoot, userCrewRoot } from "../utils/paths.ts";
+import { RunWatcherRegistry } from "../utils/run-watcher-registry.ts";
 import { resolveContainedPath } from "../utils/safe-paths.ts";
 import { extractSessionId } from "../utils/session-utils.ts";
 import { resetTimings, time } from "../utils/timings.ts";
-import {
-	type PiCrewRpcHandle,
-	registerPiCrewRpc,
-} from "./cross-extension-rpc.ts";
-import {
-	type NotificationDescriptor,
-	NotificationRouter,
-} from "./notification-router.ts";
+import { registerContextStatusInjection } from "./context-status-injection.ts";
+import { registerCrewAutocomplete } from "./crew-autocomplete.ts";
+import { registerCrewInputRouter } from "./crew-input-router.ts";
+import { registerCrewShortcuts } from "./crew-shortcuts.ts";
+import { type PiCrewRpcHandle, registerPiCrewRpc } from "./cross-extension-rpc.ts";
+import { registerCrewMessageRenderers } from "./message-renderers.ts";
+import { type NotificationDescriptor, NotificationRouter } from "./notification-router.ts";
 import { createJsonlSink, type NotificationSink } from "./notification-sink.ts";
 import { runArtifactCleanup } from "./registration/artifact-cleanup.ts";
 import { registerTeamCommands } from "./registration/commands.ts";
 import { registerCompactionGuard } from "./registration/compaction-guard.ts";
-import {
-	__test__subagentSpawnParams,
-	sendAgentWakeUp,
-	sendFollowUp,
-} from "./registration/subagent-helpers.ts";
+import { __test__subagentSpawnParams, sendAgentWakeUp, sendFollowUp } from "./registration/subagent-helpers.ts";
 import { registerSubagentTools } from "./registration/subagent-tools.ts";
-import { registerCrewMessageRenderers } from "./message-renderers.ts";
-import { registerCrewInputRouter } from "./crew-input-router.ts";
-import { registerCrewAutocomplete } from "./crew-autocomplete.ts";
-import { registerCrewShortcuts } from "./crew-shortcuts.ts";
-import { registerContextStatusInjection } from "./context-status-injection.ts";
 import { registerTeamTool } from "./registration/team-tool.ts";
-import { handleTeamTool } from "./team-tool.ts";
-import { persistScheduledJobUpdate } from "./team-tool/handle-schedule.ts";
 import { shouldBlockDestructiveTeamAction } from "./team-tool/destructive-gate.ts";
+import { persistScheduledJobUpdate } from "./team-tool/handle-schedule.ts";
+import { handleTeamTool } from "./team-tool.ts";
 
 let _cachedOTLPExporter: typeof OTLPExporterType | undefined;
 async function importOTLPExporter(): Promise<typeof OTLPExporterType> {
@@ -147,13 +105,11 @@ import type {
 // 2.7: Lazy-load crash-recovery helpers — only invoked from session_start
 // deferred cleanup and cleanupRuntime. Each function is awaited inside an
 // async context that already runs after registration completes.
-import {
-	reconcileAllStaleRuns,
-} from "../runtime/crash-recovery.ts";
+import { reconcileAllStaleRuns } from "../runtime/crash-recovery.ts";
 import { appendDeadletter } from "../runtime/deadletter.ts";
 import { HeartbeatWatcher } from "../runtime/heartbeat-watcher.ts";
-import { cleanupOrphanTempDirs, cleanupLegacyOrphanTempDirs } from "../runtime/pi-args.ts";
 import { cleanupOrphanWorkers } from "../runtime/orphan-worker-registry.ts";
+import { cleanupLegacyOrphanTempDirs, cleanupOrphanTempDirs } from "../runtime/pi-args.ts";
 import { reconcileOrphanedTempWorkspaces } from "../runtime/stale-reconciler.ts";
 
 let _cachedCrashRecovery:
@@ -163,9 +119,7 @@ let _cachedCrashRecovery:
 			purgeStaleActiveRunIndex: typeof PurgeStaleActiveRunIndexFn;
 	  }
 	| undefined;
-async function importCrashRecovery(): Promise<
-	NonNullable<typeof _cachedCrashRecovery>
-> {
+async function importCrashRecovery(): Promise<NonNullable<typeof _cachedCrashRecovery>> {
 	if (!_cachedCrashRecovery) {
 		// LAZY: defer crash-recovery (~14 KB) until session_start cleanup runs.
 		const mod = await import("../runtime/crash-recovery.ts");
@@ -189,10 +143,7 @@ function purgeStaleActiveRunIndexSyncIfLoaded(): void {
 	}
 }
 
-import {
-	pruneFinishedRuns,
-	pruneUserLevelRuns,
-} from "../extension/run-maintenance.ts";
+import { pruneFinishedRuns, pruneUserLevelRuns } from "../extension/run-maintenance.ts";
 import { initI18n } from "../i18n.ts";
 import { DeliveryCoordinator } from "../runtime/delivery-coordinator.ts";
 import { OverflowRecoveryTracker } from "../runtime/overflow-recovery.ts";
@@ -245,9 +196,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	let manifestCache = createManifestCache(process.cwd());
 	let runSnapshotCache = createRunSnapshotCache(process.cwd());
 	let cacheCwd = process.cwd();
-	const getManifestCache = (
-		cwd: string,
-	): ReturnType<typeof createManifestCache> => {
+	const getManifestCache = (cwd: string): ReturnType<typeof createManifestCache> => {
 		if (manifestCache && cacheCwd === cwd) return manifestCache;
 		if (manifestCache) manifestCache.dispose();
 		if (runSnapshotCache) runSnapshotCache.dispose?.();
@@ -256,15 +205,11 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		runSnapshotCache = createRunSnapshotCache(cwd);
 		return manifestCache;
 	};
-	const getRunSnapshotCache = (
-		cwd: string,
-	): ReturnType<typeof createRunSnapshotCache> => {
+	const getRunSnapshotCache = (cwd: string): ReturnType<typeof createRunSnapshotCache> => {
 		if (cacheCwd !== cwd) getManifestCache(cwd);
 		return runSnapshotCache;
 	};
-	const telemetryEnabled = (): boolean =>
-		loadConfig(currentCtx?.cwd ?? process.cwd()).config.telemetry
-			?.enabled !== false;
+	const telemetryEnabled = (): boolean => loadConfig(currentCtx?.cwd ?? process.cwd()).config.telemetry?.enabled !== false;
 	const widgetState: CrewWidgetState = { frame: 0 };
 	let notificationSink: NotificationSink | undefined;
 	let notificationRouter: NotificationRouter | undefined;
@@ -287,35 +232,21 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		if (config.telemetry?.enabled !== false)
 			notificationSink = createJsonlSink(
 				projectCrewRoot(ctx.cwd),
-				config.notifications?.sinkRetentionDays ??
-					DEFAULT_NOTIFICATIONS.sinkRetentionDays,
+				config.notifications?.sinkRetentionDays ?? DEFAULT_NOTIFICATIONS.sinkRetentionDays,
 			);
 		notificationRouter = new NotificationRouter(
 			{
-				dedupWindowMs:
-					config.notifications?.dedupWindowMs ??
-					DEFAULT_NOTIFICATIONS.dedupWindowMs,
-				batchWindowMs:
-					config.notifications?.batchWindowMs ??
-					DEFAULT_NOTIFICATIONS.batchWindowMs,
+				dedupWindowMs: config.notifications?.dedupWindowMs ?? DEFAULT_NOTIFICATIONS.dedupWindowMs,
+				batchWindowMs: config.notifications?.batchWindowMs ?? DEFAULT_NOTIFICATIONS.batchWindowMs,
 				quietHours: config.notifications?.quietHours,
-				severityFilter: config.notifications?.severityFilter ?? [
-					...DEFAULT_NOTIFICATIONS.severityFilter,
-				],
+				severityFilter: config.notifications?.severityFilter ?? [...DEFAULT_NOTIFICATIONS.severityFilter],
 				sink: (notification) => notificationSink?.write(notification),
 			},
 			(notification) => {
-				widgetState.notificationCount =
-					(widgetState.notificationCount ?? 0) + 1;
+				widgetState.notificationCount = (widgetState.notificationCount ?? 0) + 1;
 				sendFollowUp(
 					pi,
-					[
-						notification.title,
-						notification.body,
-						notification.runId
-							? `Run: ${notification.runId}`
-							: undefined,
-					]
+					[notification.title, notification.body, notification.runId ? `Run: ${notification.runId}` : undefined]
 						.filter((line): line is string => Boolean(line))
 						.join("\n"),
 				);
@@ -378,12 +309,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			// LAZY: opt-in OTLP export — load the exporter module on first enable.
 			void importOTLPExporter()
 				.then((Ctor) => {
-					if (
-						cleanedUp ||
-						metricRegistry !== owningRegistry ||
-						!owningRegistry
-					)
-						return;
+					if (cleanedUp || metricRegistry !== owningRegistry || !owningRegistry) return;
 					otlpExporter = new Ctor(
 						{
 							endpoint: otlpEndpoint,
@@ -394,9 +320,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					);
 					otlpExporter.start();
 				})
-				.catch((error: unknown) =>
-					logInternalError("register.otlp-lazy-import", error),
-				);
+				.catch((error: unknown) => logInternalError("register.otlp-lazy-import", error));
 		}
 		heartbeatWatcher = new HeartbeatWatcher({
 			cwd: ctx.cwd,
@@ -409,8 +333,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					return true;
 				},
 			},
-			deadletterTickThreshold:
-				config.reliability?.deadletterThreshold ?? 3,
+			deadletterTickThreshold: config.reliability?.deadletterThreshold ?? 3,
 			onDeadletterTrigger: (manifest, taskId) => {
 				appendDeadletter(manifest, {
 					taskId,
@@ -419,12 +342,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					attempts: 0,
 					timestamp: new Date().toISOString(),
 				});
-				metricRegistry
-					?.counter(
-						"crew.task.deadletter_total",
-						"Deadletter triggers by reason",
-					)
-					.inc({ reason: "heartbeat-dead" });
+				metricRegistry?.counter("crew.task.deadletter_total", "Deadletter triggers by reason").inc({ reason: "heartbeat-dead" });
 				pi.events?.emit?.("crew.task.deadletter", {
 					runId: manifest.runId,
 					taskId,
@@ -445,16 +363,12 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			clearInterval(tempReconcileTimer);
 			tempReconcileTimer = undefined;
 		}
-		const autoRepairIntervalMs =
-			config.reliability?.autoRepairIntervalMs ?? 60_000;
+		const autoRepairIntervalMs = config.reliability?.autoRepairIntervalMs ?? 60_000;
 		if (autoRepairIntervalMs > 0) {
 			autoRepairTimer = setInterval(() => {
 				if (cleanedUp || !currentCtx) return;
 				try {
-					const staleResults = reconcileAllStaleRuns(
-						currentCtx.cwd,
-						getManifestCache(currentCtx.cwd),
-					);
+					const staleResults = reconcileAllStaleRuns(currentCtx.cwd, getManifestCache(currentCtx.cwd));
 					if (staleResults.length > 0) {
 						for (const result of staleResults) {
 							if (result.repaired) {
@@ -483,8 +397,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				if (cleanedUp) return;
 				try {
 					reconcileOrphanedTempWorkspaces(Date.now(), {
-						cleanupOrphanedTempDirs:
-							config.reliability?.cleanupOrphanedTempDirs,
+						cleanupOrphanedTempDirs: config.reliability?.cleanupOrphanedTempDirs,
 					});
 					// Layer 4: also clean orphan temp dirs under
 					// ~/.pi/agent/pi-crew/tmp/ that the SIGKILL'd parent
@@ -527,10 +440,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			void importCrashRecovery()
 				.then(({ detectInterruptedRuns }) => {
 					if (cleanedUp) return;
-					for (const plan of detectInterruptedRuns(
-						cwdSnapshot,
-						cacheSnapshot,
-					)) {
+					for (const plan of detectInterruptedRuns(cwdSnapshot, cacheSnapshot)) {
 						notifyOperator({
 							id: `recovery_prompt_${plan.runId}`,
 							severity: "warning",
@@ -541,12 +451,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 						});
 					}
 				})
-				.catch((error: unknown) =>
-					logInternalError(
-						"register.crash-recovery-lazy-import",
-						error,
-					),
-				);
+				.catch((error: unknown) => logInternalError("register.crash-recovery-lazy-import", error));
 		}
 	};
 	const autoRecoveryLast = new Map<string, { insertedAt: number; lastAccessAt: number }>();
@@ -569,12 +474,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				pi.events?.emit?.(event, data);
 			},
 			sendFollowUp: (title, body) => {
-				sendFollowUp(
-					pi,
-					[title, body]
-						.filter((line): line is string => Boolean(line))
-						.join("\n"),
-				);
+				sendFollowUp(pi, [title, body].filter((line): line is string => Boolean(line)).join("\n"));
 			},
 			sendWakeUp: (message) => {
 				sendAgentWakeUp(pi, message);
@@ -583,15 +483,10 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		overflowTracker = new OverflowRecoveryTracker({
 			onPhaseChange: (state, previousPhase) => {
 				if (metricRegistry) {
-					metricRegistry
-						.counter(
-							"crew.task.overflow_recovery_total",
-							"Overflow recovery phase transitions",
-						)
-						.inc({
-							phase: state.phase,
-							previous_phase: previousPhase,
-						});
+					metricRegistry.counter("crew.task.overflow_recovery_total", "Overflow recovery phase transitions").inc({
+						phase: state.phase,
+						previous_phase: previousPhase,
+					});
 				}
 				pi.events?.emit?.("crew.task.overflow", {
 					runId: state.runId,
@@ -617,28 +512,14 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			notificationRouter?.enqueue(notification);
 		} catch (error) {
 			logInternalError("register.notification", error);
-			sendFollowUp(
-				pi,
-				[notification.title, notification.body]
-					.filter((line): line is string => Boolean(line))
-					.join("\n"),
-			);
+			sendFollowUp(pi, [notification.title, notification.body].filter((line): line is string => Boolean(line)).join("\n"));
 		}
 	};
 	const captureSessionGeneration = (): number => sessionGeneration;
-	const isOwnerSessionCurrent = (
-		ownerGeneration: number | undefined,
-	): boolean =>
-		!cleanedUp &&
-		(ownerGeneration === undefined ||
-			ownerGeneration === sessionGeneration);
-	const isContextCurrent = (
-		ctx: ExtensionContext,
-		ownerGeneration: number,
-	): boolean =>
-		!cleanedUp &&
-		currentCtx === ctx &&
-		sessionGeneration === ownerGeneration;
+	const isOwnerSessionCurrent = (ownerGeneration: number | undefined): boolean =>
+		!cleanedUp && (ownerGeneration === undefined || ownerGeneration === sessionGeneration);
+	const isContextCurrent = (ctx: ExtensionContext, ownerGeneration: number): boolean =>
+		!cleanedUp && currentCtx === ctx && sessionGeneration === ownerGeneration;
 	const batchBarrier = new BatchBarrier();
 	const subagentManager = new SubagentManager(
 		4,
@@ -685,13 +566,10 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			setTimeout(() => {
 				if (cleanedUp) return;
 				const fresh = subagentManager.getRecord(agentId);
-				const persisted = currentCtx
-					? readPersistedSubagentRecord(currentCtx.cwd, agentId)
-					: undefined;
+				const persisted = currentCtx ? readPersistedSubagentRecord(currentCtx.cwd, agentId) : undefined;
 				// Leader already joined the result -> suppress redundant notify.
 				if (fresh?.resultConsumed || persisted?.resultConsumed) return;
-				if (!isOwnerSessionCurrent(fresh?.ownerSessionGeneration ?? ownerGen))
-					return;
+				if (!isOwnerSessionCurrent(fresh?.ownerSessionGeneration ?? ownerGen)) return;
 				// Rule 1 (batch coalescing): if this agent belongs to a batch, never
 				// emit an individual notification. Instead record its terminal state
 				// in the barrier; emit ONE consolidated notification only when ALL
@@ -707,10 +585,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					if (snap.allDone && !snap.notified) {
 						batchBarrier.markNotified(agentBatchId);
 						const roster = snap.terminal
-							.map(
-								(m) =>
-									`- ${m.id} [${m.status}] (${m.type ?? "agent"}): ${m.description ?? ""}`,
-							)
+							.map((m) => `- ${m.id} [${m.status}] (${m.type ?? "agent"}): ${m.description ?? ""}`)
 							.join("\n");
 						const joinInstruction = [
 							`All ${snap.terminal.length} background subagents in batch "${agentBatchId}" have finished.`,
@@ -765,26 +640,12 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		},
 		1000,
 		(event, payload) => {
-			const ownerGeneration =
-				typeof payload.ownerSessionGeneration === "number"
-					? payload.ownerSessionGeneration
-					: undefined;
-			if (
-				ownerGeneration !== undefined &&
-				!isOwnerSessionCurrent(ownerGeneration)
-			)
-				return;
+			const ownerGeneration = typeof payload.ownerSessionGeneration === "number" ? payload.ownerSessionGeneration : undefined;
+			if (ownerGeneration !== undefined && !isOwnerSessionCurrent(ownerGeneration)) return;
 			if (event === "subagent.stuck-blocked") {
-				const id =
-					typeof payload.id === "string" ? payload.id : "unknown";
-				const runId =
-					typeof payload.runId === "string"
-						? payload.runId
-						: "unknown";
-				const durationMs =
-					typeof payload.durationMs === "number"
-						? payload.durationMs
-						: 0;
+				const id = typeof payload.id === "string" ? payload.id : "unknown";
+				const runId = typeof payload.runId === "string" ? payload.runId : "unknown";
+				const durationMs = typeof payload.durationMs === "number" ? payload.durationMs : 0;
 				notifyOperator({
 					id: `subagent-stuck:${id}:${runId}`,
 					severity: "warning",
@@ -834,21 +695,15 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	// P0 fix: stopSessionBoundSubagents must NOT abort foreground team runs on session switch.
 	// Foreground team runs run in the same process as the session; they naturally clean up
 	// when the session context is torn down. Only subagents need explicit abort on switch.
-	const foregroundTeamRunControllers = new Map<
-		string | symbol,
-		AbortController
-	>();
+	const foregroundTeamRunControllers = new Map<string | symbol, AbortController>();
 
 	const stopSessionBoundSubagents = (): void => {
 		// Only abort subagent controllers — NOT foreground team runs.
 		// Foreground team runs are bound to the session lifecycle; they will be aborted
 		// by cleanupRuntime during session_shutdown.
-		for (const controller of foregroundControllers.values())
-			controller.abort();
+		for (const controller of foregroundControllers.values()) controller.abort();
 		foregroundControllers.clear();
-		subagentManager.abortAll(
-			"Session switching — foreground subagents cancelled.",
-		);
+		subagentManager.abortAll("Session switching — foreground subagents cancelled.");
 		terminateActiveChildPiProcesses();
 		disposeRenderSchedulerSubscriptions();
 		renderScheduler?.dispose();
@@ -857,32 +712,18 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		terminalStatus = undefined;
 		terminalStatusActive = false;
 		liveSidebarRunId = undefined;
-		if (currentCtx)
-			stopCrewWidget(
-				currentCtx,
-				widgetState,
-				loadConfig(currentCtx.cwd).config.ui,
-			);
+		if (currentCtx) stopCrewWidget(currentCtx, widgetState, loadConfig(currentCtx.cwd).config.ui);
 		clearPiCrewPowerbar(pi.events);
 	};
 	const openLiveSidebar = (ctx: ExtensionContext, runId: string): void => {
 		const uiConfig = loadConfig(ctx.cwd).config.ui;
 		const autoOpen = uiConfig?.autoOpenDashboard === true;
-		const foregroundAutoOpen =
-			uiConfig?.autoOpenDashboardForForegroundRuns ??
-			DEFAULT_UI.autoOpenDashboardForForegroundRuns;
-		if (
-			!ctx.hasUI ||
-			!autoOpen ||
-			!foregroundAutoOpen ||
-			(uiConfig?.dashboardPlacement ?? DEFAULT_UI.dashboardPlacement) !==
-				"right"
-		)
+		const foregroundAutoOpen = uiConfig?.autoOpenDashboardForForegroundRuns ?? DEFAULT_UI.autoOpenDashboardForForegroundRuns;
+		if (!ctx.hasUI || !autoOpen || !foregroundAutoOpen || (uiConfig?.dashboardPlacement ?? DEFAULT_UI.dashboardPlacement) !== "right")
 			return;
 		if (liveSidebarRunId === runId) return;
 		liveSidebarRunId = runId;
-		const widgetPlacement =
-			uiConfig?.widgetPlacement ?? DEFAULT_UI.widgetPlacement;
+		const widgetPlacement = uiConfig?.widgetPlacement ?? DEFAULT_UI.widgetPlacement;
 		setExtensionWidget(ctx, "pi-crew", undefined, {
 			placement: widgetPlacement,
 		});
@@ -893,10 +734,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		widgetState.lastPlacement = widgetPlacement;
 		widgetState.lastKey = "pi-crew-active";
 		widgetState.model = undefined;
-		const width = Math.min(
-			90,
-			Math.max(40, uiConfig?.dashboardWidth ?? DEFAULT_UI.dashboardWidth),
-		);
+		const width = Math.min(90, Math.max(40, uiConfig?.dashboardWidth ?? DEFAULT_UI.dashboardWidth));
 		void importLiveRunSidebar()
 			.then((LiveRunSidebar) => {
 				if (cleanedUp || !currentCtx) return;
@@ -925,8 +763,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 						},
 					},
 				).finally(() => {
-					if (liveSidebarRunId === runId)
-						liveSidebarRunId = undefined;
+					if (liveSidebarRunId === runId) liveSidebarRunId = undefined;
 					updateCrewWidget(
 						ctx,
 						widgetState,
@@ -936,15 +773,9 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					);
 				});
 			})
-			.catch((error: unknown) =>
-				logInternalError("register.live-sidebar-lazy-import", error),
-			);
+			.catch((error: unknown) => logInternalError("register.live-sidebar-lazy-import", error));
 	};
-	const startForegroundRun = (
-		ctx: ExtensionContext,
-		runner: (signal?: AbortSignal) => Promise<void>,
-		runId?: string,
-	): void => {
+	const startForegroundRun = (ctx: ExtensionContext, runner: (signal?: AbortSignal) => Promise<void>, runId?: string): void => {
 		const ownerGeneration = captureSessionGeneration();
 		const controller = new AbortController();
 		const key = runId ?? Symbol();
@@ -954,11 +785,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				frames: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
 				intervalMs: 80,
 			});
-			ctx.ui.setWorkingMessage(
-				runId
-					? `pi-crew foreground run ${runId}...`
-					: "pi-crew foreground run...",
-			);
+			ctx.ui.setWorkingMessage(runId ? `pi-crew foreground run ${runId}...` : "pi-crew foreground run...");
 		}
 		// Start watchdog for foreground run — periodic health check that
 		// auto-notifies the assistant if the run appears hung or completes.
@@ -974,8 +801,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		setImmediate(() => {
 			void runner(controller.signal)
 				.catch((error) => {
-					const message =
-						error instanceof Error ? error.message : String(error);
+					const message = error instanceof Error ? error.message : String(error);
 					if (runId) {
 						try {
 							const loaded = loadRunManifestById(ctx.cwd, runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency. Post-run status updates tolerate slight staleness.
@@ -986,30 +812,13 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 								loaded.manifest.status !== "cancelled" &&
 								loaded.manifest.status !== "blocked"
 							)
-								updateRunStatus(
-									loaded.manifest,
-									"failed",
-									message,
-								);
+								updateRunStatus(loaded.manifest, "failed", message);
 						} catch (statusError) {
-							logInternalError(
-								"register.foreground-run-failure",
-								statusError,
-								`runId=${runId}`,
-							);
+							logInternalError("register.foreground-run-failure", statusError, `runId=${runId}`);
 						}
 					}
-					if (isContextCurrent(ctx, ownerGeneration))
-						ctx.ui.notify(
-							`pi-crew foreground run failed: ${message}`,
-							"error",
-						);
-					else
-						logInternalError(
-							"register.foreground-run-failure",
-							error,
-							`runId=${runId} context disposed`,
-						);
+					if (isContextCurrent(ctx, ownerGeneration)) ctx.ui.notify(`pi-crew foreground run failed: ${message}`, "error");
+					else logInternalError("register.foreground-run-failure", error, `runId=${runId} context disposed`);
 				})
 				.finally(() => {
 					foregroundTeamRunControllers.delete(key);
@@ -1034,12 +843,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					if (ownerCurrent && runId) {
 						const loaded = loadRunManifestById(ctx.cwd, runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency. Post-run status updates tolerate slight staleness.
 						const status = loaded?.manifest.status ?? "finished";
-						const level =
-							status === "failed" || status === "blocked"
-								? "error"
-								: status === "cancelled"
-									? "warning"
-									: "info";
+						const level = status === "failed" || status === "blocked" ? "error" : status === "cancelled" ? "warning" : "info";
 						ctx.ui.notify(
 							`pi-crew run ${runId} ${status}. Use /team-summary ${runId} or /team-status ${runId}.`,
 							level as "info" | "warning" | "error",
@@ -1101,9 +905,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	registerKnowledgeInjection(pi);
 	time("register.knowledge");
 	time("register.rpc");
-	function getPiEvents():
-		| Parameters<typeof registerPiCrewRpc>[0]
-		| undefined {
+	function getPiEvents(): Parameters<typeof registerPiCrewRpc>[0] | undefined {
 		if (pi && typeof pi === "object" && "events" in pi) {
 			// pi.events may not be typed in the original pi type, so cast through unknown
 			const events = (pi as { events?: Parameters<typeof registerPiCrewRpc>[0] }).events;
@@ -1116,105 +918,58 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	// Register global RPC registry for cross-extension access (mirrors pi-subagents3's Symbol.for pattern)
 	// Uses lazy import to avoid pulling team-tool.ts into module load.
 	// Other extensions access via: const reg = globalThis[Symbol.for("pi-crew:registry")];
-	void import("./team-tool.ts").then(
-		({ registerCrewGlobalRegistry, installCrewGlobalRegistry }) => {
-			// Phase 3b: installCrewGlobalRegistry creates a v2 registry with agent registration API.
-			// We then patch the manifest-backed methods with real implementations below.
-			const manifestCacheForRegistry = getManifestCache(
-				currentCtx?.cwd ?? process.cwd(),
-			);
-			installCrewGlobalRegistry();
-			const CREW_REGISTRY_KEY = Symbol.for("pi-crew:registry");
-			const registry = (globalThis as Record<symbol | string, unknown>)[
-				CREW_REGISTRY_KEY
-			] as Record<string, unknown>;
-			// Phase 3b (defensive): Validate registry structure before patching methods.
-			// If a previous occupant left a non-conforming object, replace it entirely.
-			// This prevents runtime failures if getRecord/listRuns/etc. are called on a
-			// malformed predecessor value.
-			if (
-				registry === null ||
-				typeof registry !== "object" ||
-				Array.isArray(registry)
-			) {
-				(globalThis as Record<symbol | string, unknown>)[
-					CREW_REGISTRY_KEY
-				] = {};
-			}
-			const validatedRegistry = (globalThis as Record<symbol | string, unknown>)[
-				CREW_REGISTRY_KEY
-			] as Record<string, unknown>;
-			validatedRegistry.getRecord = (runId: string) =>
-				manifestCacheForRegistry.get(runId);
-			validatedRegistry.listRuns = () =>
-				manifestCacheForRegistry
-					.list(100)
-					.map(
-						(m: {
-							runId: string;
-							status: string;
-							goal: string;
-						}) => ({
-							runId: m.runId,
-							status: m.status,
-							goal: m.goal,
-						}),
-					);
-			validatedRegistry.appendEvent = (
-				runId: string,
-				event: Record<string, unknown>,
-			) => {
-				const manifest = manifestCacheForRegistry.get(runId);
-				if (manifest)
-					void import("../state/event-log.ts").then(
-						({ appendEventFireAndForget }) =>
-							appendEventFireAndForget(
-								manifest.eventsPath,
-								event as Parameters<
-									typeof appendEventFireAndForget
-								>[1],
-							),
-					);
-			};
-			validatedRegistry.waitForAll = async (runId: string) => {
-				// LAZY: state-store only needed for post-completion polling (waitForAll) and sync hasRunning check; avoid at startup.
-				const { loadRunManifestById } = await import(
-					"../state/state-store.ts"
+	void import("./team-tool.ts").then(({ registerCrewGlobalRegistry, installCrewGlobalRegistry }) => {
+		// Phase 3b: installCrewGlobalRegistry creates a v2 registry with agent registration API.
+		// We then patch the manifest-backed methods with real implementations below.
+		const manifestCacheForRegistry = getManifestCache(currentCtx?.cwd ?? process.cwd());
+		installCrewGlobalRegistry();
+		const CREW_REGISTRY_KEY = Symbol.for("pi-crew:registry");
+		const registry = (globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] as Record<string, unknown>;
+		// Phase 3b (defensive): Validate registry structure before patching methods.
+		// If a previous occupant left a non-conforming object, replace it entirely.
+		// This prevents runtime failures if getRecord/listRuns/etc. are called on a
+		// malformed predecessor value.
+		if (registry === null || typeof registry !== "object" || Array.isArray(registry)) {
+			(globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] = {};
+		}
+		const validatedRegistry = (globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] as Record<string, unknown>;
+		validatedRegistry.getRecord = (runId: string) => manifestCacheForRegistry.get(runId);
+		validatedRegistry.listRuns = () =>
+			manifestCacheForRegistry.list(100).map((m: { runId: string; status: string; goal: string }) => ({
+				runId: m.runId,
+				status: m.status,
+				goal: m.goal,
+			}));
+		validatedRegistry.appendEvent = (runId: string, event: Record<string, unknown>) => {
+			const manifest = manifestCacheForRegistry.get(runId);
+			if (manifest)
+				void import("../state/event-log.ts").then(({ appendEventFireAndForget }) =>
+					appendEventFireAndForget(manifest.eventsPath, event as Parameters<typeof appendEventFireAndForget>[1]),
 				);
-				const check = (): boolean => {
-					const loaded = loadRunManifestById(
-						currentCtx?.cwd ?? process.cwd(),
-						runId,
-					);
-					if (!loaded) return true;
-					return !loaded.tasks.some(
-						(t: { status: string }) =>
-							t.status === "running" || t.status === "queued",
-					);
-				};
-				while (!check())
-					await new Promise((resolve) => setTimeout(resolve, 500));
+		};
+		validatedRegistry.waitForAll = async (runId: string) => {
+			// LAZY: state-store only needed for post-completion polling (waitForAll) and sync hasRunning check; avoid at startup.
+			const { loadRunManifestById } = await import("../state/state-store.ts");
+			const check = (): boolean => {
+				const loaded = loadRunManifestById(currentCtx?.cwd ?? process.cwd(), runId);
+				if (!loaded) return true;
+				return !loaded.tasks.some((t: { status: string }) => t.status === "running" || t.status === "queued");
 			};
-			validatedRegistry.hasRunning = async (runId: string) => {
-				const manifest = manifestCacheForRegistry.get(runId);
-				if (!manifest) return false;
-				// LAZY: state-store only needed in hasRunning; avoid at startup.
-				// Use dynamic import to avoid CJS/ESM mixed module issues.
-				const { loadRunManifestById: loadRunForHasRunning } =
-		// LAZY: defer dynamic import of ../state/state-store.ts to its call site.
-					await import("../state/state-store.ts");
-				const loaded = loadRunForHasRunning(
-					currentCtx?.cwd ?? process.cwd(),
-					runId,
-				);
-				if (!loaded) return false;
-				return loaded.tasks.some(
-					(t: { status: string }) =>
-						t.status === "running" || t.status === "queued",
-				);
-			};
-		},
-	);
+			while (!check()) await new Promise((resolve) => setTimeout(resolve, 500));
+		};
+		validatedRegistry.hasRunning = async (runId: string) => {
+			const manifest = manifestCacheForRegistry.get(runId);
+			if (!manifest) return false;
+			// LAZY: state-store only needed in hasRunning; avoid at startup.
+			// Use dynamic import to avoid CJS/ESM mixed module issues.
+			const { loadRunManifestById: loadRunForHasRunning } =
+				// LAZY: defer dynamic import of ../state/state-store.ts to its call site.
+				await import("../state/state-store.ts");
+			const loaded = loadRunForHasRunning(currentCtx?.cwd ?? process.cwd(), runId);
+			if (!loaded) return false;
+			return loaded.tasks.some((t: { status: string }) => t.status === "running" || t.status === "queued");
+		};
+	});
 
 	const cleanupRuntime = (): void => {
 		if (cleanedUp) return;
@@ -1230,8 +985,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		stopSessionBoundSubagents();
 		// P0 fix: also abort foreground team runs on session shutdown (not on session switch).
 		// This is the only place where foreground team run controllers should be aborted.
-		for (const controller of foregroundTeamRunControllers.values())
-			controller.abort();
+		for (const controller of foregroundTeamRunControllers.values()) controller.abort();
 		foregroundTeamRunControllers.clear();
 		crewScheduler?.stop();
 		stopAsyncRunNotifier(notifierState);
@@ -1260,11 +1014,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		// the next session_start will fire the lazy import + purge.
 		purgeStaleActiveRunIndexSyncIfLoaded();
 
-		stopCrewWidget(
-			currentCtx,
-			widgetState,
-			currentCtx ? loadConfig(currentCtx.cwd).config.ui : undefined,
-		);
+		stopCrewWidget(currentCtx, widgetState, currentCtx ? loadConfig(currentCtx.cwd).config.ui : undefined);
 		clearPiCrewPowerbar(pi.events);
 		disposePowerbarCoalescer();
 		heartbeatWatcher?.dispose();
@@ -1307,8 +1057,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		disposeI18n();
 		sessionGeneration += 1;
 		currentCtx = undefined;
-		if (globalStore[runtimeCleanupStoreKey] === cleanupRuntime)
-			delete globalStore[runtimeCleanupStoreKey];
+		if (globalStore[runtimeCleanupStoreKey] === cleanupRuntime) delete globalStore[runtimeCleanupStoreKey];
 	};
 	globalStore[runtimeCleanupStoreKey] = cleanupRuntime;
 
@@ -1319,11 +1068,17 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		try {
 			const entries = ctx.sessionManager?.getEntries?.();
 			if (entries) {
-				import("../ui/tool-renderers/brief-mode.ts").then(({ restoreBriefState }) => {
-					restoreBriefState(entries);
-				}).catch(() => {/* non-critical */});
+				import("../ui/tool-renderers/brief-mode.ts")
+					.then(({ restoreBriefState }) => {
+						restoreBriefState(entries);
+					})
+					.catch(() => {
+						/* non-critical */
+					});
 			}
-		} catch { /* non-critical */ }
+		} catch {
+			/* non-critical */
+		}
 
 		time("register.session-start");
 		cleanedUp = false;
@@ -1355,32 +1110,20 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 
 			// 2.7: load crash-recovery lazily once per session_start cleanup batch.
 			void (async () => {
-				let crashRecovery:
-					| Awaited<ReturnType<typeof importCrashRecovery>>
-					| undefined;
+				let crashRecovery: Awaited<ReturnType<typeof importCrashRecovery>> | undefined;
 				try {
 					crashRecovery = await importCrashRecovery();
 				} catch (error) {
-					logInternalError(
-						"register.sessionStart.lazyCrashRecovery",
-						error,
-					);
+					logInternalError("register.sessionStart.lazyCrashRecovery", error);
 					return;
 				}
 				if (cleanedUp || sessionGeneration !== ownerGeneration) return;
-				const {
-					cancelOrphanedRuns: cancelOrphanedRunsFn,
-					purgeStaleActiveRunIndex: purgeStaleActiveRunIndexFn,
-				} = crashRecovery;
+				const { cancelOrphanedRuns: cancelOrphanedRunsFn, purgeStaleActiveRunIndex: purgeStaleActiveRunIndexFn } = crashRecovery;
 
 				// Auto-cancel orphaned runs
 				if (currentSessionId) {
 					try {
-						const { cancelled } = cancelOrphanedRunsFn(
-							ctx.cwd,
-							getManifestCache(ctx.cwd),
-							currentSessionId,
-						);
+						const { cancelled } = cancelOrphanedRunsFn(ctx.cwd, getManifestCache(ctx.cwd), currentSessionId);
 						if (cancelled.length > 0) {
 							notifyOperator({
 								id: `orphan_cleanup`,
@@ -1391,10 +1134,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 							});
 						}
 					} catch (error) {
-						logInternalError(
-							"register.sessionStart.orphanCleanup",
-							error,
-						);
+						logInternalError("register.sessionStart.orphanCleanup", error);
 					}
 				}
 
@@ -1416,10 +1156,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 						});
 					}
 				} catch (error) {
-					logInternalError(
-						"register.sessionStart.startupTempCleanup",
-						error,
-					);
+					logInternalError("register.sessionStart.startupTempCleanup", error);
 				}
 
 				// Orphan worker cleanup (Fix B): kill stale background-runner
@@ -1440,10 +1177,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 						});
 					}
 				} catch (error) {
-					logInternalError(
-						"register.sessionStart.orphanWorkers",
-						error,
-					);
+					logInternalError("register.sessionStart.orphanWorkers", error);
 				}
 
 				// Global purge of stale active-run-index entries
@@ -1459,31 +1193,21 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 						});
 					}
 				} catch (error) {
-					logInternalError(
-						"register.sessionStart.globalIndexPurge",
-						error,
-					);
+					logInternalError("register.sessionStart.globalIndexPurge", error);
 				}
 			})();
 
 			// Reconcile stale runs found on disk (not in active-run-index)
 			// These are ghost runs from crashed processes that were never cleaned up.
 			try {
-				const staleResults =
-					reconcileAllStaleRuns(ctx.cwd, getManifestCache(ctx.cwd)) ??
-					[];
+				const staleResults = reconcileAllStaleRuns(ctx.cwd, getManifestCache(ctx.cwd)) ?? [];
 				if (staleResults.length > 0) {
 					notifyOperator({
 						id: "stale_reconcile",
 						severity: "info",
 						source: "crash-recovery",
-						title:
-							"Reconciled " +
-							staleResults.length +
-							" stale run(s)",
-						body:
-							"Found and repaired ghost runs from previous sessions: " +
-							staleResults.map((r) => r.runId).join(", "),
+						title: "Reconciled " + staleResults.length + " stale run(s)",
+						body: "Found and repaired ghost runs from previous sessions: " + staleResults.map((r) => r.runId).join(", "),
 					});
 				}
 			} catch (error) {
@@ -1503,10 +1227,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					});
 				}
 			} catch (error) {
-				logInternalError(
-					"register.sessionStart.autoPruneProject",
-					error,
-				);
+				logInternalError("register.sessionStart.autoPruneProject", error);
 			}
 
 			// Auto-prune finished user-level run directories (keep 10 most recent)
@@ -1534,9 +1255,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		// Resolve sessionId before the scheduler executor closure captures it.
 		const sessionId =
 			ctx.sessionManager?.getSessionId?.() ??
-			(typeof ctx === "object" && ctx !== null && "sessionId" in ctx
-				? (ctx as Record<string, unknown>).sessionId
-				: undefined);
+			(typeof ctx === "object" && ctx !== null && "sessionId" in ctx ? (ctx as Record<string, unknown>).sessionId : undefined);
 		crewScheduler = new CrewScheduler();
 		crewScheduler.start({
 			emit: (event) => {
@@ -1548,14 +1267,23 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				try {
 					runParams = JSON.parse(job.prompt);
 				} catch {
-					runParams = { action: "run", team: "default", goal: job.prompt };
+					runParams = {
+						action: "run",
+						team: "default",
+						goal: job.prompt,
+					};
 				}
 				if (runParams.action !== "run") return `scheduled-${job.id}-${Date.now()}`;
 				const agentId = `scheduled-${job.id}-${Date.now()}`;
 				setImmediate(async () => {
 					try {
 						const runResult = await handleTeamTool(
-							{ action: "run", team: runParams.team, goal: runParams.goal, async: true },
+							{
+								action: "run",
+								team: runParams.team,
+								goal: runParams.goal,
+								async: true,
+							},
 							{ cwd: ctx.cwd, sessionId },
 						);
 						// Track the runId so remove() can cancel spawned runs
@@ -1567,7 +1295,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 								const cwd = ctx.cwd ?? process.cwd();
 								const loaded = loadRunManifestById(cwd, runId);
 								if (loaded) {
-		// LAZY: defer dynamic import of ../state/atomic-write.ts to its call site.
+									// LAZY: defer dynamic import of ../state/atomic-write.ts to its call site.
 									const { atomicWriteJson } = await import("../state/atomic-write.ts");
 									atomicWriteJson(loaded.manifest.stateRoot + "/manifest.json", {
 										...loaded.manifest,
@@ -1575,13 +1303,17 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 										schedulerName: job.name,
 									});
 								}
-							} catch { /* best-effort provenance tracking */ }
+							} catch {
+								/* best-effort provenance tracking */
+							}
 						}
 						// Persist updated job with spawnedRunIds to settings
 						try {
 							const updatedJob = crewScheduler?.list().find((j) => j.id === job.id);
 							if (updatedJob) persistScheduledJobUpdate(ctx.cwd, updatedJob);
-						} catch { /* best-effort */ }
+						} catch {
+							/* best-effort */
+						}
 						// Update run count
 						crewScheduler?.update(job.id, {
 							runCount: job.runCount + 1,
@@ -1598,10 +1330,9 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			finalizer: () => {},
 			runCancelFn: (runId: string) => {
 				try {
-					handleTeamTool(
-						{ action: "cancel", runId, confirm: true },
-						{ cwd: ctx.cwd, sessionId },
-					).catch((err) => logInternalError("scheduler.runCancelFn", err, `runId=${runId}`));
+					handleTeamTool({ action: "cancel", runId, confirm: true }, { cwd: ctx.cwd, sessionId }).catch((err) =>
+						logInternalError("scheduler.runCancelFn", err, `runId=${runId}`),
+					);
 				} catch (err) {
 					logInternalError("scheduler.runCancelFn.sync", err, `runId=${runId}`);
 				}
@@ -1624,34 +1355,18 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		configureNotifications(ctx);
 		configureObservability(ctx);
 		configureDeliveryCoordinator();
-		if (typeof sessionId === "string" && sessionId)
-			deliveryCoordinator?.activate(sessionId);
+		if (typeof sessionId === "string" && sessionId) deliveryCoordinator?.activate(sessionId);
 		tryRegisterSessionCleanup(pi, () => {
 			terminateActiveChildPiProcesses();
 			cleanupRuntime();
 		});
 		registerPiCrewPowerbarSegments(pi.events, loadedConfig.config.ui);
-		startAsyncRunNotifier(
-			ctx,
-			notifierState,
-			loadedConfig.config.notifierIntervalMs ??
-				DEFAULT_UI.notifierIntervalMs,
-			{
-				generation: ownerGeneration,
-				isCurrent: (generation) =>
-					generation === sessionGeneration &&
-					currentCtx === ctx &&
-					!cleanedUp,
-			},
-		);
+		startAsyncRunNotifier(ctx, notifierState, loadedConfig.config.notifierIntervalMs ?? DEFAULT_UI.notifierIntervalMs, {
+			generation: ownerGeneration,
+			isCurrent: (generation) => generation === sessionGeneration && currentCtx === ctx && !cleanedUp,
+		});
 		const cache = getManifestCache(ctx.cwd);
-		updateCrewWidget(
-			ctx,
-			widgetState,
-			loadedConfig.config.ui,
-			cache,
-			getRunSnapshotCache(ctx.cwd),
-		);
+		updateCrewWidget(ctx, widgetState, loadedConfig.config.ui, cache, getRunSnapshotCache(ctx.cwd));
 		updatePiCrewPowerbar(
 			pi.events,
 			ctx.cwd,
@@ -1672,12 +1387,8 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 
 		let lastPreloadedConfig: ReturnType<typeof loadConfig> | undefined;
 		let lastPreloadedManifests: TeamRunManifest[] = [];
-		let lastFrameManifestCache:
-			| ReturnType<typeof createManifestCache>
-			| undefined;
-		let lastFrameSnapshotCache:
-			| ReturnType<typeof createRunSnapshotCache>
-			| undefined;
+		let lastFrameManifestCache: ReturnType<typeof createManifestCache> | undefined;
+		let lastFrameSnapshotCache: ReturnType<typeof createRunSnapshotCache> | undefined;
 
 		const buildFrame = async (): Promise<boolean> => {
 			if (!currentCtx) return false;
@@ -1724,10 +1435,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				});
 		};
 
-		const startPreloadLoop = (
-			intervalMs: number,
-			dynamicMs?: () => number,
-		): void => {
+		const startPreloadLoop = (intervalMs: number, dynamicMs?: () => number): void => {
 			if (preloadTimer) clearTimeout(preloadTimer);
 			const tick = (): void => {
 				backgroundPreload();
@@ -1742,10 +1450,8 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		const renderTick = (): void => {
 			if (!currentCtx) return;
 			const config = lastPreloadedConfig?.config.ui;
-			const activeCache =
-				lastFrameManifestCache ?? getManifestCache(currentCtx.cwd);
-			const snapshotCache =
-				lastFrameSnapshotCache ?? getRunSnapshotCache(currentCtx.cwd);
+			const activeCache = lastFrameManifestCache ?? getManifestCache(currentCtx.cwd);
+			const snapshotCache = lastFrameSnapshotCache ?? getRunSnapshotCache(currentCtx.cwd);
 			// 1.1: keep render path zero-fs-IO. Always read from the preloaded
 			// frame; if it is empty (first tick after session_start, or cwd
 			// switched), kick off a background preload and render a skeleton
@@ -1754,21 +1460,12 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			const manifests = lastPreloadedManifests;
 			if (!lastPreloadedConfig) backgroundPreload();
 			if (liveSidebarRunId) {
-				const placement =
-					config?.widgetPlacement ?? DEFAULT_UI.widgetPlacement;
-				if (
-					widgetState.lastVisibility !== "hidden" ||
-					widgetState.lastPlacement !== placement
-				) {
+				const placement = config?.widgetPlacement ?? DEFAULT_UI.widgetPlacement;
+				if (widgetState.lastVisibility !== "hidden" || widgetState.lastPlacement !== placement) {
 					setExtensionWidget(currentCtx, "pi-crew", undefined, {
 						placement,
 					});
-					setExtensionWidget(
-						currentCtx,
-						"pi-crew-active",
-						undefined,
-						{ placement },
-					);
+					setExtensionWidget(currentCtx, "pi-crew-active", undefined, { placement });
 					widgetState.lastVisibility = "hidden";
 					widgetState.lastPlacement = placement;
 					widgetState.lastKey = "pi-crew-active";
@@ -1776,14 +1473,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 				}
 				requestRender(currentCtx);
 			} else {
-				updateCrewWidget(
-					currentCtx,
-					widgetState,
-					config,
-					activeCache,
-					snapshotCache,
-					manifests,
-				);
+				updateCrewWidget(currentCtx, widgetState, config, activeCache, snapshotCache, manifests);
 			}
 			requestPowerbarUpdate(
 				pi.events,
@@ -1814,20 +1504,11 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 					// Skip if snapshot shows run already completed/failed (stale cache)
 					if (snapshot.manifest.status !== "running") continue;
 					const summary = summarizeHeartbeats(snapshot, { now });
-					const maybeNotifyHealth = (
-						kind: string,
-						count: number,
-						title: string,
-						body: string,
-					): void => {
+					const maybeNotifyHealth = (kind: string, count: number, title: string, body: string): void => {
 						if (count <= 0) return;
 						const key = `${kind}_${run.runId}`;
 						const previous = autoRecoveryLast.get(key);
-						if (
-							previous !== undefined &&
-							now - previous.lastAccessAt < 5 * 60_000
-						)
-							return;
+						if (previous !== undefined && now - previous.lastAccessAt < 5 * 60_000) return;
 						// Defensive cap: evict entry with oldest lastAccessAt before
 						// inserting/updating when size exceeds the limit. Uses LRU
 						// semantics so entries that are still being actively
@@ -1844,7 +1525,10 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 							if (oldestKey === undefined) break;
 							autoRecoveryLast.delete(oldestKey);
 						}
-						autoRecoveryLast.set(key, { insertedAt: now, lastAccessAt: now });
+						autoRecoveryLast.set(key, {
+							insertedAt: now,
+							lastAccessAt: now,
+						});
 						notifyOperator({
 							id: key,
 							severity: "warning",
@@ -1867,35 +1551,22 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 						"Open /team-dashboard → 5 health → inspect health actions.",
 					);
 				} catch (error) {
-					logInternalError(
-						"register.health-notification",
-						error,
-						run.runId,
-					);
+					logInternalError("register.health-notification", error, run.runId);
 				}
 			}
 		};
 
-		const fallbackMs =
-			loadedConfig.config.ui?.dashboardLiveRefreshMs ??
-			DEFAULT_UI.refreshMs;
+		const fallbackMs = loadedConfig.config.ui?.dashboardLiveRefreshMs ?? DEFAULT_UI.refreshMs;
 		// R3: Use faster refresh when live agents OR background runs are running.
 		// 160ms is aligned with SUBAGENT_SPINNER_FRAME_MS so the spinner advances
 		// one frame per render tick when a run is active. Falls back to the
 		// (slower) configured refresh when idle to save CPU.
 		const liveRefreshMs = 160;
 		const hasActiveWork = (): boolean => {
-			if (listLiveAgents().some((a) => a.status === "running"))
-				return true;
-			return lastPreloadedManifests.some(
-				(r) =>
-					r.status === "running" ||
-					r.status === "queued" ||
-					r.status === "planning",
-			);
+			if (listLiveAgents().some((a) => a.status === "running")) return true;
+			return lastPreloadedManifests.some((r) => r.status === "running" || r.status === "queued" || r.status === "planning");
 		};
-		const effectiveRefreshMs = () =>
-			hasActiveWork() ? liveRefreshMs : fallbackMs;
+		const effectiveRefreshMs = () => (hasActiveWork() ? liveRefreshMs : fallbackMs);
 		renderScheduler = new RenderScheduler(pi.events, renderTick, {
 			// Dynamic fallback: same logic as preload loop so the render timer
 			// also ticks at spinner frequency while a run is active.
@@ -1985,32 +1656,16 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			const activeRuns = currentCtx
 				? getManifestCache(currentCtx.cwd)
 						.list(50)
-						.filter(
-							(run) =>
-								run.status === "running" ||
-								run.status === "queued" ||
-								run.status === "blocked",
-						)
+						.filter((run) => run.status === "running" || run.status === "queued" || run.status === "blocked")
 				: [];
-			const snapshot = createSessionSnapshot(
-				activeRuns,
-				pendingCount,
-				sessionGeneration,
-			);
+			const snapshot = createSessionSnapshot(activeRuns, pendingCount, sessionGeneration);
 			if (pendingCount > 0 || snapshot.activeRunIds.length > 0)
-				logInternalError(
-					"register.session-before-switch",
-					undefined,
-					JSON.stringify(snapshot),
-				);
+				logInternalError("register.session-before-switch", undefined, JSON.stringify(snapshot));
 		} catch (error) {
 			logInternalError("register.session-before-switch.snapshot", error);
 		}
 		if (pendingCount > 0) {
-			logInternalError(
-				"register.session-before-switch",
-				`Switching session with ${pendingCount} pending deliveries`,
-			);
+			logInternalError("register.session-before-switch", `Switching session with ${pendingCount} pending deliveries`);
 		}
 		deliveryCoordinator?.deactivate();
 		resetPowerbarDedupState();
@@ -2024,12 +1679,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		pi.on("resources_discover", () => {
 			const sessionCwd = currentCtx?.cwd ?? process.cwd();
 			const skillDir = path.resolve(sessionCwd, "skills");
-			const extSkillDir = path.resolve(
-				path.dirname(fileURLToPath(import.meta.url)),
-				"..",
-				"..",
-				"skills",
-			);
+			const extSkillDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "skills");
 			const paths: string[] = [];
 			if (fs.existsSync(extSkillDir)) paths.push(extSkillDir);
 			if (skillDir !== extSkillDir && fs.existsSync(skillDir)) {
@@ -2090,7 +1740,9 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			if (!filePath) return;
 			const result = validateWrittenFile(filePath);
 			if (!result || result.ok) return;
-			return { content: [...event.content, buildValidationBlocker(filePath, result.error ?? "validation failed")] };
+			return {
+				content: [...event.content, buildValidationBlocker(filePath, result.error ?? "validation failed")],
+			};
 		} catch {
 			// best-effort: never break a tool result
 		}
@@ -2107,21 +1759,18 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		widgetState,
 		onJsonEvent: (taskId, runId, event) => {
 			const record = event as Record<string, unknown>;
-			const eventType =
-				typeof record.type === "string" ? record.type : undefined;
+			const eventType = typeof record.type === "string" ? record.type : undefined;
 			if (eventType) overflowTracker?.feedEvent(taskId, runId, eventType);
 		},
 	});
 	registerSubagentTools(pi, subagentManager, {
 		ownerSessionGeneration: captureSessionGeneration,
-		startForegroundRun: (ctx, runner, runId) =>
-			startForegroundRun(ctx as ExtensionContext, runner, runId),
+		startForegroundRun: (ctx, runner, runId) => startForegroundRun(ctx as ExtensionContext, runner, runId),
 		batchBarrier,
 	});
 	time("register.tools");
 
 	registerCleanupHandler(pi);
-
 
 	// Resilient edit (Phase 2): OPT-IN via CREW_RESILIENT_EDIT=1.
 	// Wraps the native edit tool with the cascading replace() fallback so that
@@ -2132,7 +1781,9 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			.then(({ wrapEditWithResilientReplace }) => {
 				wrapEditWithResilientReplace(pi);
 			})
-			.catch(() => { /* non-critical */ });
+			.catch(() => {
+				/* non-critical */
+			});
 	}
 
 	registerTeamCommands(pi, {
@@ -2146,13 +1797,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 			widgetState.notificationCount = 0;
 			if (currentCtx) {
 				const uiConfig = loadConfig(currentCtx.cwd).config.ui;
-				updateCrewWidget(
-					currentCtx,
-					widgetState,
-					uiConfig,
-					getManifestCache(currentCtx.cwd),
-					getRunSnapshotCache(currentCtx.cwd),
-				);
+				updateCrewWidget(currentCtx, widgetState, uiConfig, getManifestCache(currentCtx.cwd), getRunSnapshotCache(currentCtx.cwd));
 				updatePiCrewPowerbar(
 					pi.events,
 					currentCtx.cwd,

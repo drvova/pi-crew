@@ -1,6 +1,17 @@
 import type { CrewTheme, CrewThemeColor } from "./theme-adapter.ts";
 
-export type RunStatus = "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "stopped" | "blocked" | "stale" | "needs_attention" | (string & {});
+export type RunStatus =
+	| "queued"
+	| "running"
+	| "waiting"
+	| "completed"
+	| "failed"
+	| "cancelled"
+	| "stopped"
+	| "blocked"
+	| "stale"
+	| "needs_attention"
+	| (string & {});
 
 export function colorForStatus(status: RunStatus): CrewThemeColor {
 	switch (status) {

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
-import * as path from "node:path";
 import { homedir } from "node:os";
+import * as path from "node:path";
 import { logInternalError } from "../utils/internal-error.ts";
 import type { JoinMode } from "./group-join.ts";
 
@@ -27,9 +27,7 @@ const VALID_JOIN_MODES = new Set<JoinMode>(["async", "group", "smart"]);
 function validateScheduledJob(job: unknown): boolean {
 	if (!job || typeof job !== "object") return false;
 	const obj = job as Record<string, unknown>;
-	return typeof obj.id === "string" && obj.id.length > 0
-		&& typeof obj.scheduleType === "string"
-		&& typeof obj.enabled === "boolean";
+	return typeof obj.id === "string" && obj.id.length > 0 && typeof obj.scheduleType === "string" && typeof obj.enabled === "boolean";
 }
 
 function sanitizeSettings(raw: unknown): CrewSettings {
@@ -52,12 +50,7 @@ function sanitizeSettings(raw: unknown): CrewSettings {
 	) {
 		out.defaultMaxTurns = r.defaultMaxTurns;
 	}
-	if (
-		typeof r.graceTurns === "number" &&
-		Number.isInteger(r.graceTurns) &&
-		r.graceTurns >= 1 &&
-		r.graceTurns <= GRACE_TURNS_CEILING
-	) {
+	if (typeof r.graceTurns === "number" && Number.isInteger(r.graceTurns) && r.graceTurns >= 1 && r.graceTurns <= GRACE_TURNS_CEILING) {
 		out.graceTurns = r.graceTurns;
 	}
 	if (typeof r.defaultJoinMode === "string" && VALID_JOIN_MODES.has(r.defaultJoinMode as JoinMode)) {
@@ -95,7 +88,10 @@ function readSettingsFile(filePath: string): CrewSettings {
 }
 
 export function loadCrewSettings(cwd: string = process.cwd()): CrewSettings {
-	return { ...readSettingsFile(globalPath()), ...readSettingsFile(projectPath(cwd)) };
+	return {
+		...readSettingsFile(globalPath()),
+		...readSettingsFile(projectPath(cwd)),
+	};
 }
 
 export function saveCrewSettings(s: CrewSettings, cwd: string = process.cwd()): boolean {
@@ -110,7 +106,15 @@ export function saveCrewSettings(s: CrewSettings, cwd: string = process.cwd()): 
 }
 
 export function applyCrewSettingsToConfig(
-	config: { limits?: { maxConcurrentWorkers?: number }; runtime?: { maxTurns?: number; graceTurns?: number; groupJoin?: string }; notifierIntervalMs?: number },
+	config: {
+		limits?: { maxConcurrentWorkers?: number };
+		runtime?: {
+			maxTurns?: number;
+			graceTurns?: number;
+			groupJoin?: string;
+		};
+		notifierIntervalMs?: number;
+	},
 	settings: CrewSettings,
 ): void {
 	if (settings.maxConcurrent != null && config.limits) config.limits.maxConcurrentWorkers = settings.maxConcurrent;

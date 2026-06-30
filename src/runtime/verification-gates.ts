@@ -1,22 +1,22 @@
 /**
  * Verification Gates — ECC VERIFICATION_LOOP Pattern Implementation
- * 
+ *
  * Implements RED/GREEN phase gates for task verification.
  * Sequential execution: cannot skip to Phase N+1 without Phase N passing.
- * 
+ *
  * Based on: docs/distillation/ECC-10-skills.md §2 (verification-loop)
- * 
+ *
  * @module verification-gates
  */
 
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
-import { redactSecretString } from "../utils/redaction.ts";
+import type { ArtifactDescriptor, GreenLevel, VerificationCommandResult, VerificationContract } from "../state/types.ts";
+import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
-import type { VerificationContract, VerificationCommandResult, GreenLevel, ArtifactDescriptor } from "../state/types.ts";
+import { redactSecretString } from "../utils/redaction.ts";
 
 /**
  * Phase 1.5 #1 (RFC 13 §6 info-disclosure mitigation): sanitize the env passed
@@ -78,9 +78,15 @@ function buildVerificationEnv(): Record<string, string> {
 		return { ...process.env, FORCE_COLOR: "0" };
 	}
 	const preserveRaw = process.env.PI_CREW_VERIFICATION_PRESERVE_ENV ?? process.env.PI_TEAMS_VERIFICATION_PRESERVE_ENV ?? "";
-	const preserve = preserveRaw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+	const preserve = preserveRaw
+		.split(",")
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
 	const allowList = [...VERIFICATION_ENV_ALLOWLIST, ...preserve];
-	return { ...sanitizeEnvSecrets(process.env, { allowList }), FORCE_COLOR: "0" };
+	return {
+		...sanitizeEnvSecrets(process.env, { allowList }),
+		FORCE_COLOR: "0",
+	};
 }
 
 export interface PhaseGateResult {
@@ -105,7 +111,11 @@ export interface PhaseGateBundle {
  * Standard phase gate definitions for npm/TypeScript projects.
  * Sequential enforcement: each phase must pass before proceeding.
  */
-export const NPM_TYPESCRIPT_GATES: Array<{ name: string; command: string; critical: boolean }> = [
+export const NPM_TYPESCRIPT_GATES: Array<{
+	name: string;
+	command: string;
+	critical: boolean;
+}> = [
 	{ name: "build", command: "npm run build 2>&1", critical: true },
 	{ name: "typecheck", command: "npx tsc --noEmit 2>&1", critical: true },
 	{ name: "lint", command: "npm run lint 2>&1", critical: false },
@@ -115,7 +125,11 @@ export const NPM_TYPESCRIPT_GATES: Array<{ name: string; command: string; critic
 /**
  * Cargo/Rust project phase gates.
  */
-export const CARGO_RUST_GATES: Array<{ name: string; command: string; critical: boolean }> = [
+export const CARGO_RUST_GATES: Array<{
+	name: string;
+	command: string;
+	critical: boolean;
+}> = [
 	{ name: "check", command: "cargo check 2>&1", critical: true },
 	{ name: "test", command: "cargo test 2>&1", critical: true },
 	{ name: "clippy", command: "cargo clippy 2>&1", critical: false },
@@ -160,15 +174,13 @@ function validateGateCommand(command: string): void {
 		);
 	}
 	const normalized = command
-		.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')  // ANSI escape sequences
-		.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')  // control chars
-		.replace(/\\\n/g, ' ')  // escaped newlines
-		.replace(/\s+/g, ' ')  // collapse whitespace
+		.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "") // ANSI escape sequences
+		.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "") // control chars
+		.replace(/\\\n/g, " ") // escaped newlines
+		.replace(/\s+/g, " ") // collapse whitespace
 		.trim();
 	if (DANGEROUS_SHELL_PATTERNS.test(normalized)) {
-		throw new Error(
-			`Security: verification gate command rejected (dangerous shell pattern): ${command}`,
-		);
+		throw new Error(`Security: verification gate command rejected (dangerous shell pattern): ${command}`);
 	}
 }
 
@@ -237,7 +249,7 @@ async function executeCommand(
 
 /**
  * Run phase gates sequentially, stopping on first critical failure.
- * 
+ *
  * @param gates - Array of phase gate definitions
  * @param cwd - Working directory to execute commands in
  * @param signal - Optional abort signal
@@ -312,7 +324,7 @@ export async function runPhaseGates(
 /**
  * Execute verification commands from a task's verification contract.
  * Maps the contract commands to phase gates and runs them sequentially.
- * 
+ *
  * @param contract - Verification contract with commands to execute
  * @param cwd - Working directory
  * @param runId - Run ID for artifact naming
@@ -413,15 +425,12 @@ export async function executeVerificationCommands(
 /**
  * Compute observed green level from verification results.
  * Maps verification outcomes to green levels per ECC pattern.
- * 
+ *
  * @param commands - Array of verification command results
  * @param requiredLevel - Required green level from contract
  * @returns Observed green level
  */
-export function computeGreenLevelFromResults(
-	commands: VerificationCommandResult[],
-	requiredLevel: GreenLevel,
-): GreenLevel {
+export function computeGreenLevelFromResults(commands: VerificationCommandResult[], requiredLevel: GreenLevel): GreenLevel {
 	if (commands.length === 0) {
 		return "none";
 	}

@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { RenderScheduler } from "../../src/ui/render-scheduler.ts";
 
 class FakeEvents {
@@ -26,7 +26,21 @@ test("RenderScheduler coalesces event bursts and disposes listeners", async () =
 	const events = new FakeEvents();
 	let renders = 0;
 	let invalidations = 0;
-	const scheduler = new RenderScheduler(events, () => { renders += 1; }, { debounceMs: 20, fallbackMs: 10_000, events: ["crew.run.completed"], onInvalidate: () => { invalidations += 1; }, invalidateCoalesceMs: 0 });
+	const scheduler = new RenderScheduler(
+		events,
+		() => {
+			renders += 1;
+		},
+		{
+			debounceMs: 20,
+			fallbackMs: 10_000,
+			events: ["crew.run.completed"],
+			onInvalidate: () => {
+				invalidations += 1;
+			},
+			invalidateCoalesceMs: 0,
+		},
+	);
 	assert.equal(events.listenerCount("crew.run.completed"), 1);
 	events.emit("crew.run.completed", { runId: "one" });
 	events.emit("crew.run.completed", { runId: "one" });
@@ -54,7 +68,11 @@ test("RenderScheduler 1.9: per-runId invalidate coalesce collapses same-run burs
 		},
 	});
 	// Burst on the same run + one event on a different run.
-	for (let i = 0; i < 10; i++) events.emit("crew.subagent.completed", { runId: "burst", taskId: `t${i}` });
+	for (let i = 0; i < 10; i++)
+		events.emit("crew.subagent.completed", {
+			runId: "burst",
+			taskId: `t${i}`,
+		});
 	events.emit("crew.subagent.completed", { runId: "other" });
 	await sleep(60);
 	scheduler.dispose();
@@ -71,7 +89,9 @@ test("RenderScheduler 1.9: payload without runId still invalidates immediately",
 		fallbackMs: 10_000,
 		events: ["crew.mailbox.updated"],
 		invalidateCoalesceMs: 30,
-		onInvalidate: () => { invalidations += 1; },
+		onInvalidate: () => {
+			invalidations += 1;
+		},
 	});
 	// payload without runId — should not be coalesced.
 	events.emit("crew.mailbox.updated", { kind: "info" });
@@ -82,7 +102,13 @@ test("RenderScheduler 1.9: payload without runId still invalidates immediately",
 
 test("RenderScheduler fallback renders when no events arrive", async () => {
 	let renders = 0;
-	const scheduler = new RenderScheduler(undefined, () => { renders += 1; }, { debounceMs: 5, fallbackMs: 20 });
+	const scheduler = new RenderScheduler(
+		undefined,
+		() => {
+			renders += 1;
+		},
+		{ debounceMs: 5, fallbackMs: 20 },
+	);
 	// Wait longer for slower environments (macOS ARM64 may be slower)
 	await sleep(100);
 	scheduler.dispose();
@@ -93,8 +119,14 @@ test("RenderScheduler fallback renders when no events arrive", async () => {
 test("RenderScheduler accepts dynamic fallbackMs and adapts tick frequency", async () => {
 	let renders = 0;
 	let mode: "fast" | "slow" = "fast";
-	const fallbackMs = () => mode === "fast" ? 20 : 5_000;
-	const scheduler = new RenderScheduler(undefined, () => { renders += 1; }, { debounceMs: 5, fallbackMs });
+	const fallbackMs = () => (mode === "fast" ? 20 : 5_000);
+	const scheduler = new RenderScheduler(
+		undefined,
+		() => {
+			renders += 1;
+		},
+		{ debounceMs: 5, fallbackMs },
+	);
 	await sleep(120);
 	const fastRenders = renders;
 	assert.ok(fastRenders >= 2, `expected >= 2 fast renders, got ${fastRenders}`);
@@ -108,10 +140,18 @@ test("RenderScheduler accepts dynamic fallbackMs and adapts tick frequency", asy
 
 test("RenderScheduler handles fallbackMs thrower without crashing", async () => {
 	let renders = 0;
-	const scheduler = new RenderScheduler(undefined, () => { renders += 1; }, {
-		debounceMs: 5,
-		fallbackMs: () => { throw new Error("boom"); },
-	});
+	const scheduler = new RenderScheduler(
+		undefined,
+		() => {
+			renders += 1;
+		},
+		{
+			debounceMs: 5,
+			fallbackMs: () => {
+				throw new Error("boom");
+			},
+		},
+	);
 	await sleep(50);
 	scheduler.dispose();
 	assert.ok(renders >= 0);

@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { pruneFinishedRuns, pruneUserLevelRuns } from "../../src/extension/run-maintenance.ts";
-import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
+import { pruneFinishedRuns, pruneUserLevelRuns } from "../../src/extension/run-maintenance.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function writeManifest(stateRoot: string, runId: string, status: string, updatedAt: string, cwd: string, artifactsRoot: string) {
 	const manifest = {

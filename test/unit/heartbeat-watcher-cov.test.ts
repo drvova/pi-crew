@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { HeartbeatWatcher, type HeartbeatWatcherOptions } from "../../src/runtime/heartbeat-watcher.ts";
-import type { ManifestCache } from "../../src/runtime/manifest-cache.ts";
+import { describe, it } from "node:test";
 import type { MetricRegistry } from "../../src/observability/metric-registry.ts";
 import type { GradientThresholds } from "../../src/runtime/heartbeat-gradient.ts";
+import { HeartbeatWatcher, type HeartbeatWatcherOptions } from "../../src/runtime/heartbeat-watcher.ts";
+import type { ManifestCache } from "../../src/runtime/manifest-cache.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 /** Minimal mock metric registry for testing. */
@@ -145,7 +145,13 @@ describe("HeartbeatWatcher.tick", () => {
 
 	it("tick does not throw for non-running status runs", () => {
 		const cache: ManifestCache = {
-			list: () => [{ runId: "completed_run", status: "completed", stateRoot: "/nonexistent" }],
+			list: () => [
+				{
+					runId: "completed_run",
+					status: "completed",
+					stateRoot: "/nonexistent",
+				},
+			],
 			get: () => undefined,
 			refresh: async () => {},
 		} as unknown as ManifestCache;
@@ -162,7 +168,13 @@ describe("HeartbeatWatcher.tick", () => {
 
 	it("tick does not throw when stateRoot does not exist", () => {
 		const cache: ManifestCache = {
-			list: () => [{ runId: "ghost_run", status: "running", stateRoot: "/nonexistent/path/12345" }],
+			list: () => [
+				{
+					runId: "ghost_run",
+					status: "running",
+					stateRoot: "/nonexistent/path/12345",
+				},
+			],
 			get: () => undefined,
 			refresh: async () => {},
 		} as unknown as ManifestCache;

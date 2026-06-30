@@ -8,8 +8,9 @@
  * - resetTurnCount
  * - hasPendingResume
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { AutoResumeController, SETTLE_WINDOW_MS } from "../../src/runtime/auto-resume.ts";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

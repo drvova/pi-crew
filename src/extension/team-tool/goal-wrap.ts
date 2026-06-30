@@ -17,26 +17,22 @@
  * nonce-token feedback, worker cap, workspace lock) all apply.
  */
 
-import { createRunPaths, saveRunManifest } from "../../state/state-store.ts";
-import { atomicWriteJson } from "../../state/atomic-write.ts";
-import { appendEvent } from "../../state/event-log.ts";
-import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
+import { loadConfig } from "../../config/config.ts";
+import type { GoalWrapWorkflowConfig } from "../../config/types.ts";
 import { GoalStore } from "../../runtime/goal-state-store.ts";
 import { snapshotManifests } from "../../runtime/verification-integrity.ts";
-import { logInternalError } from "../../utils/internal-error.ts";
-import { loadConfig } from "../../config/config.ts";
-import type { GoalLoopState, TeamRunManifest } from "../../state/types.ts";
-import type { GoalWrapWorkflowConfig } from "../../config/types.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
+import { atomicWriteJson } from "../../state/atomic-write.ts";
+import { appendEvent } from "../../state/event-log.ts";
+import { createRunPaths, saveRunManifest } from "../../state/state-store.ts";
+import type { GoalLoopState, TeamRunManifest } from "../../state/types.ts";
+import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
+import { logInternalError } from "../../utils/internal-error.ts";
 import type { WorkflowConfig } from "../../workflows/workflow-config.ts";
 import { result, type TeamContext } from "./context.ts";
 
 /** Builtin workflows eligible for goal-wrap (have a clear "done" condition). */
-export const GOAL_WRAP_ELIGIBLE_BUILTINS = new Set([
-	"implementation",
-	"fast-fix",
-	"default",
-]);
+export const GOAL_WRAP_ELIGIBLE_BUILTINS = new Set(["implementation", "fast-fix", "default"]);
 
 /**
  * Maximum number of workflow steps allowed for goal-wrap.
@@ -63,10 +59,7 @@ export const GOAL_WRAP_MAX_STEPS = 1;
 export type { GoalWrapWorkflowConfig };
 
 /** Read the goal-wrap config for a given workflow name (merged user + project config). */
-export function readGoalWrapConfig(
-	cwd: string,
-	workflowName: string,
-): GoalWrapWorkflowConfig | undefined {
+export function readGoalWrapConfig(cwd: string, workflowName: string): GoalWrapWorkflowConfig | undefined {
 	const loaded = loadConfig(cwd);
 	const cfg = loaded.config?.goalWrap as Record<string, GoalWrapWorkflowConfig> | undefined;
 	if (!cfg) return undefined;
@@ -84,9 +77,7 @@ export function isGoalWrapEnabled(cwd: string, workflowName: string): boolean {
  * Validate a goal-wrap config entry. Returns an error string if invalid, undefined if OK.
  * Mirrors the Phase 1 validation: budget required (or unlimited), evaluatorModel required.
  */
-export function validateGoalWrapConfig(
-	wc: GoalWrapWorkflowConfig,
-): string | undefined {
+export function validateGoalWrapConfig(wc: GoalWrapWorkflowConfig): string | undefined {
 	if (!wc.evaluatorModel) {
 		return "goalWrap config requires evaluatorModel (the goal-judge model). No silent default.";
 	}
@@ -125,7 +116,11 @@ export function persistAsyncOnGoalLoopManifest(
 ): void {
 	const asyncGoalManifest = {
 		...manifest,
-		async: { pid: spawned.pid, logPath: spawned.logPath, spawnedAt: new Date().toISOString() },
+		async: {
+			pid: spawned.pid,
+			logPath: spawned.logPath,
+			spawnedAt: new Date().toISOString(),
+		},
 	};
 	atomicWriteJson(manifestPath, asyncGoalManifest);
 }
@@ -146,14 +141,27 @@ export function persistAsyncOnGoalLoopManifest(
  * goal-wrap is unsafe for a given workflow, silently fall back so the user
  * still gets the workflow run they asked for.
  */
-export function shouldGoalWrap(cwd: string, workflow: WorkflowConfig): { enabled: true } | { enabled: false; reason: "config-off" | "multi-step" | "invalid-config"; message?: string } {
+export function shouldGoalWrap(
+	cwd: string,
+	workflow: WorkflowConfig,
+):
+	| { enabled: true }
+	| {
+			enabled: false;
+			reason: "config-off" | "multi-step" | "invalid-config";
+			message?: string;
+	  } {
 	const wc = readGoalWrapConfig(cwd, workflow.name);
 	if (!wc || wc.enabled !== true) {
 		return { enabled: false, reason: "config-off" };
 	}
 	const validationError = validateGoalWrapConfig(wc);
 	if (validationError) {
-		return { enabled: false, reason: "invalid-config", message: validationError };
+		return {
+			enabled: false,
+			reason: "invalid-config",
+			message: validationError,
+		};
 	}
 	if (workflow.steps.length > GOAL_WRAP_MAX_STEPS) {
 		return {
@@ -174,7 +182,11 @@ export async function startGoalWrappedRun(
 	const cwd = ctx.cwd;
 	const wc = readGoalWrapConfig(cwd, workflow.name);
 	if (!wc || wc.enabled !== true) {
-		return result(`goal-wrap is not enabled for workflow '${workflow.name}' in .crew/config.json.`, { action: "run", status: "error" }, true);
+		return result(
+			`goal-wrap is not enabled for workflow '${workflow.name}' in .crew/config.json.`,
+			{ action: "run", status: "error" },
+			true,
+		);
 	}
 	const validationError = validateGoalWrapConfig(wc);
 	if (validationError) {
@@ -196,7 +208,10 @@ export async function startGoalWrappedRun(
 			verificationIntegrity = "none-text-only";
 		} else {
 			try {
-				verificationIntegrity = { snapshot: snapshotManifests(cwd), takenAt: now };
+				verificationIntegrity = {
+					snapshot: snapshotManifests(cwd),
+					takenAt: now,
+				};
 			} catch (error) {
 				logInternalError("goal-wrap.integritySnapshot", error, `goalId=${goalId}`);
 				verificationIntegrity = "none-text-only";
@@ -254,7 +269,16 @@ export async function startGoalWrappedRun(
 			runKind: "goal-loop",
 		};
 		saveRunManifest(goalLoopManifest);
-		appendEvent(paths.eventsPath, { type: "goal.loop_start", runId: goalId, data: { goalId, objective: goal, maxTurns, goalWrapWorkflow: workflow.name } });
+		appendEvent(paths.eventsPath, {
+			type: "goal.loop_start",
+			runId: goalId,
+			data: {
+				goalId,
+				objective: goal,
+				maxTurns,
+				goalWrapWorkflow: workflow.name,
+			},
+		});
 
 		const spawned = await spawnBackgroundTeamRun(goalLoopManifest);
 		const pid = spawned.pid ?? 0;
@@ -264,8 +288,18 @@ export async function startGoalWrappedRun(
 		// background runner dies (it currently dies silently due to a multi-step
 		// atomic-write bug — see investigation report). Mirrors run.ts:371-372 which
 		// writes asyncManifest = { ...effectiveManifest, async: {...} } to manifestPath.
-		persistAsyncOnGoalLoopManifest(paths.manifestPath, goalLoopManifest, { pid, logPath: spawned.logPath });
-		const withAsync = { ...goalState, async: { pid, logPath: spawned.logPath, spawnedAt: new Date().toISOString() } };
+		persistAsyncOnGoalLoopManifest(paths.manifestPath, goalLoopManifest, {
+			pid,
+			logPath: spawned.logPath,
+		});
+		const withAsync = {
+			...goalState,
+			async: {
+				pid,
+				logPath: spawned.logPath,
+				spawnedAt: new Date().toISOString(),
+			},
+		};
 		store.save(withAsync);
 
 		return result(
@@ -273,12 +307,20 @@ export async function startGoalWrappedRun(
 				`Goal-wrapped '${workflow.name}' started (background pid=${pid}).`,
 				`Goal ${goalId} [running] — worker = '${workflow.name}' workflow, judged each turn by ${wc.evaluatorModel}.`,
 				`  turn: 0/${maxTurns}   budget: ${wc.budgetUnlimited ? "∞ (unlimited)" : `${wc.budgetTotal}`}`,
-				verification?.commands?.length ? `  verification: ${verification.commands.join(", ")}` : "  verification: text-only (no objective oracle)",
+				verification?.commands?.length
+					? `  verification: ${verification.commands.join(", ")}`
+					: "  verification: text-only (no objective oracle)",
 				``,
 				`Next: \`team action='goal' config.subAction='status' config.goalId='${goalId}'\`.`,
 				`Log: ${spawned.logPath}`,
 			].join("\n"),
-			{ action: "run", status: "ok", runId: goalId, artifactsRoot: paths.artifactsRoot, data: { goalId, goalWrap: true, workflow: workflow.name, pid } },
+			{
+				action: "run",
+				status: "ok",
+				runId: goalId,
+				artifactsRoot: paths.artifactsRoot,
+				data: { goalId, goalWrap: true, workflow: workflow.name, pid },
+			},
 			false,
 		);
 	} catch (error) {

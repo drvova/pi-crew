@@ -1,12 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	slug,
+	__test__parseAdaptivePlan,
+	__test__repairAdaptivePlan,
 	extractAdaptivePlanJson,
 	parseAdaptivePlan,
 	repairAdaptivePlan,
-	__test__parseAdaptivePlan,
-	__test__repairAdaptivePlan,
+	slug,
 } from "../../src/runtime/adaptive-plan.ts";
 
 /**
@@ -53,14 +53,14 @@ After`;
 });
 
 test("extractAdaptivePlanJson: extracts from code fence when no markers", () => {
-	const text = "Here's the plan:\n```json\n{\"phases\":[]}\n```\nDone.";
+	const text = 'Here\'s the plan:\n```json\n{"phases":[]}\n```\nDone.';
 	const json = extractAdaptivePlanJson(text);
 	assert.ok(json);
 	assert.ok(JSON.parse(json!), "should parse as JSON");
 });
 
 test("extractAdaptivePlanJson: extracts from code fence without json hint", () => {
-	const text = "```\n{\"phases\":[]}\n```";
+	const text = '```\n{"phases":[]}\n```';
 	const json = extractAdaptivePlanJson(text);
 	assert.ok(json);
 	assert.ok(JSON.parse(json!), "should parse as JSON");
@@ -119,9 +119,17 @@ test("extractAdaptivePlanJson: works without markers when no END present", () =>
 // ─── parseAdaptivePlan ─────────────────────────────────────────────────────
 
 test("parseAdaptivePlan: parses valid single-phase plan", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ name: "build", tasks: [{ role: "executor", task: "Implement X" }] }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [
+				{
+					name: "build",
+					tasks: [{ role: "executor", task: "Implement X" }],
+				},
+			],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const plan = parseAdaptivePlan(text, ["executor"]);
 	assert.ok(plan);
 	assert.equal(plan!.phases.length, 1);
@@ -131,12 +139,24 @@ test("parseAdaptivePlan: parses valid single-phase plan", () => {
 });
 
 test("parseAdaptivePlan: parses multi-phase plan", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [
-			{ name: "research", tasks: [{ role: "explorer", task: "Investigate" }] },
-			{ name: "implement", tasks: [{ role: "executor", task: "Build" }, { role: "reviewer", task: "Review" }] },
-		],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [
+				{
+					name: "research",
+					tasks: [{ role: "explorer", task: "Investigate" }],
+				},
+				{
+					name: "implement",
+					tasks: [
+						{ role: "executor", task: "Build" },
+						{ role: "reviewer", task: "Review" },
+					],
+				},
+			],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const plan = parseAdaptivePlan(text, ["explorer", "executor", "reviewer"]);
 	assert.ok(plan);
 	assert.equal(plan!.phases.length, 2);
@@ -145,23 +165,32 @@ test("parseAdaptivePlan: parses multi-phase plan", () => {
 });
 
 test("parseAdaptivePlan: rejects unknown role", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ name: "p", tasks: [{ role: "hacker", task: "do bad" }] }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [{ name: "p", tasks: [{ role: "hacker", task: "do bad" }] }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	assert.equal(parseAdaptivePlan(text, ["executor"]), undefined);
 });
 
 test("parseAdaptivePlan: rejects empty task text", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ name: "p", tasks: [{ role: "executor", task: "  " }] }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [{ name: "p", tasks: [{ role: "executor", task: "  " }] }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	assert.equal(parseAdaptivePlan(text, ["executor"]), undefined);
 });
 
 test("parseAdaptivePlan: accepts tasks-only format (auto-wraps in phase)", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		tasks: [{ role: "executor", task: "Do something" }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			tasks: [{ role: "executor", task: "Do something" }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const plan = parseAdaptivePlan(text, ["executor"]);
 	assert.ok(plan);
 	assert.equal(plan!.phases.length, 1);
@@ -182,26 +211,38 @@ test("parseAdaptivePlan: returns undefined for invalid JSON", () => {
 });
 
 test("parseAdaptivePlan: caps at MAX_ADAPTIVE_TASKS (12)", () => {
-	const tasks = Array.from({ length: 13 }, (_, i) => ({ role: "executor", task: `Task ${i}` }));
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ name: "big", tasks }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const tasks = Array.from({ length: 13 }, (_, i) => ({
+		role: "executor",
+		task: `Task ${i}`,
+	}));
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [{ name: "big", tasks }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	assert.equal(parseAdaptivePlan(text, ["executor"]), undefined);
 });
 
 test("parseAdaptivePlan: trims task text", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ name: "p", tasks: [{ role: "executor", task: "  do it  " }] }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [{ name: "p", tasks: [{ role: "executor", task: "  do it  " }] }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const plan = parseAdaptivePlan(text, ["executor"]);
 	assert.ok(plan);
 	assert.equal(plan!.phases[0]!.tasks[0]!.task, "do it");
 });
 
 test("parseAdaptivePlan: auto-names unnamed phases", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ tasks: [{ role: "executor", task: "Do it" }] }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [{ tasks: [{ role: "executor", task: "Do it" }] }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const plan = parseAdaptivePlan(text, ["executor"]);
 	assert.ok(plan);
 	assert.equal(plan!.phases[0]!.name, "phase-1");
@@ -210,9 +251,12 @@ test("parseAdaptivePlan: auto-names unnamed phases", () => {
 // ─── repairAdaptivePlan ────────────────────────────────────────────────────
 
 test("repairAdaptivePlan: returns original for valid plan", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ name: "p", tasks: [{ role: "executor", task: "Fix bug" }] }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [{ name: "p", tasks: [{ role: "executor", task: "Fix bug" }] }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const result = repairAdaptivePlan(text, ["executor"]);
 	assert.ok(result.plan);
 	assert.equal(result.repaired, true);
@@ -229,21 +273,27 @@ test("repairAdaptivePlan: repairs truncated JSON (missing closing brackets)", ()
 });
 
 test("repairAdaptivePlan: uses role aliases (developer → executor)", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ name: "p", tasks: [{ role: "developer", task: "Code it" }] }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [{ name: "p", tasks: [{ role: "developer", task: "Code it" }] }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const result = repairAdaptivePlan(text, ["executor"]);
 	assert.ok(result.plan);
 	assert.equal(result.plan!.phases[0]!.tasks[0]!.role, "executor");
 });
 
 test("repairAdaptivePlan: skips tasks with unknown roles", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [
-			{ name: "p1", tasks: [{ role: "unknown", task: "Bad" }] },
-			{ name: "p2", tasks: [{ role: "executor", task: "Good" }] },
-		],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [
+				{ name: "p1", tasks: [{ role: "unknown", task: "Bad" }] },
+				{ name: "p2", tasks: [{ role: "executor", task: "Good" }] },
+			],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const result = repairAdaptivePlan(text, ["executor"]);
 	assert.ok(result.plan);
 	assert.equal(result.plan!.phases.length, 1);
@@ -258,9 +308,12 @@ test("repairAdaptivePlan: returns empty for missing JSON", () => {
 });
 
 test("repairAdaptivePlan: returns empty for empty plan", () => {
-	const text = "ADAPTIVE_PLAN_JSON_START\n" + JSON.stringify({
-		phases: [{ name: "p", tasks: [{ role: "unknown", task: "Bad" }] }],
-	}) + "\nADAPTIVE_PLAN_JSON_END";
+	const text =
+		"ADAPTIVE_PLAN_JSON_START\n" +
+		JSON.stringify({
+			phases: [{ name: "p", tasks: [{ role: "unknown", task: "Bad" }] }],
+		}) +
+		"\nADAPTIVE_PLAN_JSON_END";
 	const result = repairAdaptivePlan(text, ["executor"]);
 	assert.equal(result.plan, undefined);
 	assert.equal(result.repaired, false);

@@ -5,11 +5,12 @@
  * readCrewAgents, isDisplayActiveRun). These tests verify it does not crash
  * and that the notification logic works as expected.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import { notifyActiveRuns } from "../../src/extension/session-summary.ts";
 import { clearProjectRootCache } from "../../src/utils/paths.ts";
 
@@ -24,7 +25,9 @@ function makeCtx(dir: string): MockCtx {
 	return {
 		cwd: dir,
 		ui: {
-			notify: (msg: string, _level: string) => { calls.push(msg); },
+			notify: (msg: string, _level: string) => {
+				calls.push(msg);
+			},
 		},
 		notifyCalls: calls,
 	};

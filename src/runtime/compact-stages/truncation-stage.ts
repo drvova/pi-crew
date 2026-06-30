@@ -41,7 +41,10 @@ export class TruncationStage implements ICompactStage {
 	private readonly marker: TruncationMarkerConfig;
 	constructor(
 		maxChars: number,
-		opts: { preserveImportant?: boolean; marker?: Partial<TruncationMarkerConfig> } = {},
+		opts: {
+			preserveImportant?: boolean;
+			marker?: Partial<TruncationMarkerConfig>;
+		} = {},
 	) {
 		if (!Number.isFinite(maxChars) || maxChars <= 0) {
 			throw new Error(`TruncationStage: maxChars must be a positive finite number, got ${maxChars}`);

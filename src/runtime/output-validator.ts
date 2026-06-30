@@ -43,7 +43,12 @@ export function validateWorkerOutput(role: string, output: string): OutputValida
 
 	// Empty output always fails
 	if (!output || !output.trim()) {
-		return { valid: false, formatMatch: false, structurePreserved: false, issues: ["Empty output"] };
+		return {
+			valid: false,
+			formatMatch: false,
+			structurePreserved: false,
+			issues: ["Empty output"],
+		};
 	}
 
 	// Check role-specific format
@@ -87,7 +92,12 @@ export function validateWorkerOutput(role: string, output: string): OutputValida
  * Returns array of { file, line, severity, message } objects.
  */
 export function parseReviewerFindings(output: string): Array<{ file: string; line: number; severity: string; message: string }> {
-	const findings: Array<{ file: string; line: number; severity: string; message: string }> = [];
+	const findings: Array<{
+		file: string;
+		line: number;
+		severity: string;
+		message: string;
+	}> = [];
 	const lines = output.split("\n");
 
 	const SEVERITY_MAP: Record<string, string> = {
@@ -118,7 +128,12 @@ export function parseReviewerFindings(output: string): Array<{ file: string; lin
  * Returns array of { file, line, symbol, note } objects.
  */
 export function parseExplorerResults(output: string): Array<{ file: string; line: number; symbol: string; note: string }> {
-	const results: Array<{ file: string; line: number; symbol: string; note: string }> = [];
+	const results: Array<{
+		file: string;
+		line: number;
+		symbol: string;
+		note: string;
+	}> = [];
 	const lines = output.split("\n");
 
 	for (const line of lines) {

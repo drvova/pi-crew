@@ -13,15 +13,19 @@
  */
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { Type, type Static } from "@sinclair/typebox";
-import { listLiveAgents, sendIrcMessage, broadcastIrcMessage, respondAsBackground } from "../live-agent-manager.ts";
+import { type Static, Type } from "@sinclair/typebox";
+import { broadcastIrcMessage, listLiveAgents, respondAsBackground, sendIrcMessage } from "../live-agent-manager.ts";
 import type { IrcMessage } from "../live-irc.ts";
 
 const IrcParams = Type.Object({
 	op: Type.Union(
 		[
-			Type.Literal("send", { description: "Send a message to one peer or to all peers." }),
-			Type.Literal("list", { description: "List currently visible peers." }),
+			Type.Literal("send", {
+				description: "Send a message to one peer or to all peers.",
+			}),
+			Type.Literal("list", {
+				description: "List currently visible peers.",
+			}),
 		],
 		{ description: "IRC operation." },
 	),
@@ -37,7 +41,8 @@ const IrcParams = Type.Object({
 	),
 	awaitReply: Type.Optional(
 		Type.Boolean({
-			description: "Wait for a prose reply (default: true for DM, false for broadcast). For DMs the recipient receives the message as a non-blocking background turn and its reply is returned to the caller. Broadcast always ignores this flag.",
+			description:
+				"Wait for a prose reply (default: true for DM, false for broadcast). For DMs the recipient receives the message as a non-blocking background turn and its reply is returned to the caller. Broadcast always ignores this flag.",
 		}),
 	),
 });
@@ -74,9 +79,7 @@ interface IrcDetails {
  *
  * @param selfId — This agent's ID (runId:taskId format)
  */
-export function createIrcTool(
-	selfId: string,
-): ToolDefinition<typeof IrcParams, IrcDetails> {
+export function createIrcTool(selfId: string): ToolDefinition<typeof IrcParams, IrcDetails> {
 	return defineTool({
 		name: "irc",
 		label: "IRC",
@@ -95,7 +98,10 @@ export function createIrcTool(
 			_signal: AbortSignal | undefined,
 			_onUpdate: unknown,
 			_ctx: unknown,
-		): Promise<{ content: Array<{ type: "text"; text: string }>; details: IrcDetails }> {
+		): Promise<{
+			content: Array<{ type: "text"; text: string }>;
+			details: IrcDetails;
+		}> {
 			if (params.op === "list") {
 				return executeList(selfId);
 			}
@@ -104,13 +110,20 @@ export function createIrcTool(
 			}
 			return {
 				content: [{ type: "text", text: "Unknown irc op." }],
-				details: { op: params.op, from: selfId, error: "Unknown operation." },
+				details: {
+					op: params.op,
+					from: selfId,
+					error: "Unknown operation.",
+				},
 			};
 		},
 	});
 }
 
-function executeList(selfId: string): { content: Array<{ type: "text"; text: string }>; details: IrcDetails } {
+function executeList(selfId: string): {
+	content: Array<{ type: "text"; text: string }>;
+	details: IrcDetails;
+} {
 	const agents = listLiveAgents();
 	const peers = agents
 		.filter((a) => a.agentId !== selfId && (a.status === "running" || a.status === "queued"))
@@ -135,7 +148,10 @@ function executeList(selfId: string): { content: Array<{ type: "text"; text: str
 async function executeSend(
 	selfId: string,
 	params: IrcParams,
-): Promise<{ content: Array<{ type: "text"; text: string }>; details: IrcDetails }> {
+): Promise<{
+	content: Array<{ type: "text"; text: string }>;
+	details: IrcDetails;
+}> {
 	const to = params.to?.trim();
 	const message = params.message?.trim();
 
@@ -148,13 +164,23 @@ async function executeSend(
 	if (!message) {
 		return {
 			content: [{ type: "text", text: '`message` is required for op="send".' }],
-			details: { op: "send", from: selfId, to, error: "Missing 'message' field." },
+			details: {
+				op: "send",
+				from: selfId,
+				to,
+				error: "Missing 'message' field.",
+			},
 		};
 	}
 	if (to === selfId) {
 		return {
 			content: [{ type: "text", text: "Cannot send a message to yourself." }],
-			details: { op: "send", from: selfId, to, error: "Self-message not allowed." },
+			details: {
+				op: "send",
+				from: selfId,
+				to,
+				error: "Self-message not allowed.",
+			},
 		};
 	}
 
@@ -188,7 +214,9 @@ async function executeSend(
 			if (!target || (target.status !== "running" && target.status !== "queued")) {
 				notFound.push(to);
 			} else {
-				const result = await respondAsBackground(to, selfId, message, { awaitReply: true });
+				const result = await respondAsBackground(to, selfId, message, {
+					awaitReply: true,
+				});
 				if (result.ok) {
 					delivered.push(to);
 					if (result.replyContent) replies.push({ from: to, text: result.replyContent });

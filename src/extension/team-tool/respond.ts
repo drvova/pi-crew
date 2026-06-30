@@ -1,12 +1,12 @@
+import { readCrewAgents, recordFromTask, saveCrewAgents } from "../../runtime/crew-agent-records.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
-import { withRunLockSync } from "../../state/locks.ts";
-import { loadRunManifestById, saveRunTasks, updateRunStatus } from "../../state/state-store.ts";
 import { appendEvent } from "../../state/event-log.ts";
+import { withRunLockSync } from "../../state/locks.ts";
 import { appendMailboxMessage, updateMailboxMessageReply } from "../../state/mailbox.ts";
-import { readCrewAgents, saveCrewAgents, recordFromTask } from "../../runtime/crew-agent-records.ts";
+import { loadRunManifestById, saveRunTasks, updateRunStatus } from "../../state/state-store.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
-import type { PiTeamsToolResult } from "../tool-result.ts";
 import { locateRunCwd } from "../team-tool.ts";
+import type { PiTeamsToolResult } from "../tool-result.ts";
 import { result, type TeamContext } from "./context.ts";
 import { RUN_NOT_FOUND_HINT } from "./run-not-found.ts";
 
@@ -17,7 +17,8 @@ import { RUN_NOT_FOUND_HINT } from "./run-not-found.ts";
  */
 export function handleRespond(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	if (!params.runId) return result("Respond requires runId.", { action: "respond", status: "error" }, true);
-	if (!params.message && !params.taskId) return result("Respond requires taskId and/or message.", { action: "respond", status: "error" }, true);
+	if (!params.message && !params.taskId)
+		return result("Respond requires taskId and/or message.", { action: "respond", status: "error" }, true);
 
 	const runCwd = locateRunCwd(params.runId, ctx.cwd);
 	if (!runCwd) return result(`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`, { action: "respond", status: "error" }, true);
@@ -28,7 +29,16 @@ export function handleRespond(params: TeamToolParamsValue, ctx: TeamContext): Pi
 		const fresh = loadRunManifestById(loaded.manifest.cwd, params.runId!); // NOTE: inside withRunLockSync - consistent read
 		if (!fresh) return result(`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`, { action: "respond", status: "error" }, true);
 		const foreignRun = typeof fresh.manifest.ownerSessionId === "string" && fresh.manifest.ownerSessionId !== ctx.sessionId;
-		if (foreignRun && !params.force) return result(`Run ${fresh.manifest.runId} belongs to another session. Use force: true to override.`, { action: "respond", status: "error", runId: fresh.manifest.runId }, true);
+		if (foreignRun && !params.force)
+			return result(
+				`Run ${fresh.manifest.runId} belongs to another session. Use force: true to override.`,
+				{
+					action: "respond",
+					status: "error",
+					runId: fresh.manifest.runId,
+				},
+				true,
+			);
 
 		const taskId = params.taskId;
 		const message = params.message ?? "";
@@ -39,14 +49,19 @@ export function handleRespond(params: TeamToolParamsValue, ctx: TeamContext): Pi
 
 		if (targetTasks.length === 0) {
 			const existing = taskId ? fresh.tasks.find((t) => t.id === taskId) : undefined;
-			const hint = " Use api operation=follow-up-agent for continuation prompts or api operation=steer-agent to interrupt active work.";
+			const hint =
+				" Use api operation=follow-up-agent for continuation prompts or api operation=steer-agent to interrupt active work.";
 			return result(
 				(taskId
 					? existing
 						? `Task '${taskId}' is ${existing.status}, not waiting.`
 						: `Task '${taskId}' not found.`
 					: `No waiting tasks in run ${fresh.manifest.runId}.`) + hint,
-				{ action: "respond", status: "error", runId: fresh.manifest.runId },
+				{
+					action: "respond",
+					status: "error",
+					runId: fresh.manifest.runId,
+				},
 				true,
 			);
 		}
@@ -95,23 +110,41 @@ export function handleRespond(params: TeamToolParamsValue, ctx: TeamContext): Pi
 
 		saveRunTasks(fresh.manifest, updatedTasks);
 		let manifest = fresh.manifest;
-		if (manifest.status === "blocked" || manifest.status === "completed" || manifest.status === "failed" || manifest.status === "cancelled") {
+		if (
+			manifest.status === "blocked" ||
+			manifest.status === "completed" ||
+			manifest.status === "failed" ||
+			manifest.status === "cancelled"
+		) {
 			manifest = updateRunStatus(manifest, "running", `Resumed ${resumed.size} waiting task(s).`);
 		}
 		for (const taskId of resumed) {
-			appendEvent(manifest.eventsPath, { type: "task.resumed", runId: manifest.runId, taskId, message: message || "Task re-queued after respond.", data: { mailboxIds } });
+			appendEvent(manifest.eventsPath, {
+				type: "task.resumed",
+				runId: manifest.runId,
+				taskId,
+				message: message || "Task re-queued after respond.",
+				data: { mailboxIds },
+			});
 		}
 		try {
 			const existingRuntimes = new Map(readCrewAgents(fresh.manifest).map((a) => [a.taskId, a.runtime]));
-			saveCrewAgents(fresh.manifest, updatedTasks.map((task) => recordFromTask(fresh.manifest, task, existingRuntimes.get(task.id) ?? "child-process")));
+			saveCrewAgents(
+				fresh.manifest,
+				updatedTasks.map((task) => recordFromTask(fresh.manifest, task, existingRuntimes.get(task.id) ?? "child-process")),
+			);
 		} catch (error) {
 			logInternalError("team-tool.handleRespond.crewAgents", error, `runId=${fresh.manifest.runId}`);
 		}
 
 		const resumedIds = targetTasks.map((t) => t.id);
-		return result(
-			`Resumed ${resumedIds.length} waiting task(s): ${resumedIds.join(", ")}. Message: ${message || "(no message)"}`,
-			{ action: "respond", status: "ok", runId: fresh.manifest.runId, resumedIds, mailboxIds, intent: `responding to ${resumedIds.join(", ")} in ${fresh.manifest.runId}` },
-		);
+		return result(`Resumed ${resumedIds.length} waiting task(s): ${resumedIds.join(", ")}. Message: ${message || "(no message)"}`, {
+			action: "respond",
+			status: "ok",
+			runId: fresh.manifest.runId,
+			resumedIds,
+			mailboxIds,
+			intent: `responding to ${resumedIds.join(", ")} in ${fresh.manifest.runId}`,
+		});
 	});
 }

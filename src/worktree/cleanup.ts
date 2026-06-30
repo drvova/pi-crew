@@ -1,13 +1,13 @@
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
-import type { TeamRunManifest } from "../state/types.ts";
-import { writeArtifact } from "../state/artifact-store.ts";
-import { projectCrewRoot } from "../utils/paths.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
+import { writeArtifact } from "../state/artifact-store.ts";
+import type { TeamRunManifest } from "../state/types.ts";
+import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { projectCrewRoot } from "../utils/paths.ts";
 
 export interface WorktreeCleanupResult {
 	removed: string[];
@@ -19,10 +19,45 @@ export interface WorktreeCleanupResult {
 
 // SECURITY: PI_* and PI_CREW_* wildcards removed — they could match secret vars like PI_PASSWORD.
 // Git operations do not need PI_CREW_* execution-control vars.
-const GIT_SAFE_ENV = { ...sanitizeEnvSecrets(process.env, { allowList: ["PATH", "HOME", "USER", ...WINDOWS_ESSENTIAL_ENV_VARS, "SHELL", "TERM", "LANG", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MESSAGES", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "NVM_BIN", "NVM_DIR", "NODE_PATH", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"] }), LANG: "C", LC_ALL: "C" };
+const GIT_SAFE_ENV = {
+	...sanitizeEnvSecrets(process.env, {
+		allowList: [
+			"PATH",
+			"HOME",
+			"USER",
+			...WINDOWS_ESSENTIAL_ENV_VARS,
+			"SHELL",
+			"TERM",
+			"LANG",
+			"LC_ALL",
+			"LC_COLLATE",
+			"LC_CTYPE",
+			"LC_MESSAGES",
+			"XDG_CONFIG_HOME",
+			"XDG_DATA_HOME",
+			"XDG_CACHE_HOME",
+			"NVM_BIN",
+			"NVM_DIR",
+			"NODE_PATH",
+			"GIT_CONFIG_GLOBAL",
+			"GIT_CONFIG_SYSTEM",
+			"GIT_AUTHOR_NAME",
+			"GIT_AUTHOR_EMAIL",
+			"GIT_COMMITTER_NAME",
+			"GIT_COMMITTER_EMAIL",
+		],
+	}),
+	LANG: "C",
+	LC_ALL: "C",
+};
 
 function sanitizeBranchPart(value: string): string {
-	return value.toLowerCase().replace(/[^a-z0-9._/-]+/g, "-").replace(/^-+|-+$/g, "") || "task";
+	return (
+		value
+			.toLowerCase()
+			.replace(/[^a-z0-9._/-]+/g, "-")
+			.replace(/^-+|-+$/g, "") || "task"
+	);
 }
 
 function sanitizeFilename(value: string): string {
@@ -32,7 +67,13 @@ function sanitizeFilename(value: string): string {
 
 function git(cwd: string, args: string[]): string {
 	try {
-		return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: GIT_SAFE_ENV, windowsHide: true }).trim();
+		return execFileSync("git", args, {
+			cwd,
+			encoding: "utf-8",
+			stdio: ["ignore", "pipe", "pipe"],
+			env: GIT_SAFE_ENV,
+			windowsHide: true,
+		}).trim();
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		throw new Error(`git ${args.join(" ")} failed: ${message}`);
@@ -49,17 +90,31 @@ function isDirty(worktreePath: string): boolean | "error" {
 
 function captureDiff(worktreePath: string): string {
 	try {
-		return [git(worktreePath, ["status", "--porcelain"]), "", git(worktreePath, ["diff", "--stat"]), "", git(worktreePath, ["diff"])].join("\n");
+		return [
+			git(worktreePath, ["status", "--porcelain"]),
+			"",
+			git(worktreePath, ["diff", "--stat"]),
+			"",
+			git(worktreePath, ["diff"]),
+		].join("\n");
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return `Failed to capture cleanup diff for ${worktreePath}: ${message}`;
 	}
 }
 
-export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?: boolean; signal?: AbortSignal } = {}): WorktreeCleanupResult {
+export function cleanupRunWorktrees(
+	manifest: TeamRunManifest,
+	options: { force?: boolean; signal?: AbortSignal } = {},
+): WorktreeCleanupResult {
 	const sanitizedRunId = manifest.runId.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^-+|-+$/g, "") || "run";
 	const worktreeRoot = path.join(projectCrewRoot(manifest.cwd), DEFAULT_PATHS.state.worktreesSubdir, sanitizedRunId);
-	const result: WorktreeCleanupResult = { removed: [], preserved: [], artifactPaths: [], committedBranches: [] };
+	const result: WorktreeCleanupResult = {
+		removed: [],
+		preserved: [],
+		artifactPaths: [],
+		committedBranches: [],
+	};
 	if (!fs.existsSync(worktreeRoot)) return result;
 
 	// M3 fix: use withFileTypes to avoid race between readdirSync and statSync.
@@ -82,7 +137,13 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 			try {
 				// Issue 2 fix: verify status before and after add to ensure atomicity
 				const statusBefore = git(worktreePath, ["status", "--porcelain"]);
-				execFileSync("git", ["add", "-A"], { cwd: worktreePath, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: GIT_SAFE_ENV, windowsHide: true });
+				execFileSync("git", ["add", "-A"], {
+					cwd: worktreePath,
+					encoding: "utf-8",
+					stdio: ["ignore", "pipe", "pipe"],
+					env: GIT_SAFE_ENV,
+					windowsHide: true,
+				});
 				// Verify no unexpected changes were added (only staged the original dirty files)
 				const statusAfterAdd = git(worktreePath, ["status", "--porcelain"]);
 				if (statusAfterAdd !== statusBefore) {
@@ -97,23 +158,43 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 				if (safeDesc.includes("\n")) {
 					safeDesc = safeDesc.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/g, " ");
 				}
-				execFileSync("git", ["commit", "-m", `pi-crew: ${safeDesc}`], { cwd: worktreePath, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: GIT_SAFE_ENV, windowsHide: true });
+				execFileSync("git", ["commit", "-m", `pi-crew: ${safeDesc}`], {
+					cwd: worktreePath,
+					encoding: "utf-8",
+					stdio: ["ignore", "pipe", "pipe"],
+					env: GIT_SAFE_ENV,
+					windowsHide: true,
+				});
 				// Issue 1 fix: check signal before branch creation
 				if (options.signal?.aborted) break;
 				// Create branch in the main repo pointing to this worktree's HEAD
 				let branchError: Error | null = null;
 				try {
-					execFileSync("git", ["branch", branchName], { cwd: worktreePath, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: GIT_SAFE_ENV, windowsHide: true });
+					execFileSync("git", ["branch", branchName], {
+						cwd: worktreePath,
+						encoding: "utf-8",
+						stdio: ["ignore", "pipe", "pipe"],
+						env: GIT_SAFE_ENV,
+						windowsHide: true,
+					});
 				} catch (err) {
 					branchError = err instanceof Error ? err : new Error(String(err));
 					// Branch already exists — use timestamp suffix
 					const tsBranch = `${branchName}-${Date.now()}`;
 					try {
-						execFileSync("git", ["branch", tsBranch], { cwd: worktreePath, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: GIT_SAFE_ENV, windowsHide: true });
+						execFileSync("git", ["branch", tsBranch], {
+							cwd: worktreePath,
+							encoding: "utf-8",
+							stdio: ["ignore", "pipe", "pipe"],
+							env: GIT_SAFE_ENV,
+							windowsHide: true,
+						});
 					} catch (err2) {
 						// Both branch attempts failed — accumulate error for outer catch
 						const err2_msg = err2 instanceof Error ? err2.message : String(err2);
-						throw new Error(`branch creation failed (${branchName} already exists): ${branchError.message}; fallback branch also failed: ${err2_msg}`);
+						throw new Error(
+							`branch creation failed (${branchName} already exists): ${branchError.message}; fallback branch also failed: ${err2_msg}`,
+						);
 					}
 				}
 				result.committedBranches.push(branchName);
@@ -135,15 +216,31 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 					// Commit succeeded but worktree remove failed — directory is orphaned
 					// Issue 1 fix: use fs.rmSync as fallback to clean up orphaned directory
 					try {
-						fs.rmSync(worktreePath, { recursive: true, force: true });
+						fs.rmSync(worktreePath, {
+							recursive: true,
+							force: true,
+						});
 						result.removed.push(worktreePath);
 					} catch {
-						result.preserved.push({ path: worktreePath, reason: `commit succeeded but worktree remove failed: ${removeError instanceof Error ? removeError.message : String(removeError)}; fs.rmSync fallback also failed` });
+						result.preserved.push({
+							path: worktreePath,
+							reason: `commit succeeded but worktree remove failed: ${removeError instanceof Error ? removeError.message : String(removeError)}; fs.rmSync fallback also failed`,
+						});
 					}
 					const artifact = writeArtifact(manifest.artifactsRoot, {
 						kind: "metadata",
 						relativePath: `metadata/worktree-branch-${safeBranchName}.json`,
-						content: JSON.stringify({ worktreePath, branch: branchName, committedAt: new Date().toISOString(), mergeCommand: `git merge ${branchName}`, gitStatusAtCommit: gitStatusBeforeRemove }, null, 2),
+						content: JSON.stringify(
+							{
+								worktreePath,
+								branch: branchName,
+								committedAt: new Date().toISOString(),
+								mergeCommand: `git merge ${branchName}`,
+								gitStatusAtCommit: gitStatusBeforeRemove,
+							},
+							null,
+							2,
+						),
 						producer: "worktree-cleanup",
 					});
 					result.artifactPaths.push(artifact.path);
@@ -152,7 +249,17 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 				const artifact = writeArtifact(manifest.artifactsRoot, {
 					kind: "metadata",
 					relativePath: `metadata/worktree-branch-${safeBranchName}.json`,
-					content: JSON.stringify({ worktreePath, branch: branchName, committedAt: new Date().toISOString(), mergeCommand: `git merge ${branchName}`, gitStatusAtCommit: gitStatusBeforeRemove }, null, 2),
+					content: JSON.stringify(
+						{
+							worktreePath,
+							branch: branchName,
+							committedAt: new Date().toISOString(),
+							mergeCommand: `git merge ${branchName}`,
+							gitStatusAtCommit: gitStatusBeforeRemove,
+						},
+						null,
+						2,
+					),
 					producer: "worktree-cleanup",
 				});
 				result.artifactPaths.push(artifact.path);
@@ -167,7 +274,10 @@ export function cleanupRunWorktrees(manifest: TeamRunManifest, options: { force?
 					producer: "worktree-cleanup",
 				});
 				result.artifactPaths.push(artifact.path);
-				result.preserved.push({ path: worktreePath, reason: `dirty worktree preserved (commit failed: ${error instanceof Error ? error.message : String(error)})` });
+				result.preserved.push({
+					path: worktreePath,
+					reason: `dirty worktree preserved (commit failed: ${error instanceof Error ? error.message : String(error)})`,
+				});
 			}
 			continue;
 		}

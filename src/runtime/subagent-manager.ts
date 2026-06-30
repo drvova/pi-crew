@@ -7,15 +7,7 @@ import { logInternalError } from "../utils/internal-error.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
 import { redactSecrets } from "../utils/redaction.ts";
 
-export type SubagentStatus =
-	| "queued"
-	| "running"
-	| "completed"
-	| "failed"
-	| "cancelled"
-	| "error"
-	| "blocked"
-	| "stopped";
+export type SubagentStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "error" | "blocked" | "stopped";
 
 export interface SubagentSpawnOptions {
 	cwd: string;
@@ -61,10 +53,7 @@ export interface SubagentRecord {
 	lifetimeUsage?: { input: number; output: number; cacheWrite: number };
 }
 
-type SpawnRunner = (
-	options: SubagentSpawnOptions,
-	signal?: AbortSignal,
-) => Promise<PiTeamsToolResult>;
+type SpawnRunner = (options: SubagentSpawnOptions, signal?: AbortSignal) => Promise<PiTeamsToolResult>;
 type Notify = (record: SubagentRecord) => void;
 type NotifyEvent = (type: string, data: Record<string, unknown>) => void;
 
@@ -81,11 +70,7 @@ function isValidSubagentId(id: string): boolean {
 
 function persistedSubagentPath(cwd: string, id: string): string {
 	if (!isValidSubagentId(id)) throw new Error(`Invalid subagent id: ${id}`);
-	return path.join(
-		projectCrewRoot(cwd),
-		DEFAULT_PATHS.state.subagentsSubdir,
-		`${id}.json`,
-	);
+	return path.join(projectCrewRoot(cwd), DEFAULT_PATHS.state.subagentsSubdir, `${id}.json`);
 }
 
 function serializableRecord(record: SubagentRecord): SubagentRecord {
@@ -93,18 +78,11 @@ function serializableRecord(record: SubagentRecord): SubagentRecord {
 	return rest;
 }
 
-export function savePersistedSubagentRecord(
-	cwd: string,
-	record: SubagentRecord,
-): void {
+export function savePersistedSubagentRecord(cwd: string, record: SubagentRecord): void {
 	try {
 		const filePath = persistedSubagentPath(cwd, record.id);
 		fs.mkdirSync(path.dirname(filePath), { recursive: true });
-		fs.writeFileSync(
-			filePath,
-			`${JSON.stringify(redactSecrets(serializableRecord(record)), null, 2)}\n`,
-			"utf-8",
-		);
+		fs.writeFileSync(filePath, `${JSON.stringify(redactSecrets(serializableRecord(record)), null, 2)}\n`, "utf-8");
 		// SECURITY: Restrict permissions to owner-only (rw-------).
 		// On multi-user systems, other users must not read task prompts,
 		// agent descriptions, and run IDs from subagent record files.
@@ -186,9 +164,7 @@ function sanitizePersistedRecord(raw: unknown): SubagentRecord | undefined {
 	for (const key of Object.keys(obj)) {
 		if (
 			ALLOWED_RECORD_FIELDS.has(key) &&
-			(typeof obj[key] === "string" ||
-				typeof obj[key] === "number" ||
-				typeof obj[key] === "boolean")
+			(typeof obj[key] === "string" || typeof obj[key] === "number" || typeof obj[key] === "boolean")
 		) {
 			clean[key] = obj[key];
 		}
@@ -198,14 +174,9 @@ function sanitizePersistedRecord(raw: unknown): SubagentRecord | undefined {
 	return clean as unknown as SubagentRecord;
 }
 
-export function readPersistedSubagentRecord(
-	cwd: string,
-	id: string,
-): SubagentRecord | undefined {
+export function readPersistedSubagentRecord(cwd: string, id: string): SubagentRecord | undefined {
 	try {
-		const raw = JSON.parse(
-			fs.readFileSync(persistedSubagentPath(cwd, id), "utf-8"),
-		);
+		const raw = JSON.parse(fs.readFileSync(persistedSubagentPath(cwd, id), "utf-8"));
 		return sanitizePersistedRecord(raw);
 	} catch {
 		return undefined;
@@ -226,10 +197,7 @@ function detailsRunId(result: PiTeamsToolResult): string | undefined {
 	return typeof details?.runId === "string" ? details.runId : undefined;
 }
 
-function totalRunTurns(
-	cwd: string,
-	runId: string | undefined,
-): number | undefined {
+function totalRunTurns(cwd: string, runId: string | undefined): number | undefined {
 	if (!runId) return undefined;
 	const loaded = loadRunManifestById(cwd, runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 	if (!loaded) return undefined;
@@ -258,33 +226,20 @@ export class SubagentManager {
 	private readonly onEvent?: NotifyEvent;
 	private readonly pollIntervalMs: number;
 
-	constructor(
-		maxConcurrent = 4,
-		onComplete?: Notify,
-		pollIntervalMs = 1000,
-		onEvent?: NotifyEvent,
-	) {
+	constructor(maxConcurrent = 4, onComplete?: Notify, pollIntervalMs = 1000, onEvent?: NotifyEvent) {
 		this.maxConcurrent = maxConcurrent;
 		this.onComplete = onComplete;
 		this.onEvent = onEvent;
 		this.pollIntervalMs = pollIntervalMs;
 	}
 
-	spawn(
-		options: SubagentSpawnOptions,
-		runner: SpawnRunner,
-		signal?: AbortSignal,
-	): SubagentRecord {
+	spawn(options: SubagentSpawnOptions, runner: SpawnRunner, signal?: AbortSignal): SubagentRecord {
 		const record: SubagentRecord = {
 			id: `agent_${Date.now().toString(36)}_${(++this.counter).toString(36)}`,
 			type: options.type,
 			description: options.description,
 			prompt: options.prompt,
-			status:
-				options.background &&
-				this.runningBackground >= this.maxConcurrent
-					? "queued"
-					: "running",
+			status: options.background && this.runningBackground >= this.maxConcurrent ? "queued" : "running",
 			startedAt: Date.now(),
 			model: options.model,
 			skill: options.skill,
@@ -308,9 +263,7 @@ export class SubagentManager {
 	}
 
 	listAgents(): SubagentRecord[] {
-		return [...this.records.values()].sort(
-			(a, b) => b.startedAt - a.startedAt,
-		);
+		return [...this.records.values()].sort((a, b) => b.startedAt - a.startedAt);
 	}
 
 	abort(id: string, reason?: string): boolean {
@@ -321,8 +274,7 @@ export class SubagentManager {
 			this.markStopped(record, reason ?? "Aborted by caller.");
 			return true;
 		}
-		if (record.status !== "running" && record.status !== "blocked")
-			return false;
+		if (record.status !== "running" && record.status !== "blocked") return false;
 		this.controllers.get(id)?.abort();
 		this.markStopped(record, reason ?? "Aborted by caller.");
 		return true;
@@ -350,15 +302,9 @@ export class SubagentManager {
 		while (true) {
 			this.drainQueue();
 			const pending = this.listAgents()
-				.filter(
-					(record) =>
-						record.status === "running" ||
-						record.status === "queued",
-				)
+				.filter((record) => record.status === "running" || record.status === "queued")
 				.map((record) => record.promise)
-				.filter((promise): promise is Promise<void> =>
-					Boolean(promise),
-				);
+				.filter((promise): promise is Promise<void> => Boolean(promise));
 			if (!pending.length) break;
 			await Promise.allSettled(pending);
 		}
@@ -368,15 +314,10 @@ export class SubagentManager {
 		while (true) {
 			const record = this.records.get(id);
 			if (!record) return undefined;
-			if (record.status !== "running" && record.status !== "queued")
-				return record;
+			if (record.status !== "running" && record.status !== "queued") return record;
 			if (record.promise)
 				await record.promise.catch((error) => {
-					logInternalError(
-						"subagent-manager.waitForRecord",
-						error,
-						`id=${id}`,
-					);
+					logInternalError("subagent-manager.waitForRecord", error, `id=${id}`);
 				});
 			else await new Promise((resolve) => setTimeout(resolve, 100));
 		}
@@ -387,12 +328,7 @@ export class SubagentManager {
 		this.drainQueue();
 	}
 
-	private start(
-		record: SubagentRecord,
-		options: SubagentSpawnOptions,
-		runner: SpawnRunner,
-		signal?: AbortSignal,
-	): void {
+	private start(record: SubagentRecord, options: SubagentSpawnOptions, runner: SpawnRunner, signal?: AbortSignal): void {
 		if (options.background) this.runningBackground++;
 		record.status = "running";
 		record.startedAt = Date.now();
@@ -411,8 +347,7 @@ export class SubagentManager {
 					record.error = record.result;
 					throw new Error(record.error);
 				}
-				if (record.runId)
-					await this.pollRunToTerminal(options.cwd, record);
+				if (record.runId) await this.pollRunToTerminal(options.cwd, record);
 				else record.status = "completed";
 			} catch (error) {
 				if (record.status === "stopped" || runSignal.aborted) {
@@ -420,27 +355,16 @@ export class SubagentManager {
 						? "Signal aborted — agent cancelled by parent (session switch, user cancel, or tool timeout)."
 						: undefined;
 					record.status = "stopped";
-					if (!record.error)
-						record.error =
-							abortReason ??
-							(error instanceof Error
-								? error.message
-								: String(error));
+					if (!record.error) record.error = abortReason ?? (error instanceof Error ? error.message : String(error));
 					return;
 				}
 				record.status = "error";
-				record.error =
-					error instanceof Error ? error.message : String(error);
+				record.error = error instanceof Error ? error.message : String(error);
 				throw error; // H4: Propagate rejection so callers awaiting record.promise see the error
 			} finally {
 				this.cleanupRunSignal(record.id);
-				if (options.background)
-					this.runningBackground = Math.max(
-						0,
-						this.runningBackground - 1,
-					);
-				if (record.status !== "blocked")
-					record.completedAt = record.completedAt ?? Date.now();
+				if (options.background) this.runningBackground = Math.max(0, this.runningBackground - 1);
+				if (record.status !== "blocked") record.completedAt = record.completedAt ?? Date.now();
 				savePersistedSubagentRecord(options.cwd, record);
 				if (
 					record.status === "completed" ||
@@ -450,12 +374,8 @@ export class SubagentManager {
 					record.status === "stopped"
 				) {
 					// Phase 1.6: Populate telemetry fields
-					record.turnCount =
-						record.turnCount ??
-						totalRunTurns(options.cwd, record.runId);
-					record.durationMs = record.completedAt
-						? Math.max(0, record.completedAt - record.startedAt)
-						: undefined;
+					record.turnCount = record.turnCount ?? totalRunTurns(options.cwd, record.runId);
+					record.durationMs = record.completedAt ? Math.max(0, record.completedAt - record.startedAt) : undefined;
 					savePersistedSubagentRecord(options.cwd, record);
 					// User policy (v0.9.16): cancelled / stopped subagents leave NO trace.
 					// Successful runs (`completed`) and agent errors (`failed`, `error`)
@@ -477,11 +397,7 @@ export class SubagentManager {
 		// DO await (they still see the rejection) while preventing the
 		// harness-killing failure mode for callers that don't.
 		record.promise.catch((error) => {
-			logInternalError(
-				"subagent-manager.start.unhandled",
-				error,
-				`id=${record.id}`,
-			);
+			logInternalError("subagent-manager.start.unhandled", error, `id=${record.id}`);
 		});
 	}
 
@@ -509,9 +425,7 @@ export class SubagentManager {
 		if (signal) {
 			const abort = (): void => controller.abort();
 			signal.addEventListener("abort", abort, { once: true });
-			this.controllerCleanup.set(id, () =>
-				signal.removeEventListener("abort", abort),
-			);
+			this.controllerCleanup.set(id, () => signal.removeEventListener("abort", abort));
 		}
 		return controller.signal;
 	}
@@ -523,48 +437,32 @@ export class SubagentManager {
 	}
 
 	private drainQueue(): void {
-		while (
-			this.queue.length > 0 &&
-			this.runningBackground < this.maxConcurrent
-		) {
+		while (this.queue.length > 0 && this.runningBackground < this.maxConcurrent) {
 			const next = this.queue.shift();
 			if (!next || next.record.status !== "queued") continue;
 			this.start(next.record, next.options, next.runner, next.signal);
 		}
 	}
 
-	private async pollRunToTerminal(
-		cwd: string,
-		record: SubagentRecord,
-	): Promise<void> {
-		while (
-			record.runId &&
-			(record.status === "running" || record.status === "blocked")
-		) {
+	private async pollRunToTerminal(cwd: string, record: SubagentRecord): Promise<void> {
+		while (record.runId && (record.status === "running" || record.status === "blocked")) {
 			const loaded = loadRunManifestById(cwd, record.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 			if (!loaded) {
-				await new Promise((resolve) =>
-					setTimeout(resolve, this.pollIntervalMs),
-				);
+				await new Promise((resolve) => setTimeout(resolve, this.pollIntervalMs));
 				continue;
 			}
 			if (loaded.manifest.status === "completed") {
 				record.status = "completed";
 				record.error = undefined;
-				record.turnCount =
-					record.turnCount ?? totalRunTurns(cwd, record.runId);
+				record.turnCount = record.turnCount ?? totalRunTurns(cwd, record.runId);
 				record.completedAt = Date.now();
 				savePersistedSubagentRecord(cwd, record);
 				return;
 			}
-			if (
-				loaded.manifest.status === "failed" ||
-				loaded.manifest.status === "cancelled"
-			) {
+			if (loaded.manifest.status === "failed" || loaded.manifest.status === "cancelled") {
 				record.status = loaded.manifest.status;
 				record.error = loaded.manifest.summary;
-				record.turnCount =
-					record.turnCount ?? totalRunTurns(cwd, record.runId);
+				record.turnCount = record.turnCount ?? totalRunTurns(cwd, record.runId);
 				record.completedAt = Date.now();
 				savePersistedSubagentRecord(cwd, record);
 				return;
@@ -583,20 +481,14 @@ export class SubagentManager {
 				savePersistedSubagentRecord(cwd, record);
 				return;
 			}
-			await new Promise((resolve) =>
-				setTimeout(resolve, this.pollIntervalMs),
-			);
+			await new Promise((resolve) => setTimeout(resolve, this.pollIntervalMs));
 		}
 	}
 
-	private scheduleBlockedTerminalPoll(
-		cwd: string,
-		record: SubagentRecord,
-	): void {
+	private scheduleBlockedTerminalPoll(cwd: string, record: SubagentRecord): void {
 		const poll = (): void => {
 			const current = this.records.get(record.id);
-			if (!current || current.status !== "blocked" || !current.runId)
-				return;
+			if (!current || current.status !== "blocked" || !current.runId) return;
 			const loaded = loadRunManifestById(cwd, current.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 			if (
 				!loaded ||
@@ -610,25 +502,17 @@ export class SubagentManager {
 				return;
 			}
 			const persisted = readPersistedSubagentRecord(cwd, current.id);
-			current.resultConsumed =
-				current.resultConsumed || persisted?.resultConsumed;
+			current.resultConsumed = current.resultConsumed || persisted?.resultConsumed;
 			if (loaded.manifest.status === "completed") {
 				current.status = "completed";
 				current.error = undefined;
-			} else if (
-				loaded.manifest.status === "failed" ||
-				loaded.manifest.status === "cancelled"
-			) {
+			} else if (loaded.manifest.status === "failed" || loaded.manifest.status === "cancelled") {
 				current.status = loaded.manifest.status;
 				current.error = loaded.manifest.summary;
 			} else return;
 			current.completedAt = Date.now();
-			current.turnCount =
-				current.turnCount ?? totalRunTurns(cwd, current.runId);
-			current.durationMs = Math.max(
-				0,
-				current.completedAt - current.startedAt,
-			);
+			current.turnCount = current.turnCount ?? totalRunTurns(cwd, current.runId);
+			current.durationMs = Math.max(0, current.completedAt - current.startedAt);
 			savePersistedSubagentRecord(cwd, current);
 			this.onComplete?.(current);
 		};
@@ -636,20 +520,11 @@ export class SubagentManager {
 		timer.unref();
 	}
 
-	private scheduleStuckBlockedNotify(
-		cwd: string,
-		record: SubagentRecord,
-	): void {
+	private scheduleStuckBlockedNotify(cwd: string, record: SubagentRecord): void {
 		const threshold = DEFAULT_SUBAGENT.stuckBlockedNotifyMs;
 		const fire = (): void => {
 			const current = this.records.get(record.id);
-			if (
-				!current ||
-				current.status !== "blocked" ||
-				!current.blockedAt ||
-				current.stuckNotified
-			)
-				return;
+			if (!current || current.status !== "blocked" || !current.blockedAt || current.stuckNotified) return;
 			current.stuckNotified = true;
 			this.onEvent?.("subagent.stuck-blocked", {
 				event: "subagent.stuck-blocked",

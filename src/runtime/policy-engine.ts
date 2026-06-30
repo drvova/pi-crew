@@ -36,34 +36,70 @@ export function evaluateCrewPolicy(input: PolicyEngineInput): PolicyDecision[] {
 	const decisions: PolicyDecision[] = [];
 	const maxTasksPerRun = Number.isFinite(input.limits?.maxTasksPerRun) ? input.limits!.maxTasksPerRun : undefined;
 	if (maxTasksPerRun !== undefined && input.tasks.length > maxTasksPerRun) {
-		decisions.push(decision("block", "limit_exceeded", `Run has ${input.tasks.length} tasks, exceeding maxTasksPerRun=${maxTasksPerRun}.`));
+		decisions.push(
+			decision("block", "limit_exceeded", `Run has ${input.tasks.length} tasks, exceeding maxTasksPerRun=${maxTasksPerRun}.`),
+		);
 	}
 	const runningCount = input.tasks.filter((task) => task.status === "running").length;
 	const maxConcurrentWorkers = Number.isFinite(input.limits?.maxConcurrentWorkers) ? input.limits!.maxConcurrentWorkers : undefined;
 	if (maxConcurrentWorkers !== undefined && runningCount > maxConcurrentWorkers) {
-		decisions.push(decision("block", "limit_exceeded", `Run has ${runningCount} running workers, exceeding maxConcurrentWorkers=${maxConcurrentWorkers}.`));
+		decisions.push(
+			decision(
+				"block",
+				"limit_exceeded",
+				`Run has ${runningCount} running workers, exceeding maxConcurrentWorkers=${maxConcurrentWorkers}.`,
+			),
+		);
 	}
 	const tasksById = new Map(input.tasks.map((task) => [task.id, task]));
 
 	for (const task of input.tasks) {
 		if (input.limits?.maxChildrenPerTask !== undefined && (task.graph?.children.length ?? 0) > input.limits.maxChildrenPerTask) {
-			decisions.push(decision("block", "limit_exceeded", `Task has ${task.graph?.children.length ?? 0} children, exceeding maxChildrenPerTask=${input.limits.maxChildrenPerTask}.`, task.id));
+			decisions.push(
+				decision(
+					"block",
+					"limit_exceeded",
+					`Task has ${task.graph?.children.length ?? 0} children, exceeding maxChildrenPerTask=${input.limits.maxChildrenPerTask}.`,
+					task.id,
+				),
+			);
 		}
 		if (input.limits?.maxTaskDepth !== undefined && taskDepth(task, tasksById) > input.limits.maxTaskDepth) {
-			decisions.push(decision("block", "limit_exceeded", `Task graph depth exceeds maxTaskDepth=${input.limits.maxTaskDepth}.`, task.id));
+			decisions.push(
+				decision("block", "limit_exceeded", `Task graph depth exceeds maxTaskDepth=${input.limits.maxTaskDepth}.`, task.id),
+			);
 		}
 		if (task.status === "failed") {
 			const retryCount = task.policy?.retryCount ?? 0;
 			const maxRetries = input.limits?.maxRetriesPerTask ?? 0;
-			decisions.push(decision(retryCount < maxRetries ? "retry" : "escalate", "task_failed", task.error ? `Task failed: ${task.error}` : "Task failed.", task.id));
+			decisions.push(
+				decision(
+					retryCount < maxRetries ? "retry" : "escalate",
+					"task_failed",
+					task.error ? `Task failed: ${task.error}` : "Task failed.",
+					task.id,
+				),
+			);
 		}
-		if ((task.status === "running" || task.status === "queued") && task.heartbeat && task.heartbeat.alive !== false && isWorkerHeartbeatStale(task.heartbeat, input.limits?.heartbeatStaleMs ?? 60_000, input.now)) {
+		if (
+			(task.status === "running" || task.status === "queued") &&
+			task.heartbeat &&
+			task.heartbeat.alive !== false &&
+			isWorkerHeartbeatStale(task.heartbeat, input.limits?.heartbeatStaleMs ?? 60_000, input.now)
+		) {
 			decisions.push(decision("escalate", "worker_stale", "Worker heartbeat is stale.", task.id));
 		}
 		if (task.taskPacket?.verification) {
 			const outcome = evaluateGreenContract(task.taskPacket.verification, task.verification);
 			if (!outcome.satisfied && task.status === "completed") {
-				decisions.push(decision("block", "green_unsatisfied", `Green contract unsatisfied: required=${outcome.requiredGreenLevel}, observed=${outcome.observedGreenLevel}.`, task.id));
+				decisions.push(
+					decision(
+						"block",
+						"green_unsatisfied",
+						`Green contract unsatisfied: required=${outcome.requiredGreenLevel}, observed=${outcome.observedGreenLevel}.`,
+						task.id,
+					),
+				);
 			}
 		}
 	}

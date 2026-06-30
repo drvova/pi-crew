@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-	subprocessToolRegistry,
 	type SubprocessToolEvent,
 	type SubprocessToolHandler,
+	subprocessToolRegistry,
 } from "../../src/runtime/subprocess-tool-registry.ts";
 
 // Helper to create a fresh registry for isolated tests

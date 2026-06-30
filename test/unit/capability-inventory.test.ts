@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCapabilityInventory } from "../../src/runtime/capability-inventory.ts";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
+import { buildCapabilityInventory } from "../../src/runtime/capability-inventory.ts";
 
 test("capability inventory includes builtin teams, workflows, and agents", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-cap-inv-"));
@@ -53,7 +53,9 @@ test("capability inventory with empty disabledCapabilities returns all active", 
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-cap-inv3-"));
 	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
 	try {
-		const inventory = buildCapabilityInventory(cwd, { policy: { disabledCapabilities: [] } });
+		const inventory = buildCapabilityInventory(cwd, {
+			policy: { disabledCapabilities: [] },
+		});
 		const disabledItems = inventory.filter((item) => item.state === "disabled" && item.disabledReason === "disabled by policy");
 		assert.equal(disabledItems.length, 0, "no items should be disabled by policy with empty array");
 	} finally {

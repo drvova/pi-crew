@@ -1,12 +1,8 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-	resolveGroupJoinMode,
-	shouldGroupJoin,
-	GroupJoinManager,
-} from "../../src/runtime/group-join.ts";
+import { describe, it } from "node:test";
 import type { CrewRuntimeConfig } from "../../src/config/config.ts";
 import type { CrewAgentRecord } from "../../src/runtime/crew-agent-runtime.ts";
+import { GroupJoinManager, resolveGroupJoinMode, shouldGroupJoin } from "../../src/runtime/group-join.ts";
 
 // Note: deliverGroupJoin requires file I/O and is tested in the existing
 // test/unit/group-join.test.ts. Here we add additional coverage for pure
@@ -19,11 +15,21 @@ describe("group-join (cov)", () => {
 		});
 
 		it("returns configured 'off'", () => {
-			assert.equal(resolveGroupJoinMode({ groupJoin: "off" } as unknown as CrewRuntimeConfig), "off");
+			assert.equal(
+				resolveGroupJoinMode({
+					groupJoin: "off",
+				} as unknown as CrewRuntimeConfig),
+				"off",
+			);
 		});
 
 		it("returns configured 'group'", () => {
-			assert.equal(resolveGroupJoinMode({ groupJoin: "group" } as unknown as CrewRuntimeConfig), "group");
+			assert.equal(
+				resolveGroupJoinMode({
+					groupJoin: "group",
+				} as unknown as CrewRuntimeConfig),
+				"group",
+			);
 		});
 	});
 

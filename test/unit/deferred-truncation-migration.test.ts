@@ -20,9 +20,10 @@
  * Tests in this file call the REAL exported stages and verify behavior
  * equivalent to the pre-Sprint-5 inline implementations.
  */
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { HeadSnapStage, TailCaptureStage, TAIL_CAPTURE_STREAM_STAGE } from "../../src/runtime/compact-stages/index.ts";
+import { test } from "node:test";
+import { HeadSnapStage, TAIL_CAPTURE_STREAM_STAGE, TailCaptureStage } from "../../src/runtime/compact-stages/index.ts";
 
 // --- TailCaptureStage: char cap mode ---
 
@@ -46,7 +47,10 @@ test("TailCaptureStage (char cap): with marker prepends marker + newline when tr
 });
 
 test("TailCaptureStage (char cap): with marker returns input verbatim when under cap (no spurious marker)", () => {
-	const stage = new TailCaptureStage({ maxChars: 100, marker: "[truncated]" });
+	const stage = new TailCaptureStage({
+		maxChars: 100,
+		marker: "[truncated]",
+	});
 	const text = "short text";
 	assert.equal(stage.apply(text), text);
 });
@@ -264,7 +268,10 @@ test("L4 backward-compat: appendBoundedTail-style marker wording is preserved by
 	// Pre-Sprint-5 appendBoundedTail produced markers like:
 	//   [pi-crew captured output truncated to last X KiB]
 	// The migrated function passes exactly this marker to TailCaptureStage.
-	const stage = new TailCaptureStage({ maxBytes: 1024 * 4, marker: "[pi-crew captured output truncated to last 4 KiB]" });
+	const stage = new TailCaptureStage({
+		maxBytes: 1024 * 4,
+		marker: "[pi-crew captured output truncated to last 4 KiB]",
+	});
 	const out = stage.apply("A".repeat(10_000));
 	assert.ok(out.startsWith("[pi-crew captured output truncated to last 4 KiB]\n"));
 });

@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ResourceSource } from "../agents/agent-config.ts";
-import type { TeamConfig, TeamRole } from "./team-config.ts";
 import { parseCsv, parseFrontmatter } from "../utils/frontmatter.ts";
 import { parseGitUrl } from "../utils/git.ts";
 import { packageRoot, projectCrewRoot, userPiRoot } from "../utils/paths.ts";
+import type { TeamConfig, TeamRole } from "./team-config.ts";
 
 export interface TeamDiscoveryResult {
 	builtin: TeamConfig[];
@@ -15,7 +15,10 @@ export interface TeamDiscoveryResult {
 function parseRoleSkills(value: string | undefined): string[] | false | undefined {
 	if (!value) return undefined;
 	if (value === "false") return false;
-	const skills = value.split(",").map((entry) => entry.trim()).filter(Boolean);
+	const skills = value
+		.split(",")
+		.map((entry) => entry.trim())
+		.filter(Boolean);
 	return skills.length ? skills : undefined;
 }
 
@@ -39,7 +42,12 @@ function parseRoleLine(line: string): TeamRole | undefined {
 		return "";
 	});
 	const description = descriptionSource.replace(/\s+/g, " ").trim() || undefined;
-	const maxConcurrency = metadata.maxConcurrency ? (() => { const p = Number.parseInt(metadata.maxConcurrency, 10); return p > 0 ? p : undefined; })() : undefined;
+	const maxConcurrency = metadata.maxConcurrency
+		? (() => {
+				const p = Number.parseInt(metadata.maxConcurrency, 10);
+				return p > 0 ? p : undefined;
+			})()
+		: undefined;
 	return {
 		name,
 		agent: metadata.agent ?? name,
@@ -54,7 +62,10 @@ function parseCost(value: string | undefined): "free" | "cheap" | "expensive" | 
 	return value === "free" || value === "cheap" || value === "expensive" ? value : undefined;
 }
 
-function parseTeamSource(rawSource: string | undefined, fallback: ResourceSource): { source: ResourceSource; sourceUrl: string | undefined } {
+function parseTeamSource(
+	rawSource: string | undefined,
+	fallback: ResourceSource,
+): { source: ResourceSource; sourceUrl: string | undefined } {
 	if (!rawSource) return { source: fallback, sourceUrl: undefined };
 	const parsed = parseGitUrl(rawSource);
 	if (!parsed) return { source: fallback, sourceUrl: undefined };
@@ -66,7 +77,10 @@ function parseTeamFile(filePath: string, source: ResourceSource): TeamConfig | u
 		const content = fs.readFileSync(filePath, "utf-8");
 		const { frontmatter, body } = parseFrontmatter(content);
 		const name = frontmatter.name?.trim() || path.basename(filePath, ".team.md");
-		const roles = body.split("\n").map(parseRoleLine).filter((role): role is TeamRole => role !== undefined);
+		const roles = body
+			.split("\n")
+			.map(parseRoleLine)
+			.filter((role): role is TeamRole => role !== undefined);
 		const triggers = parseCsv(frontmatter.triggers ?? frontmatter.trigger);
 		const useWhen = parseCsv(frontmatter.useWhen);
 		const avoidWhen = parseCsv(frontmatter.avoidWhen);
@@ -92,7 +106,8 @@ function parseTeamFile(filePath: string, source: ResourceSource): TeamConfig | u
 
 function readTeamDir(dir: string, source: ResourceSource): TeamConfig[] {
 	if (!fs.existsSync(dir)) return [];
-	return fs.readdirSync(dir)
+	return fs
+		.readdirSync(dir)
 		.filter((entry) => entry.endsWith(".team.md"))
 		.map((entry) => parseTeamFile(path.join(dir, entry), source))
 		.filter((team): team is TeamConfig => team !== undefined)

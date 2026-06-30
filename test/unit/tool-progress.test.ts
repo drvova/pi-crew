@@ -2,45 +2,68 @@
  * Tool Progress Tests
  */
 
-import test from "node:test";
 import assert from "node:assert";
-import {
-	getToolName,
-	isToolRunning,
-	isToolComplete,
-	isToolError,
-	getUsage,
-	formatToolProgress,
-	formatCurrentToolLine,
-	formatTokenUsage,
-	renderProgressBar,
-	filterToolEvents,
-	getEventsForTool,
-	hasError,
-} from "../../src/runtime/tool-progress.ts";
+import test from "node:test";
 import type { CrewAgentProgress } from "../../src/runtime/crew-agent-runtime.ts";
 import type { ToolProgressEvent } from "../../src/runtime/tool-progress.ts";
+import {
+	filterToolEvents,
+	formatCurrentToolLine,
+	formatTokenUsage,
+	formatToolProgress,
+	getEventsForTool,
+	getToolName,
+	getUsage,
+	hasError,
+	isToolComplete,
+	isToolError,
+	isToolRunning,
+	renderProgressBar,
+} from "../../src/runtime/tool-progress.ts";
 
-const mockProgress = (overrides: Partial<CrewAgentProgress> = {}): CrewAgentProgress => ({
-	currentTool: "bash",
-	currentToolArgs: "npm install",
-	currentToolStartedAt: "2026-01-01T00:00:00.000Z",
-	recentTools: [
-		{ tool: "read", args: "package.json", endedAt: "2026-01-01T00:00:01.000Z" },
-		{ tool: "bash", args: "npm install", startedAt: "2026-01-01T00:00:02.000Z" },
-	],
-	tokens: 45000,
-	toolCount: 2,
-	lastActivityAt: "2026-01-01T00:00:02.000Z",
-	activityState: "active",
-	turns: 3,
-	...overrides,
-} as CrewAgentProgress);
+const mockProgress = (overrides: Partial<CrewAgentProgress> = {}): CrewAgentProgress =>
+	({
+		currentTool: "bash",
+		currentToolArgs: "npm install",
+		currentToolStartedAt: "2026-01-01T00:00:00.000Z",
+		recentTools: [
+			{
+				tool: "read",
+				args: "package.json",
+				endedAt: "2026-01-01T00:00:01.000Z",
+			},
+			{
+				tool: "bash",
+				args: "npm install",
+				startedAt: "2026-01-01T00:00:02.000Z",
+			},
+		],
+		tokens: 45000,
+		toolCount: 2,
+		lastActivityAt: "2026-01-01T00:00:02.000Z",
+		activityState: "active",
+		turns: 3,
+		...overrides,
+	}) as CrewAgentProgress;
 
 test("getToolName extracts tool name from events", () => {
-	const startEvent = { type: "tool_execution_start" as const, toolName: "bash", toolCallId: "123", timestamp: Date.now() };
-	const endEvent = { type: "tool_execution_end" as const, toolName: "read", toolCallId: "456", timestamp: Date.now() };
-	const messageEvent = { type: "message_end" as const, message: { role: "assistant", usage: { input: 100, output: 50 } }, timestamp: Date.now() } as ToolProgressEvent;
+	const startEvent = {
+		type: "tool_execution_start" as const,
+		toolName: "bash",
+		toolCallId: "123",
+		timestamp: Date.now(),
+	};
+	const endEvent = {
+		type: "tool_execution_end" as const,
+		toolName: "read",
+		toolCallId: "456",
+		timestamp: Date.now(),
+	};
+	const messageEvent = {
+		type: "message_end" as const,
+		message: { role: "assistant", usage: { input: 100, output: 50 } },
+		timestamp: Date.now(),
+	} as ToolProgressEvent;
 
 	assert.equal(getToolName(startEvent), "bash");
 	assert.equal(getToolName(endEvent), "read");
@@ -48,20 +71,75 @@ test("getToolName extracts tool name from events", () => {
 });
 
 test("isToolRunning detects start events", () => {
-	assert.ok(isToolRunning({ type: "tool_execution_start" as const, toolName: "bash", toolCallId: "123", timestamp: Date.now() }));
-	assert.ok(!isToolRunning({ type: "tool_execution_end" as const, toolName: "bash", toolCallId: "123", timestamp: Date.now() }));
-	assert.ok(!isToolRunning({ type: "message_end" as const, message: { role: "assistant" }, timestamp: Date.now() }));
+	assert.ok(
+		isToolRunning({
+			type: "tool_execution_start" as const,
+			toolName: "bash",
+			toolCallId: "123",
+			timestamp: Date.now(),
+		}),
+	);
+	assert.ok(
+		!isToolRunning({
+			type: "tool_execution_end" as const,
+			toolName: "bash",
+			toolCallId: "123",
+			timestamp: Date.now(),
+		}),
+	);
+	assert.ok(
+		!isToolRunning({
+			type: "message_end" as const,
+			message: { role: "assistant" },
+			timestamp: Date.now(),
+		}),
+	);
 });
 
 test("isToolComplete detects end events", () => {
-	assert.ok(isToolComplete({ type: "tool_execution_end" as const, toolName: "read", toolCallId: "456", timestamp: Date.now() }));
-	assert.ok(!isToolComplete({ type: "tool_execution_start" as const, toolName: "read", toolCallId: "456", timestamp: Date.now() }));
+	assert.ok(
+		isToolComplete({
+			type: "tool_execution_end" as const,
+			toolName: "read",
+			toolCallId: "456",
+			timestamp: Date.now(),
+		}),
+	);
+	assert.ok(
+		!isToolComplete({
+			type: "tool_execution_start" as const,
+			toolName: "read",
+			toolCallId: "456",
+			timestamp: Date.now(),
+		}),
+	);
 });
 
 test("isToolError detects error events", () => {
-	assert.ok(isToolError({ type: "tool_execution_error" as const, toolName: "bash", toolCallId: "123", timestamp: Date.now() }));
-	assert.ok(isToolError({ type: "tool_execution_failed" as const, toolName: "bash", toolCallId: "123", timestamp: Date.now() }));
-	assert.ok(!isToolError({ type: "tool_execution_end" as const, toolName: "bash", toolCallId: "123", timestamp: Date.now() }));
+	assert.ok(
+		isToolError({
+			type: "tool_execution_error" as const,
+			toolName: "bash",
+			toolCallId: "123",
+			timestamp: Date.now(),
+		}),
+	);
+	assert.ok(
+		isToolError({
+			type: "tool_execution_failed" as const,
+			toolName: "bash",
+			toolCallId: "123",
+			timestamp: Date.now(),
+		}),
+	);
+	assert.ok(
+		!isToolError({
+			type: "tool_execution_end" as const,
+			toolName: "bash",
+			toolCallId: "123",
+			timestamp: Date.now(),
+		}),
+	);
 });
 
 test("getUsage extracts usage from message_end", () => {
@@ -132,9 +210,23 @@ test("renderProgressBar creates visual bar", () => {
 
 test("filterToolEvents returns only tool events", () => {
 	const events = [
-		{ type: "tool_execution_start" as const, toolName: "bash", toolCallId: "1", timestamp: Date.now() },
-		{ type: "message_end" as const, message: { role: "assistant" }, timestamp: Date.now() },
-		{ type: "tool_execution_end" as const, toolName: "bash", toolCallId: "1", timestamp: Date.now() },
+		{
+			type: "tool_execution_start" as const,
+			toolName: "bash",
+			toolCallId: "1",
+			timestamp: Date.now(),
+		},
+		{
+			type: "message_end" as const,
+			message: { role: "assistant" },
+			timestamp: Date.now(),
+		},
+		{
+			type: "tool_execution_end" as const,
+			toolName: "bash",
+			toolCallId: "1",
+			timestamp: Date.now(),
+		},
 	] as unknown as ToolProgressEvent[];
 
 	const toolEvents = filterToolEvents(events);
@@ -144,9 +236,24 @@ test("filterToolEvents returns only tool events", () => {
 
 test("getEventsForTool filters by tool name", () => {
 	const events = [
-		{ type: "tool_execution_start" as const, toolName: "bash", toolCallId: "1", timestamp: Date.now() },
-		{ type: "tool_execution_start" as const, toolName: "read", toolCallId: "2", timestamp: Date.now() },
-		{ type: "tool_execution_end" as const, toolName: "bash", toolCallId: "1", timestamp: Date.now() },
+		{
+			type: "tool_execution_start" as const,
+			toolName: "bash",
+			toolCallId: "1",
+			timestamp: Date.now(),
+		},
+		{
+			type: "tool_execution_start" as const,
+			toolName: "read",
+			toolCallId: "2",
+			timestamp: Date.now(),
+		},
+		{
+			type: "tool_execution_end" as const,
+			toolName: "bash",
+			toolCallId: "1",
+			timestamp: Date.now(),
+		},
 	] as unknown as ToolProgressEvent[];
 
 	const bashEvents = getEventsForTool(events, "bash");
@@ -155,13 +262,34 @@ test("getEventsForTool filters by tool name", () => {
 
 test("hasError detects error events", () => {
 	const withError = [
-		{ type: "tool_execution_start" as const, toolName: "bash", toolCallId: "1", timestamp: Date.now() },
-		{ type: "tool_execution_error" as const, toolName: "bash", toolCallId: "1", error: "timeout", timestamp: Date.now() },
+		{
+			type: "tool_execution_start" as const,
+			toolName: "bash",
+			toolCallId: "1",
+			timestamp: Date.now(),
+		},
+		{
+			type: "tool_execution_error" as const,
+			toolName: "bash",
+			toolCallId: "1",
+			error: "timeout",
+			timestamp: Date.now(),
+		},
 	] as unknown as ToolProgressEvent[];
 
 	const withoutError = [
-		{ type: "tool_execution_start" as const, toolName: "bash", toolCallId: "1", timestamp: Date.now() },
-		{ type: "tool_execution_end" as const, toolName: "bash", toolCallId: "1", timestamp: Date.now() },
+		{
+			type: "tool_execution_start" as const,
+			toolName: "bash",
+			toolCallId: "1",
+			timestamp: Date.now(),
+		},
+		{
+			type: "tool_execution_end" as const,
+			toolName: "bash",
+			toolCallId: "1",
+			timestamp: Date.now(),
+		},
 	] as unknown as ToolProgressEvent[];
 
 	assert.ok(hasError(withError));
@@ -177,9 +305,9 @@ test("formatToolProgress handles empty progress", () => {
 	} as unknown as CrewAgentProgress;
 
 	const display = formatToolProgress(empty);
-	
+
 	assert.equal(display.currentTool, undefined);
-	
+
 	assert.equal(display.toolCount, 0);
 	assert.ok(Array.isArray(display.recentTools));
 });

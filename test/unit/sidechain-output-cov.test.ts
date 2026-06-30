@@ -1,14 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
+import { eventToSidechainType, sidechainOutputPath, writeSidechainEntry } from "../../src/runtime/sidechain-output.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
-
-import {
-	writeSidechainEntry,
-	sidechainOutputPath,
-	eventToSidechainType,
-} from "../../src/runtime/sidechain-output.ts";
 
 // ── eventToSidechainType ──
 

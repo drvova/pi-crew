@@ -1,4 +1,4 @@
-import { CrewCancellationError, type CancellationReason, cancellationReasonFromUnknown } from "./cancellation.ts";
+import { type CancellationReason, CrewCancellationError, cancellationReasonFromUnknown } from "./cancellation.ts";
 
 export interface CancellationTokenState {
 	aborted: boolean;
@@ -28,11 +28,21 @@ export class CancellationToken {
 		else if (options.signal) options.signal.addEventListener("abort", () => this.abort(options.signal?.reason), { once: true });
 	}
 
-	get signal(): AbortSignal { return this.#controller.signal; }
-	get aborted(): boolean { return this.#controller.signal.aborted; }
-	get reason(): CancellationReason | undefined { return this.#reason; }
-	get lastHeartbeatAt(): string | undefined { return this.#lastHeartbeatAt; }
-	get lastHeartbeatStage(): string | undefined { return this.#lastHeartbeatStage; }
+	get signal(): AbortSignal {
+		return this.#controller.signal;
+	}
+	get aborted(): boolean {
+		return this.#controller.signal.aborted;
+	}
+	get reason(): CancellationReason | undefined {
+		return this.#reason;
+	}
+	get lastHeartbeatAt(): string | undefined {
+		return this.#lastHeartbeatAt;
+	}
+	get lastHeartbeatStage(): string | undefined {
+		return this.#lastHeartbeatStage;
+	}
 
 	heartbeat(stage?: string): CancellationTokenState {
 		this.throwIfCancelled();

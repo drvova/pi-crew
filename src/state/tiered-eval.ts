@@ -1,15 +1,15 @@
 /**
  * Tiered Evaluation System
- * 
+ *
  * Inspired by agent-eval's judge tiers, this module provides a hierarchical
  * evaluation system where checks are grouped by computational cost and reliability:
- * 
+ *
  * - Tier 1 (deterministic): Fast checks (~1s timeout) - file exists, parse errors, etc.
  * - Tier 2 (pattern): Medium checks (~5s timeout) - grep, regex, structural checks
  * - Tier 3 (llm): Expensive checks (~60s timeout) - LLM-based evaluation
  */
 
-import type { EvalTier, TierConfig, EvalResult } from "./types-eval.ts";
+import type { EvalResult, EvalTier, TierConfig } from "./types-eval.ts";
 
 /**
  * Default tier configurations with increasing timeouts for more expensive evaluations.
@@ -40,7 +40,7 @@ export const TIER_CONFIGS: Record<EvalTier, TierConfig> = {
  */
 export const DEFAULT_TIER_CONFIGS = TIER_CONFIGS;
 
-export type { EvalTier, TierConfig, EvalResult };
+export type { EvalResult, EvalTier, TierConfig };
 
 /**
  * Individual evaluation check with its assigned tier.
@@ -99,21 +99,21 @@ export interface TieredEvalResult {
 /**
  * TieredEvalRunner executes evaluation checks in tiered order,
  * with appropriate timeouts for each tier level.
- * 
+ *
  * Supports two execution modes:
  * - runTieredEval: Runs all checks regardless of failures
  * - runTieredEvalFailFast: Stops at first failure (like ECC promotion gates)
- * 
+ *
  * @example
  * ```typescript
  * const runner = new TieredEvalRunner();
- * 
+ *
  * // Run all checks
  * const allResults = await runner.runTieredEval('task-1', [
  *   { tier: 1, check: () => fs.existsSync('output.json') },
  *   { tier: 2, check: async () => (await run('grep', ['pattern', 'output.json'])).exitCode === 0 }
  * ]);
- * 
+ *
  * // Fail-fast mode
  * const failFastResult = await runner.runTieredEvalFailFast('task-2', [
  *   { tier: 1, check: () => fs.existsSync('output.json') },
@@ -129,7 +129,7 @@ export class TieredEvalRunner {
 
 	/**
 	 * Creates a new TieredEvalRunner instance.
-	 * 
+	 *
 	 * @param config - Optional configuration to override defaults
 	 */
 	constructor(config?: TieredEvalRunnerConfig) {
@@ -154,7 +154,7 @@ export class TieredEvalRunner {
 
 	/**
 	 * Gets the effective timeout for a given tier.
-	 * 
+	 *
 	 * @param tier - The evaluation tier
 	 * @returns The timeout in milliseconds (after multiplier is applied)
 	 */
@@ -164,7 +164,7 @@ export class TieredEvalRunner {
 
 	/**
 	 * Gets the configuration for a specific tier.
-	 * 
+	 *
 	 * @param tier - The evaluation tier
 	 * @returns The tier configuration
 	 */
@@ -174,15 +174,12 @@ export class TieredEvalRunner {
 
 	/**
 	 * Runs a check with the specified timeout.
-	 * 
+	 *
 	 * @param check - The check function to run
 	 * @param tier - The tier this check belongs to
 	 * @returns The result of the check
 	 */
-	private async runCheckWithTimeout(
-		check: () => Promise<boolean> | boolean,
-		tier: EvalTier,
-	): Promise<CheckResult> {
+	private async runCheckWithTimeout(check: () => Promise<boolean> | boolean, tier: EvalTier): Promise<CheckResult> {
 		const timeout = this.getTimeout(tier);
 		const startTime = Date.now();
 
@@ -228,11 +225,11 @@ export class TieredEvalRunner {
 
 	/**
 	 * Runs all evaluation checks and returns results for each.
-	 * 
+	 *
 	 * @param taskId - Identifier for the task being evaluated
 	 * @param checks - Array of checks to run, each with a tier assignment
 	 * @returns Array of evaluation results for each check
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * const results = await runner.runTieredEval('task-123', [
@@ -240,19 +237,20 @@ export class TieredEvalRunner {
 	 *   { tier: 2, check: async () => (await grep('output.json', 'pattern')).found },
 	 *   { tier: 3, check: async () => llmJudge.evaluate(output) }
 	 * ]);
-	 * 
+	 *
 	 * // Check if all passed
 	 * const allPassed = results.every(r => r.passed);
 	 * ```
 	 */
 	async runTieredEval(
 		taskId: string,
-		checks: Array<{ tier: EvalTier; check: () => Promise<boolean> | boolean }>,
+		checks: Array<{
+			tier: EvalTier;
+			check: () => Promise<boolean> | boolean;
+		}>,
 	): Promise<EvalResult[]> {
 		// Sort checks by tier if configured (lower tiers first)
-		const sortedChecks = this.sortByTier
-			? [...checks].sort((a, b) => a.tier - b.tier)
-			: checks;
+		const sortedChecks = this.sortByTier ? [...checks].sort((a, b) => a.tier - b.tier) : checks;
 
 		const results: EvalResult[] = [];
 
@@ -267,14 +265,14 @@ export class TieredEvalRunner {
 
 	/**
 	 * Runs evaluation checks in fail-fast mode, stopping at the first failure.
-	 * 
+	 *
 	 * This is useful for promotion gates where cheaper checks should run first
 	 * and any failure should stop the evaluation immediately.
-	 * 
+	 *
 	 * @param taskId - Identifier for the task being evaluated
 	 * @param checks - Array of checks to run, each with a tier assignment
 	 * @returns Array of evaluation results (may be shorter than input if fail-fast triggered)
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * const results = await runner.runTieredEvalFailFast('task-123', [
@@ -282,7 +280,7 @@ export class TieredEvalRunner {
 	 *   { tier: 2, check: async () => (await grep('output.json', 'pattern')).found },
 	 *   { tier: 3, check: async () => llmJudge.evaluate(output) }
 	 * ]);
-	 * 
+	 *
 	 * if (results.length < checks.length) {
 	 *   console.log(`Failed at tier ${results[results.length - 1].tier}`);
 	 * }
@@ -290,12 +288,13 @@ export class TieredEvalRunner {
 	 */
 	async runTieredEvalFailFast(
 		taskId: string,
-		checks: Array<{ tier: EvalTier; check: () => Promise<boolean> | boolean }>,
+		checks: Array<{
+			tier: EvalTier;
+			check: () => Promise<boolean> | boolean;
+		}>,
 	): Promise<EvalResult[]> {
 		// Sort checks by tier if configured (lower tiers first)
-		const sortedChecks = this.sortByTier
-			? [...checks].sort((a, b) => a.tier - b.tier)
-			: checks;
+		const sortedChecks = this.sortByTier ? [...checks].sort((a, b) => a.tier - b.tier) : checks;
 
 		const results: EvalResult[] = [];
 
@@ -315,7 +314,7 @@ export class TieredEvalRunner {
 
 	/**
 	 * Runs evaluation checks and returns a structured result object.
-	 * 
+	 *
 	 * @param taskId - Identifier for the task being evaluated
 	 * @param checks - Array of checks to run, each with a tier assignment
 	 * @param failFast - Whether to stop at first failure (default: false)
@@ -323,12 +322,13 @@ export class TieredEvalRunner {
 	 */
 	async runEval(
 		taskId: string,
-		checks: Array<{ tier: EvalTier; check: () => Promise<boolean> | boolean }>,
+		checks: Array<{
+			tier: EvalTier;
+			check: () => Promise<boolean> | boolean;
+		}>,
 		failFast = false,
 	): Promise<TieredEvalResult> {
-		const sortedChecks = this.sortByTier
-			? [...checks].sort((a, b) => a.tier - b.tier)
-			: checks;
+		const sortedChecks = this.sortByTier ? [...checks].sort((a, b) => a.tier - b.tier) : checks;
 
 		const results: CheckResult[] = [];
 		let totalDurationMs = 0;
@@ -361,9 +361,9 @@ export class TieredEvalRunner {
 
 	/**
 	 * Runs checks in parallel within each tier, but sequentially across tiers.
-	 * 
+	 *
 	 * This optimizes execution time when multiple checks exist at the same tier level.
-	 * 
+	 *
 	 * @param taskId - Identifier for the task being evaluated
 	 * @param checks - Array of checks to run
 	 * @param failFast - Whether to stop at first failure (default: false)
@@ -371,11 +371,20 @@ export class TieredEvalRunner {
 	 */
 	async runTieredEvalParallel(
 		taskId: string,
-		checks: Array<{ tier: EvalTier; check: () => Promise<boolean> | boolean }>,
+		checks: Array<{
+			tier: EvalTier;
+			check: () => Promise<boolean> | boolean;
+		}>,
 		failFast = false,
 	): Promise<TieredEvalResult> {
 		// Group checks by tier
-		const checksByTier = new Map<EvalTier, Array<{ check: () => Promise<boolean> | boolean; originalIndex: number }>>();
+		const checksByTier = new Map<
+			EvalTier,
+			Array<{
+				check: () => Promise<boolean> | boolean;
+				originalIndex: number;
+			}>
+		>();
 
 		checks.forEach((c, originalIndex) => {
 			const existing = checksByTier.get(c.tier) || [];
@@ -431,7 +440,7 @@ export class TieredEvalRunner {
 
 	/**
 	 * Creates a new runner with overridden tier configurations.
-	 * 
+	 *
 	 * @param overrides - Tier configurations to override
 	 * @returns A new TieredEvalRunner instance
 	 */
@@ -447,10 +456,10 @@ export class TieredEvalRunner {
 
 /**
  * Convenience function to create a TieredEvalRunner with default configuration.
- * 
+ *
  * @param config - Optional configuration overrides
  * @returns A new TieredEvalRunner instance
- * 
+ *
  * @example
  * ```typescript
  * const runner = createRunner({

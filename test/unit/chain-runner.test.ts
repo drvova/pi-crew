@@ -3,23 +3,19 @@
  * @see src/runtime/chain-runner.ts
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
+	type ChainResult,
 	ChainRunner,
-	createChainRunner,
-	parseChainString,
 	type ChainSpec,
 	type ChainStep,
-	type ChainResult,
 	type ChainStepResult,
 	type ChainTaskRunner,
+	createChainRunner,
+	parseChainString,
 } from "../../src/runtime/chain-runner.ts";
-import {
-	HandoffManager,
-	type TaskPacket,
-	type TaskResult,
-} from "../../src/runtime/handoff-manager.ts";
+import { HandoffManager, type TaskPacket, type TaskResult } from "../../src/runtime/handoff-manager.ts";
 
 // Test helpers
 function createTaskResult(overrides: Partial<TaskResult> = {}): TaskResult {
@@ -315,7 +311,9 @@ test("ChainRunner - runChain calculates total tokens", async () => {
 	const mockRunner: ChainTaskRunner = {
 		runTask: async () => {
 			callCount++;
-			return createTaskResult({ usage: { totalTokens: callCount * 1000 } });
+			return createTaskResult({
+				usage: { totalTokens: callCount * 1000 },
+			});
 		},
 	};
 
@@ -382,9 +380,7 @@ test("parseChainString parses simple chain", () => {
 });
 
 test("parseChainString handles complex syntax", () => {
-	const spec = parseChainString(
-		'"Goal 1" --model opus --timeout 60 -> "Goal 2" --global-model sonnet'
-	);
+	const spec = parseChainString('"Goal 1" --model opus --timeout 60 -> "Goal 2" --global-model sonnet');
 
 	assert.strictEqual(spec.steps.length, 2);
 	assert.strictEqual(spec.steps[0].inlineGoal, "Goal 1");

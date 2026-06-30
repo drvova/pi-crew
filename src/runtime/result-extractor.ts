@@ -177,8 +177,7 @@ function tryMarkerExtraction(text: string): unknown | undefined {
 				if (jsonEnd > 0) {
 					try {
 						return JSON.parse(after.slice(0, jsonEnd));
-					} catch {
-					}
+					} catch {}
 				}
 			}
 		}

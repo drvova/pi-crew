@@ -8,14 +8,12 @@
  * via PI_CREW_VERIFICATION_SANITIZE_ENV=1; escape hatch via
  * PI_CREW_VERIFICATION_PRESERVE_ENV=KEY1,KEY2.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import * as path from "node:path";
-import {
-	isVerificationEnvSanitizeEnabled,
-	executeVerificationCommands,
-} from "../../src/runtime/verification-gates.ts";
+import test from "node:test";
+import { executeVerificationCommands, isVerificationEnvSanitizeEnabled } from "../../src/runtime/verification-gates.ts";
 import { pickPrintenv } from "../fixtures/cross-platform-cmd.ts";
 
 function withEnv(vars: Record<string, string | undefined>, fn: () => Promise<void> | void): Promise<void> {
@@ -34,9 +32,15 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => Promise<voi
 }
 
 test("isVerificationEnvSanitizeEnabled: defaults to false (opt-in)", () => {
-	return withEnv({ PI_CREW_VERIFICATION_SANITIZE_ENV: undefined, PI_TEAMS_VERIFICATION_SANITIZE_ENV: undefined }, () => {
-		assert.equal(isVerificationEnvSanitizeEnabled(), false);
-	});
+	return withEnv(
+		{
+			PI_CREW_VERIFICATION_SANITIZE_ENV: undefined,
+			PI_TEAMS_VERIFICATION_SANITIZE_ENV: undefined,
+		},
+		() => {
+			assert.equal(isVerificationEnvSanitizeEnabled(), false);
+		},
+	);
 });
 
 test("isVerificationEnvSanitizeEnabled: true when PI_CREW_VERIFICATION_SANITIZE_ENV=1", () => {
@@ -46,9 +50,15 @@ test("isVerificationEnvSanitizeEnabled: true when PI_CREW_VERIFICATION_SANITIZE_
 });
 
 test("isVerificationEnvSanitizeEnabled: true when PI_TEAMS_VERIFICATION_SANITIZE_ENV=1", () => {
-	return withEnv({ PI_CREW_VERIFICATION_SANITIZE_ENV: undefined, PI_TEAMS_VERIFICATION_SANITIZE_ENV: "1" }, () => {
-		assert.equal(isVerificationEnvSanitizeEnabled(), true);
-	});
+	return withEnv(
+		{
+			PI_CREW_VERIFICATION_SANITIZE_ENV: undefined,
+			PI_TEAMS_VERIFICATION_SANITIZE_ENV: "1",
+		},
+		() => {
+			assert.equal(isVerificationEnvSanitizeEnabled(), true);
+		},
+	);
 });
 
 test("INTEGRATION: with sanitize ON, secret env var does NOT reach the verification subprocess", async () => {
@@ -78,7 +88,10 @@ test("INTEGRATION: with sanitize ON, secret env var does NOT reach the verificat
 			const fs = await import("node:fs");
 			const content = out?.path ? fs.readFileSync(out.path, "utf-8") : "";
 			assert.equal(content.includes("sk-leak-me-12345"), false, "secret must NOT reach verification subprocess when sanitize is ON");
-			fs.rmSync(path.join(process.cwd(), ".test-artifacts-tmp"), { recursive: true, force: true });
+			fs.rmSync(path.join(process.cwd(), ".test-artifacts-tmp"), {
+				recursive: true,
+				force: true,
+			});
 		},
 	);
 });
@@ -102,8 +115,15 @@ test("INTEGRATION: with sanitize OFF (default), secret env var DOES reach the ve
 			);
 			const fs = await import("node:fs");
 			const content = results[0]?.outputArtifact?.path ? fs.readFileSync(results[0].outputArtifact.path, "utf-8") : "";
-			assert.equal(content.includes("sk-visible-default"), true, "default (no sanitize) preserves existing behavior — secret visible");
-			fs.rmSync(path.join(process.cwd(), ".test-artifacts-tmp"), { recursive: true, force: true });
+			assert.equal(
+				content.includes("sk-visible-default"),
+				true,
+				"default (no sanitize) preserves existing behavior — secret visible",
+			);
+			fs.rmSync(path.join(process.cwd(), ".test-artifacts-tmp"), {
+				recursive: true,
+				force: true,
+			});
 		},
 	);
 });
@@ -128,7 +148,10 @@ test("INTEGRATION: with sanitize ON + PRESERVE_ENV, explicitly-preserved secret 
 			const fs = await import("node:fs");
 			const content = results[0]?.outputArtifact?.path ? fs.readFileSync(results[0].outputArtifact.path, "utf-8") : "";
 			assert.equal(content.includes("sk-preserved-explicit"), true, "PRESERVE_ENV must allow explicitly-listed secret through");
-			fs.rmSync(path.join(process.cwd(), ".test-artifacts-tmp2"), { recursive: true, force: true });
+			fs.rmSync(path.join(process.cwd(), ".test-artifacts-tmp2"), {
+				recursive: true,
+				force: true,
+			});
 		},
 	);
 });
@@ -151,7 +174,9 @@ test("INTEGRATION: sanitize ON keeps essential non-secret vars (PATH, HOME)", as
 		async () => {
 			// Run two separate commands (validateGateCommand rejects `&&`).
 			const results = await executeVerificationCommands(
-				{ commands: [pickPrintenv("PATH"), pickPrintenv("HOME")] } as never,
+				{
+					commands: [pickPrintenv("PATH"), pickPrintenv("HOME")],
+				} as never,
 				process.cwd(),
 				"test-run",
 				"test-task",
@@ -164,7 +189,10 @@ test("INTEGRATION: sanitize ON keeps essential non-secret vars (PATH, HOME)", as
 			const homeContent = results[1]?.outputArtifact?.path ? fs.readFileSync(results[1].outputArtifact.path, "utf-8") : "";
 			assert.equal(pathContent.includes("/usr/bin:/bin"), true, "PATH must be preserved");
 			assert.equal(homeContent.includes("/tmp/fake-home"), true, "HOME must be preserved");
-			fs.rmSync(path.join(process.cwd(), ".test-artifacts-tmp3"), { recursive: true, force: true });
+			fs.rmSync(path.join(process.cwd(), ".test-artifacts-tmp3"), {
+				recursive: true,
+				force: true,
+			});
 		},
 	);
 });

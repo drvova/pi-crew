@@ -1,13 +1,13 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
 	buildExecutionPlan,
-	getReadyTasks,
 	detectCycles,
 	findBlockedTasks,
 	getBlockingTasks,
-	topologicalSort,
+	getReadyTasks,
 	type TaskNode,
+	topologicalSort,
 } from "../../src/runtime/task-graph.ts";
 
 // ── buildExecutionPlan ─────────────────────────────────────────────────

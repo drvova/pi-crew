@@ -14,10 +14,10 @@
 import { performance } from "node:perf_hooks";
 import {
 	buildTaskGraphIndex,
-	refreshTaskGraphQueues,
 	getReadyTasks,
-	markTaskRunning,
 	markTaskDone,
+	markTaskRunning,
+	refreshTaskGraphQueues,
 } from "../../src/runtime/task-graph-scheduler.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
@@ -49,7 +49,12 @@ function makeDag(): TeamTaskState[] {
 		tasks.push(makeTask(`f${i}`, ["c9"]));
 	}
 	// Merge node depending on all fan-out nodes.
-	tasks.push(makeTask("m0", Array.from({ length: 10 }, (_v, i) => `f${i}`)));
+	tasks.push(
+		makeTask(
+			"m0",
+			Array.from({ length: 10 }, (_v, i) => `f${i}`),
+		),
+	);
 	return tasks;
 }
 
@@ -112,4 +117,6 @@ function percentile(sorted: number[], q: number): number {
 	const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q));
 	return sorted[idx];
 }
-function round(n: number): number { return Math.round(n * 100) / 100; }
+function round(n: number): number {
+	return Math.round(n * 100) / 100;
+}

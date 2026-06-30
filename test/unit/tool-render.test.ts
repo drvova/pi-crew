@@ -3,20 +3,19 @@
  * Tests for renderTeamToolResult and renderAgentToolResult functions.
  */
 
-import test from "node:test";
 import assert from "node:assert";
-import {
-	renderTeamToolResult,
-	renderAgentToolResult,
-	type Theme,
-	type Component,
-} from "../../src/ui/tool-render.ts";
+import test from "node:test";
 import { Container, Text } from "@earendil-works/pi-tui";
+import { type Component, renderAgentToolResult, renderTeamToolResult, type Theme } from "../../src/ui/tool-render.ts";
 
 // Mock theme for testing
 const mockTheme: Theme = {
-	fg(color: any, text: string): string { return text; },
-	bold(text: string): string { return text; },
+	fg(color: any, text: string): string {
+		return text;
+	},
+	bold(text: string): string {
+		return text;
+	},
 };
 
 test("renderTeamToolResult handles details with action run and agentRecords", () => {
@@ -106,8 +105,16 @@ test("renderAgentToolResult handles details with results array", () => {
 	const result = {
 		details: {
 			results: [
-				{ agentId: "executor", status: "completed", output: "Done successfully" },
-				{ agentId: "reviewer", status: "completed", output: "All good" },
+				{
+					agentId: "executor",
+					status: "completed",
+					output: "Done successfully",
+				},
+				{
+					agentId: "reviewer",
+					status: "completed",
+					output: "All good",
+				},
 			],
 		},
 	};
@@ -222,7 +229,9 @@ test("renderAgentToolResult sanitizes tabs in error messages (Round 20)", () => 
 
 	// Walk the container children and find the error line. We just need to
 	// confirm no raw tab characters survive in any rendered Text.
-	const children = (component as Container as any).children as Array<{ text?: string }>;
+	const children = (component as Container as any).children as Array<{
+		text?: string;
+	}>;
 	for (const child of children) {
 		if (child.text?.includes("Error:")) {
 			assert.ok(!child.text.includes("\t"), `Error line should not contain raw tabs: ${JSON.stringify(child.text)}`);
@@ -248,7 +257,9 @@ test("renderAgentToolResult truncates very long error messages (Round 20)", () =
 
 	const component = renderAgentToolResult(result as any, undefined, mockTheme, undefined);
 	assert.ok(component instanceof Container, "Expected Container for agent with error");
-	const children = (component as Container as any).children as Array<{ text?: string }>;
+	const children = (component as Container as any).children as Array<{
+		text?: string;
+	}>;
 	const errorLine = children.find((c) => c.text?.includes("Error:"));
 	assert.ok(errorLine, "Should find an error line");
 	assert.ok((errorLine!.text?.length ?? 0) < 5000, "Error line should be truncated");

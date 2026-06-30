@@ -47,13 +47,7 @@ export type CrewThemeColor =
 	// Special
 	| "bashMode";
 
-export type CrewThemeBg =
-	| "selectedBg"
-	| "userMessageBg"
-	| "customMessageBg"
-	| "toolPendingBg"
-	| "toolSuccessBg"
-	| "toolErrorBg";
+export type CrewThemeBg = "selectedBg" | "userMessageBg" | "customMessageBg" | "toolPendingBg" | "toolSuccessBg" | "toolErrorBg";
 
 /** ANSI fallback values for theme color slots when the active theme doesn't define them. */
 export const THEME_COLOR_FALLBACKS: Record<CrewThemeColor, string> = {
@@ -102,10 +96,7 @@ export const THEME_COLOR_FALLBACKS: Record<CrewThemeColor, string> = {
 
 /** Map a thinking intensity level (0–5) to a theme color slot. */
 export function thinkingColorForLevel(level: number): CrewThemeColor {
-	const slots: CrewThemeColor[] = [
-		"thinkingOff", "thinkingMinimal", "thinkingLow",
-		"thinkingMedium", "thinkingHigh", "thinkingXhigh",
-	];
+	const slots: CrewThemeColor[] = ["thinkingOff", "thinkingMinimal", "thinkingLow", "thinkingMedium", "thinkingHigh", "thinkingXhigh"];
 	return slots[Math.min(Math.max(level, 0), 5)] ?? "thinkingOff";
 }
 
@@ -177,7 +168,14 @@ function callMaybeString(fn: unknown): string | undefined {
 function themeSignature(theme: object): string {
 	const record = theme as Record<string, unknown>;
 	const primitiveEntries = Object.entries(record)
-		.filter(([_key, value]) => value === undefined || value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+		.filter(
+			([_key, value]) =>
+				value === undefined ||
+				value === null ||
+				typeof value === "string" ||
+				typeof value === "number" ||
+				typeof value === "boolean",
+		)
 		.map(([key, value]) => `${key}:${String(value)}`)
 		.sort();
 	const colorMode = callMaybeString(record.getColorMode);
@@ -217,7 +215,8 @@ function startThemeSourceSubscription(theme: object, subscription: ThemeSourceSu
 	if (typeof record.addEventListener === "function") {
 		(record.addEventListener as (type: string, callback: () => void) => void)("change", emit);
 		if (typeof record.removeEventListener === "function") {
-			subscription.unsubscribeSource = () => (record.removeEventListener as (type: string, callback: () => void) => void)("change", emit);
+			subscription.unsubscribeSource = () =>
+				(record.removeEventListener as (type: string, callback: () => void) => void)("change", emit);
 		}
 		return;
 	}
@@ -235,7 +234,10 @@ export function subscribeThemeChange(theme: unknown, callback: () => void): () =
 	const key = theme;
 	let subscription = themeSubscriptions.get(key);
 	if (!subscription) {
-		subscription = { callbacks: new Set(), lastSignature: themeSignature(key) };
+		subscription = {
+			callbacks: new Set(),
+			lastSignature: themeSignature(key),
+		};
 		themeSubscriptions.set(key, subscription);
 		startThemeSourceSubscription(key, subscription);
 	}

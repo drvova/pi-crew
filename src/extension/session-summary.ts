@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { readCrewAgents } from "../runtime/crew-agent-records.ts";
 import { isDisplayActiveRun } from "../runtime/process-status.ts";
 import { listRuns } from "./run-index.ts";
-import { readCrewAgents } from "../runtime/crew-agent-records.ts";
 
 export function notifyActiveRuns(ctx: ExtensionContext): void {
 	const active = listRuns(ctx.cwd)

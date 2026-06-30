@@ -85,7 +85,7 @@ export class CrewSelectList<T = string> {
 			const prefix = index === this.selectedIndex ? " → " : "   ";
 			const suffix = item.description ? this.theme.fg("dim", ` — ${item.description}`) : "";
 			const raw = `${prefix}${item.label}${suffix}`;
-			const line = index === this.selectedIndex ? this.theme.inverse?.(raw) ?? raw : raw;
+			const line = index === this.selectedIndex ? (this.theme.inverse?.(raw) ?? raw) : raw;
 			lines.push(pad(truncate(line, width), Math.max(1, width)));
 		}
 		if (hasBottom) lines.push(this.theme.fg("muted", `↓ ${this.items.length - (this.scrollOffset + slots)} more`));

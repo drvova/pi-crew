@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { buildWidgetLines } from "../../src/ui/widget/widget-renderer.ts";
 import type { WidgetRun } from "../../src/ui/widget/widget-types.ts";
 
@@ -41,10 +41,14 @@ function makeFakeRun(overrides?: { description?: string; recentOutput?: string[]
 			status: "running" as const,
 			startedAt: new Date(Date.now() - 180_000).toISOString(),
 			prompt: overrides?.description ?? "explore",
-			runtime: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0 } as never,
-			progress: overrides?.recentOutput
-				? { currentTool: "read", recentOutput: overrides.recentOutput }
-				: { currentTool: "bash" },
+			runtime: {
+				inputTokens: 0,
+				outputTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+				totalTokens: 0,
+			} as never,
+			progress: overrides?.recentOutput ? { currentTool: "read", recentOutput: overrides.recentOutput } : { currentTool: "bash" },
 		},
 	];
 	return { run, agents, snapshot: undefined } as unknown as WidgetRun;
@@ -56,19 +60,14 @@ test("buildWidgetLines: every rendered line is <= width (no TUI overflow)", () =
 	const lines = buildWidgetLines(FAKE_CWD, 0, 20, runs, 0, width);
 	for (const [i, line] of lines.entries()) {
 		const visible = stripAnsi(line).length;
-		assert.ok(
-			visible <= width,
-			`line ${i} width ${visible} exceeds terminal width ${width}: ${JSON.stringify(line.slice(0, 80))}…`,
-		);
+		assert.ok(visible <= width, `line ${i} width ${visible} exceeds terminal width ${width}: ${JSON.stringify(line.slice(0, 80))}…`);
 	}
 });
 
 test("buildWidgetLines: 200-char task description does NOT overflow width", () => {
 	// Reproduces the actual crash: pi-audit task with `| S7: ... | ⬜ pending | |`
 	// style description that escaped the 60-char agentActivity cap.
-	const longDesc =
-		"| S7: pi-audit security test | ⬜ pending | | " +
-		"A".repeat(180);
+	const longDesc = "| S7: pi-audit security test | ⬜ pending | | " + "A".repeat(180);
 	const runs: WidgetRun[] = [
 		makeFakeRun({
 			description: longDesc,
@@ -80,10 +79,7 @@ test("buildWidgetLines: 200-char task description does NOT overflow width", () =
 	assert.ok(lines.length > 0);
 	for (const [i, line] of lines.entries()) {
 		const visible = stripAnsi(line).length;
-		assert.ok(
-			visible <= width,
-			`CRASH-GUARD: line ${i} width ${visible} > terminal ${width}: ${JSON.stringify(line.slice(0, 80))}…`,
-		);
+		assert.ok(visible <= width, `CRASH-GUARD: line ${i} width ${visible} > terminal ${width}: ${JSON.stringify(line.slice(0, 80))}…`);
 	}
 });
 
@@ -93,10 +89,7 @@ test("buildWidgetLines: monotone in width (wider = never shorter content)", () =
 	const wide = buildWidgetLines(FAKE_CWD, 0, 20, runs, 0, 160);
 	assert.ok(stripAnsi(narrow[0]!).length <= 60, "narrow header fits");
 	assert.ok(stripAnsi(wide[0]!).length <= 160, "wide header fits");
-	assert.ok(
-		stripAnsi(wide[0]!).length >= stripAnsi(narrow[0]!).length,
-		"wider width never produces a shorter visible header",
-	);
+	assert.ok(stripAnsi(wide[0]!).length >= stripAnsi(narrow[0]!).length, "wider width never produces a shorter visible header");
 });
 
 test("buildWidgetLines: missing width param still works (default fallback)", () => {
@@ -106,14 +99,11 @@ test("buildWidgetLines: missing width param still works (default fallback)", () 
 	assert.ok(lines.length > 0);
 	for (const [i, line] of lines.entries()) {
 		const visible = stripAnsi(line).length;
-		assert.ok(
-			visible <= 100,
-			`default-width fallback: line ${i} = ${visible} > 100: ${JSON.stringify(line.slice(0, 80))}…`,
-		);
+		assert.ok(visible <= 100, `default-width fallback: line ${i} = ${visible} > 100: ${JSON.stringify(line.slice(0, 80))}…`);
 	}
 });
 
-import { getRenderWidth, DEFAULT_WIDGET_WIDTH } from "../../src/ui/widget/index.ts";
+import { DEFAULT_WIDGET_WIDTH, getRenderWidth } from "../../src/ui/widget/index.ts";
 
 test("getRenderWidth: explicit positive width wins over everything", () => {
 	assert.equal(getRenderWidth(80), 80);

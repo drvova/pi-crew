@@ -1,18 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentConfig } from "../agents/agent-config.ts";
-import {
-	allAgents,
-	discoverAgents,
-	listDynamicAgents,
-	registerDynamicAgent,
-	unregisterDynamicAgent,
-} from "../agents/discover-agents.ts";
-import {
-	loadConfig,
-	updateAutonomousConfig,
-	updateConfig,
-} from "../config/config.ts";
+import { allAgents, discoverAgents, listDynamicAgents, registerDynamicAgent, unregisterDynamicAgent } from "../agents/discover-agents.ts";
+import { loadConfig, updateAutonomousConfig, updateConfig } from "../config/config.ts";
 // Heavy runtime — lazy-loaded to avoid 1.4s import cost at extension registration.
 // executeTeamRun is only called when a team run actually executes.
 import type { executeTeamRun as _executeTeamRunFn } from "../runtime/team-runner.ts";
@@ -21,23 +11,11 @@ import { writeArtifact } from "../state/artifact-store.ts";
 import { appendEvent, appendEventFireAndForget } from "../state/event-log.ts";
 import { withRunLock } from "../state/locks.ts";
 import { replayPendingMailboxMessages } from "../state/mailbox.ts";
-import {
-	loadRunManifestById,
-	saveRunManifest,
-	saveRunTasks,
-	updateRunStatus,
-} from "../state/state-store.ts";
-import type {
-	ArtifactDescriptor,
-	TeamRunManifest,
-	TeamTaskState,
-} from "../state/types.ts";
+import { loadRunManifestById, saveRunManifest, saveRunTasks, updateRunStatus } from "../state/state-store.ts";
+import type { ArtifactDescriptor, TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { allTeams, discoverTeams } from "../teams/discover-teams.ts";
 import { assertSafePathId } from "../utils/safe-paths.ts";
-import {
-	allWorkflows,
-	discoverWorkflows,
-} from "../workflows/discover-workflows.ts";
+import { allWorkflows, discoverWorkflows } from "../workflows/discover-workflows.ts";
 import { piTeamsHelp } from "./help.ts";
 import { handleCreate, handleDelete, handleUpdate } from "./management.ts";
 import { initializeProject } from "./project-init.ts";
@@ -45,16 +23,11 @@ import { listRuns } from "./run-index.ts";
 import { formatRecommendation, recommendTeam } from "./team-recommendation.ts";
 import { handleSettings } from "./team-tool/handle-settings.ts";
 import type { PiTeamsToolResult } from "./tool-result.ts";
-import {
-	formatValidationReport,
-	validateResources,
-} from "./validate-resources.ts";
+import { formatValidationReport, validateResources } from "./validate-resources.ts";
 
 type ExecuteTeamRunFn = typeof _executeTeamRunFn;
 let _cachedExecuteTeamRun: ExecuteTeamRunFn | undefined;
-async function executeTeamRun(
-	...args: Parameters<ExecuteTeamRunFn>
-): Promise<Awaited<ReturnType<ExecuteTeamRunFn>>> {
+async function executeTeamRun(...args: Parameters<ExecuteTeamRunFn>): Promise<Awaited<ReturnType<ExecuteTeamRunFn>>> {
 	if (_cachedExecuteTeamRun === undefined) {
 		// LAZY: heavy runtime — defer 1.4s import cost until team run actually executes.
 		const mod = await import("../runtime/team-runner.ts");
@@ -65,33 +38,17 @@ async function executeTeamRun(
 
 import { directTeamAndWorkflowFromRun } from "../runtime/direct-run.ts";
 import { parsePiJsonOutput } from "../runtime/pi-json-output.ts";
-import {
-	resolveCrewRuntime,
-	runtimeResolutionState,
-} from "../runtime/runtime-resolver.ts";
+import { resolveCrewRuntime, runtimeResolutionState } from "../runtime/runtime-resolver.ts";
 import { handleApi } from "./team-tool/api.ts";
-import {
-	autonomousPatchFromConfig,
-	configPatchFromConfig,
-	effectiveRunConfig,
-	formatAutonomyStatus,
-} from "./team-tool/config-patch.ts";
-import {
-	buildParentContext,
-	configRecord,
-	formatScoped,
-	result,
-	type TeamContext,
-} from "./team-tool/context.ts";
+import { autonomousPatchFromConfig, configPatchFromConfig, effectiveRunConfig, formatAutonomyStatus } from "./team-tool/config-patch.ts";
+import { buildParentContext, configRecord, formatScoped, result, type TeamContext } from "./team-tool/context.ts";
 // Lazy-loaded: run.ts pulls in spawnBackgroundTeamRun, resolveCrewRuntime, etc.
 // Static import fails silently in some jiti contexts (child-process), leaving handleRun undefined.
 import type { handleRun as _handleRunFn } from "./team-tool/run.ts";
 
 type HandleRunFn = typeof _handleRunFn;
 let _cachedHandleRun: HandleRunFn | undefined;
-async function handleRun(
-	...args: Parameters<HandleRunFn>
-): Promise<Awaited<ReturnType<HandleRunFn>>> {
+async function handleRun(...args: Parameters<HandleRunFn>): Promise<Awaited<ReturnType<HandleRunFn>>> {
 	if (_cachedHandleRun === undefined) {
 		// LAZY: run.ts pulls in spawnBackgroundTeamRun + resolveCrewRuntime; also avoids jiti import race in child-process contexts.
 		const mod = await import("./team-tool/run.ts");
@@ -103,21 +60,13 @@ async function handleRun(
 import { FileCheckpointStore } from "../runtime/checkpoint.ts";
 import { waitForRun } from "../runtime/run-tracker.ts";
 import { normalizeSkillOverride } from "../runtime/skill-instructions.ts";
-import {
-	computeRunCacheKey,
-	getCachedRun,
-	getCacheStats,
-} from "../state/run-cache.ts";
+import { computeRunCacheKey, getCachedRun, getCacheStats } from "../state/run-cache.ts";
 import { listRunGraphs, loadRunGraph } from "../state/run-graph.ts";
 import { searchAgents, searchTeams } from "../utils/bm25-search.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
+import { formatActionSuggestion } from "./action-suggestions.ts";
 import { buildTeamOnboarding } from "./team-onboard.ts";
-import {
-	handleAnchorAccumulate,
-	handleAnchorClear,
-	handleAnchorSet,
-	handleAnchorStatus,
-} from "./team-tool/anchor.ts";
+import { handleAnchorAccumulate, handleAnchorClear, handleAnchorSet, handleAnchorStatus } from "./team-tool/anchor.ts";
 import {
 	createAutoSummarizeService,
 	handleAutoSummarizeConfig,
@@ -125,31 +74,14 @@ import {
 	handleAutoSummarizeOn,
 	handleAutoSummarizeStatus,
 } from "./team-tool/auto-summarize.ts";
-import { handleGoal } from "./team-tool/goal.ts";
-import {
-	handleWorkflowCreate,
-	handleWorkflowGet,
-	handleWorkflowList,
-	handleWorkflowSave,
-	handleWorkflowDelete,
-} from "./team-tool/workflow-manage.ts";
-import {
-	type CacheControlDeps,
-	invalidateSnapshot,
-} from "./team-tool/cache-control.ts";
+import { type CacheControlDeps, invalidateSnapshot } from "./team-tool/cache-control.ts";
 import { handleCancel, handleRetry } from "./team-tool/cancel.ts";
 import { handleDoctor } from "./team-tool/doctor.ts";
 import { handleExplain } from "./team-tool/explain.ts";
-import {
-	handleListScheduled,
-	handleSchedule,
-} from "./team-tool/handle-schedule.ts";
+import { handleGoal } from "./team-tool/goal.ts";
+import { handleListScheduled, handleSchedule } from "./team-tool/handle-schedule.ts";
 import { handleHealthMonitor } from "./team-tool/health-monitor.ts";
-import {
-	handleArtifacts,
-	handleEvents,
-	handleSummary,
-} from "./team-tool/inspect.ts";
+import { handleArtifacts, handleEvents, handleSummary } from "./team-tool/inspect.ts";
 import {
 	handleCleanup,
 	handleExport,
@@ -163,9 +95,15 @@ import { handleOrchestrate } from "./team-tool/orchestrate.ts";
 import { handleParallel } from "./team-tool/parallel-dispatch.ts";
 import { handlePlan } from "./team-tool/plan.ts";
 import { handleRespond } from "./team-tool/respond.ts";
-import { handleStatus } from "./team-tool/status.ts";
 import { RUN_NOT_FOUND_HINT } from "./team-tool/run-not-found.ts";
-import { formatActionSuggestion } from "./action-suggestions.ts";
+import { handleStatus } from "./team-tool/status.ts";
+import {
+	handleWorkflowCreate,
+	handleWorkflowDelete,
+	handleWorkflowGet,
+	handleWorkflowList,
+	handleWorkflowSave,
+} from "./team-tool/workflow-manage.ts";
 
 export { handleApi } from "./team-tool/api.ts";
 export { handleRetry } from "./team-tool/cancel.ts";
@@ -192,21 +130,14 @@ export { handleStatus } from "./team-tool/status.ts";
 export type { TeamToolDetails } from "./team-tool-types.ts";
 export { handleRun };
 
-export function handleList(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleList(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const resource = params.resource;
 	const blocks: string[] = [];
 	if (!resource || resource === "team") {
 		const teams = allTeams(discoverTeams(ctx.cwd));
 		blocks.push(
 			"Teams:",
-			...(teams.length
-				? teams.map((team) =>
-						formatScoped(team.name, team.source, team.description),
-					)
-				: ["- (none)"]),
+			...(teams.length ? teams.map((team) => formatScoped(team.name, team.source, team.description)) : ["- (none)"]),
 		);
 	}
 	if (!resource || resource === "workflow") {
@@ -215,13 +146,7 @@ export function handleList(
 			"",
 			"Workflows:",
 			...(workflows.length
-				? workflows.map((workflow) =>
-						formatScoped(
-							workflow.name,
-							workflow.source,
-							workflow.description,
-						),
-					)
+				? workflows.map((workflow) => formatScoped(workflow.name, workflow.source, workflow.description))
 				: ["- (none)"]),
 		);
 	}
@@ -230,15 +155,7 @@ export function handleList(
 		blocks.push(
 			"",
 			"Agents:",
-			...(agents.length
-				? agents.map((agent) =>
-						formatScoped(
-							agent.name,
-							agent.source,
-							agent.description,
-						),
-					)
-				: ["- (none)"]),
+			...(agents.length ? agents.map((agent) => formatScoped(agent.name, agent.source, agent.description)) : ["- (none)"]),
 		);
 	}
 	if (!resource) {
@@ -247,30 +164,17 @@ export function handleList(
 			"",
 			"Recent runs:",
 			...(runs.length
-				? runs.map(
-						(run) =>
-							`- ${run.runId} [${run.status}] ${run.team}/${run.workflow ?? "none"}: ${run.goal}`,
-					)
+				? runs.map((run) => `- ${run.runId} [${run.status}] ${run.team}/${run.workflow ?? "none"}: ${run.goal}`)
 				: ["- (none)"]),
 		);
 	}
 	return result(blocks.join("\n"), { action: "list", status: "ok" });
 }
 
-export function handleGet(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleGet(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	if (params.team) {
-		const team = allTeams(discoverTeams(ctx.cwd)).find(
-			(item) => item.name === params.team,
-		);
-		if (!team)
-			return result(
-				`Team '${params.team}' not found.`,
-				{ action: "get", status: "error" },
-				true,
-			);
+		const team = allTeams(discoverTeams(ctx.cwd)).find((item) => item.name === params.team);
+		if (!team) return result(`Team '${params.team}' not found.`, { action: "get", status: "error" }, true);
 		const lines = [
 			`Team: ${team.name} (${team.source})`,
 			`Path: ${team.filePath}`,
@@ -279,66 +183,40 @@ export function handleGet(
 			`Workspace mode: ${team.workspaceMode ?? "single"}`,
 			"Roles:",
 			...(team.roles.length
-				? team.roles.map(
-						(role) =>
-							`- ${role.name} -> ${role.agent}${role.description ? `: ${role.description}` : ""}`,
-					)
+				? team.roles.map((role) => `- ${role.name} -> ${role.agent}${role.description ? `: ${role.description}` : ""}`)
 				: ["- (none)"]),
 		];
 		return result(lines.join("\n"), { action: "get", status: "ok" });
 	}
 	if (params.workflow) {
-		const workflow = allWorkflows(discoverWorkflows(ctx.cwd)).find(
-			(item) => item.name === params.workflow,
-		);
-		if (!workflow)
-			return result(
-				`Workflow '${params.workflow}' not found.`,
-				{ action: "get", status: "error" },
-				true,
-			);
+		const workflow = allWorkflows(discoverWorkflows(ctx.cwd)).find((item) => item.name === params.workflow);
+		if (!workflow) return result(`Workflow '${params.workflow}' not found.`, { action: "get", status: "error" }, true);
 		const lines = [
 			`Workflow: ${workflow.name} (${workflow.source})`,
 			`Path: ${workflow.filePath}`,
 			`Description: ${workflow.description}`,
 			"Steps:",
 			...(workflow.steps.length
-				? workflow.steps.map(
-						(step) =>
-							`- ${step.id} [${step.role}] dependsOn=${step.dependsOn?.join(",") ?? "none"}`,
-					)
+				? workflow.steps.map((step) => `- ${step.id} [${step.role}] dependsOn=${step.dependsOn?.join(",") ?? "none"}`)
 				: ["- (none)"]),
 		];
 		return result(lines.join("\n"), { action: "get", status: "ok" });
 	}
 	if (params.agent) {
-		const agent = allAgents(discoverAgents(ctx.cwd)).find(
-			(item) => item.name === params.agent,
-		);
-		if (!agent)
-			return result(
-				`Agent '${params.agent}' not found.`,
-				{ action: "get", status: "error" },
-				true,
-			);
+		const agent = allAgents(discoverAgents(ctx.cwd)).find((item) => item.name === params.agent);
+		if (!agent) return result(`Agent '${params.agent}' not found.`, { action: "get", status: "error" }, true);
 		const lines = [
 			`Agent: ${agent.name} (${agent.source})`,
 			`Path: ${agent.filePath}`,
 			`Description: ${agent.description}`,
 			agent.model ? `Model: ${agent.model}` : undefined,
-			agent.skills?.length
-				? `Skills: ${agent.skills.join(", ")}`
-				: undefined,
+			agent.skills?.length ? `Skills: ${agent.skills.join(", ")}` : undefined,
 			"",
 			agent.systemPrompt || "(empty system prompt)",
 		].filter((line): line is string => line !== undefined);
 		return result(lines.join("\n"), { action: "get", status: "ok" });
 	}
-	return result(
-		"Specify team, workflow, or agent for get.",
-		{ action: "get", status: "error" },
-		true,
-	);
+	return result("Specify team, workflow, or agent for get.", { action: "get", status: "error" }, true);
 }
 
 function artifactKey(artifact: ArtifactDescriptor): string {
@@ -353,10 +231,7 @@ function recoverCheckpointedTasks(
 	let nextManifest = manifest;
 	const nextTasks = tasks.map((task) => {
 		if (task.status !== "running" || !task.checkpoint) return task;
-		if (
-			task.checkpoint.phase === "artifact-written" &&
-			task.resultArtifact
-		) {
+		if (task.checkpoint.phase === "artifact-written" && task.resultArtifact) {
 			recovered.push(task.id);
 			return {
 				...task,
@@ -368,28 +243,15 @@ function recoverCheckpointedTasks(
 		}
 		if (task.checkpoint.phase === "child-stdout-final") {
 			// transcripts are written with .attempt-${i}.jsonl suffix; find the most recent one
-			const transcriptsDir = path.join(
-				manifest.artifactsRoot,
-				"transcripts",
-			);
+			const transcriptsDir = path.join(manifest.artifactsRoot, "transcripts");
 			let transcriptPath: string | undefined;
 			if (fs.existsSync(transcriptsDir)) {
-				const files = fs
-					.readdirSync(transcriptsDir)
-					.filter(
-						(f) =>
-							f.startsWith(`${task.id}.attempt-`) &&
-							f.endsWith(".jsonl"),
-					);
+				const files = fs.readdirSync(transcriptsDir).filter((f) => f.startsWith(`${task.id}.attempt-`) && f.endsWith(".jsonl"));
 				if (files.length > 0) {
 					// Sort by attempt index descending to get the most recent
 					files.sort((a, b) => {
-						const idxA = parseInt(
-							a.match(/\.attempt-(\d+)\./)?.[1] ?? "0",
-						);
-						const idxB = parseInt(
-							b.match(/\.attempt-(\d+)\./)?.[1] ?? "0",
-						);
+						const idxA = parseInt(a.match(/\.attempt-(\d+)\./)?.[1] ?? "0");
+						const idxB = parseInt(b.match(/\.attempt-(\d+)\./)?.[1] ?? "0");
 						return idxB - idxA;
 					});
 					transcriptPath = path.join(transcriptsDir, files[0]);
@@ -402,9 +264,7 @@ function recoverCheckpointedTasks(
 			const resultArtifact = writeArtifact(manifest.artifactsRoot, {
 				kind: "result",
 				relativePath: `results/${task.id}.txt`,
-				content:
-					parsed.finalText ??
-					"(recovered from completed child transcript)",
+				content: parsed.finalText ?? "(recovered from completed child transcript)",
 				producer: task.id,
 			});
 			const transcriptArtifact = writeArtifact(manifest.artifactsRoot, {
@@ -429,20 +289,12 @@ function recoverCheckpointedTasks(
 		return task;
 	});
 	if (recovered.length) {
-		const artifacts = new Map(
-			nextManifest.artifacts.map((artifact) => [
-				artifactKey(artifact),
-				artifact,
-			]),
-		);
+		const artifacts = new Map(nextManifest.artifacts.map((artifact) => [artifactKey(artifact), artifact]));
 		for (const task of nextTasks) {
 			if (!recovered.includes(task.id)) continue;
-			for (const artifact of [
-				task.promptArtifact,
-				task.resultArtifact,
-				task.logArtifact,
-				task.transcriptArtifact,
-			].filter(Boolean) as ArtifactDescriptor[])
+			for (const artifact of [task.promptArtifact, task.resultArtifact, task.logArtifact, task.transcriptArtifact].filter(
+				Boolean,
+			) as ArtifactDescriptor[])
 				artifacts.set(artifactKey(artifact), artifact);
 		}
 		nextManifest = {
@@ -456,70 +308,24 @@ function recoverCheckpointedTasks(
 	return { manifest: nextManifest, tasks: nextTasks, recovered };
 }
 
-export async function handleResume(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): Promise<PiTeamsToolResult> {
-	if (!params.runId)
-		return result(
-			"Resume requires runId.",
-			{ action: "resume", status: "error" },
-			true,
-		);
+export async function handleResume(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
+	if (!params.runId) return result("Resume requires runId.", { action: "resume", status: "error" }, true);
 	const runCwd = locateRunCwd(params.runId, ctx.cwd);
-	if (!runCwd)
-		return result(
-			`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`,
-			{ action: "resume", status: "error" },
-			true,
-		);
+	if (!runCwd) return result(`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`, { action: "resume", status: "error" }, true);
 	const loaded = loadRunManifestById(runCwd, params.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
-	if (!loaded)
-		return result(
-			`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`,
-			{ action: "resume", status: "error" },
-			true,
-		);
+	if (!loaded) return result(`Run '${params.runId}' not found.${RUN_NOT_FOUND_HINT}`, { action: "resume", status: "error" }, true);
 	if (!loaded.manifest.workflow)
-		return result(
-			`Run '${params.runId}' has no workflow to resume.`,
-			{ action: "resume", status: "error" },
-			true,
-		);
+		return result(`Run '${params.runId}' has no workflow to resume.`, { action: "resume", status: "error" }, true);
 	const agents = allAgents(discoverAgents(ctx.cwd));
-	const direct = directTeamAndWorkflowFromRun(
-		loaded.manifest,
-		loaded.tasks,
-		agents,
-	);
-	const team =
-		direct?.team ??
-		allTeams(discoverTeams(ctx.cwd)).find(
-			(candidate) => candidate.name === loaded.manifest.team,
-		);
-	if (!team)
-		return result(
-			`Team '${loaded.manifest.team}' not found.`,
-			{ action: "resume", status: "error" },
-			true,
-		);
+	const direct = directTeamAndWorkflowFromRun(loaded.manifest, loaded.tasks, agents);
+	const team = direct?.team ?? allTeams(discoverTeams(ctx.cwd)).find((candidate) => candidate.name === loaded.manifest.team);
+	if (!team) return result(`Team '${loaded.manifest.team}' not found.`, { action: "resume", status: "error" }, true);
 	const workflow =
-		direct?.workflow ??
-		allWorkflows(discoverWorkflows(ctx.cwd)).find(
-			(candidate) => candidate.name === loaded.manifest.workflow,
-		);
-	if (!workflow)
-		return result(
-			`Workflow '${loaded.manifest.workflow}' not found.`,
-			{ action: "resume", status: "error" },
-			true,
-		);
+		direct?.workflow ?? allWorkflows(discoverWorkflows(ctx.cwd)).find((candidate) => candidate.name === loaded.manifest.workflow);
+	if (!workflow) return result(`Workflow '${loaded.manifest.workflow}' not found.`, { action: "resume", status: "error" }, true);
 	return await withRunLock(loaded.manifest, async () => {
 		const loadedConfig = loadConfig(ctx.cwd);
-		const recovered = recoverCheckpointedTasks(
-			loaded.manifest,
-			loaded.tasks,
-		);
+		const recovered = recoverCheckpointedTasks(loaded.manifest, loaded.tasks);
 		const resumeManifest = recovered.manifest;
 		const executedConfig = {
 			...effectiveRunConfig(loadedConfig.config, params.config),
@@ -527,10 +333,7 @@ export async function handleResume(
 		// Preserve original manifest scaffold mode when resume has no explicit mode override
 		// AND workers are not explicitly disabled. If workers are disabled, let
 		// resolveCrewRuntime detect it and return blocked safety.
-		if (
-			!executedConfig.runtime?.mode &&
-			resumeManifest.runtimeResolution?.safety === "explicit_dry_run"
-		) {
+		if (!executedConfig.runtime?.mode && resumeManifest.runtimeResolution?.safety === "explicit_dry_run") {
 			const workersDisabled =
 				executedConfig.executeWorkers === false ||
 				process.env.PI_CREW_EXECUTE_WORKERS === "0" ||
@@ -556,16 +359,11 @@ export async function handleResume(
 			data: { runtimeResolution, action: "resume" },
 		});
 		if (runtime.safety === "blocked") {
-			const runningManifest = updateRunStatus(
-				runtimeManifest,
-				"running",
-				"Checking worker runtime availability before resume.",
-			);
+			const runningManifest = updateRunStatus(runtimeManifest, "running", "Checking worker runtime availability before resume.");
 			const blocked = updateRunStatus(
 				runningManifest,
 				"blocked",
-				runtime.reason ??
-					"Child worker execution is disabled; refusing to resume with no-op scaffold subagents.",
+				runtime.reason ?? "Child worker execution is disabled; refusing to resume with no-op scaffold subagents.",
 			);
 			appendEvent(blocked.eventsPath, {
 				type: "run.blocked",
@@ -592,10 +390,7 @@ export async function handleResume(
 			);
 		}
 		const resetTasks = recovered.tasks.map((task) =>
-			task.status === "failed" ||
-			task.status === "cancelled" ||
-			task.status === "skipped" ||
-			task.status === "running"
+			task.status === "failed" || task.status === "cancelled" || task.status === "skipped" || task.status === "running"
 				? {
 						...task,
 						status: "queued" as const,
@@ -630,15 +425,11 @@ export async function handleResume(
 				message: `Replayed ${replay.messages.length} pending inbox message(s).`,
 				data: {
 					messageIds: replay.messages.map((message) => message.id),
-					taskIds: replay.messages
-						.map((message) => message.taskId)
-						.filter(Boolean),
+					taskIds: replay.messages.map((message) => message.taskId).filter(Boolean),
 				},
 			});
 		const executeWorkers = runtime.kind !== "scaffold";
-		const resumeSkillOverride =
-			normalizeSkillOverride(params.skill) ??
-			runtimeManifest.skillOverride;
+		const resumeSkillOverride = normalizeSkillOverride(params.skill) ?? runtimeManifest.skillOverride;
 		const executed = await executeTeamRun({
 			manifest: runtimeManifest,
 			tasks: resetTasks,
@@ -677,39 +468,17 @@ export async function handleResume(
 	});
 }
 
-export function handleSteer(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+export function handleSteer(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const { runId, taskId, message } = params;
 	if (!runId || !taskId || !message) {
-		return result(
-			"steer requires runId, taskId, and message",
-			{ action: "steer", status: "error" },
-			true,
-		);
+		return result("steer requires runId, taskId, and message", { action: "steer", status: "error" }, true);
 	}
 	const runCwd = locateRunCwd(runId, ctx.cwd);
-	if (!runCwd)
-		return result(
-			`Run '${runId}' not found`,
-			{ action: "steer", status: "error" },
-			true,
-		);
+	if (!runCwd) return result(`Run '${runId}' not found`, { action: "steer", status: "error" }, true);
 	const loaded = loadRunManifestById(runCwd, runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
-	if (!loaded)
-		return result(
-			`Run '${runId}' not found`,
-			{ action: "steer", status: "error" },
-			true,
-		);
+	if (!loaded) return result(`Run '${runId}' not found`, { action: "steer", status: "error" }, true);
 	const task = loaded.tasks.find((t) => t.id === taskId);
-	if (!task)
-		return result(
-			`Task '${taskId}' not found`,
-			{ action: "steer", status: "error" },
-			true,
-		);
+	if (!task) return result(`Task '${taskId}' not found`, { action: "steer", status: "error" }, true);
 	if (!task.pendingSteers) task.pendingSteers = [];
 	// HIGH-04: Cap pendingSteers array to prevent unbounded memory growth
 	const MAX_PENDING_STEERS = 100;
@@ -735,44 +504,24 @@ export function handleSteer(
 		taskId,
 		data: { message },
 	});
-	return result(
-		`Steer queued for task '${taskId}'. It will be delivered when the task's session is ready.`,
-		{ action: "steer", status: "ok" },
-	);
+	return result(`Steer queued for task '${taskId}'. It will be delivered when the task's session is ready.`, {
+		action: "steer",
+		status: "ok",
+	});
 }
 
-function cacheControlDepsFromContext(
-	ctx: TeamContext,
-): CacheControlDeps | undefined {
+function cacheControlDepsFromContext(ctx: TeamContext): CacheControlDeps | undefined {
 	if (!ctx.getRunSnapshotCache) return undefined;
 	return { getRunSnapshotCache: ctx.getRunSnapshotCache };
 }
 
-function handleInvalidate(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): PiTeamsToolResult {
+function handleInvalidate(params: TeamToolParamsValue, ctx: TeamContext): PiTeamsToolResult {
 	const runId = params.runId;
-	if (!runId)
-		return result(
-			"Invalidate requires runId.",
-			{ action: "invalidate", status: "error" },
-			true,
-		);
+	if (!runId) return result("Invalidate requires runId.", { action: "invalidate", status: "error" }, true);
 	const runCwd = locateRunCwd(runId, ctx.cwd);
-	if (!runCwd)
-		return result(
-			`Run '${runId}' not found.`,
-			{ action: "invalidate", status: "error" },
-			true,
-		);
+	if (!runCwd) return result(`Run '${runId}' not found.`, { action: "invalidate", status: "error" }, true);
 	const deps = cacheControlDepsFromContext(ctx);
-	if (!deps)
-		return result(
-			"Cache invalidation not available (no snapshot cache).",
-			{ action: "invalidate", status: "error" },
-			true,
-		);
+	if (!deps) return result("Cache invalidation not available (no snapshot cache).", { action: "invalidate", status: "error" }, true);
 	invalidateSnapshot(runId, runCwd, deps);
 	return result(`Cache invalidated for run ${runId}.`, {
 		action: "invalidate",
@@ -792,23 +541,9 @@ function handleInvalidate(
  *   (e.g. .crew, .pi, .tmp-crew-runs)
  */
 const MAX_SCAN_ENTRIES = 1000;
-const SKIP_SCAN_DIRS = new Set([
-	"node_modules",
-	".git",
-	".npm",
-	".cache",
-	".local",
-	"proc",
-	"sys",
-	"dev",
-	"Library",
-	"Applications",
-]);
+const SKIP_SCAN_DIRS = new Set(["node_modules", ".git", ".npm", ".cache", ".local", "proc", "sys", "dev", "Library", "Applications"]);
 
-export function locateRunCwd(
-	runId: string,
-	baseCwd: string,
-): string | undefined {
+export function locateRunCwd(runId: string, baseCwd: string): string | undefined {
 	// Fast path: run is in the current CWD
 	if (loadRunManifestById(baseCwd, runId)) {
 		return baseCwd;
@@ -817,19 +552,13 @@ export function locateRunCwd(
 	// Scan immediate child directories, but with defensive bounds.
 	try {
 		const entries = fs.readdirSync(baseCwd, { withFileTypes: true });
-		const boundedEntries = entries.length > MAX_SCAN_ENTRIES
-			? entries.slice(0, MAX_SCAN_ENTRIES)
-			: entries;
+		const boundedEntries = entries.length > MAX_SCAN_ENTRIES ? entries.slice(0, MAX_SCAN_ENTRIES) : entries;
 		for (const entry of boundedEntries) {
 			if (!entry.isDirectory()) continue;
 			if (SKIP_SCAN_DIRS.has(entry.name)) continue;
 			// Skip hidden entries except well-known run-storage prefixes
 			if (entry.name.startsWith(".")) {
-				if (
-					!entry.name.startsWith(".crew") &&
-					!entry.name.startsWith(".pi") &&
-					!entry.name.startsWith(".tmp-crew")
-				) continue;
+				if (!entry.name.startsWith(".crew") && !entry.name.startsWith(".pi") && !entry.name.startsWith(".tmp-crew")) continue;
 			}
 			const candidate = path.join(baseCwd, entry.name);
 			if (loadRunManifestById(candidate, runId)) {
@@ -843,32 +572,20 @@ export function locateRunCwd(
 	return undefined;
 }
 
-async function handleWait(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): Promise<PiTeamsToolResult> {
+async function handleWait(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
 	const { runId } = params;
-	if (!runId)
-		return result(
-			"wait requires runId.",
-			{ action: "wait", status: "error" },
-			true,
-		);
+	if (!runId) return result("wait requires runId.", { action: "wait", status: "error" }, true);
 
 	const timeoutMs = Math.min(
 		Math.max(
-			typeof params.config?.timeoutMs === "number" &&
-				Number.isFinite(params.config.timeoutMs)
-				? params.config.timeoutMs
-				: 300_000,
+			typeof params.config?.timeoutMs === "number" && Number.isFinite(params.config.timeoutMs) ? params.config.timeoutMs : 300_000,
 			1_000, // minimum 1 s
 		),
 		3_600_000, // maximum 1 h
 	);
 	const pollIntervalMs = Math.max(
 		Math.min(
-			typeof params.config?.pollIntervalMs === "number" &&
-				Number.isFinite(params.config.pollIntervalMs)
+			typeof params.config?.pollIntervalMs === "number" && Number.isFinite(params.config.pollIntervalMs)
 				? params.config.pollIntervalMs
 				: 2000,
 			60_000, // maximum 60 s
@@ -879,11 +596,7 @@ async function handleWait(
 	// Resolve the run's CWD: try ctx.cwd first, then scan child dirs with .crew/
 	const runCwd = locateRunCwd(runId, ctx.cwd);
 	if (!runCwd) {
-		return result(
-			`Run '${runId}' not found in '${ctx.cwd}' or its subdirectories.`,
-			{ action: "wait", status: "error", runId },
-			true,
-		);
+		return result(`Run '${runId}' not found in '${ctx.cwd}' or its subdirectories.`, { action: "wait", status: "error", runId }, true);
 	}
 
 	try {
@@ -891,16 +604,9 @@ async function handleWait(
 			timeoutMs,
 			pollIntervalMs,
 		});
-		const taskSummary = tasks
-			.map((t) => `  ${t.id}: ${t.status}`)
-			.join("\n");
+		const taskSummary = tasks.map((t) => `  ${t.id}: ${t.status}`).join("\n");
 		return result(
-			[
-				`Run ${runId} finished: ${manifest.status}`,
-				`Summary: ${manifest.summary ?? "(none)"}`,
-				`Tasks:`,
-				taskSummary,
-			].join("\n"),
+			[`Run ${runId} finished: ${manifest.status}`, `Summary: ${manifest.summary ?? "(none)"}`, `Tasks:`, taskSummary].join("\n"),
 			{
 				action: "wait",
 				status: manifest.status === "failed" ? "error" : "ok",
@@ -910,18 +616,11 @@ async function handleWait(
 		);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
-		return result(
-			`wait failed: ${msg}`,
-			{ action: "wait", status: "error", runId },
-			true,
-		);
+		return result(`wait failed: ${msg}`, { action: "wait", status: "error", runId }, true);
 	}
 }
 
-export async function handleTeamTool(
-	params: TeamToolParamsValue,
-	ctx: TeamContext,
-): Promise<PiTeamsToolResult> {
+export async function handleTeamTool(params: TeamToolParamsValue, ctx: TeamContext): Promise<PiTeamsToolResult> {
 	const action = params.action ?? "list";
 	switch (action as string) {
 		case "list":
@@ -931,9 +630,7 @@ export async function handleTeamTool(
 		case "init": {
 			const cfg = configRecord(params.config);
 			const ignoreMethod =
-				typeof cfg.ignoreMethod === "string" &&
-				(cfg.ignoreMethod === "gitignore" ||
-					cfg.ignoreMethod === "exclude")
+				typeof cfg.ignoreMethod === "string" && (cfg.ignoreMethod === "gitignore" || cfg.ignoreMethod === "exclude")
 					? cfg.ignoreMethod
 					: undefined;
 			const initialized = initializeProject(ctx.cwd, {
@@ -951,22 +648,11 @@ export async function handleTeamTool(
 				[
 					"Initialized pi-crew project layout.",
 					"Directories:",
-					...(initialized.createdDirs.length
-						? initialized.createdDirs.map(
-								(dir) => `- created ${dir}`,
-							)
-						: ["- already existed"]),
+					...(initialized.createdDirs.length ? initialized.createdDirs.map((dir) => `- created ${dir}`) : ["- already existed"]),
 					"Copied builtin files:",
-					...(initialized.copiedFiles.length
-						? initialized.copiedFiles.map((file) => `- ${file}`)
-						: ["- (none)"]),
+					...(initialized.copiedFiles.length ? initialized.copiedFiles.map((file) => `- ${file}`) : ["- (none)"]),
 					...(initialized.skippedFiles.length
-						? [
-								"Skipped existing files:",
-								...initialized.skippedFiles.map(
-									(file) => `- ${file}`,
-								),
-							]
+						? ["Skipped existing files:", ...initialized.skippedFiles.map((file) => `- ${file}`)]
 						: []),
 					`Config: ${initialized.configPath || "(none)"} (${initialized.configScope}${initialized.configCreated ? "; created" : initialized.configSkipped ? "; already existed" : "; unchanged"})`,
 					`Ignore: ${initialized.gitignorePath} (${initialized.gitignoreUpdated ? "updated" : "already configured"})`,
@@ -978,21 +664,12 @@ export async function handleTeamTool(
 			return result(piTeamsHelp(), { action: "help", status: "ok" });
 		case "recommend": {
 			const goal = params.goal ?? params.task;
-			if (!goal)
-				return result(
-					"Recommend requires goal or task.",
-					{ action: "recommend", status: "error" },
-					true,
-				);
+			if (!goal) return result("Recommend requires goal or task.", { action: "recommend", status: "error" }, true);
 			const loaded = loadConfig(ctx.cwd);
-			const recommendation = recommendTeam(
-				goal,
-				loaded.config.autonomous,
-				{
-					teams: allTeams(discoverTeams(ctx.cwd)),
-					agents: allAgents(discoverAgents(ctx.cwd)),
-				},
-			);
+			const recommendation = recommendTeam(goal, loaded.config.autonomous, {
+				teams: allTeams(discoverTeams(ctx.cwd)),
+				agents: allAgents(discoverAgents(ctx.cwd)),
+			});
 			return result(formatRecommendation(goal, recommendation), {
 				action: "recommend",
 				status: "ok",
@@ -1000,17 +677,11 @@ export async function handleTeamTool(
 		}
 		case "autonomy": {
 			const patch = autonomousPatchFromConfig(params.config);
-			const shouldUpdate = Object.values(patch).some(
-				(value) => value !== undefined,
-			);
+			const shouldUpdate = Object.values(patch).some((value) => value !== undefined);
 			if (!shouldUpdate) {
 				const loaded = loadConfig(ctx.cwd);
 				return result(
-					formatAutonomyStatus(
-						loaded.config.autonomous,
-						loaded.path,
-						false,
-					),
+					formatAutonomyStatus(loaded.config.autonomous, loaded.path, false),
 					{
 						action: "autonomy",
 						status: loaded.error ? "error" : "ok",
@@ -1020,37 +691,21 @@ export async function handleTeamTool(
 			}
 			try {
 				const saved = updateAutonomousConfig(patch);
-				return result(
-					formatAutonomyStatus(
-						saved.config.autonomous,
-						saved.path,
-						true,
-					),
-					{ action: "autonomy", status: "ok" },
-				);
+				return result(formatAutonomyStatus(saved.config.autonomous, saved.path, true), { action: "autonomy", status: "ok" });
 			} catch (error) {
-				const message =
-					error instanceof Error ? error.message : String(error);
-				return result(
-					message,
-					{ action: "autonomy", status: "error" },
-					true,
-				);
+				const message = error instanceof Error ? error.message : String(error);
+				return result(message, { action: "autonomy", status: "error" }, true);
 			}
 		}
 		case "config": {
 			const patch = configPatchFromConfig(params.config);
 			const cfg = configRecord(params.config);
 			const unsetPaths = Array.isArray(cfg.unset)
-				? cfg.unset.filter(
-						(entry): entry is string => typeof entry === "string",
-					)
+				? cfg.unset.filter((entry): entry is string => typeof entry === "string")
 				: typeof cfg.unset === "string"
 					? [cfg.unset]
 					: [];
-			const shouldUpdate =
-				Object.values(patch).some((value) => value !== undefined) ||
-				unsetPaths.length > 0;
+			const shouldUpdate = Object.values(patch).some((value) => value !== undefined) || unsetPaths.length > 0;
 			if (shouldUpdate) {
 				try {
 					const saved = updateConfig(patch, {
@@ -1059,22 +714,14 @@ export async function handleTeamTool(
 						unsetPaths,
 					});
 					return result(
-						[
-							"Updated pi-crew config.",
-							`Path: ${saved.path}`,
-							"Effective config:",
-							JSON.stringify(saved.config, null, 2),
-						].join("\n"),
+						["Updated pi-crew config.", `Path: ${saved.path}`, "Effective config:", JSON.stringify(saved.config, null, 2)].join(
+							"\n",
+						),
 						{ action: "config", status: "ok" },
 					);
 				} catch (error) {
-					const message =
-						error instanceof Error ? error.message : String(error);
-					return result(
-						message,
-						{ action: "config", status: "error" },
-						true,
-					);
+					const message = error instanceof Error ? error.message : String(error);
+					return result(message, { action: "config", status: "error" }, true);
 				}
 			}
 			const loaded = loadConfig(ctx.cwd);
@@ -1086,22 +733,12 @@ export async function handleTeamTool(
 				JSON.stringify(loaded.config, null, 2),
 				"Schema: package export ./schema.json",
 			];
-			return result(
-				lines.join("\n"),
-				{ action: "config", status: loaded.error ? "error" : "ok" },
-				Boolean(loaded.error),
-			);
+			return result(lines.join("\n"), { action: "config", status: loaded.error ? "error" : "ok" }, Boolean(loaded.error));
 		}
 		case "validate": {
 			const report = validateResources(ctx.cwd);
-			const hasErrors = report.issues.some(
-				(issue) => issue.level === "error",
-			);
-			return result(
-				formatValidationReport(report),
-				{ action: "validate", status: hasErrors ? "error" : "ok" },
-				hasErrors,
-			);
+			const hasErrors = report.issues.some((issue) => issue.level === "error");
+			return result(formatValidationReport(report), { action: "validate", status: hasErrors ? "error" : "ok" }, hasErrors);
 		}
 		case "doctor":
 			return handleDoctor(ctx, params);
@@ -1166,29 +803,21 @@ export async function handleTeamTool(
 				assertSafePathId("runId", params.runId);
 				const graph = loadRunGraph(ctx.cwd, params.runId);
 				return result(
-					graph
-						? JSON.stringify(graph, null, 2)
-						: "No graph found for this run.",
+					graph ? JSON.stringify(graph, null, 2) : "No graph found for this run.",
 					{ action: "graph", status: graph ? "ok" : "error" },
 					!graph,
 				);
 			}
 			const graphs = listRunGraphs(ctx.cwd);
-			return result(
-				graphs.length
-					? `Available graphs:\n${graphs.join("\n")}`
-					: "No graphs available.",
-				{ action: "graph", status: "ok" },
-			);
+			return result(graphs.length ? `Available graphs:\n${graphs.join("\n")}` : "No graphs available.", {
+				action: "graph",
+				status: "ok",
+			});
 		}
 		case "search": {
 			const query = params.goal ?? params.task ?? "";
 			if (!query) {
-				return result(
-					"Search requires goal or task query.",
-					{ action: "search", status: "error" },
-					true,
-				);
+				return result("Search requires goal or task query.", { action: "search", status: "error" }, true);
 			}
 			try {
 				const [agentResults, teamResults] = await Promise.all([
@@ -1199,30 +828,19 @@ export async function handleTeamTool(
 				if (teamResults.length) {
 					lines.push("## Teams");
 					for (const r of teamResults) {
-						lines.push(
-							`- [${r.team.name}] score=${r.score.toFixed(2)}: ${r.team.description ?? "(no description)"}`,
-						);
+						lines.push(`- [${r.team.name}] score=${r.score.toFixed(2)}: ${r.team.description ?? "(no description)"}`);
 					}
 				}
 				if (agentResults.length) {
 					lines.push("## Agents");
 					for (const r of agentResults) {
-						lines.push(
-							`- [${r.agent.name}] score=${r.score.toFixed(2)}: ${r.agent.description ?? "(no description)"}`,
-						);
+						lines.push(`- [${r.agent.name}] score=${r.score.toFixed(2)}: ${r.agent.description ?? "(no description)"}`);
 					}
 				}
-				return result(
-					lines.length ? lines.join("\n") : "No results found.",
-					{ action: "search", status: "ok" },
-				);
+				return result(lines.length ? lines.join("\n") : "No results found.", { action: "search", status: "ok" });
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
-				return result(
-					`Search failed: ${msg}`,
-					{ action: "search", status: "error" },
-					true,
-				);
+				return result(`Search failed: ${msg}`, { action: "search", status: "error" }, true);
 			}
 		}
 		case "schedule":
@@ -1230,10 +848,7 @@ export async function handleTeamTool(
 		case "scheduled":
 			return handleListScheduled(params, ctx);
 		case "anchor": {
-			const subAction =
-				typeof params.config?.subAction === "string"
-					? params.config.subAction
-					: "status";
+			const subAction = typeof params.config?.subAction === "string" ? params.config.subAction : "status";
 			switch (subAction) {
 				case "set":
 					return handleAnchorSet(params, ctx);
@@ -1275,10 +890,10 @@ export async function handleTeamTool(
 				case "toggle": {
 					const service = createAutoSummarizeService();
 					service.toggle();
-					return result(
-						`Auto-summarize ${service.isEnabled() ? "enabled" : "disabled"}.`,
-						{ action: "auto-summarize", status: "ok" },
-					);
+					return result(`Auto-summarize ${service.isEnabled() ? "enabled" : "disabled"}.`, {
+						action: "auto-summarize",
+						status: "ok",
+					});
 				}
 				default:
 					return handleAutoSummarizeStatus(params, ctx);
@@ -1302,12 +917,7 @@ export async function handleTeamTool(
 		}
 		case "cache": {
 			if (params.goal) {
-				const key = computeRunCacheKey(
-					params.goal,
-					params.team ?? "default",
-					params.workflow ?? "default",
-					ctx.cwd,
-				);
+				const key = computeRunCacheKey(params.goal, params.team ?? "default", params.workflow ?? "default", ctx.cwd);
 				const cached = getCachedRun(ctx.cwd, key);
 				if (cached) {
 					return result(
@@ -1332,35 +942,19 @@ export async function handleTeamTool(
 				});
 			}
 			const stats = getCacheStats(ctx.cwd);
-			return result(
-				`Cache stats: ${stats.entries} entries, ${stats.sizeBytes} bytes`,
-				{ action: "cache", status: "ok" },
-			);
+			return result(`Cache stats: ${stats.entries} entries, ${stats.sizeBytes} bytes`, { action: "cache", status: "ok" });
 		}
 		case "checkpoint": {
 			if (!params.runId || !params.taskId) {
-				return result(
-					"Checkpoint requires runId and taskId.",
-					{ action: "checkpoint", status: "error" },
-					true,
-				);
+				return result("Checkpoint requires runId and taskId.", { action: "checkpoint", status: "error" }, true);
 			}
 			assertSafePathId("runId", params.runId);
 			assertSafePathId("taskId", params.taskId);
-			const stateRoot = path.join(
-				projectCrewRoot(ctx.cwd),
-				"state",
-				"runs",
-				params.runId,
-			);
+			const stateRoot = path.join(projectCrewRoot(ctx.cwd), "state", "runs", params.runId);
 			const store = new FileCheckpointStore(stateRoot);
 			const checkpoint = store.load(params.runId, params.taskId);
 			if (!checkpoint) {
-				return result(
-					"No checkpoint found.",
-					{ action: "checkpoint", status: "error" },
-					true,
-				);
+				return result("No checkpoint found.", { action: "checkpoint", status: "error" }, true);
 			}
 			return result(
 				`Checkpoint: step=${checkpoint.step}, progress=${checkpoint.progress}, savedAt=${new Date(checkpoint.savedAt).toISOString()}`,
@@ -1403,15 +997,12 @@ interface CrewRegistry {
 // registerAgent/unregisterAgent/listDynamicAgents for cross-extension access.
 
 export function registerCrewGlobalRegistry(registry: CrewRegistry): void {
-	(globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] =
-		registry;
+	(globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] = registry;
 }
 
 /** @internal */
 function getCrewGlobalRegistry(): CrewRegistry | undefined {
-	return (globalThis as Record<symbol | string, unknown>)[
-		CREW_REGISTRY_KEY
-	] as CrewRegistry | undefined;
+	return (globalThis as Record<symbol | string, unknown>)[CREW_REGISTRY_KEY] as CrewRegistry | undefined;
 }
 
 /** Create and install the global CrewRegistry singleton. Call once at extension init. */

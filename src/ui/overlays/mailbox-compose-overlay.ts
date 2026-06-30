@@ -21,13 +21,22 @@ const FIELD_ORDER: FieldName[] = ["from", "to", "body", "taskId", "direction"];
 export class MailboxComposeOverlay {
 	private readonly done: (result: MailboxComposeResult) => void;
 	private readonly theme: CrewTheme;
-	private fields: MailboxComposePayload = { from: "operator", to: "leader", body: "", direction: "inbox" };
+	private fields: MailboxComposePayload = {
+		from: "operator",
+		to: "leader",
+		body: "",
+		direction: "inbox",
+	};
 	private activeField = 1;
 	private error: string | undefined;
 	private preview = false;
 	private confirm: ConfirmOverlay | undefined;
 
-	constructor(opts: { done: (result: MailboxComposeResult) => void; theme?: unknown; initial?: Partial<MailboxComposePayload> }) {
+	constructor(opts: {
+		done: (result: MailboxComposeResult) => void;
+		theme?: unknown;
+		initial?: Partial<MailboxComposePayload>;
+	}) {
 		this.done = opts.done;
 		this.theme = asCrewTheme(opts.theme ?? {});
 		this.fields = { ...this.fields, ...opts.initial };
@@ -43,7 +52,9 @@ export class MailboxComposeOverlay {
 		const formWidth = this.preview ? Math.max(24, Math.floor(inner * 0.6)) : inner;
 		const lines = [
 			this.theme.bold("Compose mailbox message"),
-			this.preview ? "P close preview · Tab cycle · Enter submit · ESC discard" : "P preview · Tab cycle · Enter submit · ESC discard",
+			this.preview
+				? "P close preview · Tab cycle · Enter submit · ESC discard"
+				: "P preview · Tab cycle · Enter submit · ESC discard",
 			...(this.error ? [this.theme.fg("error", this.error)] : []),
 			this.fieldLine("from", formWidth),
 			this.fieldLine("to", formWidth),
@@ -56,7 +67,9 @@ export class MailboxComposeOverlay {
 		const max = Math.max(lines.length, previewLines.length);
 		const split: string[] = [];
 		for (let index = 0; index < max; index += 1) {
-			split.push(`${pad(truncate(lines[index] ?? "", formWidth), formWidth)} │ ${truncate(previewLines[index] ?? "", inner - formWidth - 3)}`);
+			split.push(
+				`${pad(truncate(lines[index] ?? "", formWidth), formWidth)} │ ${truncate(previewLines[index] ?? "", inner - formWidth - 3)}`,
+			);
 		}
 		return split;
 	}
@@ -74,14 +87,20 @@ export class MailboxComposeOverlay {
 	private appendText(data: string): void {
 		const field = this.activeName();
 		if (field === "direction") return;
-		this.fields = { ...this.fields, [field]: `${this.fields[field] ?? ""}${data}` };
+		this.fields = {
+			...this.fields,
+			[field]: `${this.fields[field] ?? ""}${data}`,
+		};
 		this.error = undefined;
 	}
 
 	private backspace(): void {
 		const field = this.activeName();
 		if (field === "direction") return;
-		this.fields = { ...this.fields, [field]: (this.fields[field] ?? "").slice(0, -1) };
+		this.fields = {
+			...this.fields,
+			[field]: (this.fields[field] ?? "").slice(0, -1),
+		};
 	}
 
 	private submit(): void {
@@ -94,7 +113,16 @@ export class MailboxComposeOverlay {
 			this.error = "Recipient is required.";
 			return;
 		}
-		this.done({ type: "submit", payload: { ...this.fields, from: this.fields.from.trim() || "operator", to: this.fields.to.trim(), body, taskId: this.fields.taskId?.trim() || undefined } });
+		this.done({
+			type: "submit",
+			payload: {
+				...this.fields,
+				from: this.fields.from.trim() || "operator",
+				to: this.fields.to.trim(),
+				body,
+				taskId: this.fields.taskId?.trim() || undefined,
+			},
+		});
 	}
 
 	private cancel(): void {
@@ -102,10 +130,19 @@ export class MailboxComposeOverlay {
 			this.done({ type: "cancel" });
 			return;
 		}
-		this.confirm = new ConfirmOverlay({ title: "Discard draft?", body: `Body has ${this.fields.body.length} chars. Y=discard, N=continue editing`, dangerLevel: "medium", defaultAction: "cancel" }, (confirmed) => {
-			this.confirm = undefined;
-			if (confirmed) this.done({ type: "cancel" });
-		}, this.theme);
+		this.confirm = new ConfirmOverlay(
+			{
+				title: "Discard draft?",
+				body: `Body has ${this.fields.body.length} chars. Y=discard, N=continue editing`,
+				dangerLevel: "medium",
+				defaultAction: "cancel",
+			},
+			(confirmed) => {
+				this.confirm = undefined;
+				if (confirmed) this.done({ type: "cancel" });
+			},
+			this.theme,
+		);
 	}
 
 	handleInput(data: string): void {

@@ -33,10 +33,10 @@
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Message } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ContextEvent } from "@earendil-works/pi-coding-agent";
-import { collectInFlightRuns } from "./registration/compaction-guard.ts";
-import { extractSessionId } from "../utils/session-utils.ts";
+import type { ContextEvent, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { TeamRunManifest } from "../state/types.ts";
+import { extractSessionId } from "../utils/session-utils.ts";
+import { collectInFlightRuns } from "./registration/compaction-guard.ts";
 
 /** Sentinel that marks an injected ambient-status user message. */
 export const AMBIENT_STATUS_SENTINEL = "[pi-crew ambient status";
@@ -64,7 +64,9 @@ function runAge(createdAt?: string, updatedAt?: string): string {
 		if (Number.isFinite(created)) {
 			return `, running ${humanizeMs(Date.now() - created)}`;
 		}
-	} catch { /* ignore malformed timestamps */ }
+	} catch {
+		/* ignore malformed timestamps */
+	}
 	return "";
 }
 
@@ -84,8 +86,7 @@ function humanizeMs(ms: number): string {
  */
 export function formatAmbientStatus(runs: TeamRunManifest[]): string {
 	if (runs.length === 0) return "";
-	const truncate = (s: string, n: number): string =>
-		s.length > n ? `${s.slice(0, n - 1)}…` : s;
+	const truncate = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 	const lines: string[] = [
 		`${AMBIENT_STATUS_SENTINEL} — environmental context, not a user request]`,
 		`${runs.length} pi-crew run${runs.length === 1 ? "" : "s"} in flight:`,
@@ -99,7 +100,9 @@ export function formatAmbientStatus(runs: TeamRunManifest[]): string {
 	if (runs.length > MAX_INLINE_RUNS) {
 		lines.push(`• …and ${runs.length - MAX_INLINE_RUNS} more`);
 	}
-	lines.push("Inspect/join via the `team` tool: action=\"status\" (list), action=\"wait\" (join running), action=\"summary\"/action=\"get\" (results).");
+	lines.push(
+		'Inspect/join via the `team` tool: action="status" (list), action="wait" (join running), action="summary"/action="get" (results).',
+	);
 	return lines.join("\n");
 }
 
@@ -163,10 +166,7 @@ export function handleContextEvent(event: ContextEvent, cwd: string, sessionId?:
  * Pass `enabled: false` (from `runtime.reliability.ambientStatusInjection`) to
  * disable the feature without unwiring the handler.
  */
-export function registerContextStatusInjection(
-	pi: ExtensionAPI,
-	opts: { enabled?: boolean } = {},
-): void {
+export function registerContextStatusInjection(pi: ExtensionAPI, opts: { enabled?: boolean } = {}): void {
 	if (opts.enabled === false) return;
 	pi.on("context", (event: ContextEvent, ctx: unknown): AmbientContextResult | undefined => {
 		// crew state is per-project; use the session ctx cwd when available,
@@ -176,7 +176,9 @@ export function registerContextStatusInjection(
 		const cwd =
 			typeof ctx === "object" && ctx !== null && typeof (ctx as { cwd?: unknown }).cwd === "string"
 				? (ctx as { cwd: string }).cwd
-				: typeof process.cwd === "function" ? process.cwd() : ".";
+				: typeof process.cwd === "function"
+					? process.cwd()
+					: ".";
 		const sessionId = extractSessionId(ctx);
 		return handleContextEvent(event, cwd, sessionId);
 	});

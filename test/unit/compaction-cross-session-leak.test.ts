@@ -21,25 +21,28 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, it } from "node:test";
-import type { TeamConfig } from "../../src/teams/team-config.ts";
-import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
-import { createRunManifest, loadRunManifestById, saveRunManifest } from "../../src/state/state-store.ts";
-import { registerActiveRun, unregisterActiveRun } from "../../src/state/active-run-registry.ts";
-import { findRepoRoot } from "../../src/utils/paths.ts";
-import {
-	buildContinuationPrompt,
-	collectInFlightRuns,
-} from "../../src/extension/registration/compaction-guard.ts";
-import { extractSessionId } from "../../src/utils/session-utils.ts";
 import { handleContextEvent } from "../../src/extension/context-status-injection.ts";
+import { buildContinuationPrompt, collectInFlightRuns } from "../../src/extension/registration/compaction-guard.ts";
+import { registerActiveRun, unregisterActiveRun } from "../../src/state/active-run-registry.ts";
+import { createRunManifest, loadRunManifestById, saveRunManifest } from "../../src/state/state-store.ts";
+import type { TeamConfig } from "../../src/teams/team-config.ts";
+import { findRepoRoot } from "../../src/utils/paths.ts";
+import { extractSessionId } from "../../src/utils/session-utils.ts";
+import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 const team: TeamConfig = {
-	name: "default", description: "d", source: "builtin", filePath: "default.team.md",
+	name: "default",
+	description: "d",
+	source: "builtin",
+	filePath: "default.team.md",
 	roles: [{ name: "planner", agent: "planner" }],
 };
 const workflow: WorkflowConfig = {
-	name: "default", description: "d", source: "builtin", filePath: "default.workflow.md",
+	name: "default",
+	description: "d",
+	source: "builtin",
+	filePath: "default.workflow.md",
 	steps: [{ id: "plan", role: "planner", task: "Plan {goal}" }],
 };
 
@@ -59,7 +62,11 @@ function makeRun(cwd: string, goal: string, ownerSessionId?: string): string {
 
 afterEach(() => {
 	for (const dir of createdDirs.splice(0)) {
-		try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+		try {
+			fs.rmSync(dir, { recursive: true, force: true });
+		} catch {
+			/* ignore */
+		}
 	}
 });
 
@@ -123,7 +130,11 @@ describe("collectInFlightRuns: cross-PROJECT leak fix (cwd-scope barrier)", () =
 	function gitRepo(dir: string): string {
 		fs.mkdirSync(path.join(dir, ".crew"), { recursive: true });
 		try {
-			require("node:child_process").execSync("git init", { cwd: dir, stdio: "ignore", timeout: 5000 });
+			require("node:child_process").execSync("git init", {
+				cwd: dir,
+				stdio: "ignore",
+				timeout: 5000,
+			});
 			require("node:child_process").execSync("git config user.email test@test", { cwd: dir, stdio: "ignore" });
 			require("node:child_process").execSync("git config user.name test", { cwd: dir, stdio: "ignore" });
 		} catch {
@@ -142,7 +153,13 @@ describe("collectInFlightRuns: cross-PROJECT leak fix (cwd-scope barrier)", () =
 		if (!repoA || !repoB || repoA === repoB) return; // pre-condition not met
 
 		// Create a run in project A and register it as active (enters the GLOBAL registry).
-		const runA = createRunManifest({ cwd: projectA, team, workflow, goal: "project A active run", ownerSessionId: "sess-a" }).manifest;
+		const runA = createRunManifest({
+			cwd: projectA,
+			team,
+			workflow,
+			goal: "project A active run",
+			ownerSessionId: "sess-a",
+		}).manifest;
 		try {
 			registerActiveRun(runA);
 			// collectInFlightRuns in project B must NOT see project A's run.
@@ -161,11 +178,20 @@ describe("collectInFlightRuns: cross-PROJECT leak fix (cwd-scope barrier)", () =
 		const repoA = findRepoRoot(projectA);
 		if (!repoA) return; // pre-condition not met
 
-		const runA = createRunManifest({ cwd: projectA, team, workflow, goal: "same-project active run", ownerSessionId: "sess-a" }).manifest;
+		const runA = createRunManifest({
+			cwd: projectA,
+			team,
+			workflow,
+			goal: "same-project active run",
+			ownerSessionId: "sess-a",
+		}).manifest;
 		try {
 			registerActiveRun(runA);
 			const inA = collectInFlightRuns(projectA);
-			assert.ok(inA.some((r) => r.runId === runA.runId), "same-project run must be visible");
+			assert.ok(
+				inA.some((r) => r.runId === runA.runId),
+				"same-project run must be visible",
+			);
 		} finally {
 			unregisterActiveRun(runA.runId);
 		}
@@ -185,10 +211,17 @@ describe("extractSessionId: safe ctx accessor", () => {
 		assert.equal(extractSessionId({ sessionId: 123 }), undefined);
 	});
 	it("does not throw on a Proxy / exotic object", () => {
-		const exotic = new Proxy({}, {
-			get() { throw new Error("trap"); },
-			getOwnPropertyDescriptor() { throw new Error("trap"); },
-		});
+		const exotic = new Proxy(
+			{},
+			{
+				get() {
+					throw new Error("trap");
+				},
+				getOwnPropertyDescriptor() {
+					throw new Error("trap");
+				},
+			},
+		);
 		// Should not throw (descriptor access is caught) — returns undefined.
 		assert.doesNotThrow(() => void extractSessionId(exotic));
 	});
@@ -200,9 +233,10 @@ describe("handleContextEvent: ambient status respects session ownership", () => 
 		makeRun(cwd, "session A: dashboard mock", "sess-a");
 		makeRun(cwd, "session B: security audit", "sess-b");
 
-		const event = { type: "context" as const, messages: [
-			{ role: "user" as const, content: "go", timestamp: 1 },
-		] };
+		const event = {
+			type: "context" as const,
+			messages: [{ role: "user" as const, content: "go", timestamp: 1 }],
+		};
 
 		// Session B's view must contain ONLY its own run.
 		const resB = handleContextEvent(event, cwd, "sess-b");
@@ -223,9 +257,10 @@ describe("handleContextEvent: ambient status respects session ownership", () => 
 		const cwd = freshProjectWithCrewRoot();
 		makeRun(cwd, "session A: owned", "sess-a");
 		makeRun(cwd, "legacy orphan run"); // no owner
-		const event = { type: "context" as const, messages: [
-			{ role: "user" as const, content: "go", timestamp: 1 },
-		] };
+		const event = {
+			type: "context" as const,
+			messages: [{ role: "user" as const, content: "go", timestamp: 1 }],
+		};
 		// Session C owns nothing — must NOT see A's run nor the orphan.
 		assert.equal(handleContextEvent(event, cwd, "sess-c"), undefined);
 	});
@@ -234,9 +269,10 @@ describe("handleContextEvent: ambient status respects session ownership", () => 
 		const cwd = freshProjectWithCrewRoot();
 		makeRun(cwd, "session A work", "sess-a");
 		makeRun(cwd, "session B work", "sess-b");
-		const event = { type: "context" as const, messages: [
-			{ role: "user" as const, content: "go", timestamp: 1 },
-		] };
+		const event = {
+			type: "context" as const,
+			messages: [{ role: "user" as const, content: "go", timestamp: 1 }],
+		};
 		const res = handleContextEvent(event, cwd); // no session filter
 		assert.ok(res, "ambient status injected without session filter");
 		const text = JSON.stringify(res!.messages);

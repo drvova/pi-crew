@@ -1,5 +1,5 @@
-import { gzip } from "node:zlib";
 import { promisify } from "node:util";
+import { gzip } from "node:zlib";
 import { logInternalError } from "../../utils/internal-error.ts";
 import { redactSecrets } from "../../utils/redaction.ts";
 import type { MetricRegistry } from "../metric-registry.ts";
@@ -25,9 +25,7 @@ export function validateEndpoint(endpoint: string): void {
 
 	// Only allow http and https protocols
 	if (url.protocol !== "http:" && url.protocol !== "https:") {
-		throw new Error(
-			`OTLP endpoint must use http:// or https:// protocol, got: ${url.protocol}`,
-		);
+		throw new Error(`OTLP endpoint must use http:// or https:// protocol, got: ${url.protocol}`);
 	}
 
 	const hostname = url.hostname.toLowerCase();
@@ -101,7 +99,12 @@ function pointValues(snapshot: MetricSnapshot): unknown[] {
 			attributes: Object.entries(value.labels).map(([key, item]) => {
 				const redacted = redactSecrets({ [key]: item }) as Record<string, string>;
 				const val = String(redacted[key] ?? item);
-				return { key, value: { stringValue: val.length > MAX_LABEL_LENGTH ? val.slice(0, MAX_LABEL_LENGTH) : val } };
+				return {
+					key,
+					value: {
+						stringValue: val.length > MAX_LABEL_LENGTH ? val.slice(0, MAX_LABEL_LENGTH) : val,
+					},
+				};
 			}),
 			count: "count" in value ? value.count : undefined,
 			sum: "sum" in value ? value.sum : undefined,
@@ -113,7 +116,12 @@ function pointValues(snapshot: MetricSnapshot): unknown[] {
 		attributes: Object.entries(value.labels).map(([key, item]) => {
 			const redacted = redactSecrets({ [key]: item }) as Record<string, string>;
 			const val = String(redacted[key] ?? item);
-			return { key, value: { stringValue: val.length > MAX_LABEL_LENGTH ? val.slice(0, MAX_LABEL_LENGTH) : val } };
+			return {
+				key,
+				value: {
+					stringValue: val.length > MAX_LABEL_LENGTH ? val.slice(0, MAX_LABEL_LENGTH) : val,
+				},
+			};
 		}),
 		asDouble: "value" in value ? value.value : undefined,
 		count: "count" in value ? value.count : undefined,
@@ -123,13 +131,30 @@ function pointValues(snapshot: MetricSnapshot): unknown[] {
 
 export function convertToOTLP(snapshots: MetricSnapshot[]): unknown {
 	return {
-		resourceMetrics: [{
-			resource: { attributes: [{ key: "service.name", value: { stringValue: "pi-crew" } }] },
-			scopeMetrics: [{
-				scope: { name: "pi-crew" },
-				metrics: snapshots.map((snapshot) => ({ name: snapshot.name, description: snapshot.description, [snapshot.type === "histogram" ? "histogram" : snapshot.type === "gauge" ? "gauge" : "sum"]: { dataPoints: pointValues(snapshot) } })),
-			}],
-		}],
+		resourceMetrics: [
+			{
+				resource: {
+					attributes: [
+						{
+							key: "service.name",
+							value: { stringValue: "pi-crew" },
+						},
+					],
+				},
+				scopeMetrics: [
+					{
+						scope: { name: "pi-crew" },
+						metrics: snapshots.map((snapshot) => ({
+							name: snapshot.name,
+							description: snapshot.description,
+							[snapshot.type === "histogram" ? "histogram" : snapshot.type === "gauge" ? "gauge" : "sum"]: {
+								dataPoints: pointValues(snapshot),
+							},
+						})),
+					},
+				],
+			},
+		],
 	};
 }
 
@@ -154,7 +179,9 @@ export class OTLPExporter implements MetricExporter {
 			// Skip if a previous push is still running; the next tick will retry.
 			if (this.inFlight) return;
 			const snap = this.registry.snapshot();
-			this.inFlight = this.push(snap).finally(() => { this.inFlight = null; });
+			this.inFlight = this.push(snap).finally(() => {
+				this.inFlight = null;
+			});
 		}, this.opts.intervalMs ?? 60_000);
 		this.timer.unref();
 	}
@@ -182,12 +209,20 @@ export class OTLPExporter implements MetricExporter {
 				const body = await gzipAsync(Buffer.from(json));
 				const response = await fetch(this.opts.endpoint, {
 					method: "POST",
-					headers: { "content-type": "application/json", "content-encoding": "gzip", ...(this.opts.headers ?? {}) },
+					headers: {
+						"content-type": "application/json",
+						"content-encoding": "gzip",
+						...(this.opts.headers ?? {}),
+					},
 					body,
 					signal: controller.signal,
 				});
 				if (!response.ok) {
-					logInternalError("otlp-export-http", new Error(`HTTP ${response.status}: ${response.statusText}`), `endpoint=${this.opts.endpoint}`);
+					logInternalError(
+						"otlp-export-http",
+						new Error(`HTTP ${response.status}: ${response.statusText}`),
+						`endpoint=${this.opts.endpoint}`,
+					);
 				}
 			} finally {
 				clearTimeout(timer);
@@ -208,7 +243,11 @@ export class OTLPExporter implements MetricExporter {
 		if (this.timer) clearInterval(this.timer);
 		this.timer = undefined;
 		if (this.inFlight) {
-			try { await this.inFlight; } catch { /* swallow — push() already logs errors */ }
+			try {
+				await this.inFlight;
+			} catch {
+				/* swallow — push() already logs errors */
+			}
 		}
 	}
 }

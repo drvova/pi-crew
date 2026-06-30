@@ -5,13 +5,18 @@
  * Distilled from pi-autoresearch's compaction-summary pattern.
  */
 
-class GiantLineFallbackError extends Error { constructor() { super("GIANT_LINE_FALLBACK"); this.name = "GiantLineFallbackError"; } }
+class GiantLineFallbackError extends Error {
+	constructor() {
+		super("GIANT_LINE_FALLBACK");
+		this.name = "GiantLineFallbackError";
+	}
+}
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { readJsonFile } from "../state/atomic-write.ts";
 import type { TeamEvent } from "../state/event-log.ts";
+import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 
 /** Maximum number of events to read from the tail of events.jsonl. */
 const MAX_TAIL_EVENTS = 100;
@@ -57,7 +62,10 @@ function readTailLines(filePath: string, maxLines: number): string[] {
 		// For small files, just read everything
 		if (fileSize <= TAIL_MAX_READ) {
 			const content = fs.readFileSync(filePath, "utf-8");
-			return content.split("\n").filter((line) => line.trim().length > 0).slice(-maxLines);
+			return content
+				.split("\n")
+				.filter((line) => line.trim().length > 0)
+				.slice(-maxLines);
 		}
 
 		// For large files, read only the last chunk.
@@ -98,7 +106,10 @@ function readTailLines(filePath: string, maxLines: number): string[] {
 			const stat = fs.statSync(filePath);
 			if (stat.size > MAX_FALLBACK_READ) return [];
 			const content = fs.readFileSync(filePath, "utf-8");
-			return content.split("\n").filter((line) => line.trim().length > 0).slice(-maxLines);
+			return content
+				.split("\n")
+				.filter((line) => line.trim().length > 0)
+				.slice(-maxLines);
 		}
 		return [];
 	}
@@ -212,9 +223,7 @@ export function buildCompactionSummary(stateRoot: string): string {
 	}
 
 	// Section: Recent Task Results
-	const completedTasks = tasks
-		.filter((t) => t.status === "completed" || t.status === "failed")
-		.slice(-MAX_RECENT_RESULTS);
+	const completedTasks = tasks.filter((t) => t.status === "completed" || t.status === "failed").slice(-MAX_RECENT_RESULTS);
 
 	if (completedTasks.length > 0) {
 		sections.push("");
@@ -242,9 +251,7 @@ export function buildCompactionSummary(stateRoot: string): string {
 
 	// Section: Next Steps (pending/queued tasks)
 	const pendingStatuses = new Set(["queued", "waiting", "running"]);
-	const pendingTasks = tasks.filter(
-		(t) => pendingStatuses.has(t.status),
-	);
+	const pendingTasks = tasks.filter((t) => pendingStatuses.has(t.status));
 	if (pendingTasks.length > 0) {
 		sections.push("");
 		sections.push("## Next Steps");

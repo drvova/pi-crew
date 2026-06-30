@@ -1,16 +1,15 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
-
+import { describe, it } from "node:test";
 import {
-	FileCheckpointStore,
-	getCheckpointStore,
-	clearCheckpointStores,
-	formatCheckpoint,
 	type Checkpoint,
+	clearCheckpointStores,
+	FileCheckpointStore,
+	formatCheckpoint,
+	getCheckpointStore,
 } from "../../src/runtime/checkpoint.ts";
+import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 function makeCheckpoint(overrides: Partial<Checkpoint> = {}): Checkpoint {
 	return {

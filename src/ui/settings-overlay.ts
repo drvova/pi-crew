@@ -3,10 +3,11 @@
  * Mirrors Pi's built-in /settings selector: tab bar, settings list with
  * label/value alignment, inline toggle, select submenu, and text input.
  */
-import type { CrewTheme } from "./theme-adapter.ts";
+
+import { truncateToWidth, visibleWidth } from "../utils/visual.ts";
 import { DynamicCrewBorder } from "./dynamic-border.ts";
+import type { CrewTheme } from "./theme-adapter.ts";
 import { discoverPiThemes, getActivePiTheme } from "./theme-discovery.ts";
-import { visibleWidth, truncateToWidth } from "../utils/visual.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,47 +58,265 @@ const TABS: TabDef[] = [
 
 const SETTINGS: SettingDef[] = [
 	// Runtime
-	{ id: "runtime.mode", label: "Runtime Mode", type: "enum", values: ["auto", "scaffold", "child-process", "live-session"], tab: "runtime", description: "How workers execute. 'auto' picks best available. 'scaffold' = dry-run." },
-	{ id: "runtime.maxTurns", label: "Max Turns", type: "number", tab: "runtime", description: "Maximum agent turns per task." },
-	{ id: "runtime.graceTurns", label: "Grace Turns", type: "number", tab: "runtime", description: "Extra turns allowed after completion." },
-	{ id: "runtime.inheritContext", label: "Inherit Context", type: "boolean", tab: "runtime", description: "Pass parent conversation context to workers." },
-	{ id: "runtime.promptMode", label: "Prompt Mode", type: "enum", values: ["compact", "full", "minimal"], tab: "runtime", description: "How much prompt detail to send to workers." },
-	{ id: "runtime.completionMutationGuard", label: "Mutation Guard", type: "enum", values: ["off", "warn", "block"], tab: "runtime", description: "Guard against tasks completing without file mutations." },
-	{ id: "runtime.isolationPolicy", label: "Isolation Policy", type: "enum", values: ["workspace", "none"], tab: "runtime", description: "Workspace isolation between agents." },
+	{
+		id: "runtime.mode",
+		label: "Runtime Mode",
+		type: "enum",
+		values: ["auto", "scaffold", "child-process", "live-session"],
+		tab: "runtime",
+		description: "How workers execute. 'auto' picks best available. 'scaffold' = dry-run.",
+	},
+	{
+		id: "runtime.maxTurns",
+		label: "Max Turns",
+		type: "number",
+		tab: "runtime",
+		description: "Maximum agent turns per task.",
+	},
+	{
+		id: "runtime.graceTurns",
+		label: "Grace Turns",
+		type: "number",
+		tab: "runtime",
+		description: "Extra turns allowed after completion.",
+	},
+	{
+		id: "runtime.inheritContext",
+		label: "Inherit Context",
+		type: "boolean",
+		tab: "runtime",
+		description: "Pass parent conversation context to workers.",
+	},
+	{
+		id: "runtime.promptMode",
+		label: "Prompt Mode",
+		type: "enum",
+		values: ["compact", "full", "minimal"],
+		tab: "runtime",
+		description: "How much prompt detail to send to workers.",
+	},
+	{
+		id: "runtime.completionMutationGuard",
+		label: "Mutation Guard",
+		type: "enum",
+		values: ["off", "warn", "block"],
+		tab: "runtime",
+		description: "Guard against tasks completing without file mutations.",
+	},
+	{
+		id: "runtime.isolationPolicy",
+		label: "Isolation Policy",
+		type: "enum",
+		values: ["workspace", "none"],
+		tab: "runtime",
+		description: "Workspace isolation between agents.",
+	},
 	// Limits
-	{ id: "limits.maxConcurrentWorkers", label: "Max Concurrent", type: "number", tab: "limits", description: "Max number of workers running simultaneously." },
-	{ id: "limits.maxTaskDepth", label: "Max Task Depth", type: "number", tab: "limits", description: "Maximum depth of nested task spawning." },
-	{ id: "limits.maxRunMinutes", label: "Max Run Minutes", type: "number", tab: "limits", description: "Maximum total run time in minutes." },
-	{ id: "limits.maxRetriesPerTask", label: "Max Retries", type: "number", tab: "limits", description: "Max retry attempts per failed task." },
-	{ id: "limits.maxTasksPerRun", label: "Max Tasks", type: "number", tab: "limits", description: "Maximum number of tasks per run." },
-	{ id: "limits.heartbeatStaleMs", label: "Heartbeat Stale", type: "number", tab: "limits", description: "Milliseconds before a worker is considered stale." },
+	{
+		id: "limits.maxConcurrentWorkers",
+		label: "Max Concurrent",
+		type: "number",
+		tab: "limits",
+		description: "Max number of workers running simultaneously.",
+	},
+	{
+		id: "limits.maxTaskDepth",
+		label: "Max Task Depth",
+		type: "number",
+		tab: "limits",
+		description: "Maximum depth of nested task spawning.",
+	},
+	{
+		id: "limits.maxRunMinutes",
+		label: "Max Run Minutes",
+		type: "number",
+		tab: "limits",
+		description: "Maximum total run time in minutes.",
+	},
+	{
+		id: "limits.maxRetriesPerTask",
+		label: "Max Retries",
+		type: "number",
+		tab: "limits",
+		description: "Max retry attempts per failed task.",
+	},
+	{
+		id: "limits.maxTasksPerRun",
+		label: "Max Tasks",
+		type: "number",
+		tab: "limits",
+		description: "Maximum number of tasks per run.",
+	},
+	{
+		id: "limits.heartbeatStaleMs",
+		label: "Heartbeat Stale",
+		type: "number",
+		tab: "limits",
+		description: "Milliseconds before a worker is considered stale.",
+	},
 	// Agents
-	{ id: "agents.overrides", label: "Agent Model Overrides", type: "agent", tab: "agents", description: "Model and thinking overrides per agent role." },
-	{ id: "agents.disableBuiltins", label: "Disable Builtins", type: "boolean", tab: "agents", description: "Disable built-in agent definitions." },
+	{
+		id: "agents.overrides",
+		label: "Agent Model Overrides",
+		type: "agent",
+		tab: "agents",
+		description: "Model and thinking overrides per agent role.",
+	},
+	{
+		id: "agents.disableBuiltins",
+		label: "Disable Builtins",
+		type: "boolean",
+		tab: "agents",
+		description: "Disable built-in agent definitions.",
+	},
 	// UI
-	{ id: "ui.showModel", label: "Show Model", type: "boolean", tab: "ui", description: "Show model name in widget/dashboard." },
-	{ id: "ui.showTokens", label: "Show Tokens", type: "boolean", tab: "ui", description: "Show token counts in dashboard." },
-	{ id: "ui.showTools", label: "Show Tools", type: "boolean", tab: "ui", description: "Show tool usage in dashboard." },
-	{ id: "ui.dashboardPlacement", label: "Dashboard Placement", type: "enum", values: ["center", "right"], tab: "ui", description: "Where to place the dashboard overlay." },
-	{ id: "ui.dashboardWidth", label: "Dashboard Width", type: "number", tab: "ui", description: "Dashboard width as percentage or pixels." },
-	{ id: "ui.autoOpenDashboard", label: "Auto Open Dashboard", type: "boolean", tab: "ui", description: "Auto-open dashboard when a run starts." },
-	{ id: "ui.widgetPlacement", label: "Widget Placement", type: "enum", values: ["bottom", "hidden"], tab: "ui", description: "Where to place the crew widget." },
+	{
+		id: "ui.showModel",
+		label: "Show Model",
+		type: "boolean",
+		tab: "ui",
+		description: "Show model name in widget/dashboard.",
+	},
+	{
+		id: "ui.showTokens",
+		label: "Show Tokens",
+		type: "boolean",
+		tab: "ui",
+		description: "Show token counts in dashboard.",
+	},
+	{
+		id: "ui.showTools",
+		label: "Show Tools",
+		type: "boolean",
+		tab: "ui",
+		description: "Show tool usage in dashboard.",
+	},
+	{
+		id: "ui.dashboardPlacement",
+		label: "Dashboard Placement",
+		type: "enum",
+		values: ["center", "right"],
+		tab: "ui",
+		description: "Where to place the dashboard overlay.",
+	},
+	{
+		id: "ui.dashboardWidth",
+		label: "Dashboard Width",
+		type: "number",
+		tab: "ui",
+		description: "Dashboard width as percentage or pixels.",
+	},
+	{
+		id: "ui.autoOpenDashboard",
+		label: "Auto Open Dashboard",
+		type: "boolean",
+		tab: "ui",
+		description: "Auto-open dashboard when a run starts.",
+	},
+	{
+		id: "ui.widgetPlacement",
+		label: "Widget Placement",
+		type: "enum",
+		values: ["bottom", "hidden"],
+		tab: "ui",
+		description: "Where to place the crew widget.",
+	},
 	// ── Themes tab ──
-	{ id: "__piTheme__", label: "Pi UI Theme", type: "action", action: "piTheme", values: discoverPiThemes().map((t) => t.name), tab: "themes", description: "Overall terminal theme. Switches live (no restart). Currently: " + (getActivePiTheme() ?? "dark (default)") },
+	{
+		id: "__piTheme__",
+		label: "Pi UI Theme",
+		type: "action",
+		action: "piTheme",
+		values: discoverPiThemes().map((t) => t.name),
+		tab: "themes",
+		description: "Overall terminal theme. Switches live (no restart). Currently: " + (getActivePiTheme() ?? "dark (default)"),
+	},
 	// Autonomous
-	{ id: "autonomous.enabled", label: "Enabled", type: "boolean", tab: "autonomous", description: "Enable autonomous pi-crew delegation." },
-	{ id: "autonomous.injectPolicy", label: "Inject Policy", type: "boolean", tab: "autonomous", description: "Inject delegation policy into agent context." },
-	{ id: "autonomous.preferAsyncForLongTasks", label: "Prefer Async", type: "boolean", tab: "autonomous", description: "Prefer async execution for long tasks." },
-	{ id: "autonomous.allowWorktreeSuggestion", label: "Allow Worktree", type: "boolean", tab: "autonomous", description: "Allow suggesting worktree isolation." },
+	{
+		id: "autonomous.enabled",
+		label: "Enabled",
+		type: "boolean",
+		tab: "autonomous",
+		description: "Enable autonomous pi-crew delegation.",
+	},
+	{
+		id: "autonomous.injectPolicy",
+		label: "Inject Policy",
+		type: "boolean",
+		tab: "autonomous",
+		description: "Inject delegation policy into agent context.",
+	},
+	{
+		id: "autonomous.preferAsyncForLongTasks",
+		label: "Prefer Async",
+		type: "boolean",
+		tab: "autonomous",
+		description: "Prefer async execution for long tasks.",
+	},
+	{
+		id: "autonomous.allowWorktreeSuggestion",
+		label: "Allow Worktree",
+		type: "boolean",
+		tab: "autonomous",
+		description: "Allow suggesting worktree isolation.",
+	},
 	// Advanced
-	{ id: "executeWorkers", label: "Execute Workers", type: "boolean", tab: "advanced", description: "Allow real child Pi workers. false = scaffold only." },
-	{ id: "asyncByDefault", label: "Async By Default", type: "boolean", tab: "advanced", description: "Run teams asynchronously by default." },
-	{ id: "notifierIntervalMs", label: "Notifier Interval", type: "number", tab: "advanced", description: "Async run notifier check interval in ms." },
-	{ id: "reliability.autoRetry", label: "Auto Retry", type: "boolean", tab: "advanced", description: "Automatically retry failed tasks." },
-	{ id: "reliability.autoRecover", label: "Auto Recover", type: "boolean", tab: "advanced", description: "Automatically recover from crashes." },
-	{ id: "reliability.cleanupOrphanedTempDirs", label: "Cleanup Orphaned Temp Dirs", type: "boolean", tab: "advanced", description: "Remove /tmp/pi-crew-* directories after reconciliation (1h age threshold)." },
-	{ id: "telemetry.enabled", label: "Telemetry", type: "boolean", tab: "advanced", description: "Enable telemetry collection." },
-	{ id: "notifications.enabled", label: "Notifications", type: "boolean", tab: "advanced", description: "Enable run notifications." },
+	{
+		id: "executeWorkers",
+		label: "Execute Workers",
+		type: "boolean",
+		tab: "advanced",
+		description: "Allow real child Pi workers. false = scaffold only.",
+	},
+	{
+		id: "asyncByDefault",
+		label: "Async By Default",
+		type: "boolean",
+		tab: "advanced",
+		description: "Run teams asynchronously by default.",
+	},
+	{
+		id: "notifierIntervalMs",
+		label: "Notifier Interval",
+		type: "number",
+		tab: "advanced",
+		description: "Async run notifier check interval in ms.",
+	},
+	{
+		id: "reliability.autoRetry",
+		label: "Auto Retry",
+		type: "boolean",
+		tab: "advanced",
+		description: "Automatically retry failed tasks.",
+	},
+	{
+		id: "reliability.autoRecover",
+		label: "Auto Recover",
+		type: "boolean",
+		tab: "advanced",
+		description: "Automatically recover from crashes.",
+	},
+	{
+		id: "reliability.cleanupOrphanedTempDirs",
+		label: "Cleanup Orphaned Temp Dirs",
+		type: "boolean",
+		tab: "advanced",
+		description: "Remove /tmp/pi-crew-* directories after reconciliation (1h age threshold).",
+	},
+	{
+		id: "telemetry.enabled",
+		label: "Telemetry",
+		type: "boolean",
+		tab: "advanced",
+		description: "Enable telemetry collection.",
+	},
+	{
+		id: "notifications.enabled",
+		label: "Notifications",
+		type: "boolean",
+		tab: "advanced",
+		description: "Enable run notifications.",
+	},
 ];
 
 // ---------------------------------------------------------------------------
@@ -130,9 +349,9 @@ const EFFECTIVE_DEFAULTS: Record<string, unknown> = {
 	"autonomous.injectPolicy": true,
 	"autonomous.preferAsyncForLongTasks": false,
 	"autonomous.allowWorktreeSuggestion": true,
-	"executeWorkers": true,
-	"asyncByDefault": false,
-	"notifierIntervalMs": 5000,
+	executeWorkers: true,
+	asyncByDefault: false,
+	notifierIntervalMs: 5000,
 	"reliability.autoRetry": false,
 	"reliability.autoRecover": false,
 	"reliability.cleanupOrphanedTempDirs": true,
@@ -201,7 +420,15 @@ class SelectSubmenu {
 	private readonly title: string;
 	private readonly description: string;
 
-	constructor(title: string, description: string, options: string[], current: string, theme: CrewTheme, onSelect: (value: string) => void, onCancel: () => void) {
+	constructor(
+		title: string,
+		description: string,
+		options: string[],
+		current: string,
+		theme: CrewTheme,
+		onSelect: (value: string) => void,
+		onCancel: () => void,
+	) {
 		this.title = title;
 		this.description = description;
 		this.items = options;
@@ -285,7 +512,14 @@ class TextinputSubmenu {
 	private readonly onSubmit: (value: string) => void;
 	private readonly onCancel: () => void;
 
-	constructor(title: string, description: string, initialValue: string, theme: CrewTheme, onSubmit: (value: string) => void, onCancel: () => void) {
+	constructor(
+		title: string,
+		description: string,
+		initialValue: string,
+		theme: CrewTheme,
+		onSubmit: (value: string) => void,
+		onCancel: () => void,
+	) {
 		this.title = title;
 		this.description = description;
 		this.buffer = initialValue;
@@ -345,13 +579,32 @@ class AgentOverridesSubmenu {
 	private readonly onApply: (overrides: Record<string, unknown>) => void;
 	private readonly onCancel: () => void;
 
-	constructor(config: Record<string, unknown>, theme: CrewTheme, onApply: (overrides: Record<string, unknown>) => void, onCancel: () => void) {
+	constructor(
+		config: Record<string, unknown>,
+		theme: CrewTheme,
+		onApply: (overrides: Record<string, unknown>) => void,
+		onCancel: () => void,
+	) {
 		this.theme = theme;
 		this.onApply = onApply;
 		this.onCancel = onCancel;
-		const existing = (config.agents as Record<string, unknown>)?.overrides as Record<string, { model?: string; thinking?: string }> | undefined;
+		const existing = (config.agents as Record<string, unknown>)?.overrides as
+			| Record<string, { model?: string; thinking?: string }>
+			| undefined;
 		this.overrides = existing ? structuredClone(existing) : {};
-		this.agents = ["explorer", "planner", "analyst", "critic", "executor", "reviewer", "security-reviewer", "test-engineer", "verifier", "cold-verifier", "writer"];
+		this.agents = [
+			"explorer",
+			"planner",
+			"analyst",
+			"critic",
+			"executor",
+			"reviewer",
+			"security-reviewer",
+			"test-engineer",
+			"verifier",
+			"cold-verifier",
+			"writer",
+		];
 	}
 
 	invalidate(): void {}
@@ -375,7 +628,11 @@ class AgentOverridesSubmenu {
 			const valueText = valueParts || this.theme.fg("dim", "(default)");
 			const prefix = isSelected ? " → " : "   ";
 			const line = `${prefix}${label} ${valueText}`;
-			lines.push(isSelected ? (this.theme.inverse?.(truncateToWidth(line, width - 2)) ?? truncateToWidth(line, width - 2)) : truncateToWidth(line, width - 2));
+			lines.push(
+				isSelected
+					? (this.theme.inverse?.(truncateToWidth(line, width - 2)) ?? truncateToWidth(line, width - 2))
+					: truncateToWidth(line, width - 2),
+			);
 		}
 		lines.push("");
 		lines.push(this.theme.fg("dim", "Enter to edit model · e to edit thinking · Esc to go back"));
@@ -397,8 +654,14 @@ class AgentOverridesSubmenu {
 	handleInput(data: string): void {
 		if (this.editField) return this.handleEditInput(data);
 
-		if (data === "\x1b[A" || data === "k") { this.selectedIndex = (this.selectedIndex - 1 + this.agents.length) % this.agents.length; return; }
-		if (data === "\x1b[B" || data === "j") { this.selectedIndex = (this.selectedIndex + 1) % this.agents.length; return; }
+		if (data === "\x1b[A" || data === "k") {
+			this.selectedIndex = (this.selectedIndex - 1 + this.agents.length) % this.agents.length;
+			return;
+		}
+		if (data === "\x1b[B" || data === "j") {
+			this.selectedIndex = (this.selectedIndex + 1) % this.agents.length;
+			return;
+		}
 		if (data === "\r" || data === "\n") {
 			const agent = this.agents[this.selectedIndex]!;
 			this.editField = "model";
@@ -411,7 +674,10 @@ class AgentOverridesSubmenu {
 			this.editBuffer = this.overrides[agent]?.thinking ?? "";
 			return;
 		}
-		if (data === "\x1b") { this.onCancel(); return; }
+		if (data === "\x1b") {
+			this.onCancel();
+			return;
+		}
 	}
 
 	private handleEditInput(data: string): void {
@@ -430,9 +696,17 @@ class AgentOverridesSubmenu {
 			this.editField = null;
 			return;
 		}
-		if (data === "\x1b") { this.editField = null; return; }
-		if (data === "\x7f" || data === "\b") { this.editBuffer = this.editBuffer.slice(0, -1); return; }
-		if (data.length === 1 && data >= " " && data <= "~") { this.editBuffer += data; }
+		if (data === "\x1b") {
+			this.editField = null;
+			return;
+		}
+		if (data === "\x7f" || data === "\b") {
+			this.editBuffer = this.editBuffer.slice(0, -1);
+			return;
+		}
+		if (data.length === 1 && data >= " " && data <= "~") {
+			this.editBuffer += data;
+		}
 	}
 }
 
@@ -483,9 +757,7 @@ class SettingsOverlay {
 		lines.push(border("├", "┤"));
 
 		// ── Content ──
-		const content = this.submenu
-			? this.renderSubmenuContent(innerWidth - 4)
-			: this.renderSettingsContent(innerWidth - 4);
+		const content = this.submenu ? this.renderSubmenuContent(innerWidth - 4) : this.renderSettingsContent(innerWidth - 4);
 		for (const line of content) {
 			lines.push(row(` ${truncateToWidth(line, innerWidth - 2)}`));
 		}
@@ -501,21 +773,18 @@ class SettingsOverlay {
 		for (const [i, tab] of TABS.entries()) {
 			const isActive = i === this.currentTabIndex;
 			const text = `${tab.icon} ${tab.label}`;
-			parts.push(isActive
-				? this.theme.bold(this.theme.fg("accent", text))
-				: this.theme.fg("dim", text),
-			);
+			parts.push(isActive ? this.theme.bold(this.theme.fg("accent", text)) : this.theme.fg("dim", text));
 		}
 		return parts.join("  " + this.theme.fg("border", "│") + "  ");
 	}
 
 	private renderSettingsContent(innerWidth: number): string[] {
 		const tabId = TABS[this.currentTabIndex]?.id ?? "runtime";
-		const settings = SETTINGS.filter(s => s.tab === tabId);
+		const settings = SETTINGS.filter((s) => s.tab === tabId);
 		const lines: string[] = [];
 
 		// Calculate max label width for alignment
-		const maxLabelWidth = Math.min(28, Math.max(...settings.map(s => visibleWidth(s.label))));
+		const maxLabelWidth = Math.min(28, Math.max(...settings.map((s) => visibleWidth(s.label))));
 
 		// Render visible items
 		const startIdx = this.scrollOffset;
@@ -526,9 +795,7 @@ class SettingsOverlay {
 			if (!def) continue;
 			const isSelected = i === this.selectedIndex;
 
-			const effective = this.changedValues.has(def.id)
-				? this.changedValues.get(def.id)
-				: currentValueFor(this.config, def.id);
+			const effective = this.changedValues.has(def.id) ? this.changedValues.get(def.id) : currentValueFor(this.config, def.id);
 			const isDefault = !this.changedValues.has(def.id) && !isExplicitlySet(this.config, def.id) && def.id !== "__piTheme__";
 			const valueStr = formatValue(effective, def.id);
 			const suffix = isDefault && (effective !== undefined || EFFECTIVE_DEFAULTS[def.id] !== undefined) ? " (default)" : "";
@@ -605,7 +872,7 @@ class SettingsOverlay {
 
 		// Item navigation
 		const tabId = TABS[this.currentTabIndex]?.id ?? "runtime";
-		const settings = SETTINGS.filter(s => s.tab === tabId);
+		const settings = SETTINGS.filter((s) => s.tab === tabId);
 
 		if (data === "\x1b[A" || data === "k") {
 			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
@@ -652,7 +919,10 @@ class SettingsOverlay {
 						this.submenu = null;
 						this.submenuSettingId = null;
 					},
-					() => { this.submenu = null; this.submenuSettingId = null; },
+					() => {
+						this.submenu = null;
+						this.submenuSettingId = null;
+					},
 				);
 				break;
 			}
@@ -675,7 +945,10 @@ class SettingsOverlay {
 						this.submenu = null;
 						this.submenuSettingId = null;
 					},
-					() => { this.submenu = null; this.submenuSettingId = null; },
+					() => {
+						this.submenu = null;
+						this.submenuSettingId = null;
+					},
 				);
 				break;
 			}
@@ -692,7 +965,10 @@ class SettingsOverlay {
 						this.submenu = null;
 						this.submenuSettingId = null;
 					},
-					() => { this.submenu = null; this.submenuSettingId = null; },
+					() => {
+						this.submenu = null;
+						this.submenuSettingId = null;
+					},
 				);
 				break;
 			}
@@ -706,15 +982,19 @@ class SettingsOverlay {
 						this.submenu = null;
 						this.submenuSettingId = null;
 					},
-					() => { this.submenu = null; this.submenuSettingId = null; },
+					() => {
+						this.submenu = null;
+						this.submenuSettingId = null;
+					},
 				);
 				break;
 			}
 			case "action": {
 				if (!def.values?.length || !def.action) break;
-				const actionCurrent = typeof this.changedValues.get(def.id) === "string"
-					? (this.changedValues.get(def.id) as string)
-					: (currentValueFor(this.config, def.id) as string | undefined) ?? "";
+				const actionCurrent =
+					typeof this.changedValues.get(def.id) === "string"
+						? (this.changedValues.get(def.id) as string)
+						: ((currentValueFor(this.config, def.id) as string | undefined) ?? "");
 				this.submenuSettingId = def.id;
 				this.submenu = new SelectSubmenu(
 					def.label,
@@ -728,7 +1008,10 @@ class SettingsOverlay {
 						this.submenu = null;
 						this.submenuSettingId = null;
 					},
-					() => { this.submenu = null; this.submenuSettingId = null; },
+					() => {
+						this.submenu = null;
+						this.submenuSettingId = null;
+					},
 				);
 				break;
 			}
@@ -755,6 +1038,10 @@ export function createSettingsOverlay(
 	done: () => void,
 	onAction?: (action: string, value: unknown) => void,
 ) {
-	const overlay = new SettingsOverlay(config, theme, { onChange, onClose: done, onAction });
+	const overlay = new SettingsOverlay(config, theme, {
+		onChange,
+		onClose: done,
+		onAction,
+	});
 	return { overlay, component: overlay };
 }

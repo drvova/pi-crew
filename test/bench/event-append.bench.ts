@@ -10,10 +10,11 @@
  *   - serial: append N events back-to-back to one events.jsonl (lock contention)
  *   - small-batch: append N events to N different files (no contention, pure IO)
  */
-import { performance } from "node:perf_hooks";
+
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { performance } from "node:perf_hooks";
 import { appendEvent } from "../../src/state/event-log.ts";
 import type { TeamRunManifest } from "../../src/state/types.ts";
 
@@ -54,7 +55,11 @@ try {
 	const serial: number[] = [];
 	for (let i = 0; i < ITERS; i++) {
 		const t0 = performance.now();
-		appendEvent(serialPath, { type: "task.progress", runId: serialManifest.runId, data: { i } });
+		appendEvent(serialPath, {
+			type: "task.progress",
+			runId: serialManifest.runId,
+			data: { i },
+		});
 		serial.push(performance.now() - t0);
 	}
 	serial.sort((a, b) => a - b);
@@ -66,7 +71,11 @@ try {
 		fs.mkdirSync(path.dirname(fp), { recursive: true });
 		fs.writeFileSync(fp, "");
 		const t0 = performance.now();
-		appendEvent(fp, { type: "task.progress", runId: "bench-evt", data: { i } });
+		appendEvent(fp, {
+			type: "task.progress",
+			runId: "bench-evt",
+			data: { i },
+		});
 		batch.push(performance.now() - t0);
 	}
 	batch.sort((a, b) => a - b);
@@ -96,4 +105,6 @@ function percentile(sorted: number[], q: number): number {
 	const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q));
 	return sorted[idx];
 }
-function round(n: number): number { return Math.round(n * 100) / 100; }
+function round(n: number): number {
+	return Math.round(n * 100) / 100;
+}

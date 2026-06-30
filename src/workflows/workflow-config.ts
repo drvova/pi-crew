@@ -53,12 +53,7 @@ export interface WorkflowConfig {
 	 *  Used by preflight-validator to enforce "don't use pi-crew for sequential chains".
 	 *  Valid values: 'single' | 'sequential' | 'concurrent' | 'complex-dag' | 'dynamic'.
 	 *  Absent = auto-classify from step structure (default). */
-	topology?:
-		| "single"
-		| "sequential"
-		| "concurrent"
-		| "complex-dag"
-		| "dynamic";
+	topology?: "single" | "sequential" | "concurrent" | "complex-dag" | "dynamic";
 }
 
 /** A dynamic workflow (runtime === "dynamic"). steps is empty — the script is the source of truth. */

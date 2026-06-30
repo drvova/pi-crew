@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { RenderScheduler } from "../../src/ui/render-scheduler.ts";
 
 function sleep(ms: number): Promise<void> {
@@ -48,7 +48,13 @@ describe("RenderScheduler constructor", () => {
 describe("RenderScheduler flush", () => {
 	it("calls render function on flush", () => {
 		let renders = 0;
-		const scheduler = new RenderScheduler(undefined, () => { renders++; }, { debounceMs: 9999, fallbackMs: 9999 });
+		const scheduler = new RenderScheduler(
+			undefined,
+			() => {
+				renders++;
+			},
+			{ debounceMs: 9999, fallbackMs: 9999 },
+		);
 		scheduler.flush();
 		assert.equal(renders, 1);
 		scheduler.dispose();
@@ -56,11 +62,15 @@ describe("RenderScheduler flush", () => {
 
 	it("collapses multiple flush calls into render loop", () => {
 		let renders = 0;
-		const scheduler = new RenderScheduler(undefined, () => {
-			renders++;
-			// Simulate render triggering another flush
-			if (renders === 1) scheduler.flush();
-		}, { debounceMs: 9999, fallbackMs: 9999 });
+		const scheduler = new RenderScheduler(
+			undefined,
+			() => {
+				renders++;
+				// Simulate render triggering another flush
+				if (renders === 1) scheduler.flush();
+			},
+			{ debounceMs: 9999, fallbackMs: 9999 },
+		);
 		scheduler.flush();
 		assert.equal(renders, 2);
 		scheduler.dispose();
@@ -68,10 +78,14 @@ describe("RenderScheduler flush", () => {
 
 	it("does not infinite-loop beyond safety valve", () => {
 		let renders = 0;
-		const scheduler = new RenderScheduler(undefined, () => {
-			renders++;
-			scheduler.flush(); // Always re-flush
-		}, { debounceMs: 9999, fallbackMs: 9999 });
+		const scheduler = new RenderScheduler(
+			undefined,
+			() => {
+				renders++;
+				scheduler.flush(); // Always re-flush
+			},
+			{ debounceMs: 9999, fallbackMs: 9999 },
+		);
 		scheduler.flush();
 		// Should stop at 5 iterations (safety valve)
 		assert.equal(renders, 5);
@@ -82,7 +96,13 @@ describe("RenderScheduler flush", () => {
 describe("RenderScheduler schedule", () => {
 	it("debounces multiple schedule calls", async () => {
 		let renders = 0;
-		const scheduler = new RenderScheduler(undefined, () => { renders++; }, { debounceMs: 20, fallbackMs: 9999 });
+		const scheduler = new RenderScheduler(
+			undefined,
+			() => {
+				renders++;
+			},
+			{ debounceMs: 20, fallbackMs: 9999 },
+		);
 		scheduler.schedule();
 		scheduler.schedule();
 		scheduler.schedule();
@@ -94,7 +114,13 @@ describe("RenderScheduler schedule", () => {
 
 	it("does not schedule after dispose", async () => {
 		let renders = 0;
-		const scheduler = new RenderScheduler(undefined, () => { renders++; }, { debounceMs: 5, fallbackMs: 9999 });
+		const scheduler = new RenderScheduler(
+			undefined,
+			() => {
+				renders++;
+			},
+			{ debounceMs: 5, fallbackMs: 9999 },
+		);
 		scheduler.dispose();
 		scheduler.schedule();
 		await sleep(20);
@@ -106,11 +132,17 @@ describe("RenderScheduler event subscription", () => {
 	it("subscribes to events and triggers render", async () => {
 		const bus = new FakeEventBus();
 		let renders = 0;
-		const scheduler = new RenderScheduler(bus, () => { renders++; }, {
-			debounceMs: 5,
-			fallbackMs: 9999,
-			events: ["test.event"],
-		});
+		const scheduler = new RenderScheduler(
+			bus,
+			() => {
+				renders++;
+			},
+			{
+				debounceMs: 5,
+				fallbackMs: 9999,
+				events: ["test.event"],
+			},
+		);
 		bus.emit("test.event", {});
 		await sleep(20);
 		assert.ok(renders >= 1);
@@ -161,7 +193,9 @@ describe("RenderScheduler invalidate coalesce", () => {
 			fallbackMs: 9999,
 			events: ["e"],
 			invalidateCoalesceMs: 9999,
-			onInvalidate: () => { count++; },
+			onInvalidate: () => {
+				count++;
+			},
 		});
 		bus.emit("e", { noRunId: true });
 		assert.equal(count, 1);
@@ -172,10 +206,16 @@ describe("RenderScheduler invalidate coalesce", () => {
 describe("RenderScheduler dispose", () => {
 	it("clears all timers and prevents future renders", async () => {
 		let renders = 0;
-		const scheduler = new RenderScheduler(undefined, () => { renders++; }, {
-			debounceMs: 5,
-			fallbackMs: 20,
-		});
+		const scheduler = new RenderScheduler(
+			undefined,
+			() => {
+				renders++;
+			},
+			{
+				debounceMs: 5,
+				fallbackMs: 20,
+			},
+		);
 		await sleep(50);
 		const beforeDispose = renders;
 		scheduler.dispose();

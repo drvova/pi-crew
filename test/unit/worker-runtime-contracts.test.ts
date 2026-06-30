@@ -1,11 +1,20 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { claimTask, isTaskClaimExpired, releaseTaskClaim } from "../../src/state/task-claims.ts";
+import test from "node:test";
 import { createWorkerHeartbeat, isWorkerHeartbeatStale, touchWorkerHeartbeat } from "../../src/runtime/worker-heartbeat.ts";
+import { claimTask, isTaskClaimExpired, releaseTaskClaim } from "../../src/state/task-claims.ts";
 import type { TeamTaskState } from "../../src/state/types.ts";
 
 function task(): TeamTaskState {
-	return { id: "task_1", runId: "run_1", role: "executor", agent: "executor", title: "Task", status: "queued", dependsOn: [], cwd: process.cwd() };
+	return {
+		id: "task_1",
+		runId: "run_1",
+		role: "executor",
+		agent: "executor",
+		title: "Task",
+		status: "queued",
+		dependsOn: [],
+		cwd: process.cwd(),
+	};
 }
 
 test("task claims enforce owner token and expiry", () => {

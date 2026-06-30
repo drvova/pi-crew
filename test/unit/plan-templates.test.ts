@@ -1,12 +1,7 @@
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import {
-	registerPlanTemplate,
-	getPlanTemplate,
-	listPlanTemplates,
-	renderPlanTemplate,
-} from "../../src/runtime/plan-templates.ts";
+import { beforeEach, describe, it } from "node:test";
 import type { PlanTemplate } from "../../src/runtime/plan-templates.ts";
+import { getPlanTemplate, listPlanTemplates, registerPlanTemplate, renderPlanTemplate } from "../../src/runtime/plan-templates.ts";
 
 describe("plan-templates: registerPlanTemplate + getPlanTemplate", () => {
 	it("retrieves a built-in template", () => {

@@ -3,12 +3,13 @@
  * abort the task when preStepOptional is set. Verifies the parsing (string →
  * bool) via the real discoverWorkflows path, and the runtime decision branch.
  */
-import test from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { discoverWorkflows, allWorkflows } from "../../src/workflows/discover-workflows.ts";
+import * as path from "node:path";
+import test from "node:test";
+import { allWorkflows, discoverWorkflows } from "../../src/workflows/discover-workflows.ts";
 
 function writeProjectWorkflow(cwd: string, body: string): void {
 	const dir = path.join(cwd, ".crew", "workflows");
@@ -103,7 +104,12 @@ test("discoverWorkflows defaults preStepOptional to false when absent", () => {
 });
 
 test("workflow-config type carries preStepOptional field (structural)", () => {
-	const step = { id: "s", role: "executor", preStepScript: "x.sh", preStepOptional: true } as const;
+	const step = {
+		id: "s",
+		role: "executor",
+		preStepScript: "x.sh",
+		preStepOptional: true,
+	} as const;
 	assert.equal(step.preStepOptional, true);
 	const step2 = { id: "s", role: "executor", preStepScript: "x.sh" };
 	assert.equal((step2 as { preStepOptional?: boolean }).preStepOptional, undefined);

@@ -1,10 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-	assertValidSessionId,
-	toPiSessionId,
-	safeToPiSessionId,
-} from "../../src/utils/session-utils.ts";
+import test from "node:test";
+import { assertValidSessionId, safeToPiSessionId, toPiSessionId } from "../../src/utils/session-utils.ts";
 
 /**
  * Round 30 (test coverage gaps): `session-utils.ts` provides session ID

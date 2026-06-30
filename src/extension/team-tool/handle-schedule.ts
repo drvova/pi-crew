@@ -1,13 +1,16 @@
 import * as crypto from "node:crypto";
-import type { PiTeamsToolResult } from "../tool-result.ts";
-import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
-import { result, type TeamContext } from "./context.ts";
 import { humanizeSchedule, nextRunTime, parseSchedule } from "../../runtime/scheduler.ts";
 import { loadCrewSettings, saveCrewSettings } from "../../runtime/settings-store.ts";
+import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
+import type { PiTeamsToolResult } from "../tool-result.ts";
+import { result, type TeamContext } from "./context.ts";
 
 // Global key for cross-module scheduler access.
 const CREW_SCHEDULER_KEY = Symbol.for("pi-crew:scheduler");
-type SchedulerRef = { add(job: import("../../runtime/scheduler.ts").ScheduledJob): void; list(): import("../../runtime/scheduler.ts").ScheduledJob[] };
+type SchedulerRef = {
+	add(job: import("../../runtime/scheduler.ts").ScheduledJob): void;
+	list(): import("../../runtime/scheduler.ts").ScheduledJob[];
+};
 
 function getCrewScheduler(): SchedulerRef | undefined {
 	return (globalThis as Record<symbol | string, unknown>)[CREW_SCHEDULER_KEY] as SchedulerRef | undefined;
@@ -36,13 +39,22 @@ function buildScheduleSpec(params: ScheduleParams): {
 	if (params.cron) {
 		const parsed = parseSchedule(params.cron);
 		if ("error" in parsed) throw new Error(parsed.error);
-		return { spec: parsed, schedule: params.cron, scheduleType: "cron" as const };
+		return {
+			spec: parsed,
+			schedule: params.cron,
+			scheduleType: "cron" as const,
+		};
 	}
 	if (params.interval !== undefined && params.interval > 0) {
 		const specStr = `${params.interval}ms`;
 		const spec = parseSchedule(specStr);
 		if ("error" in spec) throw new Error(spec.error);
-		return { spec, schedule: specStr, scheduleType: "interval" as const, intervalMs: params.interval };
+		return {
+			spec,
+			schedule: specStr,
+			scheduleType: "interval" as const,
+			intervalMs: params.interval,
+		};
 	}
 	if (params.once !== undefined) {
 		const ts = typeof params.once === "number" ? new Date(params.once).toISOString() : params.once;
@@ -155,7 +167,10 @@ function persistScheduledJob(cwd: string, job: import("../../runtime/scheduler.t
 			? ((settings as Record<string, unknown>).scheduledJobs as import("../../runtime/scheduler.ts").ScheduledJob[])
 			: [];
 		saveCrewSettings(
-			{ ...settings, scheduledJobs: [...existingJobs, job] } as Parameters<typeof saveCrewSettings>[0],
+			{
+				...settings,
+				scheduledJobs: [...existingJobs, job],
+			} as Parameters<typeof saveCrewSettings>[0],
 			cwd,
 		);
 	} catch {
@@ -172,11 +187,8 @@ export function persistScheduledJobUpdate(cwd: string, job: import("../../runtim
 		)
 			? ((settings as Record<string, unknown>).scheduledJobs as import("../../runtime/scheduler.ts").ScheduledJob[])
 			: [];
-		const updated = existingJobs.map((j) => j.id === job.id ? job : j);
-		saveCrewSettings(
-			{ ...settings, scheduledJobs: updated } as Parameters<typeof saveCrewSettings>[0],
-			cwd,
-		);
+		const updated = existingJobs.map((j) => (j.id === job.id ? job : j));
+		saveCrewSettings({ ...settings, scheduledJobs: updated } as Parameters<typeof saveCrewSettings>[0], cwd);
 	} catch {
 		/* best-effort persistence */
 	}
@@ -192,7 +204,10 @@ function persistScheduledJobRemove(cwd: string, jobId: string): void {
 			? ((settings as Record<string, unknown>).scheduledJobs as import("../../runtime/scheduler.ts").ScheduledJob[])
 			: [];
 		saveCrewSettings(
-			{ ...settings, scheduledJobs: existingJobs.filter((j) => j.id !== jobId) } as Parameters<typeof saveCrewSettings>[0],
+			{
+				...settings,
+				scheduledJobs: existingJobs.filter((j) => j.id !== jobId),
+			} as Parameters<typeof saveCrewSettings>[0],
 			cwd,
 		);
 	} catch {
@@ -204,7 +219,11 @@ export function handleListScheduled(_params: TeamToolParamsValue, ctx: TeamConte
 	const scheduler = getCrewScheduler();
 	if (!scheduler) return result("Scheduler not running.", { action: "scheduled", status: "error" }, true);
 	const jobs = scheduler.list();
-	if (jobs.length === 0) return result("No scheduled jobs.", { action: "scheduled", status: "ok" });
+	if (jobs.length === 0)
+		return result("No scheduled jobs.", {
+			action: "scheduled",
+			status: "ok",
+		});
 	const lines: string[] = [`Scheduled jobs (${jobs.length}):`];
 	for (const job of jobs) {
 		lines.push(

@@ -1,12 +1,12 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { appendEvent, readEvents, type TeamEvent } from "../state/event-log.ts";
+import { readCrewAgents, saveCrewAgents } from "../runtime/crew-agent-records.ts";
 import { checkProcessLiveness, isActiveRunStatus } from "../runtime/process-status.ts";
+import { appendEvent, readEvents, type TeamEvent } from "../state/event-log.ts";
+import { withRunLockSync } from "../state/locks.ts";
 import { loadRunManifestById, saveRunTasks, updateRunStatus } from "../state/state-store.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
-import { readCrewAgents, saveCrewAgents } from "../runtime/crew-agent-records.ts";
-import { withRunLockSync } from "../state/locks.ts";
-import { listRuns } from "./run-index.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { listRuns } from "./run-index.ts";
 
 export interface AsyncNotifierState {
 	seenFinishedRunIds: Set<string>;
@@ -51,15 +51,35 @@ function markActiveTasksAndAgentsFailed(run: TeamRunManifest, message: string): 
 	const tasks = loaded?.tasks ?? [];
 	const failedAt = new Date().toISOString();
 	if (tasks.some(isTaskActive)) {
-		saveRunTasks(run, tasks.map((task) => isTaskActive(task) ? { ...task, status: "failed", finishedAt: failedAt, error: message } : task));
+		saveRunTasks(
+			run,
+			tasks.map((task) =>
+				isTaskActive(task)
+					? {
+							...task,
+							status: "failed",
+							finishedAt: failedAt,
+							error: message,
+						}
+					: task,
+			),
+		);
 	}
 	const agents = readCrewAgents(run);
 	if (agents.some((agent) => agent.status === "running" || agent.status === "queued" || agent.status === "waiting")) {
-		saveCrewAgents(run, agents.map((agent) =>
-			agent.status === "running" || agent.status === "queued" || agent.status === "waiting"
-				? { ...agent, status: "failed", completedAt: failedAt, error: message }
-				: agent,
-		));
+		saveCrewAgents(
+			run,
+			agents.map((agent) =>
+				agent.status === "running" || agent.status === "queued" || agent.status === "waiting"
+					? {
+							...agent,
+							status: "failed",
+							completedAt: failedAt,
+							error: message,
+						}
+					: agent,
+			),
+		);
 	}
 }
 
@@ -77,16 +97,26 @@ export function markDeadAsyncRunIfNeeded(run: TeamRunManifest, now = Date.now(),
 		if (!fresh || !isActiveRunStatus(fresh.manifest.status)) return undefined;
 		const failed = updateRunStatus(fresh.manifest, "failed", message);
 		markActiveTasksAndAgentsFailed(failed, message);
-		appendEvent(failed.eventsPath, { type: "async.died", runId: failed.runId, message, data: { pid: asyncPid, detail: liveness.detail } });
+		appendEvent(failed.eventsPath, {
+			type: "async.died",
+			runId: failed.runId,
+			message,
+			data: { pid: asyncPid, detail: liveness.detail },
+		});
 		return failed;
 	});
 }
 
 const LIST_RUNS_DEBOUNCE_MS = 30_000;
 
-export function startAsyncRunNotifier(ctx: ExtensionContext, state: AsyncNotifierState, intervalMs = 5000, options: AsyncNotifierOptions = {}): void {
+export function startAsyncRunNotifier(
+	ctx: ExtensionContext,
+	state: AsyncNotifierState,
+	intervalMs = 5000,
+	options: AsyncNotifierOptions = {},
+): void {
 	if (state.interval) clearInterval(state.interval);
-	const generation = options.generation ?? ((state.generation ?? 0) + 1);
+	const generation = options.generation ?? (state.generation ?? 0) + 1;
 	state.generation = generation;
 	const startedAtMs = Date.now();
 	const staleBeforeMs = state.lastStoppedAtMs ?? startedAtMs;

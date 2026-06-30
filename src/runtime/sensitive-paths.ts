@@ -12,7 +12,8 @@ import * as path from "node:path";
 
 /** Basenames that almost certainly hold secrets or PII */
 const SENSITIVE_BASENAMES = /\.(?:env|pem|key|p12|pfx|crt|cer|jks|keystore|asc|gpg)(?:\..+)?$/i;
-const SENSITIVE_EXACT = /^(?:\.env|\.netrc|\.npmrc|\.pypirc|credentials|secrets?|passwords?|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|authorized_keys|known_hosts|jwt\.json|session\.cookie|\.token)$/i;
+const SENSITIVE_EXACT =
+	/^(?:\.env|\.netrc|\.npmrc|\.pypirc|credentials|secrets?|passwords?|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|authorized_keys|known_hosts|jwt\.json|session\.cookie|\.token)$/i;
 
 /** Path components that indicate sensitive directories */
 const SENSITIVE_DIRS = new Set([".ssh", ".aws", ".gnupg", ".kube", ".docker", ".config/gcloud", ".config/gh"]);

@@ -53,27 +53,57 @@ export function isWorktreeSandboxEnabled(): boolean {
  */
 export function checkWorktreeSandboxAvailable(cwd: string): { available: true; commitSha: string } | { available: false; reason: string } {
 	if (!isWorktreeSandboxEnabled()) {
-		return { available: false, reason: "PI_CREW_VERIFICATION_WORKTREE not set (opt-in)" };
+		return {
+			available: false,
+			reason: "PI_CREW_VERIFICATION_WORKTREE not set (opt-in)",
+		};
 	}
 	try {
 		// Is cwd inside a git repo? `git rev-parse --show-toplevel` errors out
 		// (non-zero exit) when not in a repo. execFileSync throws on non-zero.
-		const toplevel = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" }).trim();
-		if (!toplevel) return { available: false, reason: "git rev-parse returned empty toplevel" };
+		const toplevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+			encoding: "utf-8",
+		}).trim();
+		if (!toplevel)
+			return {
+				available: false,
+				reason: "git rev-parse returned empty toplevel",
+			};
 		// Current commit SHA (this is what T_snap will pin to).
-		const commitSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" }).trim();
-		if (!commitSha) return { available: false, reason: "git rev-parse HEAD returned empty SHA" };
+		const commitSha = execFileSync("git", ["rev-parse", "HEAD"], {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+			encoding: "utf-8",
+		}).trim();
+		if (!commitSha)
+			return {
+				available: false,
+				reason: "git rev-parse HEAD returned empty SHA",
+			};
 		// Dirty index? `git status --porcelain` outputs non-empty if there are
 		// uncommitted changes. We refuse to sandbox a dirty workspace because
 		// the worktree would NOT contain the in-progress edits (T_snap would
 		// pin to a stale commit). Better to fall back + warn than silently
 		// verify against the wrong code.
-		const status = execFileSync("git", ["status", "--porcelain"], { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" }).trim();
-		if (status.length > 0) return { available: false, reason: `dirty git index (${status.split("\n").length} changed files); refusing to sandbox — worktree would pin to stale commit` };
+		const status = execFileSync("git", ["status", "--porcelain"], {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+			encoding: "utf-8",
+		}).trim();
+		if (status.length > 0)
+			return {
+				available: false,
+				reason: `dirty git index (${status.split("\n").length} changed files); refusing to sandbox — worktree would pin to stale commit`,
+			};
 		return { available: true, commitSha };
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : String(error);
-		return { available: false, reason: `git precondition check failed: ${msg.slice(0, 200)}` };
+		return {
+			available: false,
+			reason: `git precondition check failed: ${msg.slice(0, 200)}`,
+		};
 	}
 }
 
@@ -102,13 +132,29 @@ export function prepareVerificationWorktree(cwd: string, commitSha: string): Ver
 			execFileSync("git", ["worktree", "remove", "--force", worktreePath], { cwd, stdio: ["ignore", "pipe", "pipe"], timeout: 5000 });
 		} catch {
 			// Fall back to `git worktree prune` if remove fails (already gone).
-			try { execFileSync("git", ["worktree", "prune"], { cwd, stdio: ["ignore", "pipe", "pipe"], timeout: 5000 }); } catch { /* best-effort */ }
+			try {
+				execFileSync("git", ["worktree", "prune"], {
+					cwd,
+					stdio: ["ignore", "pipe", "pipe"],
+					timeout: 5000,
+				});
+			} catch {
+				/* best-effort */
+			}
 		}
 		// Remove the temp parent dir.
-		try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best-effort */ }
+		try {
+			fs.rmSync(tmpRoot, { recursive: true, force: true });
+		} catch {
+			/* best-effort */
+		}
 	};
 	try {
-		execFileSync("git", ["worktree", "add", "--detach", worktreePath, commitSha], { cwd, stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 });
+		execFileSync("git", ["worktree", "add", "--detach", worktreePath, commitSha], {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+			timeout: 30_000,
+		});
 		return { worktreePath, commitSha, cleanup };
 	} catch (error) {
 		cleanup();
@@ -126,7 +172,11 @@ export function prepareVerificationWorktree(cwd: string, commitSha: string): Ver
  * If preparation fails, the function rethrows WITHOUT calling fn — caller
  * must handle the prep failure (typically by falling back to non-sandboxed).
  */
-export async function withVerificationWorktree<T>(cwd: string, commitSha: string, fn: (worktree: VerificationWorktree) => Promise<T> | T): Promise<T> {
+export async function withVerificationWorktree<T>(
+	cwd: string,
+	commitSha: string,
+	fn: (worktree: VerificationWorktree) => Promise<T> | T,
+): Promise<T> {
 	const worktree = prepareVerificationWorktree(cwd, commitSha);
 	try {
 		return await fn(worktree);

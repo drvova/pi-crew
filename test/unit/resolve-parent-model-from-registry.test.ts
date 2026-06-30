@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { resolveParentModelFromRegistry } from "../../src/runtime/live-session-runtime.ts";
 
 describe("resolveParentModelFromRegistry (round 18 — stale parentModel)", () => {
@@ -9,12 +9,24 @@ describe("resolveParentModelFromRegistry (round 18 — stale parentModel)", () =
 	});
 
 	it("returns raw parentModel when it has auth (full provider/id form)", () => {
-		const reg = buildRegistry([{ provider: "minimax", id: "MiniMax-M3", fullId: "minimax/MiniMax-M3" }]);
+		const reg = buildRegistry([
+			{
+				provider: "minimax",
+				id: "MiniMax-M3",
+				fullId: "minimax/MiniMax-M3",
+			},
+		]);
 		assert.equal(resolveParentModelFromRegistry(reg, "minimax/MiniMax-M3"), "minimax/MiniMax-M3");
 	});
 
 	it("falls back to first available when parentModel has NO auth (claude-sonnet-4-5)", () => {
-		const reg = buildRegistry([{ provider: "minimax", id: "MiniMax-M3", fullId: "minimax/MiniMax-M3" }]);
+		const reg = buildRegistry([
+			{
+				provider: "minimax",
+				id: "MiniMax-M3",
+				fullId: "minimax/MiniMax-M3",
+			},
+		]);
 		// claude-sonnet-4-5 has no auth → must fall back to first available (minimax/MiniMax-M3)
 		assert.equal(resolveParentModelFromRegistry(reg, "anthropic/claude-sonnet-4-5"), "minimax/MiniMax-M3");
 	});
@@ -25,7 +37,13 @@ describe("resolveParentModelFromRegistry (round 18 — stale parentModel)", () =
 	});
 
 	it("resolves bare id via registry.fullId when bare id exists", () => {
-		const reg = buildRegistry([{ provider: "minimax", id: "MiniMax-M3", fullId: "minimax/MiniMax-M3" }]);
+		const reg = buildRegistry([
+			{
+				provider: "minimax",
+				id: "MiniMax-M3",
+				fullId: "minimax/MiniMax-M3",
+			},
+		]);
 		assert.equal(resolveParentModelFromRegistry(reg, "MiniMax-M3"), "minimax/MiniMax-M3");
 	});
 
@@ -35,7 +53,13 @@ describe("resolveParentModelFromRegistry (round 18 — stale parentModel)", () =
 	});
 
 	it("handles undefined parentModel gracefully", () => {
-		const reg = buildRegistry([{ provider: "minimax", id: "MiniMax-M3", fullId: "minimax/MiniMax-M3" }]);
+		const reg = buildRegistry([
+			{
+				provider: "minimax",
+				id: "MiniMax-M3",
+				fullId: "minimax/MiniMax-M3",
+			},
+		]);
 		assert.equal(resolveParentModelFromRegistry(reg, undefined), "minimax/MiniMax-M3");
 	});
 });

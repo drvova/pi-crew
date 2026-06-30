@@ -10,9 +10,7 @@ export const claudeAdapter: ExportAdapter = {
 	},
 
 	formatFile(content: ExportContent): string {
-		const tagLines = content.tags.length > 0
-			? ["tags:", ...content.tags.map((tag) => `  - ${JSON.stringify(tag)}`)]
-			: [];
+		const tagLines = content.tags.length > 0 ? ["tags:", ...content.tags.map((tag) => `  - ${JSON.stringify(tag)}`)] : [];
 		const frontmatter = [
 			"---",
 			`description: ${JSON.stringify(content.description)}`,

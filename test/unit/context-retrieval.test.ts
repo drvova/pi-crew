@@ -1,12 +1,12 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
-	scoreRelevance,
 	hasConverged,
-	refineQuery,
-	shouldContinue,
-	type RetrievalQuery,
 	type RelevanceEvaluation,
+	type RetrievalQuery,
+	refineQuery,
+	scoreRelevance,
+	shouldContinue,
 } from "../../src/runtime/task-runner/context-retrieval.ts";
 
 describe("scoreRelevance", () => {
@@ -33,18 +33,11 @@ describe("scoreRelevance", () => {
 	it("path match contributes more than content match", () => {
 		const pathOnly = scoreRelevance("task-manager.ts", "xyz", ["task"]);
 		const contentOnly = scoreRelevance("xyz.ts", "task manager", ["task"]);
-		assert.ok(
-			pathOnly >= contentOnly,
-			`Path match (${pathOnly}) should be >= content match (${contentOnly})`,
-		);
+		assert.ok(pathOnly >= contentOnly, `Path match (${pathOnly}) should be >= content match (${contentOnly})`);
 	});
 
 	it("score is clamped between 0 and 1", () => {
-		const score = scoreRelevance(
-			"task-runner.ts",
-			"task task task task task task task task task",
-			["task", "runner", "test"],
-		);
+		const score = scoreRelevance("task-runner.ts", "task task task task task task task task task", ["task", "runner", "test"]);
 		assert.ok(score >= 0 && score <= 1, `Score ${score} out of range [0,1]`);
 	});
 
@@ -58,36 +51,96 @@ describe("scoreRelevance", () => {
 describe("hasConverged", () => {
 	it("returns false when fewer than 3 high-relevance evaluations", () => {
 		const evals: RelevanceEvaluation[] = [
-			{ path: "a.ts", relevance: 0.9, reason: "good", missingContext: [] },
-			{ path: "b.ts", relevance: 0.8, reason: "good", missingContext: [] },
+			{
+				path: "a.ts",
+				relevance: 0.9,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "b.ts",
+				relevance: 0.8,
+				reason: "good",
+				missingContext: [],
+			},
 		];
 		assert.equal(hasConverged(evals), false);
 	});
 
 	it("returns true when 3+ high-relevance and no critical gaps", () => {
 		const evals: RelevanceEvaluation[] = [
-			{ path: "a.ts", relevance: 0.9, reason: "good", missingContext: [] },
-			{ path: "b.ts", relevance: 0.8, reason: "good", missingContext: [] },
-			{ path: "c.ts", relevance: 0.75, reason: "good", missingContext: [] },
+			{
+				path: "a.ts",
+				relevance: 0.9,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "b.ts",
+				relevance: 0.8,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "c.ts",
+				relevance: 0.75,
+				reason: "good",
+				missingContext: [],
+			},
 		];
 		assert.equal(hasConverged(evals), true);
 	});
 
 	it("returns false when a critical gap exists (low relevance with missing context)", () => {
 		const evals: RelevanceEvaluation[] = [
-			{ path: "a.ts", relevance: 0.9, reason: "good", missingContext: [] },
-			{ path: "b.ts", relevance: 0.8, reason: "good", missingContext: [] },
-			{ path: "c.ts", relevance: 0.75, reason: "good", missingContext: [] },
-			{ path: "d.ts", relevance: 0.2, reason: "gap", missingContext: ["critical-config"] },
+			{
+				path: "a.ts",
+				relevance: 0.9,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "b.ts",
+				relevance: 0.8,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "c.ts",
+				relevance: 0.75,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "d.ts",
+				relevance: 0.2,
+				reason: "gap",
+				missingContext: ["critical-config"],
+			},
 		];
 		assert.equal(hasConverged(evals), false);
 	});
 
 	it("returns true with high-relevance files even if some have missingContext", () => {
 		const evals: RelevanceEvaluation[] = [
-			{ path: "a.ts", relevance: 0.9, reason: "good", missingContext: ["extra"] },
-			{ path: "b.ts", relevance: 0.8, reason: "good", missingContext: [] },
-			{ path: "c.ts", relevance: 0.75, reason: "good", missingContext: [] },
+			{
+				path: "a.ts",
+				relevance: 0.9,
+				reason: "good",
+				missingContext: ["extra"],
+			},
+			{
+				path: "b.ts",
+				relevance: 0.8,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "c.ts",
+				relevance: 0.75,
+				reason: "good",
+				missingContext: [],
+			},
 		];
 		// No low-relevance evaluation with missingContext => converged
 		assert.equal(hasConverged(evals), true);
@@ -204,16 +257,36 @@ describe("shouldContinue", () => {
 
 	it("returns false when converged (3+ high relevance, no gaps)", () => {
 		const evals: RelevanceEvaluation[] = [
-			{ path: "a.ts", relevance: 0.9, reason: "good", missingContext: [] },
-			{ path: "b.ts", relevance: 0.8, reason: "good", missingContext: [] },
-			{ path: "c.ts", relevance: 0.75, reason: "good", missingContext: [] },
+			{
+				path: "a.ts",
+				relevance: 0.9,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "b.ts",
+				relevance: 0.8,
+				reason: "good",
+				missingContext: [],
+			},
+			{
+				path: "c.ts",
+				relevance: 0.75,
+				reason: "good",
+				missingContext: [],
+			},
 		];
 		assert.equal(shouldContinue(evals, 0), false);
 	});
 
 	it("returns true when not converged and cycle < 3", () => {
 		const evals: RelevanceEvaluation[] = [
-			{ path: "a.ts", relevance: 0.4, reason: "partial", missingContext: ["gap"] },
+			{
+				path: "a.ts",
+				relevance: 0.4,
+				reason: "partial",
+				missingContext: ["gap"],
+			},
 		];
 		assert.equal(shouldContinue(evals, 1), true);
 	});

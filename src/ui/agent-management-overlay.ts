@@ -34,23 +34,35 @@ export function agentToEntry(agent: AgentConfig): AgentEntry {
 
 function sourceIcon(source: ResourceSource): string {
 	switch (source) {
-		case "builtin": return "📦";
-		case "user": return "👤";
-		case "project": return "📂";
-		case "git": return "🔗";
-		case "dynamic": return "⚡";
-		default: return "❓";
+		case "builtin":
+			return "📦";
+		case "user":
+			return "👤";
+		case "project":
+			return "📂";
+		case "git":
+			return "🔗";
+		case "dynamic":
+			return "⚡";
+		default:
+			return "❓";
 	}
 }
 
 function sourceLabel(source: ResourceSource): string {
 	switch (source) {
-		case "builtin": return "builtin";
-		case "user": return "user";
-		case "project": return "project";
-		case "git": return "git";
-		case "dynamic": return "dynamic";
-		default: return "unknown";
+		case "builtin":
+			return "builtin";
+		case "user":
+			return "user";
+		case "project":
+			return "project";
+		case "git":
+			return "git";
+		case "dynamic":
+			return "dynamic";
+		default:
+			return "unknown";
 	}
 }
 
@@ -65,7 +77,14 @@ export interface AgentOverlayState {
 export function createAgentOverlayState(entries: AgentEntry[], maxVisible = 20): AgentOverlayState {
 	return {
 		entries: entries.sort((a, b) => {
-			const order: Record<ResourceSource, number> = { project: 0, "project-pi": 1, user: 2, git: 3, builtin: 4, dynamic: 5 };
+			const order: Record<ResourceSource, number> = {
+				project: 0,
+				"project-pi": 1,
+				user: 2,
+				git: 3,
+				builtin: 4,
+				dynamic: 5,
+			};
 			const diff = (order[a.source] ?? 4) - (order[b.source] ?? 4);
 			return diff !== 0 ? diff : a.name.localeCompare(b.name);
 		}),
@@ -80,11 +99,7 @@ export function moveSelection(state: AgentOverlayState, direction: -1 | 1): Agen
 	const next = Math.max(0, Math.min(state.entries.length - 1, state.selectedIndex + direction));
 	const visibleStart = state.scrollOffset;
 	const visibleEnd = state.scrollOffset + state.maxVisible;
-	const newScroll = next < visibleStart
-		? next
-		: next >= visibleEnd
-			? Math.max(0, next - state.maxVisible + 1)
-			: state.scrollOffset;
+	const newScroll = next < visibleStart ? next : next >= visibleEnd ? Math.max(0, next - state.maxVisible + 1) : state.scrollOffset;
 	return { ...state, selectedIndex: next, scrollOffset: newScroll };
 }
 
@@ -109,34 +124,31 @@ export function renderAgentOverlay(state: AgentOverlayState, width: number): str
 		return lines;
 	}
 
-	const visible = state.entries.slice(
-		state.scrollOffset,
-		state.scrollOffset + state.maxVisible,
-	);
+	const visible = state.entries.slice(state.scrollOffset, state.scrollOffset + state.maxVisible);
 
 	for (const [i, entry] of visible.entries()) {
 		const globalIndex = state.scrollOffset + i;
 		const isSelected = globalIndex === state.selectedIndex;
 		const isExpanded = state.expanded.has(globalIndex);
 		const cursor = isSelected ? "▸" : " ";
-	const disabled = entry.disabled ? " [disabled]" : "";
-	const model = entry.model ? ` (${entry.model})` : "";
+		const disabled = entry.disabled ? " [disabled]" : "";
+		const model = entry.model ? ` (${entry.model})` : "";
 
-	const summary = `${cursor} ${sourceIcon(entry.source)} ${entry.name}${model}${disabled}`;
-	lines.push(truncate(summary, width));
+		const summary = `${cursor} ${sourceIcon(entry.source)} ${entry.name}${model}${disabled}`;
+		lines.push(truncate(summary, width));
 
-	if (isExpanded) {
-		const desc = `    ${entry.description}`;
-		lines.push(truncate(desc, width));
-		const meta: string[] = [`    source: ${sourceLabel(entry.source)}`];
-		if (entry.model) meta.push(`model: ${entry.model}`);
-		if (entry.thinking) meta.push(`thinking: ${entry.thinking}`);
-		if (entry.loadMode) meta.push(`loadMode: ${entry.loadMode}`);
-		if (entry.contextMode) meta.push(`context: ${entry.contextMode}`);
-		meta.push(`file: ${entry.filePath}`);
-		lines.push(truncate(meta.join(" · "), width));
-		lines.push(truncate("─".repeat(Math.min(width - 4, 50)), width));
-	}
+		if (isExpanded) {
+			const desc = `    ${entry.description}`;
+			lines.push(truncate(desc, width));
+			const meta: string[] = [`    source: ${sourceLabel(entry.source)}`];
+			if (entry.model) meta.push(`model: ${entry.model}`);
+			if (entry.thinking) meta.push(`thinking: ${entry.thinking}`);
+			if (entry.loadMode) meta.push(`loadMode: ${entry.loadMode}`);
+			if (entry.contextMode) meta.push(`context: ${entry.contextMode}`);
+			meta.push(`file: ${entry.filePath}`);
+			lines.push(truncate(meta.join(" · "), width));
+			lines.push(truncate("─".repeat(Math.min(width - 4, 50)), width));
+		}
 	}
 
 	if (state.scrollOffset + state.maxVisible < state.entries.length) {

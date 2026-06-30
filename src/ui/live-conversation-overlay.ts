@@ -5,10 +5,10 @@
  * Falls back to polling LiveAgentHandle.activity when subscribe is unavailable.
  */
 import type { LiveAgentHandle } from "../runtime/live-agent-manager.ts";
-import { iconForStatus } from "./status-colors.ts";
-import { spinnerFrame } from "./spinner.ts";
-import type { CrewTheme } from "./theme-adapter.ts";
 import { pad, truncate } from "../utils/visual.ts";
+import { spinnerFrame } from "./spinner.ts";
+import { iconForStatus } from "./status-colors.ts";
+import type { CrewTheme } from "./theme-adapter.ts";
 
 const CHROME_LINES = 6;
 const MIN_VIEWPORT = 3;
@@ -31,12 +31,7 @@ export class LiveConversationOverlay {
 	private handle: LiveAgentHandle;
 	private theme: CrewTheme;
 
-	constructor(
-		handle: LiveAgentHandle,
-		theme: CrewTheme,
-		columns = 80,
-		rows = 24,
-	) {
+	constructor(handle: LiveAgentHandle, theme: CrewTheme, columns = 80, rows = 24) {
 		this.handle = handle;
 		this.theme = theme;
 		this.columns = columns;
@@ -54,16 +49,26 @@ export class LiveConversationOverlay {
 						if (this.autoScroll) this.scrollOffset = Math.max(0, this.cachedLines.length - this.viewportHeight());
 					}
 				});
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 		}
 		// Also poll for summary updates
 		this.pollTimer = setInterval(() => {
 			if (this.closed) return;
 			this.frame++;
-			try { this.refreshSummary(); } catch { /* ignore */ }
+			try {
+				this.refreshSummary();
+			} catch {
+				/* ignore */
+			}
 		}, 200);
 		this.pollTimer.unref();
-		try { this.refreshSummary(); } catch { /* ignore */ }
+		try {
+			this.refreshSummary();
+		} catch {
+			/* ignore */
+		}
 	}
 
 	private pushLine(line: string): void {
@@ -120,8 +125,7 @@ export class LiveConversationOverlay {
 		if (w < 6) return [];
 		const th = this.theme;
 		const innerW = w - 4;
-		const row = (content: string) =>
-			th.fg("border", "│") + " " + pad(truncate(content, innerW), innerW) + " " + th.fg("border", "│");
+		const row = (content: string) => th.fg("border", "│") + " " + pad(truncate(content, innerW), innerW) + " " + th.fg("border", "│");
 		const hrTop = th.fg("border", `╭${"─".repeat(w - 2)}╮`);
 		const hrBot = th.fg("border", `╰${"─".repeat(w - 2)}╯`);
 		const hrMid = row(th.fg("dim", "─".repeat(innerW)));
@@ -130,9 +134,10 @@ export class LiveConversationOverlay {
 		lines.push(hrTop);
 
 		// Header
-		const statusIcon = this.handle.status === "running"
-			? th.fg("accent", spinnerFrame(this.handle.taskId ?? this.handle.agentId))
-			: iconForStatus(this.handle.status);
+		const statusIcon =
+			this.handle.status === "running"
+				? th.fg("accent", spinnerFrame(this.handle.taskId ?? this.handle.agentId))
+				: iconForStatus(this.handle.status);
 		const name = this.handle.agent ?? this.handle.taskId;
 		const act = this.handle.activity;
 		const elapsed = `${(this.safeElapsedMs(act) / 1000).toFixed(1)}s`;
@@ -149,13 +154,19 @@ export class LiveConversationOverlay {
 				const color = ctxPct >= 85 ? "error" : ctxPct >= 70 ? "warning" : "dim";
 				headerParts.push(th.fg(color, `${Math.round(ctxPct)}% ctx`));
 			}
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 		if (act.compactionCount > 0) headerParts.push(th.fg("dim", `↻${act.compactionCount}`));
 		// Model name
 		if (this.handle.modelName) headerParts.push(th.fg("muted", this.handle.modelName));
 
 		const desc = this.handle.description ?? this.handle.role ?? "";
-		lines.push(row(`${statusIcon} ${th.fg("accent", name)}  ${th.fg("muted", desc)} ${th.fg("dim", "·")} ${th.fg("dim", headerParts.join(" · "))}`));
+		lines.push(
+			row(
+				`${statusIcon} ${th.fg("accent", name)}  ${th.fg("muted", desc)} ${th.fg("dim", "·")} ${th.fg("dim", headerParts.join(" · "))}`,
+			),
+		);
 		lines.push(hrMid);
 
 		// Content
@@ -167,7 +178,9 @@ export class LiveConversationOverlay {
 
 		// Footer
 		lines.push(hrMid);
-		const footerText = this.autoScroll ? "auto-scroll · esc/q close" : `line ${this.scrollOffset + 1}/${this.cachedLines.length} · ↑/k ↓/j G/g · esc/q close`;
+		const footerText = this.autoScroll
+			? "auto-scroll · esc/q close"
+			: `line ${this.scrollOffset + 1}/${this.cachedLines.length} · ↑/k ↓/j G/g · esc/q close`;
 		lines.push(row(th.fg("dim", footerText)));
 		lines.push(hrBot);
 		return lines;
@@ -178,7 +191,10 @@ export class LiveConversationOverlay {
 		this.closed = true;
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
-		if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = undefined; }
+		if (this.pollTimer) {
+			clearInterval(this.pollTimer);
+			this.pollTimer = undefined;
+		}
 	}
 
 	dispose(): void {

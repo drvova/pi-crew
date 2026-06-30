@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { PipelineRunner, createPipelineWorkflow } from "../../src/runtime/pipeline-runner.ts";
-import type { PipelineStage, PipelineWorkflow, PipelineContext, StageResult, PipelineResult } from "../../src/runtime/pipeline-runner.ts";
+import test from "node:test";
+import type { PipelineContext, PipelineResult, PipelineStage, PipelineWorkflow, StageResult } from "../../src/runtime/pipeline-runner.ts";
+import { createPipelineWorkflow, PipelineRunner } from "../../src/runtime/pipeline-runner.ts";
 
 test("PipelineRunner executes single stage", async () => {
 	const runner = new PipelineRunner();
@@ -115,7 +115,10 @@ test("PipelineRunner fans out for array inputs", async () => {
 	assert.equal(result.status, "completed");
 	assert.equal(result.stages[0].fanOutItems, 3);
 	assert.equal(executions.length, 3);
-	assert.deepEqual(executions.map((e) => e.item), ["item1", "item2", "item3"]);
+	assert.deepEqual(
+		executions.map((e) => e.item),
+		["item1", "item2", "item3"],
+	);
 });
 
 test("PipelineRunner respects maxConcurrency for fan-out", async () => {
@@ -264,9 +267,7 @@ test("PipelineRunner resolves context variables", async () => {
 		name: "context-test",
 		description: "Test context resolution",
 		goal: "Test goal",
-		stages: [
-			{ name: "stage1", team: "team", inputs: "${context.value}" },
-		],
+		stages: [{ name: "stage1", team: "team", inputs: "${context.value}" }],
 	};
 
 	let receivedInputs: unknown;
@@ -286,9 +287,7 @@ test("PipelineRunner resolves args variables", async () => {
 		name: "args-test",
 		description: "Test args resolution",
 		goal: "Test goal",
-		stages: [
-			{ name: "stage1", team: "team", inputs: "${args.topic}" },
-		],
+		stages: [{ name: "stage1", team: "team", inputs: "${args.topic}" }],
 	};
 
 	let receivedInputs: unknown;
@@ -366,7 +365,12 @@ test("PipelineRunner fromWorkflowConfig converts workflow", () => {
 		filePath: "/test/workflow.md",
 		steps: [
 			{ id: "step1", role: "explorer", task: "Task 1" },
-			{ id: "step2", role: "analyst", task: "Task 2", dependsOn: ["step1"] },
+			{
+				id: "step2",
+				role: "analyst",
+				task: "Task 2",
+				dependsOn: ["step1"],
+			},
 		],
 		maxConcurrency: 3,
 	};
@@ -385,15 +389,10 @@ test("PipelineRunner fromWorkflowConfig converts workflow", () => {
 });
 
 test("createPipelineWorkflow factory function", () => {
-	const workflow = createPipelineWorkflow(
-		"my-pipeline",
-		"My pipeline description",
-		"My goal",
-		[
-			{ name: "stage1", team: "team1", inputs: "input1" },
-			{ name: "stage2", team: "team2", inputs: "input2" },
-		],
-	);
+	const workflow = createPipelineWorkflow("my-pipeline", "My pipeline description", "My goal", [
+		{ name: "stage1", team: "team1", inputs: "input1" },
+		{ name: "stage2", team: "team2", inputs: "input2" },
+	]);
 
 	assert.equal(workflow.name, "my-pipeline");
 	assert.equal(workflow.description, "My pipeline description");
@@ -500,7 +499,12 @@ test("PipelineRunner respects stage-level stopOnError", async () => {
 		goal: "Test goal",
 		stages: [
 			{ name: "stage1", team: "team", inputs: "input1" },
-			{ name: "stage2", team: "team", inputs: "input2", stopOnError: false },
+			{
+				name: "stage2",
+				team: "team",
+				inputs: "input2",
+				stopOnError: false,
+			},
 			{ name: "stage3", team: "team", inputs: "input3" },
 		],
 	};
@@ -567,7 +571,11 @@ test("PipelineRunner resolves nested context paths", async () => {
 		description: "Test nested context",
 		goal: "Test goal",
 		stages: [
-			{ name: "stage1", team: "team", inputs: "${context.nested.deep.value}" },
+			{
+				name: "stage1",
+				team: "team",
+				inputs: "${context.nested.deep.value}",
+			},
 		],
 	};
 
@@ -577,13 +585,7 @@ test("PipelineRunner resolves nested context paths", async () => {
 		return { result: inputs };
 	};
 
-	await runner.run(
-		workflow,
-		{ nested: { deep: { value: "found!" } } },
-		executeStage,
-		"run-1",
-		"/tmp/events.jsonl",
-	);
+	await runner.run(workflow, { nested: { deep: { value: "found!" } } }, executeStage, "run-1", "/tmp/events.jsonl");
 
 	assert.equal(receivedInputs, "found!");
 });
@@ -594,9 +596,7 @@ test("PipelineRunner handles undefined previous results gracefully", async () =>
 		name: "undefined-previous",
 		description: "Test undefined previous",
 		goal: "Test goal",
-		stages: [
-			{ name: "stage1", team: "team", inputs: "${previous[99]}" },
-		],
+		stages: [{ name: "stage1", team: "team", inputs: "${previous[99]}" }],
 	};
 
 	const executeStage = async (stage: PipelineStage, inputs: unknown) => {

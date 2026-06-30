@@ -31,7 +31,11 @@ export function parseScalar(raw: string): unknown {
 	if (raw === "true") return true;
 	if (raw === "false") return false;
 	if (/^-?\d+$/.test(raw)) return Number(raw);
-	if (raw.includes(",")) return raw.split(",").map((entry) => entry.trim()).filter(Boolean);
+	if (raw.includes(","))
+		return raw
+			.split(",")
+			.map((entry) => entry.trim())
+			.filter(Boolean);
 	return raw;
 }
 

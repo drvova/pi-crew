@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { redactSecrets } from "../utils/redaction.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { redactSecrets } from "../utils/redaction.ts";
 import type { MetricRegistry } from "./metric-registry.ts";
 import type { MetricSnapshot } from "./metrics-primitives.ts";
 
@@ -42,7 +42,11 @@ export function createMetricFileSink(opts: MetricFileSinkOptions): MetricSink {
 	const ensureFd = (date: string): number => {
 		if (fd !== undefined && fdDate === date) return fd;
 		if (fd !== undefined) {
-			try { fs.closeSync(fd); } catch (error) { logInternalError("metric-sink.closeFd", error); }
+			try {
+				fs.closeSync(fd);
+			} catch (error) {
+				logInternalError("metric-sink.closeFd", error);
+			}
 		}
 		fs.mkdirSync(dir, { recursive: true });
 		rotateOldFiles(dir, retentionDays);
@@ -72,7 +76,11 @@ export function createMetricFileSink(opts: MetricFileSinkOptions): MetricSink {
 		dispose: () => {
 			clearInterval(timer);
 			if (fd !== undefined) {
-				try { fs.closeSync(fd); } catch (error) { logInternalError("metric-sink.dispose", error); }
+				try {
+					fs.closeSync(fd);
+				} catch (error) {
+					logInternalError("metric-sink.dispose", error);
+				}
 				fd = undefined;
 				fdDate = undefined;
 			}

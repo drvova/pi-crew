@@ -1,11 +1,7 @@
 /**
  * Metric names that are denied to prevent prototype pollution.
  */
-export const DENIED_METRIC_NAMES: ReadonlySet<string> = new Set([
-	"__proto__",
-	"constructor",
-	"prototype",
-]);
+export const DENIED_METRIC_NAMES: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
 const METRIC_LINE_RE = /^CREW_METRIC\s+(\w+)=(\S+)$/;
 

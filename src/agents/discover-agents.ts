@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { AgentConfig, ResourceSource } from "./agent-config.ts";
-import { parseToolsField } from "./agent-config.ts";
-import { loadConfig, type LoadedPiTeamsConfig } from "../config/config.ts";
+import { type LoadedPiTeamsConfig, loadConfig } from "../config/config.ts";
 import { parseCsv, parseFrontmatter } from "../utils/frontmatter.ts";
 import { logInternalError } from "../utils/internal-error.ts";
-import { packageRoot, projectCrewRoot, userPiRoot, findRepoRoot } from "../utils/paths.ts";
+import { findRepoRoot, packageRoot, projectCrewRoot, userPiRoot } from "../utils/paths.ts";
+import type { AgentConfig, ResourceSource } from "./agent-config.ts";
+import { parseToolsField } from "./agent-config.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SEC-001 Fix: Protected Agent Names Blocklist
@@ -20,7 +20,6 @@ import { packageRoot, projectCrewRoot, userPiRoot, findRepoRoot } from "../utils
 // callers might get stale cached snapshots.
 // See: SECURITY-ISSUES.md SEC-005
 // ═══════════════════════════════════════════════════════════════════════════
-
 
 /** Version counter for atomic cache invalidation. Incremented on every mutation. */
 let cacheVersion = 0;
@@ -69,14 +68,23 @@ const PROTECTED_AGENT_PATTERNS: Array<{ pattern: RegExp; example: string }> = [
 	{ pattern: /^explorer[-_]/i, example: "explorer-debug" },
 	{ pattern: /^planner[-_]/i, example: "planner-v3" },
 	// Generic prefixes that could impersonate builtins
-	{ pattern: /^(my|custom|new|local)[-_](executor|test[-_]?engineer|explorer|planner)$/i, example: "my-executor" },
-	{ pattern: /^(executor|test[-_]?engineer|explorer|planner)[-_]?(proxy|hook|override)$/i, example: "executor-override" },
+	{
+		pattern: /^(my|custom|new|local)[-_](executor|test[-_]?engineer|explorer|planner)$/i,
+		example: "my-executor",
+	},
+	{
+		pattern: /^(executor|test[-_]?engineer|explorer|planner)[-_]?(proxy|hook|override)$/i,
+		example: "executor-override",
+	},
 	// Common typosquatting patterns (intentional misspellings)
 	{ pattern: /^exec[au]t[o0]r$/i, example: "execator" },
 	{ pattern: /^expl[o0]rer$/i, example: "explorer" },
 	{ pattern: /^plann[ae]r$/i, example: "plannar" },
 	// Suffixes that indicate override意图
-	{ pattern: /^(executor|test[-_]?engineer|explorer|planner)[-_]?(override|replacement|shadow)$/i, example: "executor-override" },
+	{
+		pattern: /^(executor|test[-_]?engineer|explorer|planner)[-_]?(override|replacement|shadow)$/i,
+		example: "executor-override",
+	},
 ];
 
 /**
@@ -123,11 +131,7 @@ function logSecurityEvent(event: SecurityEvent): void {
 	}
 
 	// Log security events via structured logger
-	logInternalError(
-		`security.${event.type}`,
-		undefined,
-		`agent="${event.name}" reason="${event.reason}"`,
-	);
+	logInternalError(`security.${event.type}`, undefined, `agent="${event.name}" reason="${event.reason}"`);
 }
 
 /**
@@ -167,7 +171,7 @@ function assertAgentNameAllowed(name: string): void {
 		});
 		throw new Error(
 			`SECURITY: Cannot register agent '${name}': protected builtin name. ` +
-			`Dynamic agents cannot shadow builtin agents (executor, explorer, planner, etc.) to prevent privilege escalation.`
+				`Dynamic agents cannot shadow builtin agents (executor, explorer, planner, etc.) to prevent privilege escalation.`,
 		);
 	}
 
@@ -182,7 +186,7 @@ function assertAgentNameAllowed(name: string): void {
 		});
 		throw new Error(
 			`SECURITY: Cannot register agent '${name}': name matches protected pattern (${matchedPattern}). ` +
-			`This pattern is blocked to prevent privilege escalation via similar-named agents.`
+				`This pattern is blocked to prevent privilege escalation via similar-named agents.`,
 		);
 	}
 }
@@ -284,7 +288,7 @@ function sourceToTrustLevel(source: ResourceSource): TrustLevel {
 		case "user":
 			return "user";
 		case "project":
-		return "project";
+			return "project";
 		default:
 			return "project";
 	}
@@ -305,10 +309,7 @@ function sourceToTrustLevel(source: ResourceSource): TrustLevel {
  * - user: Standard sanitization
  * - project: Strict sanitization (untrusted source)
  */
-export function sanitizeAgentSystemPrompt(
-	content: string,
-	source: ResourceSource
-): string {
+export function sanitizeAgentSystemPrompt(content: string, source: ResourceSource): string {
 	const trustLevel = sourceToTrustLevel(source);
 	let sanitized = content;
 
@@ -323,7 +324,7 @@ export function sanitizeAgentSystemPrompt(
 		// Strip lines that look like system directives
 		sanitized = sanitized.replace(
 			/^\s*(?:SYSTEM|INSTRUCTION|IGNORE(?:\s+ALL)?\s+(?:PREVIOUS|INSTRUCTIONS)?|OVERRIDE|YOUR\s+ROLE\s+IS|MALICIOUS|BACKDOOR)\s*:.*$/gim,
-			""
+			"",
 		);
 
 		// Strip embedded instruction patterns in brackets
@@ -389,15 +390,21 @@ function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig |
 			skills: parseCsv(frontmatter.skills ?? frontmatter.skill),
 			systemPromptMode: frontmatter.systemPromptMode === "append" ? "append" : "replace",
 			inheritProjectContext: frontmatter.inheritProjectContext === "true",
-		inheritSkills: frontmatter.inheritSkills === "true",
-		memory: parseMemory(frontmatter.memory),
-		loadMode: parseLoadMode(frontmatter.loadMode),
-		defaultTools: frontmatter.defaultTools !== undefined ? parseCsv(frontmatter.defaultTools) ?? null : undefined,
-		contextMode: parseContextMode(frontmatter.contextMode),
-		maxTurns: (() => { const n = Number.parseInt(frontmatter.maxTurns, 10); return Number.isFinite(n) && n > 0 ? n : undefined; })(),
-		effort: frontmatter.effort === "low" || frontmatter.effort === "medium" || frontmatter.effort === "high" ? frontmatter.effort : undefined,
-		disabled: frontmatter.disabled === "true" || frontmatter.enabled === "false",
-		routing: triggers || useWhen || avoidWhen || cost || category ? { triggers, useWhen, avoidWhen, cost, category } : undefined,
+			inheritSkills: frontmatter.inheritSkills === "true",
+			memory: parseMemory(frontmatter.memory),
+			loadMode: parseLoadMode(frontmatter.loadMode),
+			defaultTools: frontmatter.defaultTools !== undefined ? (parseCsv(frontmatter.defaultTools) ?? null) : undefined,
+			contextMode: parseContextMode(frontmatter.contextMode),
+			maxTurns: (() => {
+				const n = Number.parseInt(frontmatter.maxTurns, 10);
+				return Number.isFinite(n) && n > 0 ? n : undefined;
+			})(),
+			effort:
+				frontmatter.effort === "low" || frontmatter.effort === "medium" || frontmatter.effort === "high"
+					? frontmatter.effort
+					: undefined,
+			disabled: frontmatter.disabled === "true" || frontmatter.enabled === "false",
+			routing: triggers || useWhen || avoidWhen || cost || category ? { triggers, useWhen, avoidWhen, cost, category } : undefined,
 		};
 	} catch (error) {
 		logInternalError("discoverAgents.parseAgentFile", error, `filePath=${filePath}`);
@@ -407,7 +414,8 @@ function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig |
 
 function readAgentDir(dir: string, source: ResourceSource): AgentConfig[] {
 	if (!fs.existsSync(dir)) return [];
-	const agents = fs.readdirSync(dir)
+	const agents = fs
+		.readdirSync(dir)
 		.filter((entry) => entry.endsWith(".md") && !entry.endsWith(".team.md") && !entry.endsWith(".workflow.md"))
 		.map((entry) => parseAgentFile(path.join(dir, entry), source))
 		.filter((agent): agent is AgentConfig => agent !== undefined)
@@ -436,11 +444,11 @@ function applyAgentOverrides(agents: AgentConfig[], cwd: string, loadedConfig?: 
 			return {
 				...agent,
 				disabled: override.disabled ?? agent.disabled,
-				model: override.model === false ? undefined : override.model ?? agent.model,
-				fallbackModels: override.fallbackModels === false ? undefined : override.fallbackModels ?? agent.fallbackModels,
-				thinking: override.thinking === false ? undefined : override.thinking ?? agent.thinking,
-				tools: override.tools === false ? undefined : override.tools ?? agent.tools,
-				skills: override.skills === false ? undefined : override.skills ?? agent.skills,
+				model: override.model === false ? undefined : (override.model ?? agent.model),
+				fallbackModels: override.fallbackModels === false ? undefined : (override.fallbackModels ?? agent.fallbackModels),
+				thinking: override.thinking === false ? undefined : (override.thinking ?? agent.thinking),
+				tools: override.tools === false ? undefined : (override.tools ?? agent.tools),
+				skills: override.skills === false ? undefined : (override.skills ?? agent.skills),
 				override: { source: "config", path: loaded.path },
 			};
 		});
@@ -454,7 +462,7 @@ const DISCOVERY_CACHE_TTL_MS = 500;
 interface CachedDiscoveryEntry {
 	result: AgentDiscoveryResult;
 	expiresAt: number;
-	cacheVersion: number;  // SEC-005: Version stamp for atomic invalidation
+	cacheVersion: number; // SEC-005: Version stamp for atomic invalidation
 }
 const discoveryCache = new Map<string, CachedDiscoveryEntry>();
 const DISCOVERY_CACHE_MAX_ENTRIES = 32;
@@ -500,7 +508,11 @@ export function discoverAgents(cwd: string): AgentDiscoveryResult {
 		projectPi: applyAgentOverrides(readAgentDir(path.join(findRepoRoot(cwd) ?? cwd, ".pi", "agents"), "project-pi"), cwd, loaded),
 	};
 	// SEC-005: Store with current version stamp
-	discoveryCache.set(cwd, { result, expiresAt: Date.now() + DISCOVERY_CACHE_TTL_MS, cacheVersion: currentVersion });
+	discoveryCache.set(cwd, {
+		result,
+		expiresAt: Date.now() + DISCOVERY_CACHE_TTL_MS,
+		cacheVersion: currentVersion,
+	});
 	while (discoveryCache.size > DISCOVERY_CACHE_MAX_ENTRIES) {
 		const oldest = discoveryCache.keys().next().value;
 		if (oldest !== undefined) discoveryCache.delete(oldest);
@@ -522,7 +534,7 @@ export function registerDynamicAgent(config: AgentConfig): void {
 	if (dynamicAgents.has(key)) {
 		throw new Error(`Agent already registered: ${config.name}`);
 	}
-	dynamicAgents.set(key, { ...config, source: "dynamic" });  // Always "dynamic" — cannot be spoofed
+	dynamicAgents.set(key, { ...config, source: "dynamic" }); // Always "dynamic" — cannot be spoofed
 	invalidateAgentDiscoveryCache();
 }
 

@@ -20,9 +20,9 @@
  * reflect outcomes, and `task_failed` must now record a passed:false entry.
  */
 import assert from "node:assert/strict";
-import test from "node:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import test from "node:test";
 import {
 	adjustConfidence,
 	computeNextActivationConfidence,
@@ -130,7 +130,10 @@ test("T7: recording two successes via the hooks' confidence math evolves the val
 
 		const metrics = computeSkillMetrics("skill-x", stored);
 		// currentConfidence = last stored (0.35) with same-day decay ≈ 0.35.
-		assert.ok(metrics.currentConfidence > 0.3, `currentConfidence ${metrics.currentConfidence} should exceed the 0.3 floor (the bug value)`);
+		assert.ok(
+			metrics.currentConfidence > 0.3,
+			`currentConfidence ${metrics.currentConfidence} should exceed the 0.3 floor (the bug value)`,
+		);
 		assert.equal(metrics.passedActivations, 2);
 		assert.equal(metrics.passRate, 1);
 	} finally {
@@ -158,7 +161,10 @@ test("T7: a failed task now lowers the rolling confidence (regression guard for 
 		assert.equal(metrics.failedActivations, 1);
 		assert.equal(metrics.passRate, 0.5);
 		// The failure fed back: currentConfidence reflects the rollback.
-		assert.ok(metrics.currentConfidence <= 0.4 + 0.001, `currentConfidence ${metrics.currentConfidence} should reflect the failure rollback`);
+		assert.ok(
+			metrics.currentConfidence <= 0.4 + 0.001,
+			`currentConfidence ${metrics.currentConfidence} should reflect the failure rollback`,
+		);
 	} finally {
 		cleanup();
 	}

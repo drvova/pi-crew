@@ -3,18 +3,19 @@
  * Focuses on edge cases: implicit tag detection, buildChainData, empty chains,
  * prompt truncation in overview, and error handling.
  */
-import { describe, it } from "node:test";
+
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import {
-	parsePlanDocument,
-	parsePlanDocumentSimple,
 	buildAgentChain,
 	buildChainData,
 	formatPlanOverview,
 	orchestratePlan,
+	parsePlanDocument,
+	parsePlanDocumentSimple,
 	TAG_TO_CHAIN,
 } from "../../src/extension/plan-orchestrate.ts";
 
@@ -146,7 +147,12 @@ describe("buildAgentChain handles empty chain", () => {
 describe("buildChainData returns structured data", () => {
 	it("includes step and commands for each entry", () => {
 		const steps = [
-			{ stepId: "s1", tag: "design", chain: ["planner"], prompt: "Plan it" },
+			{
+				stepId: "s1",
+				tag: "design",
+				chain: ["planner"],
+				prompt: "Plan it",
+			},
 			{ stepId: "s2", tag: "impl", chain: ["coder"], prompt: "Code it" },
 		];
 		const data = buildChainData(steps);

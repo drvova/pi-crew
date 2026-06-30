@@ -1,20 +1,20 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it } from "node:test";
 import {
+	__test__clearManifestCache,
+	createRunManifest,
 	createRunPaths,
 	createTasksFromWorkflow,
-	createRunManifest,
+	loadRunManifestById,
 	saveRunManifest,
 	saveRunTasks,
-	loadRunManifestById,
 	updateRunStatus,
-	__test__clearManifestCache,
 } from "../../src/state/state-store.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import { createTrackedTempDir, removeTrackedTempDir } from "../fixtures/test-tempdir.ts";
 
 const team: TeamConfig = {
@@ -32,7 +32,12 @@ const multiStepWorkflow: WorkflowConfig = {
 	filePath: "test.workflow.md",
 	steps: [
 		{ id: "step1", role: "executor", task: "Do first thing" },
-		{ id: "step2", role: "executor", task: "Do second thing", dependsOn: ["step1"] },
+		{
+			id: "step2",
+			role: "executor",
+			task: "Do second thing",
+			dependsOn: ["step1"],
+		},
 		{ id: "step3", role: "executor", task: "Do third thing" },
 	],
 };
@@ -91,7 +96,12 @@ describe("createTasksFromWorkflow", () => {
 describe("createRunManifest", () => {
 	it("creates manifest, tasks, and paths on disk", () => {
 		const cwd = createTrackedTempDir("pi-crew-ss-manifest-");
-		const result = createRunManifest({ cwd, team, workflow: multiStepWorkflow, goal: "test goal" });
+		const result = createRunManifest({
+			cwd,
+			team,
+			workflow: multiStepWorkflow,
+			goal: "test goal",
+		});
 		assert.ok(result.manifest.runId);
 		assert.equal(result.manifest.status, "queued");
 		assert.equal(result.tasks.length, 3);
@@ -121,7 +131,11 @@ describe("saveRunManifest + loadRunManifestById", () => {
 	it("round-trips manifest data", () => {
 		const cwd = createTrackedTempDir("pi-crew-ss-rt-");
 		__test__clearManifestCache();
-		const { manifest, paths } = createRunManifest({ cwd, team, goal: "round trip" });
+		const { manifest, paths } = createRunManifest({
+			cwd,
+			team,
+			goal: "round trip",
+		});
 		manifest.status = "running";
 		manifest.updatedAt = new Date().toISOString();
 		saveRunManifest(manifest);
@@ -142,7 +156,12 @@ describe("saveRunTasks", () => {
 	it("persists updated tasks", () => {
 		const cwd = createTrackedTempDir("pi-crew-ss-tasks-");
 		__test__clearManifestCache();
-		const { manifest, tasks, paths } = createRunManifest({ cwd, team, workflow: multiStepWorkflow, goal: "save tasks" });
+		const { manifest, tasks, paths } = createRunManifest({
+			cwd,
+			team,
+			workflow: multiStepWorkflow,
+			goal: "save tasks",
+		});
 		tasks[0].status = "running";
 		saveRunTasks(manifest, tasks);
 		__test__clearManifestCache();
@@ -157,7 +176,11 @@ describe("updateRunStatus", () => {
 	it("transitions from queued to running", () => {
 		const cwd = createTrackedTempDir("pi-crew-ss-status-");
 		__test__clearManifestCache();
-		const { manifest } = createRunManifest({ cwd, team, goal: "status test" });
+		const { manifest } = createRunManifest({
+			cwd,
+			team,
+			goal: "status test",
+		});
 		const updated = updateRunStatus(manifest, "running");
 		assert.equal(updated.status, "running");
 		removeTrackedTempDir(cwd);

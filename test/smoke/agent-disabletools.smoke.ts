@@ -6,12 +6,15 @@
  * disableTools agents returned exit null ~60% of the time. Runs 5× because
  * the bug was flaky (OS-buffer-dependent).
  */
-import test from "node:test";
-import assert from "node:assert/strict";
-import { runChildPi } from "../../src/runtime/child-pi.ts";
-import { SMOKE_ENABLED, SKIP_REASON, makeTmpCwd, fakeExecutorAgent, assertHasAnswer } from "./_helpers.ts";
 
-test("smoke: ctx.agent({disableTools:true, maxTurns:1}) returns exit 0 (5x, HB-003a regression)", { skip: SMOKE_ENABLED ? false : SKIP_REASON }, async () => {
+import assert from "node:assert/strict";
+import test from "node:test";
+import { runChildPi } from "../../src/runtime/child-pi.ts";
+import { assertHasAnswer, fakeExecutorAgent, makeTmpCwd, SKIP_REASON, SMOKE_ENABLED } from "./_helpers.ts";
+
+test("smoke: ctx.agent({disableTools:true, maxTurns:1}) returns exit 0 (5x, HB-003a regression)", {
+	skip: SMOKE_ENABLED ? false : SKIP_REASON,
+}, async () => {
 	let pass = 0;
 	const failures: string[] = [];
 	for (let i = 0; i < 5; i++) {

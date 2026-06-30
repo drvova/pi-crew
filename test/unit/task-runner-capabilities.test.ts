@@ -1,12 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import test from "node:test";
+import type { AgentConfig } from "../../src/agents/agent-config.ts";
 import { buildWorkerCapabilityInventory, type WorkerCapabilityInventory } from "../../src/runtime/task-runner/capabilities.ts";
 import { runTeamTask } from "../../src/runtime/task-runner.ts";
 import { createRunManifest } from "../../src/state/state-store.ts";
-import type { AgentConfig } from "../../src/agents/agent-config.ts";
 import type { TeamConfig } from "../../src/teams/team-config.ts";
 import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 
@@ -27,8 +27,20 @@ import type { WorkflowConfig } from "../../src/workflows/workflow-config.ts";
 //      on the next iteration.
 // Add the integration test there with a mock that returns 1 vs 2 candidates.
 
-const team = { name: "t", description: "", source: "project", filePath: "t", roles: [{ name: "r", agent: "a" }] } satisfies TeamConfig;
-const workflow = { name: "w", description: "", source: "project", filePath: "w", steps: [{ id: "s", role: "r", task: "x", model: "step/model" }] } satisfies WorkflowConfig;
+const team = {
+	name: "t",
+	description: "",
+	source: "project",
+	filePath: "t",
+	roles: [{ name: "r", agent: "a" }],
+} satisfies TeamConfig;
+const workflow = {
+	name: "w",
+	description: "",
+	source: "project",
+	filePath: "w",
+	steps: [{ id: "s", role: "r", task: "x", model: "step/model" }],
+} satisfies WorkflowConfig;
 const agent = {
 	name: "a",
 	description: "",
@@ -49,7 +61,19 @@ function readCapability(filePath: string): WorkerCapabilityInventory {
 }
 
 test("buildWorkerCapabilityInventory returns stable sorted capability fields", () => {
-	const inventory = buildWorkerCapabilityInventory({ taskId: "task-1", role: "executor", agent, runtime: "scaffold", permissionMode: "safe", skillNames: ["safe-bash", "git-master", "safe-bash"], skillPaths: ["/b", "/a"], skillsDisabled: false, modelOverride: "override/model", teamRoleModel: "team/model", stepModel: "step/model" });
+	const inventory = buildWorkerCapabilityInventory({
+		taskId: "task-1",
+		role: "executor",
+		agent,
+		runtime: "scaffold",
+		permissionMode: "safe",
+		skillNames: ["safe-bash", "git-master", "safe-bash"],
+		skillPaths: ["/b", "/a"],
+		skillsDisabled: false,
+		modelOverride: "override/model",
+		teamRoleModel: "team/model",
+		stepModel: "step/model",
+	});
 	assert.equal(inventory.schemaVersion, 1);
 	assert.equal(inventory.taskId, "task-1");
 	assert.deepEqual(inventory.tools, ["read", "write"]);
@@ -61,17 +85,38 @@ test("buildWorkerCapabilityInventory returns stable sorted capability fields", (
 	assert.equal(inventory.model.agentDefault, "agent/default");
 	assert.equal(inventory.model.teamRole, "team/model");
 	assert.equal(inventory.model.step, "step/model");
-	assert.deepEqual(inventory.inheritance, { projectContext: true, skills: true, systemPromptMode: "append" });
+	assert.deepEqual(inventory.inheritance, {
+		projectContext: true,
+		skills: true,
+		systemPromptMode: "append",
+	});
 });
 
 test("runTeamTask writes capability inventory metadata for scaffold runs", async () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-capabilities-"));
 	try {
 		fs.writeFileSync(path.join(cwd, "package.json"), "{}", "utf-8");
-		const created = createRunManifest({ cwd, team, workflow, goal: "capabilities" });
+		const created = createRunManifest({
+			cwd,
+			team,
+			workflow,
+			goal: "capabilities",
+		});
 		const task = created.tasks[0]!;
 
-		const result = await runTeamTask({ manifest: created.manifest, tasks: created.tasks, task, step: workflow.steps[0]!, agent, executeWorkers: false, runtimeKind: "scaffold", workspaceId: cwd, modelOverride: "override/model", teamRoleModel: "team/model", skillOverride: ["safe-bash"] });
+		const result = await runTeamTask({
+			manifest: created.manifest,
+			tasks: created.tasks,
+			task,
+			step: workflow.steps[0]!,
+			agent,
+			executeWorkers: false,
+			runtimeKind: "scaffold",
+			workspaceId: cwd,
+			modelOverride: "override/model",
+			teamRoleModel: "team/model",
+			skillOverride: ["safe-bash"],
+		});
 
 		const relativePath = `metadata/${task.id}.capabilities.json`;
 		const capabilityArtifact = result.manifest.artifacts.find((artifact) => artifact.path.replaceAll("\\", "/").endsWith(relativePath));

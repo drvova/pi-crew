@@ -27,8 +27,8 @@ export function userPiRoot(): string {
 	if (isSymlink) {
 		throw new Error(
 			`userPiRoot: PI_TEAMS_HOME path "${resolved}" is a symlink. ` +
-			"Symlinks are not supported for PI_TEAMS_HOME to prevent confusion attacks. " +
-			"Set PI_TEAMS_HOME to a direct path owned by the current user.",
+				"Symlinks are not supported for PI_TEAMS_HOME to prevent confusion attacks. " +
+				"Set PI_TEAMS_HOME to a direct path owned by the current user.",
 		);
 	}
 
@@ -40,7 +40,7 @@ export function userPiRoot(): string {
 		if (stats.uid !== os.userInfo().uid) {
 			throw new Error(
 				`userPiRoot: PI_TEAMS_HOME path "${resolved}" is not owned by the current user (uid=${os.userInfo().uid}, found uid=${stats.uid}). ` +
-				"This violates security assumptions about file permissions. Set PI_TEAMS_HOME to a path owned by the current user, or unset it to use the default.",
+					"This violates security assumptions about file permissions. Set PI_TEAMS_HOME to a path owned by the current user, or unset it to use the default.",
 			);
 		}
 	} catch (err: unknown) {
@@ -55,7 +55,16 @@ export function userPiRoot(): string {
 }
 
 const PROJECT_DIR_MARKERS = [".git", ".pi", ".crew", ".hg", ".svn", ".factory", ".omc"];
-const PROJECT_FILE_MARKERS = ["package.json", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "composer.json", "build.gradle", "build.gradle.kts"];
+const PROJECT_FILE_MARKERS = [
+	"package.json",
+	"pyproject.toml",
+	"Cargo.toml",
+	"go.mod",
+	"pom.xml",
+	"composer.json",
+	"build.gradle",
+	"build.gradle.kts",
+];
 
 // 2.10 — cache findRepoRoot results so repeated lookups during render ticks
 // (loadConfig, state-store helpers, powerbar, snapshot-cache, ...) skip the
@@ -98,7 +107,11 @@ function canonicalizePath(p: string): string {
 		const r = fs.realpathSync.native(p);
 		return r.startsWith("\\\\?\\") ? r.slice(4) : r;
 	} catch {
-		try { return fs.realpathSync(p); } catch { return p; }
+		try {
+			return fs.realpathSync(p);
+		} catch {
+			return p;
+		}
 	}
 }
 

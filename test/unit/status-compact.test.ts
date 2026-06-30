@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { buildCompactStatus } from "../../src/extension/team-tool/status.ts";
 
 const baseManifest = {
@@ -13,10 +13,18 @@ const baseManifest = {
 
 test("compact status shows identity, status, goal, and counts only", () => {
 	const tasks = [
-		{ id: "01_explore", status: "completed", role: "explorer", agent: "explorer" },
+		{
+			id: "01_explore",
+			status: "completed",
+			role: "explorer",
+			agent: "explorer",
+		},
 		{ id: "02_plan", status: "running", role: "planner", agent: "planner" },
 	];
-	const counts = new Map([["completed", 1], ["running", 1]]);
+	const counts = new Map([
+		["completed", 1],
+		["running", 1],
+	]);
 	const out = buildCompactStatus(baseManifest, tasks, counts);
 	const text = out.join("\n");
 	assert.match(text, /Run: team_test_run/);
@@ -54,12 +62,34 @@ test("compact status does NOT include task graph, agents, effectiveness, events"
 
 test("compact status surfaces failed / attention / cancelled tasks under 'Issues'", () => {
 	const tasks = [
-		{ id: "01_ok", status: "completed", role: "explorer", agent: "explorer" },
-		{ id: "02_bad", status: "failed", role: "executor", agent: "executor", error: "syntax error" },
-		{ id: "03_attn", status: "needs_attention", role: "reviewer", agent: "reviewer", error: "low green" },
+		{
+			id: "01_ok",
+			status: "completed",
+			role: "explorer",
+			agent: "explorer",
+		},
+		{
+			id: "02_bad",
+			status: "failed",
+			role: "executor",
+			agent: "executor",
+			error: "syntax error",
+		},
+		{
+			id: "03_attn",
+			status: "needs_attention",
+			role: "reviewer",
+			agent: "reviewer",
+			error: "low green",
+		},
 		{ id: "04_cx", status: "cancelled", role: "writer", agent: "writer" },
 	];
-	const counts = new Map([["completed", 1], ["failed", 1], ["needs_attention", 1], ["cancelled", 1]]);
+	const counts = new Map([
+		["completed", 1],
+		["failed", 1],
+		["needs_attention", 1],
+		["cancelled", 1],
+	]);
 	const out = buildCompactStatus(baseManifest, tasks, counts);
 	const text = out.join("\n");
 	assert.match(text, /Issues:/);
@@ -71,7 +101,14 @@ test("compact status surfaces failed / attention / cancelled tasks under 'Issues
 });
 
 test("compact status has no 'Issues:' section when all tasks healthy", () => {
-	const tasks = [{ id: "01_ok", status: "completed", role: "explorer", agent: "explorer" }];
+	const tasks = [
+		{
+			id: "01_ok",
+			status: "completed",
+			role: "explorer",
+			agent: "explorer",
+		},
+	];
 	const out = buildCompactStatus(baseManifest, tasks, new Map([["completed", 1]]));
 	assert.ok(!out.some((l) => l.startsWith("Issues:")));
 });

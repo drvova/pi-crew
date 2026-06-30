@@ -1,9 +1,9 @@
-import type { PiTeamsConfig } from "../config/config.ts";
-import type { TeamRunManifest, ControlReservation } from "../state/types.ts";
-import { appendTaskAttentionEvent } from "./attention-events.ts";
-import type { CrewAgentRecord } from "./crew-agent-runtime.ts";
-import { upsertCrewAgent } from "./crew-agent-records.ts";
 import { randomUUID } from "node:crypto";
+import type { PiTeamsConfig } from "../config/config.ts";
+import type { ControlReservation, TeamRunManifest } from "../state/types.ts";
+import { appendTaskAttentionEvent } from "./attention-events.ts";
+import { upsertCrewAgent } from "./crew-agent-records.ts";
+import type { CrewAgentRecord } from "./crew-agent-runtime.ts";
 
 export interface CrewControlConfig {
 	enabled: boolean;
@@ -21,7 +21,16 @@ function positiveInt(value: unknown): number | undefined {
 }
 
 export function resolveCrewControlConfig(config: PiTeamsConfig | undefined): CrewControlConfig {
-	const raw = config as PiTeamsConfig & { control?: { enabled?: unknown; needsAttentionAfterMs?: unknown; consecutiveFailureThreshold?: unknown; longRunningMinutes?: unknown } } | undefined;
+	const raw = config as
+		| (PiTeamsConfig & {
+				control?: {
+					enabled?: unknown;
+					needsAttentionAfterMs?: unknown;
+					consecutiveFailureThreshold?: unknown;
+					longRunningMinutes?: unknown;
+				};
+		  })
+		| undefined;
 	return {
 		enabled: raw?.control?.enabled === false ? false : true,
 		needsAttentionAfterMs: positiveInt(raw?.control?.needsAttentionAfterMs) ?? DEFAULT_NEEDS_ATTENTION_MS,
@@ -47,7 +56,12 @@ export function formatActivityAge(agent: CrewAgentRecord, now = Date.now()): str
 	return agent.progress?.activityState === "needs_attention" ? `no activity for ${minutes}m` : `active ${minutes}m ago`;
 }
 
-export function applyAttentionState(manifest: TeamRunManifest, agent: CrewAgentRecord, config: CrewControlConfig, now = Date.now()): CrewAgentRecord {
+export function applyAttentionState(
+	manifest: TeamRunManifest,
+	agent: CrewAgentRecord,
+	config: CrewControlConfig,
+	now = Date.now(),
+): CrewAgentRecord {
 	if (!config.enabled || agent.status !== "running") return agent;
 	const age = activityAgeMs(agent, now);
 	if (age === undefined || age <= config.needsAttentionAfterMs) return agent;
@@ -55,7 +69,11 @@ export function applyAttentionState(manifest: TeamRunManifest, agent: CrewAgentR
 	const updated: CrewAgentRecord = {
 		...agent,
 		progress: {
-			...(agent.progress ?? { recentTools: [], recentOutput: [], toolCount: agent.toolUses ?? 0 }),
+			...(agent.progress ?? {
+				recentTools: [],
+				recentOutput: [],
+				toolCount: agent.toolUses ?? 0,
+			}),
 			activityState: "needs_attention",
 		},
 	};
@@ -64,7 +82,14 @@ export function applyAttentionState(manifest: TeamRunManifest, agent: CrewAgentR
 		manifest,
 		taskId: agent.taskId,
 		message: `${agent.agent} needs attention (no observed activity for ${Math.floor(age / 1000)}s).`,
-		data: { activityState: "needs_attention", reason: "idle", elapsedMs: age, taskId: agent.taskId, agentName: agent.agent, suggestedAction: "Check worker status, wait, steer, or cancel if needed." },
+		data: {
+			activityState: "needs_attention",
+			reason: "idle",
+			elapsedMs: age,
+			taskId: agent.taskId,
+			agentName: agent.agent,
+			suggestedAction: "Check worker status, wait, steer, or cancel if needed.",
+		},
 	});
 	return updated;
 }
@@ -92,7 +117,11 @@ function applyLongRunningCheck(
 	const updated: CrewAgentRecord = {
 		...agent,
 		progress: {
-			...(agent.progress ?? { recentTools: [], recentOutput: [], toolCount: agent.toolUses ?? 0 }),
+			...(agent.progress ?? {
+				recentTools: [],
+				recentOutput: [],
+				toolCount: agent.toolUses ?? 0,
+			}),
 			activityState: "active_long_running",
 		},
 	};
@@ -101,7 +130,14 @@ function applyLongRunningCheck(
 		manifest,
 		taskId: agent.taskId,
 		message: `${agent.agent} has been running for ${Math.floor(runtimeMs / 60000)}m (threshold: ${config.longRunningMinutes}m).`,
-		data: { activityState: "active_long_running", reason: "idle", elapsedMs: runtimeMs, taskId: agent.taskId, agentName: agent.agent, suggestedAction: "Check worker progress, steer, or cancel if needed." },
+		data: {
+			activityState: "active_long_running",
+			reason: "idle",
+			elapsedMs: runtimeMs,
+			taskId: agent.taskId,
+			agentName: agent.agent,
+			suggestedAction: "Check worker progress, steer, or cancel if needed.",
+		},
 	});
 	return updated;
 }
@@ -122,7 +158,11 @@ function trackConsecutiveToolFailure(
 	const updated: CrewAgentRecord = {
 		...agent,
 		progress: {
-			...(agent.progress ?? { recentTools: [], recentOutput: [], toolCount: agent.toolUses ?? 0 }),
+			...(agent.progress ?? {
+				recentTools: [],
+				recentOutput: [],
+				toolCount: agent.toolUses ?? 0,
+			}),
 			consecutiveFailures: newFailures,
 		},
 	};
@@ -133,7 +173,13 @@ function trackConsecutiveToolFailure(
 			manifest,
 			taskId: agent.taskId,
 			message: `${agent.agent} has ${newFailures} consecutive tool failures (threshold: ${config.consecutiveFailureThreshold}). Last: ${toolName}${error ? ` - ${error.slice(0, 100)}` : ""}`,
-			data: { activityState: "needs_attention", reason: "tool_failures", taskId: agent.taskId, agentName: agent.agent, suggestedAction: "Investigate tool failures, steer, or cancel if needed." },
+			data: {
+				activityState: "needs_attention",
+				reason: "tool_failures",
+				taskId: agent.taskId,
+				agentName: agent.agent,
+				suggestedAction: "Investigate tool failures, steer, or cancel if needed.",
+			},
 		});
 	} else {
 		upsertCrewAgent(manifest, updated);
@@ -143,10 +189,7 @@ function trackConsecutiveToolFailure(
 }
 
 /** @internal */
-function resetConsecutiveToolFailures(
-	manifest: TeamRunManifest,
-	agent: CrewAgentRecord,
-): void {
+function resetConsecutiveToolFailures(manifest: TeamRunManifest, agent: CrewAgentRecord): void {
 	if (!agent.progress?.consecutiveFailures) return;
 	const updated: CrewAgentRecord = {
 		...agent,

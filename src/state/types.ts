@@ -1,13 +1,12 @@
-import type { TeamRunStatus, TeamTaskStatus } from "./contracts.ts";
-import type { TaskClaimState } from "./task-claims.ts";
-import type { WorkerHeartbeatState } from "../runtime/worker-heartbeat.ts";
-import type { CrewAgentProgress } from "../runtime/crew-agent-runtime.ts";
-import type { RolloutEntry, CoherenceMark } from "./decision-ledger.ts";
 import type { CrashClass } from "../runtime/crash-classification.ts";
-export type { RolloutEntry, CoherenceMark };
-export type { CrewAgentProgress };
+import type { CrewAgentProgress } from "../runtime/crew-agent-runtime.ts";
+import type { WorkerHeartbeatState } from "../runtime/worker-heartbeat.ts";
+import type { TeamRunStatus, TeamTaskStatus } from "./contracts.ts";
+import type { CoherenceMark, RolloutEntry } from "./decision-ledger.ts";
+import type { TaskClaimState } from "./task-claims.ts";
 
 export type { TeamRunStatus, TeamTaskStatus } from "./contracts.ts";
+export type { CoherenceMark, CrewAgentProgress, RolloutEntry };
 
 export interface ArtifactDescriptor {
 	kind: "plan" | "prompt" | "result" | "summary" | "log" | "diff" | "patch" | "progress" | "notepad" | "metadata";
@@ -74,7 +73,17 @@ export interface TaskPacket {
 }
 
 export type PolicyDecisionAction = "retry" | "reassign" | "escalate" | "block" | "notify" | "cleanup" | "closeout" | "fail";
-export type PolicyDecisionReason = "task_failed" | "worker_stale" | "green_unsatisfied" | "limit_exceeded" | "run_complete" | "mailbox_timeout" | "review_rejected" | "branch_stale" | "scope_mismatch" | "ineffective_worker";
+export type PolicyDecisionReason =
+	| "task_failed"
+	| "worker_stale"
+	| "green_unsatisfied"
+	| "limit_exceeded"
+	| "run_complete"
+	| "mailbox_timeout"
+	| "review_rejected"
+	| "branch_stale"
+	| "scope_mismatch"
+	| "ineffective_worker";
 
 export interface PolicyDecision {
 	action: PolicyDecisionAction;
@@ -228,15 +237,7 @@ export interface UsageState {
  *   stuck   → running   (only by `goal resume`, atomically via GoalStore.compareAndSetStatus)
  *   stuck   → cancelled (by the idle-timeout sweeper OR `goal stop`)
  */
-export type GoalLoopStatus =
-	| "running"
-	| "paused"
-	| "stuck"
-	| "achieved"
-	| "max_turns"
-	| "budget_exceeded"
-	| "blocked"
-	| "cancelled";
+export type GoalLoopStatus = "running" | "paused" | "stuck" | "achieved" | "max_turns" | "budget_exceeded" | "blocked" | "cancelled";
 
 /** One evaluation by the goal-judge model after a turn. */
 export interface GoalVerdict {
@@ -274,9 +275,7 @@ export interface GoalLoopState {
 	 * `"none-text-only"` marks goals started in text-only verification mode
 	 * (no objective oracle → no snapshot taken).
 	 */
-	verificationIntegrity?:
-		| { snapshot: Record<string, string>; takenAt: string }
-		| "none-text-only";
+	verificationIntegrity?: { snapshot: Record<string, string>; takenAt: string } | "none-text-only";
 	evaluatorModel: string;
 	workerModel?: string;
 	/** subagent_type / agent name for worker turns (default "executor"). */
@@ -288,7 +287,12 @@ export interface GoalLoopState {
 	/** The team-run of the current in-flight turn (for cancel/steer). */
 	currentRunId?: string;
 	verdicts: GoalVerdict[];
-	history: { runId: string; outcome: string; learnedAt: string; turn: number }[];
+	history: {
+		runId: string;
+		outcome: string;
+		learnedAt: string;
+		turn: number;
+	}[];
 	createdAt: string;
 	updatedAt: string;
 	/** Mirror of manifest.async for PID-liveness checks (cf. AsyncRunState). */

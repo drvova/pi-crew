@@ -27,7 +27,10 @@ export function renderMetricsPane(_snapshot: RunUiSnapshot | undefined, opts: Me
 			lines.push(`${snapshot.name}: empty`);
 			continue;
 		}
-		if (isHistogramPoint(first)) lines.push(`${snapshot.name}${labelsText(first.labels)} count=${first.count} p95=${Number.isFinite(first.quantiles.p95) ? Math.round(first.quantiles.p95) : "n/a"}`);
+		if (isHistogramPoint(first))
+			lines.push(
+				`${snapshot.name}${labelsText(first.labels)} count=${first.count} p95=${Number.isFinite(first.quantiles.p95) ? Math.round(first.quantiles.p95) : "n/a"}`,
+			);
 		else lines.push(`${snapshot.name}${labelsText(first.labels)} ${first.value}`);
 	}
 	return lines;
