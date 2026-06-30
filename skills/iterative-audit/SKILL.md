@@ -326,6 +326,5 @@ When you hit 2+ exhausted rounds in a row, **stop**.
 
 - `scrutinize` — Quick outsider-perspective review of a single change
 - `multi-perspective-review` — 8-pass deep review for a single change
-- `security-review` — Security-focused audit with detection authoring
 - `verification-before-done` — Evidence before claim (use per round)
 - `systematic-debugging` — When a finding reveals a real bug that needs deeper investigation

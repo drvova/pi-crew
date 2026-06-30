@@ -8,6 +8,8 @@ triggers:
   - "widget timing"
   - "display priority"
   - "snapshot cache"
+  - "widget render"
+  - "UI refresh"
 
 ---
 # widget-rendering
@@ -263,6 +265,21 @@ If ANY answer is NO → Stop. Fix widget rendering issues before proceeding.
 - `src/state/active-run-registry.ts` — purgeStaleActiveRunIndex
 
 ---
+
+## Render Performance Rules
+
+Render-path performance for the widget is non-negotiable. Treat every `render(width)`, widget update, and powerbar refresh as a hot synchronous path.
+
+- **Render from snapshots only.** Read data from in-memory snapshots, never from disk or network during render. Preload config, manifests, snapshots, agent records, and mailbox counts asynchronously *before* the first frame.
+- **Coalesce with `RenderScheduler`.** Always go through `RenderScheduler.schedule()` rather than issuing direct/repeated renders. This batches pending paints and avoids redundant refresh storms.
+- **Prefer `snapshotCache.get(runId)`** on render paths. If a synchronous fallback is genuinely unavoidable, classify it as first-load/rare and document why it can't be preloaded.
+- **Keep panes pure.** Dashboard panes must accept a snapshot/model and format strings only. Never call `fs.readFileSync`, `fs.readdirSync`, `fs.statSync`, network APIs, or large JSON parsing from pane render methods.
+- **Stay non-blocking at 60fps.** Each render cycle must complete in under ~16ms. Anything that can't finish synchronously (reads, fetches, directory scans) belongs in the async preload path, not `renderTick()`.
+- **Respect the snapshot-cache TTL of ≤500ms.** Keep the `RunSnapshotCache` TTL at 500ms or less so the widget never shows stale state. Watch TTL interactions: the preload interval must be shorter than the cache TTL, otherwise render-time refresh gaps appear.
+- **Guard session switches.** On a session switch, cancel timers and ensure in-flight async preloads cannot update a now-stale session's UI.
+- **Filter stale warnings by terminal status.** Do not surface health warnings for completed/failed/cancelled runs.
+
+**Anti-patterns:** calling `loadConfig()`, `manifestCache.list()`, or `refreshIfStale()` inside `renderTick()` without preloaded frame data; directory scans or large JSON parsing in widget render/update functions; showing stale health warnings for terminal runs.
 
 ## Verification
 

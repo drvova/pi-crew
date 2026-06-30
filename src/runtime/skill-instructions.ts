@@ -56,7 +56,7 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
 	],
 	"test-engineer": ["verification-before-done", "safe-bash"],
 	verifier: ["verification-before-done", "runtime-state-reader"],
-	writer: ["context-artifact-hygiene", "verify-evidence"],
+	writer: ["context-artifact-hygiene", "verification-before-done"],
 };
 
 export interface ResolveTaskSkillsInput {
