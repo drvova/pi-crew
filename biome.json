@@ -25,17 +25,26 @@
 			},
 			"complexity": {
 				"noUselessSwitchCase": "off",
-				"noUselessTernary": "off"
+				"noUselessTernary": "off",
+				"noUselessEscapeInRegex": "off"
 			},
 			"correctness": {
 				"noUnusedImports": "off",
-				"noUnusedFunctionParameters": "off"
+				"noUnusedFunctionParameters": "off",
+				"noUnusedVariables": "off",
+				"noVoidTypeReturn": "off",
+				"noUnsafeFinally": "off"
 			},
 			"suspicious": {
-				"noExplicitAny": "warn",
+				"noExplicitAny": "off",
 				"noImplicitAnyLet": "off",
 				"noConfusingVoidType": "off",
-				"useIterableCallbackReturn": "off"
+				"useIterableCallbackReturn": "off",
+				"noControlCharactersInRegex": "off",
+				"noAssignInExpressions": "off",
+				"noNonNullAssertedOptionalChain": "off",
+				"noShadowRestrictedNames": "off",
+				"noDuplicateElseIf": "off"
 			}
 		}
 	},

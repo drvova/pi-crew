@@ -49,9 +49,11 @@
   ],
   "scripts": {
     "check": "npm run ci",
-    "ci": "npm run typecheck && npm run check:lazy-imports && npm test && npm pack --dry-run",
+    "ci": "npm run typecheck && npm run lint && npm run format:check && npm run check:lazy-imports && npm test && npm pack --dry-run",
     "check:lazy-imports": "node scripts/check-lazy-imports.mjs",
     "typecheck": "tsc --noEmit && node --experimental-strip-types -e \"await import('./index.ts'); console.log('strip-types import ok')\"",
+    "lint": "biome check --linter-enabled=true --formatter-enabled=false --max-diagnostics=50 --diagnostic-level=error .",
+    "format:check": "biome format .",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "node scripts/test-runner.mjs --test-concurrency=4 --test-timeout=180000 --test-force-exit test/unit/*.test.ts",
     "test:watch": "tsx --watch --test --test-concurrency=4 --test-timeout=30000 --test-force-exit test/unit/*.test.ts",
