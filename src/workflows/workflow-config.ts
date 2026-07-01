@@ -54,6 +54,12 @@ export interface WorkflowConfig {
 	 *  Valid values: 'single' | 'sequential' | 'concurrent' | 'complex-dag' | 'dynamic'.
 	 *  Absent = auto-classify from step structure (default). */
 	topology?: "single" | "sequential" | "concurrent" | "complex-dag" | "dynamic";
+	/** Round 25 (M6): coalesce micro-tasks. Default false (off). When true,
+	 *  multiple ready tasks sharing role + cwd are grouped into a single
+	 *  multi-task worker prompt to reduce per-task cold-start cost. Disabled
+	 *  in v0.9.17 unless the workflow author opts in. See
+	 *  src/runtime/coalesce-tasks.ts. */
+	coalesceMicroTasks?: boolean;
 }
 
 /** A dynamic workflow (runtime === "dynamic"). steps is empty — the script is the source of truth. */

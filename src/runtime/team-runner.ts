@@ -41,6 +41,7 @@ import { buildExecutionPlan as buildDagExecutionPlan, getReadyTasks as getDagRea
 import { buildTaskGraphIndex, refreshTaskGraphQueues, taskGraphSnapshot } from "./task-graph-scheduler.ts";
 import { aggregateTaskOutputs } from "./task-output-context.ts";
 import { filterReadyByWriteOverlap } from "./path-overlap.ts";
+import { planCoalescedGroups } from "./coalesce-tasks.ts";
 import { runTeamTask } from "./task-runner.ts";
 import { clearTrackedTaskUsage } from "./usage-tracker.ts";
 import {
@@ -988,6 +989,37 @@ async function executeTeamRunCore(
 			concurrency.maxConcurrent,
 			input.limits?.serializeOnPathOverlap === true,
 		);
+
+		// Round 25 (M6): coalesce micro-tasks when opted in.
+		// Default off; when on, groups same-(role,cwd) tasks into coalesced groups
+		// (with write-path safety). In v0.9.17 first ship, we ONLY log the
+		// coalesced group count to the event stream (informational). Actual
+		// dispatching of one-multi-task worker instead of N workers is deferred
+		// to a follow-up — it's a non-trivial prompt-construction change that
+		// deserves its own PR. For now, every coalesced group => one info event.
+		const coalesceEnabled = workflow.coalesceMicroTasks === true;
+		if (coalesceEnabled) {
+			const coalescedGroups = planCoalescedGroups(
+				serializedReady,
+				tasks,
+				workflow,
+				true,
+			);
+			for (const group of coalescedGroups) {
+				if (group.tasks.length < 2) continue; // singletons are not interesting
+				await appendEventAsync(manifest.eventsPath, {
+					type: "task.coalesced",
+					runId: manifest.runId,
+					message: `Coalesced ${group.tasks.length} micro-tasks (role=${group.role}, cwd=${group.cwd})`,
+					data: {
+						groupId: group.id,
+						role: group.role,
+						cwd: group.cwd,
+						taskIds: group.tasks.map((task) => task.id),
+					},
+				});
+			}
+		}
 		if (concurrency.reason.includes(";unbounded:")) {
 			await appendEventAsync(manifest.eventsPath, {
 				type: "limits.unbounded",
