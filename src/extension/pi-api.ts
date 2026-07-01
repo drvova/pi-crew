@@ -40,8 +40,17 @@ export type {
 export { createBashTool, defineTool } from "@earendil-works/pi-coding-agent";
 
 /**
- * The Pi package version pi-crew was built against. Used for diagnostics
- * and to surface version-drift if Pi upgrades introduce breaking changes.
- * Update this when bumping the pi-coding-agent dependency.
+ * @deprecated Drift detector removed in Phase 5 follow-up to H1.
+ *
+ * History: this constant was meant to surface version-drift between
+ * dev-time type-check and runtime peer-dep version. pi-crew declares
+ * peer deps as `*` so the runtime version is set by whatever host pi
+ * install the user has — pinning this constant to a specific devDep
+ * range was a false invariant that did not reflect how extensions
+ * actually consume peer packages.
+ *
+ * Kept exported (now `"0.0.0-unset"`) only for any downstream consumers
+ * that may import it via re-exports. No diagnostic uses it anymore.
+ * Will be removed in a future major version.
  */
-export const BUILT_AGAINST_PI_VERSION = "0.77.0";
+export const BUILT_AGAINST_PI_VERSION = "0.0.0-unset";
