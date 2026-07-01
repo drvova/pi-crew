@@ -63,6 +63,8 @@
     "test:integration": "node scripts/test-runner.mjs --test-concurrency=1 --test-timeout=120000 test/integration/*.test.ts",
     "test:smoke": "node scripts/test-runner.mjs --test-concurrency=1 --test-timeout=180000 test/smoke/*.smoke.ts",
     "build:bundle": "node scripts/build-bundle.mjs",
+    "watch:bundle": "node scripts/watch-bundle.mjs",
+    "build:bundle:once": "node scripts/watch-bundle.mjs --once",
     "postinstall": "node scripts/build-bundle.mjs || node -e \"console.warn('[pi-crew] postinstall: bundle build failed; falling back to strip-types load (slower cold-start). Run npm run build:bundle to retry.')\"",
     "bench": "node scripts/run-bench.mjs",
     "bench:check": "node scripts/bench-check.mjs",

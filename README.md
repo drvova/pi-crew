@@ -621,6 +621,24 @@ Your system prompt here.
 
 ## Development
 
+### Auto-rebuild bundle on edit
+
+For active development on the bundle, run the watcher in a separate terminal:
+
+```bash
+npm run watch:bundle
+```
+
+This watches `src/` + `index.bundle.ts` and rebuilds `dist/index.mjs` after a 300ms debounce. Zero added dependencies (uses native `node:fs.watch` with per-directory watchers).
+
+```bash
+npm run watch:bundle             # watch + auto-rebuild
+npm run watch:bundle --debounce 500  # custom debounce
+node scripts/watch-bundle.mjs --once  # build once and exit (CI prep)
+```
+
+The watcher is the dev-loop companion to `check:bundle-staleness` (CI gate) — together they eliminate the "edit src/foo.ts, forget to rebuild, run stale bundle" failure mode.
+
 ```bash
 cd pi-crew
 npm install          # dependencies
