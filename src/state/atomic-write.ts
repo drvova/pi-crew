@@ -372,6 +372,16 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 			throw new Error(`Refusing to write: opened path is not a regular file: ${tempPath}`);
 		}
 		fs.writeSync(fd, content, undefined, "utf-8");
+		// FIX (2026-07-01 mailbox-replay CI flake investigation): fsync the data
+		// before close. Without this, writeSync puts content in page cache but
+		// the data may not be flushed to disk before the subsequent rename.
+		// On shared CI runners (Ubuntu, high I/O pressure), a subsequent
+		// readFileSync could see the OLD content if the page cache evicted
+		// between write and read. fsyncSync forces the data to disk so the
+		// rename + post-rename read always sees the new content. Cost: ~1ms
+		// per write (acceptable for the small delivery.json / manifest.json
+		// files this function writes; large state-store uses the async path).
+		fs.fsyncSync(fd);
 		fs.closeSync(fd);
 		try {
 			// Issue 1 fix: re-check symlink safety immediately before rename.
@@ -386,6 +396,23 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 			}
 			// Issue 1 fix: use link+unlink instead of rename to avoid following symlinks
 			renameWithLinkSync(tempPath, filePath);
+			// FIX (2026-07-01 mailbox-replay CI flake): fsync the parent directory
+			// after rename so the directory entry update is durable. On most Linux
+			// filesystems, rename is journaled but the journal flush isn't always
+			// synchronous; without this, a subsequent open() after rename can
+			// race and see ENOENT or stale content on high-IO CI runners.
+			// We skip on Windows where directory fsync semantics differ (and
+			// where the Windows-specific rename path in renameWithLinkSync already
+			// uses MoveFileEx which is fully durable).
+			if (process.platform !== "win32") {
+				try {
+					const dirFd = fs.openSync(path.dirname(filePath), "r");
+					fs.fsyncSync(dirFd);
+					fs.closeSync(dirFd);
+				} catch {
+					/* best-effort — not all filesystems support directory fsync */
+				}
+			}
 		} catch (renameError) {
 			// Issue 4 fix: use finally block to guarantee temp file cleanup.
 			// Between the initial isSymlinkSafePath check and rename attempt,
