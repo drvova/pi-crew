@@ -1,28 +1,29 @@
 /**
- * pi-crew entrypoint — v0.9.17+ bundle-aware.
+ * pi-crew entrypoint — v0.9.17+ bundle opt-in.
  *
- * Resolution order:
- *   1. If `dist/index.mjs` exists, load it (single-file 2.9MB bundle).
- *      Faster cold-start, no per-file strip-types parse cost. Built by
- *      `npm run build:bundle` (or auto-built by postinstall).
- *   2. Else, fall back to inline strip-types loading. This keeps the
- *      extension loadable in dev clones where dist/ hasn't been built,
- *      and prevents postinstall failures from breaking pi startup.
+ * By default loads via inline strip-types. Set `PI_CREW_USE_BUNDLE=1`
+ * to use the bundled dist/index.mjs (~5% faster cold-start, see
+ * `scripts/bench-cold-start.mjs`). The bundle must be built first via
+ * `npm run build:bundle` (or installed with a package that ships dist/).
  *
- * The fallback path is intentionally permissive — we'd rather pay
- * strip-types overhead than throw "bundle missing" at startup. Slow
- * beats broken. Logging is intentionally absent to avoid spamming pi
- * startup output; run `npm run build:bundle` to upgrade to the fast
- * path.
+ * If PI_CREW_USE_BUNDLE is set but the bundle is missing/unreadable,
+ * we log a single warning at startup and fall back to strip-types.
+ * Slow beats broken.
  *
- * Design notes (Phase 5 H2 follow-up):
- *   - We use dynamic import + try/catch rather than top-level await
- *     because Pi's loader does not consistently support TLA across
- *     extension entrypoints in all versions.
- *   - Strip-types fallback is computed at module-evaluation time, not
- *     runtime — switching paths mid-session is not supported.
- *   - We never read process.env here; build automation is the user's
- *     responsibility (postinstall + git pre-commit hook).
+ * History:
+ *   - v0.9.16 and earlier: pure strip-types.
+ *   - v0.9.17 initial bundle-flip attempt (`06f16d7`): bundle default
+ *     with strip-types fallback. Benchmarked at ~5% faster total
+ *     cold-start but +9% register overhead and +9MB npm package.
+ *     Reverted to opt-in after cost-benefit review (2026-07-01).
+ *
+ * Design notes:
+ *   - Dynamic `await import` for the bundle path keeps the strip-types
+ *     path cheap when the env var is not set.
+ *   - Env var check is intentionally permissive: any of 1/true/yes/on
+ *     (case-insensitive) opts in. Empty / missing = strip-types.
+ *   - We never read this env var in the bundle itself; it's purely an
+ *     entrypoint-level gate.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerPiTeams as registerPiTeamsFromSrc } from "./src/extension/register.ts";
@@ -30,9 +31,6 @@ import { waitForRun as waitForRunFromSrc } from "./src/runtime/run-tracker.ts";
 import { accessSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-
-const here = dirname(fileURLToPath(import.meta.url));
-const bundlePath = resolve(here, "dist", "index.mjs");
 
 // Minimal bundle shape — we only use a few named exports. Keep this loose
 // because dist/index.mjs has no .d.ts (it's a build artifact, not source).
@@ -42,17 +40,29 @@ type BundleModule = {
 	registerPiTeams?: (pi: ExtensionAPI) => void;
 };
 
+const OPTS_IN = new Set(["1", "true", "yes", "on"]);
+const useBundle = OPTS_IN.has((process.env.PI_CREW_USE_BUNDLE ?? "").toLowerCase());
+
+const here = dirname(fileURLToPath(import.meta.url));
+const bundlePath = resolve(here, "dist", "index.mjs");
+
 let bundleModule: BundleModule | undefined;
-try {
-	accessSync(bundlePath);
-	// Lazy import: don't pay the parse cost when bundle is missing,
-	// but DO pay it (once) when present. This keeps the strip-types
-	// path cheap in dev.
-	bundleModule = await import(bundlePath);
-} catch {
-	// Bundle missing or unreadable. Fall through to strip-types path
-	// below. This is the graceful fallback — see header comment.
-	bundleModule = undefined;
+if (useBundle) {
+	try {
+		accessSync(bundlePath);
+		// Lazy import: don't pay the parse cost when bundle is missing,
+		// but DO pay it (once) when present. This keeps the strip-types
+		// path cheap in dev when PI_CREW_USE_BUNDLE is unset.
+		bundleModule = await import(bundlePath);
+	} catch {
+		// Bundle opted-in but missing. Single warning so users notice
+		// without spamming repeated entries. Slow beats broken.
+		console.warn(
+			`[pi-crew] PI_CREW_USE_BUNDLE=1 but ${bundlePath} missing or unreadable; ` +
+				`falling back to strip-types. Run \`npm run build:bundle\` to build.`,
+		);
+		bundleModule = undefined;
+	}
 }
 
 export const waitForRun = bundleModule?.waitForRun ?? waitForRunFromSrc;

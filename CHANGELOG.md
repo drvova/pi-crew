@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased] — bundle opt-in via PI_CREW_USE_BUNDLE
+
+The bundled entrypoint (`dist/index.mjs`, 2.9MB single file) is now opt-in via the `PI_CREW_USE_BUNDLE=1` env var. By default, pi-crew continues to load via inline strip-types from `src/`.
+
+### Why opt-in, not default
+
+Benchmarked with `scripts/bench-cold-start.mjs` (20 iters, fresh node processes each):
+
+| Metric | Strip-types (p50) | Bundle (p50) | Delta |
+|---|---|---|---|
+| Total cold-start | 3238.7ms | 3079.7ms | **−4.9%** (bundle faster) |
+| Import (`await import`) | 2906.0ms | 2740.2ms | **−5.7%** |
+| Register (`registerPiTeams(mockPi)`) | 261.1ms | 283.8ms | **+8.7%** (bundle slower) |
+
+Modest 5% total speedup is offset by +9% register overhead and +9MB npm package size. Opt-in lets users opt into the speedup if they want it; everyone else keeps the simpler strip-types default.
+
+### Changed
+
+- `index.ts` — entrypoint now gates on `PI_CREW_USE_BUNDLE` env var. Default: strip-types. When opted in and `dist/index.mjs` is missing, logs a one-time warning and falls back to strip-types (slow beats broken).
+- `package.json` — `postinstall` script retained (`build:bundle || warn`) for users who want the bundle built automatically. `files` includes `dist/` so opt-in users get a working bundle after `npm install`.
+- `scripts/check-bundle-staleness.mjs` (new) — CI gate that fails the build if any `src/*.ts` is newer than `dist/index.mjs`. Wired into `npm run ci`. No-op when `dist/` is absent.
+- `src/utils/paths.ts` — `packageRoot()` now uses a heuristic walk to find the directory containing pi-crew's `package.json`. The original 2-level walk only worked for src/ paths; called from the bundle (1-level deep) it resolved to the wrong directory and broke team discovery.
+- `scripts/bench-cold-start.mjs` (new) — reproducible cold-start benchmark. Run with `node scripts/bench-cold-start.mjs --iters 20`.
+
 ## [v0.9.16] — cancel wipes the trace (2026-06-29)
 
 User-driven refinement of the cancellation policy. Previously, cancelled / stopped subagents and crew-agent records were preserved on disk (`agent_*.json` files in `.crew/state/subagents/`, plus `agents.json` + per-task `status.json` in the run state directory) and continued to appear in the UI dashboard / widget / transcript viewer. The user explicitly asked: *"một khi đã cancel thì phải xóa luôn dấu vết về subagent đó chứ để lại làm gì nữa"* — once cancelled, the trace must be wiped. This release implements that policy.

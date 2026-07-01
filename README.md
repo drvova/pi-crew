@@ -610,6 +610,7 @@ Your system prompt here.
 
 | Variable | Purpose |
 |----------|---------|
+| `PI_CREW_USE_BUNDLE=1` | Load via bundled `dist/index.mjs` (~5% faster cold-start). Default: strip-types. Requires `npm run build:bundle` to have produced `dist/`. Falls back to strip-types with a one-time warning if the bundle is missing. See `scripts/bench-cold-start.mjs`. |
 | `PI_CREW_EXECUTE_WORKERS=0` | Disable child workers (scaffold mode) |
 | `PI_TEAMS_EXECUTE_WORKERS=0` | Legacy disable flag |
 | `PI_TEAMS_MOCK_CHILD_PI=success` | Mock child worker for testing |
