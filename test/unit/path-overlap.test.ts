@@ -50,15 +50,13 @@ test("selectNonOverlapping: greedy picks non-overlapping subset, preserves order
 });
 
 test("selectNonOverlapping: respects maxCount", () => {
-	const steps = [
-		makeStep("a", "a.md"),
-		makeStep("b", "b.md"),
-		makeStep("c", "c.md"),
-		makeStep("d", "d.md"),
-	];
+	const steps = [makeStep("a", "a.md"), makeStep("b", "b.md"), makeStep("c", "c.md"), makeStep("d", "d.md")];
 	const picked = selectNonOverlapping(steps, 2);
 	assert.equal(picked.length, 2);
-	assert.deepEqual(picked.map((s) => s.id), ["a", "b"]);
+	assert.deepEqual(
+		picked.map((s) => s.id),
+		["a", "b"],
+	);
 });
 
 test("selectNonOverlapping: empty input returns empty", () => {

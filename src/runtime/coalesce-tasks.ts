@@ -54,9 +54,7 @@ export function planCoalescedGroups(
 ): CoalescedGroup[] {
 	if (!enabled || readyTaskIds.length === 0) return [];
 	const taskById = new Map<string, TeamTaskState>(tasks.map((task) => [task.id, task]));
-	const stepById = new Map<string, WorkflowStep>(
-		workflow.steps.map((step) => [step.id, step]),
-	);
+	const stepById = new Map<string, WorkflowStep>(workflow.steps.map((step) => [step.id, step]));
 
 	// Bucket: key = `${role}\0${cwd}` → task list preserving input order
 	const buckets = new Map<string, TeamTaskState[]>();
@@ -97,10 +95,7 @@ export function planCoalescedGroups(
  * current group only if they don't conflict with any already-in-group member.
  * Otherwise, they start (and extend) the next subgroup.
  */
-function splitByWriteSafety(
-	bucketTasks: TeamTaskState[],
-	stepById: Map<string, WorkflowStep>,
-): TeamTaskState[][] {
+function splitByWriteSafety(bucketTasks: TeamTaskState[], stepById: Map<string, WorkflowStep>): TeamTaskState[][] {
 	const result: TeamTaskState[][] = [];
 	for (const task of bucketTasks) {
 		const step = task.stepId ? stepById.get(task.stepId) : undefined;
@@ -110,11 +105,7 @@ function splitByWriteSafety(
 			let conflict = false;
 			for (const other of group) {
 				const otherStep = other.stepId ? stepById.get(other.stepId) : undefined;
-				if (
-					typeof writePath === "string" &&
-					typeof otherStep?.output === "string" &&
-					writePath === otherStep.output
-				) {
+				if (typeof writePath === "string" && typeof otherStep?.output === "string" && writePath === otherStep.output) {
 					conflict = true;
 					break;
 				}

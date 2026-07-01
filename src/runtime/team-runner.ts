@@ -19,6 +19,7 @@ import { logInternalError } from "../utils/internal-error.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { checkBranchFreshness } from "../worktree/branch-freshness.ts";
 import { buildSyntheticTerminalEvidence, CrewCancellationError, cancellationReasonFromSignal } from "./cancellation.ts";
+import { planCoalescedGroups } from "./coalesce-tasks.ts";
 import { resolveBatchConcurrency } from "./concurrency.ts";
 import { readCrewAgents, saveCrewAgents } from "./crew-agent-records.ts";
 import type { CrewRuntimeKind } from "./crew-agent-runtime.ts";
@@ -29,6 +30,7 @@ import { applyGoalAchievement, assessGoalAchievement } from "./goal-achievement.
 import { deliverGroupJoin, resolveGroupJoinMode } from "./group-join.ts";
 import { terminateLiveAgentsForRun } from "./live-agent-manager.ts";
 import { mapConcurrent } from "./parallel-utils.ts";
+import { filterReadyByWriteOverlap } from "./path-overlap.ts";
 import { evaluateCrewPolicy, summarizePolicyDecisions } from "./policy-engine.ts";
 import { buildRecoveryLedger, shouldRerunFailedTask } from "./recovery-recipes.ts";
 import { DEFAULT_RETRY_POLICY, executeWithRetry, type RetryPolicy } from "./retry-executor.ts";
@@ -40,8 +42,6 @@ import { recordsForMaterializedTasks } from "./task-display.ts";
 import { buildExecutionPlan as buildDagExecutionPlan, getReadyTasks as getDagReadyTasks, type TaskNode } from "./task-graph.ts";
 import { buildTaskGraphIndex, refreshTaskGraphQueues, taskGraphSnapshot } from "./task-graph-scheduler.ts";
 import { aggregateTaskOutputs } from "./task-output-context.ts";
-import { filterReadyByWriteOverlap } from "./path-overlap.ts";
-import { planCoalescedGroups } from "./coalesce-tasks.ts";
 import { runTeamTask } from "./task-runner.ts";
 import { clearTrackedTaskUsage } from "./usage-tracker.ts";
 import {
@@ -999,12 +999,7 @@ async function executeTeamRunCore(
 		// deserves its own PR. For now, every coalesced group => one info event.
 		const coalesceEnabled = workflow.coalesceMicroTasks === true;
 		if (coalesceEnabled) {
-			const coalescedGroups = planCoalescedGroups(
-				serializedReady,
-				tasks,
-				workflow,
-				true,
-			);
+			const coalescedGroups = planCoalescedGroups(serializedReady, tasks, workflow, true);
 			for (const group of coalescedGroups) {
 				if (group.tasks.length < 2) continue; // singletons are not interesting
 				await appendEventAsync(manifest.eventsPath, {

@@ -124,9 +124,13 @@ export async function configureNotifications(ctx: ExtensionContext, state: Lifec
 	const config = loadConfig(ctx.cwd).config;
 	if (config.notifications?.enabled === false) return;
 
+	// LAZY: notification router — wires events to sinks
 	const { NotificationRouter } = await import("../notification-router.ts");
+	// LAZY: JSONL sink — file-backed notification storage
 	const { createJsonlSink } = await import("../notification-sink.ts");
+	// LAZY: follow-up helpers — shared with subagent handoff
 	const { sendFollowUp } = await import("./subagent-helpers.ts");
+	// LAZY: widget updater — refreshes the TUI status widget
 	const { updateCrewWidget } = await import("../../ui/widget/index.ts");
 
 	if (config.telemetry?.enabled !== false) {
@@ -201,7 +205,9 @@ export async function configureDeliveryCoordinator(state: LifecycleState, deps: 
 	state.deliveryCoordinator = undefined;
 	state.overflowTracker?.dispose();
 	state.overflowTracker = undefined;
+	// LAZY: delivery coordinator — batches notification fan-out
 	const { DeliveryCoordinator } = await import("../../runtime/delivery-coordinator.ts");
+	// LAZY: overflow tracker — recovers from backlog overflow
 	const { OverflowRecoveryTracker } = await import("../../runtime/overflow-recovery.ts");
 	state.deliveryCoordinator = new DeliveryCoordinator({
 		emit: (event, data) => {

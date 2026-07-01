@@ -102,9 +102,11 @@ export async function configureObservability(ctx: ExtensionContext, state: Obser
 	const config = loadConfig(ctx.cwd).config;
 	if (config.observability?.enabled === false) return;
 
-	// Lazy imports — only paid for when observability is actually enabled.
+	// LAZY: observability stack — only paid for when observability is actually enabled
 	const { createMetricRegistry } = await import("../../observability/metric-registry.ts");
+	// LAZY: event→metric bridge
 	const { wireEventToMetrics } = await import("../../observability/event-to-metric.ts");
+	// LAZY: file-backed metric sink
 	const { createMetricFileSink } = await import("../../observability/metric-sink.ts");
 
 	state.metricRegistry = createMetricRegistry();
@@ -142,7 +144,7 @@ export async function configureObservability(ctx: ExtensionContext, state: Obser
 			.catch((error: unknown) => logInternalError("register.otlp-lazy-import", error));
 	}
 
-	// HeartbeatWatcher — polled per-session. Wires deadletter + metric events.
+	// LAZY: heartbeat watcher — polled per-session, wires deadletter + metric events.
 	const { HeartbeatWatcher } = await import("../../runtime/heartbeat-watcher.ts");
 	state.heartbeatWatcher = new HeartbeatWatcher({
 		cwd: ctx.cwd,

@@ -89,7 +89,6 @@ export const DEFAULT_OUTPUT_CONTEXT = {
 	teeThresholdMultiplier: 1.25,
 } as const;
 
-
 export const DEFAULT_PATHS = {
 	state: {
 		runsSubdir: "state/runs",

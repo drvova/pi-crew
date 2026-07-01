@@ -51,9 +51,24 @@ const result = await build({
 		"jiti",
 		"typebox",
 	],
-	// All node:* and Node-built-in modules are external by default for
+	// All node:* and Node-builtin modules are external by default for
 	// platform=node, but list explicitly for clarity.
-	banner: { js: "// pi-crew bundled by scripts/build-bundle.mjs (5.5)" },
+	//
+	// CJS-shim banner: pi-crew's dependency graph includes CommonJS modules
+	// (notably `yaml`) whose source calls `require("process")` etc. esbuild
+	// emits these as runtime `__require(...)` calls; in a pure-ESM context
+	// `require` is undefined, so we inject a `createRequire`-backed shim
+	// at the top of the bundle. This is the standard pattern for shipping
+	// CJS-mixed bundles as `.mjs`. See phase-2 H2 investigation (2026-06-30).
+	banner: {
+		js:
+			"// pi-crew bundled by scripts/build-bundle.mjs (5.5)\n" +
+			"// CJS-shim for legacy deps (yaml, etc.) that call require() in ESM context.\n" +
+			"import { createRequire as __piCrewCreateRequire } from 'node:module';\n" +
+			"const require = __piCrewCreateRequire(import.meta.url);\n" +
+			"const module = { exports: {} };\n" +
+			"const exports = module.exports;\n",
+	},
 	metafile: true,
 });
 
