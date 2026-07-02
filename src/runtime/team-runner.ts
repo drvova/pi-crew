@@ -689,16 +689,22 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 		stopTeamHeartbeat();
 		// P1: Catch unhandled errors — ensure manifest/tasks/agents are terminal so they don't stay "running" forever.
 		const message = error instanceof Error ? error.message : String(error);
-		// Reload manifest with lock to avoid stale data overwriting concurrent writes.
-		// If lock acquisition fails, use in-memory data rather than stale disk data.
-		let loaded;
-		try {
-			loaded = await withRunLock(input.manifest, async () => loadRunManifestById(input.manifest.cwd, input.manifest.runId));
-		} catch {
-			loaded = undefined; // best-effort: use in-memory data if lock fails
-		}
-		const freshManifest = loaded?.manifest ?? manifest;
-		const freshTasks = refreshTaskGraphQueues(loaded?.tasks ?? input.tasks);
+		// FIX (2026-07-02): drop withRunLock here entirely.
+		// Previously this catch path acquired withRunLock to reload manifest+tasks
+		// from disk (best-effort with in-memory fallback). But the closeout path at
+		// line ~1596 ALSO holds the same run lock for its final save — when a late
+		// failure fires during closeout (e.g. async hook error after run.completed),
+		// this catch path can hit `Run 'run.lock' is locked by another operation.`
+		// and the error propagates as "Unhandled error in team runner" after the
+		// run has actually completed. Lock acquisition here is unnecessary —
+		// the closeout writes through to disk before this catch fires (or after —
+		// either is fine), and the in-memory state already contains the latest
+		// post-completion manifest/tasks. We use in-memory state unconditionally.
+		// The stale-data concern is mitigated by the dispatcher having re-read disk
+		// state under lock at line ~1364 for each iteration; the manifest+task
+		// objects in the calling scope are already post-merge.
+		const freshManifest = manifest;
+		const freshTasks = refreshTaskGraphQueues(input.tasks);
 		const failedAt = new Date().toISOString();
 		const tasks = freshTasks.map((task) =>
 			task.status === "running" || task.status === "queued" || task.status === "waiting"
