@@ -8,6 +8,7 @@ import type { TeamRunManifest } from "../state/types.ts";
 import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { packageRoot } from "../utils/paths.ts";
 import { registerWorker, unregisterWorker } from "./orphan-worker-registry.ts";
 import { PEER_DEP_DIR_ENV, resolvePeerDepDir } from "./peer-dep.ts";
 
@@ -223,7 +224,17 @@ export const BACKGROUND_RUNNER_ENV_ALLOWLIST: string[] = [
 ];
 
 export async function spawnBackgroundTeamRun(manifest: TeamRunManifest): Promise<SpawnBackgroundTeamRunResult> {
-	const runnerPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "background-runner.ts");
+	// FIX (2026-07-02, perf review F-critical): use packageRoot() instead of
+	// import.meta.url-relative path. The previous path.resolve walks
+	// <bundleDir>/background-runner.ts, which is correct in src/ but BROKEN
+	// in the bundle: esbuild's __esm helper does not preserve per-module
+	// import.meta.url, so the resolve lands at <pi-crew>/background-runner.ts
+	// (missing `src/runtime/`). The background-runner then ENOENTs at spawn
+	// and 3 explorer agents failed during the verification run. packageRoot()
+	// walks up to find pi-crew's package.json and works correctly from both
+	// src/ and dist/ entry points. Mirrors the fix in pi-args.ts:10 (commit
+	// 0dd93e0).
+	const runnerPath = path.join(packageRoot(), "src", "runtime", "background-runner.ts");
 	const logPath = path.join(manifest.stateRoot, "background.log");
 	fs.mkdirSync(manifest.stateRoot, { recursive: true });
 
