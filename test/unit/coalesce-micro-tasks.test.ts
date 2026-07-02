@@ -116,6 +116,58 @@ test("coalesce: empty input returns empty", () => {
 	assert.deepEqual(planCoalescedGroups([], [], workflow, true), []);
 });
 
+test("coalesce: maxGroupBytes cap prevents oversized groups", () => {
+	// 4 explorer tasks with VERY long task text. With maxGroupBytes=2000
+	// (very tight), each task contributes ~2500+ bytes; should split into
+	// singletons rather than one big 4-task group.
+	const longText = "x".repeat(2000);
+	const tasks = [
+		makeTask("a", "explorer", "/cwd", "step-a"),
+		makeTask("b", "explorer", "/cwd", "step-b"),
+		makeTask("c", "explorer", "/cwd", "step-c"),
+		makeTask("d", "explorer", "/cwd", "step-d"),
+	];
+	const workflow = makeWorkflow([
+		makeStep("step-a", "explorer", longText),
+		makeStep("step-b", "explorer", longText),
+		makeStep("step-c", "explorer", longText),
+		makeStep("step-d", "explorer", longText),
+	]);
+	// maxGroupBytes=2000 forces splits; each task already ~2500 bytes alone.
+	const groups = planCoalescedGroups(
+		["a", "b", "c", "d"],
+		tasks,
+		workflow,
+		true,
+		5, // maxGroupSize=5 (won't be hit)
+		2000, // maxGroupBytes=2000
+	);
+	// Each task is ~2500 bytes alone, so the 2KB budget forces singletons.
+	assert.equal(groups.length, 4, "should split into 4 singletons");
+	for (const group of groups) {
+		assert.equal(group.tasks.length, 1);
+	}
+});
+
+test("coalesce: maxGroupBytes default allows normal-size groups", () => {
+	// 3 small tasks (no long text). Default 100KB budget should fit all
+	// 3 in one group.
+	const tasks = [
+		makeTask("a", "explorer", "/cwd", "step-a"),
+		makeTask("b", "explorer", "/cwd", "step-b"),
+		makeTask("c", "explorer", "/cwd", "step-c"),
+	];
+	const workflow = makeWorkflow([
+		makeStep("step-a", "explorer", "explore A"),
+		makeStep("step-b", "explorer", "explore B"),
+		makeStep("step-c", "explorer", "explore C"),
+	]);
+	const groups = planCoalescedGroups(["a", "b", "c"], tasks, workflow, true);
+	// All 3 fit in one group under the default 100KB byte budget.
+	assert.equal(groups.length, 1);
+	assert.equal(groups[0]!.tasks.length, 3);
+});
+
 test("flattenGroupIds: preserves group order and within-group order", () => {
 	const tasks = [makeTask("a", "explorer", "/cwd", "step-a"), makeTask("b", "explorer", "/cwd", "step-b")];
 	const workflow = makeWorkflow([makeStep("step-a", "explorer", "explore A"), makeStep("step-b", "explorer", "explore B")]);

@@ -34,6 +34,12 @@ import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.
 /** Default cap on group size to prevent context-budget overflow. */
 export const DEFAULT_MAX_GROUP_SIZE = 5;
 
+/** Default cap on combined estimated prompt size (bytes). Conservative
+ *  estimate — real prompt includes the stable prefix (~5KB) plus per-task
+ *  sections. 100KB matches the budget heuristic in the design doc
+ *  (m6-real-dispatch-design.md §R4). */
+export const DEFAULT_MAX_GROUP_BYTES = 100_000;
+
 export interface CoalescedGroup {
 	/** Stable id derived from the group membership; deterministic for tests. */
 	id: string;
@@ -62,6 +68,7 @@ export function planCoalescedGroups(
 	workflow: WorkflowConfig,
 	enabled: boolean,
 	maxGroupSize: number = DEFAULT_MAX_GROUP_SIZE,
+	maxGroupBytes: number = DEFAULT_MAX_GROUP_BYTES,
 ): CoalescedGroup[] {
 	if (!enabled || readyTaskIds.length === 0) return [];
 	const taskById = new Map<string, TeamTaskState>(tasks.map((task) => [task.id, task]));
@@ -95,38 +102,72 @@ export function planCoalescedGroups(
 	}
 
 	// Within each bucket, split further by write-path safety (groups of tasks
-	// that all have distinct write outputs) AND cap at maxGroupSize.
+	// that all have distinct write outputs), cap at maxGroupSize, AND cap
+	// combined estimated prompt size at maxGroupBytes. This addresses
+	// design-doc risk R4 (context-budget overflow): a worker handling N
+	// micro-tasks with large dependency contexts could exceed the model's
+	// context window. The byte cap is a heuristic, not a guarantee — the
+	// actual prompt includes rendered workspace trees and skill blocks too.
 	const groups: CoalescedGroup[] = [];
 	for (const [key, bucketTasks] of buckets) {
 		const [role, cwd] = key.split("\0");
 		const subgroups = splitByWriteSafety(bucketTasks, stepById);
 		for (const subgroup of subgroups) {
-			// Split oversized buckets into maxGroupSize chunks.
-			for (let i = 0; i < subgroup.length; i += maxGroupSize) {
-				const slice = subgroup.slice(i, i + maxGroupSize);
-				if (slice.length < 2) {
-					// Singletons don't justify coalescing overhead. Emit as a
-					// group of size 1 anyway so callers can iterate uniformly;
-					// the team-runner dispatch loop checks `tasks.length < 2`
-					// and falls back to per-task dispatch for singletons.
-					groups.push({
-						id: slice[0]!.id,
-						role,
-						cwd,
-						tasks: slice,
-					});
+			// Chunk by BOTH count and bytes. Greedy: keep adding tasks while
+			// adding the next one wouldn't exceed either limit. When a
+			// single task exceeds the byte limit by itself (rare), include
+			// it anyway as a singleton group so it's at least eligible.
+			let chunkStart = 0;
+			let chunkBytes = 0;
+			for (let i = 0; i < subgroup.length; i += 1) {
+				const task = subgroup[i]!;
+				const step = task.stepId ? stepById.get(task.stepId) : undefined;
+				const taskSize = estimateTaskPromptSize(task, step);
+				const wouldBeCount = i - chunkStart + 1;
+				const wouldBeBytes = chunkBytes + taskSize;
+				const overCount = wouldBeCount > maxGroupSize;
+				const overBytes = i > chunkStart && wouldBeBytes > maxGroupBytes;
+				if ((overCount || overBytes) && i > chunkStart) {
+					// Flush current chunk as a group.
+					const slice = subgroup.slice(chunkStart, i);
+					groups.push(buildGroup(slice, role, cwd));
+					chunkStart = i;
+					chunkBytes = taskSize;
 				} else {
-					groups.push({
-						id: slice.map((task) => task.id).join("+"),
-						role,
-						cwd,
-						tasks: slice,
-					});
+					chunkBytes += taskSize;
 				}
+			}
+			// Flush final chunk.
+			if (chunkStart < subgroup.length) {
+				const slice = subgroup.slice(chunkStart);
+				groups.push(buildGroup(slice, role, cwd));
 			}
 		}
 	}
 	return groups;
+}
+
+function buildGroup(tasks: TeamTaskState[], role: string, cwd: string): CoalescedGroup {
+	return {
+		id: tasks.length === 1 ? tasks[0]!.id : tasks.map((t) => t.id).join("+"),
+		role,
+		cwd,
+		tasks,
+	};
+}
+
+/**
+ * Estimate the prompt-bytes contribution of a single task within a
+ * coalesced group. The actual prompt is much larger (workspace tree,
+ * skill block, dependency context) but the task-specific contribution
+ * is roughly proportional to the step's task text + a fixed per-task
+ * overhead for delimiters and headers.
+ */
+function estimateTaskPromptSize(task: TeamTaskState, step: WorkflowStep | undefined): number {
+	const taskText = step?.task?.length ?? 0;
+	const packetEstimate = 500; // task packet / scope / verification estimate
+	const delimiterOverhead = 200; // `<<<TASK_RESULT:id>>>` + section header
+	return taskText + packetEstimate + delimiterOverhead;
 }
 
 /**
