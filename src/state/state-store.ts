@@ -422,10 +422,16 @@ export function saveRunTasks(manifest: TeamRunManifest, tasks: TeamTaskState[]):
  * see the previous on-disk content while the write is still buffered).
  * Bulk update paths that fan out into multiple writer call sites are the
  * intended use case. Single-update + read-update loops (e.g.
- * persistSingleTaskUpdate) should keep using saveRunTasks.
+ * persistSingleTaskUpdate) should keep using saveRunTasks — OR call
+ * `flushPendingAtomicWrites()` immediately before their read to force
+ * any pending coalesced writes to land on disk first.
+ *
+ * (perf review 2026-07 F4) — now used by persistSingleTaskUpdate's
+ * non-terminal checkpoint path; that caller calls flushPendingAtomicWrites()
+ * before its read-modify-write load to defeat the stale-read window.
  */
 /** @internal */
-function saveRunTasksCoalesced(manifest: TeamRunManifest, tasks: TeamTaskState[]): void {
+export function saveRunTasksCoalesced(manifest: TeamRunManifest, tasks: TeamTaskState[]): void {
 	// FIX: Invalidate cache BEFORE atomic write to prevent stale cache serving.
 	invalidateRunCache(manifest.stateRoot);
 	try {

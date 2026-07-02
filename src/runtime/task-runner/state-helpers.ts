@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
+import { flushPendingAtomicWrites } from "../../state/atomic-write.ts";
 import { withRunLockSync } from "../../state/locks.ts";
-import { loadRunManifestById, saveRunTasks } from "../../state/state-store.ts";
+import { loadRunManifestById, saveRunTasksCoalesced } from "../../state/state-store.ts";
 import type { TaskCheckpointState, TeamRunManifest, TeamTaskState } from "../../state/types.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
 import { recordFromTask, upsertCrewAgent } from "../crew-agent-records.ts";
@@ -54,7 +55,16 @@ export function persistSingleTaskUpdate(
 
 	try {
 		return withRunLockSync(manifest, () => {
-			retryLoop: for (let attempt = 0; attempt < 100; attempt++) {
+			for (let attempt = 0; attempt < 100; attempt++) {
+				// F4: persistSingleTaskUpdate now uses saveRunTasksCoalesced below
+				// (50ms debounce window). Read-modify-write loops are unsafe under
+				// coalescing — a parallel writer's buffered write is invisible to
+				// loadRunManifestById until it actually lands. Force any pending
+				// coalesced writes to flush first so this read sees the latest
+				// durable state. Without this guard, a parallel writer could
+				// overwrite our buffered write between our load and our (async)
+				// fsync, silently losing the intermediate update.
+				flushPendingAtomicWrites();
 				const latest = loadRunManifestById(manifest.cwd, manifest.runId)?.tasks ?? fallbackTasks;
 				merged = updateTask(latest, taskWithCheckpoint);
 
@@ -69,7 +79,7 @@ export function persistSingleTaskUpdate(
 				if (currentMtime !== baseMtime) {
 					// Another writer committed — their update is in latest, re-merge on top
 					baseMtime = currentMtime;
-					continue retryLoop;
+					continue;
 				}
 
 				// No concurrent writer — check that our merged result is based on the
@@ -83,7 +93,7 @@ export function persistSingleTaskUpdate(
 				}
 				if (recheckMtime !== baseMtime) {
 					baseMtime = recheckMtime;
-					continue retryLoop;
+					continue;
 				}
 
 				// Final pre-write mtime check to catch any concurrent writer that completed
@@ -97,10 +107,10 @@ export function persistSingleTaskUpdate(
 				if (preWriteMtime !== baseMtime) {
 					// Another writer committed — retry
 					baseMtime = preWriteMtime;
-					continue retryLoop;
+					continue;
 				}
 
-				break retryLoop;
+				break;
 			}
 
 			if (merged === undefined) {
@@ -109,7 +119,12 @@ export function persistSingleTaskUpdate(
 			}
 
 			try {
-				saveRunTasks(manifest, merged);
+				// F4: coalesced write inside the withRunLockSync critical section.
+				// The mtime CAS retry loop above still guards against concurrent
+				// non-coalesced writers; the flushPendingAtomicWrites() guard at
+				// the top of the retry loop ensures reads see any other coalesced
+				// writer's flushed-before-this-call state.
+				saveRunTasksCoalesced(manifest, merged);
 			} catch (err) {
 				logInternalError("persistSingleTaskUpdate", err);
 				throw err;
