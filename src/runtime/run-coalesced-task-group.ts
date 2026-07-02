@@ -18,6 +18,7 @@ import { buildWorkspaceTree } from "./workspace-tree.ts";
 import { saveRunTasks, updateRunStatus } from "../state/state-store.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
 import { appendEventAsync } from "../state/event-log.ts";
+import { createWorkerHeartbeat, touchWorkerHeartbeat } from "./worker-heartbeat.ts";
 import type { AgentConfig } from "../agents/agent-config.ts";
 import type { CrewRuntimeMode } from "./runtime-resolver.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
@@ -73,12 +74,50 @@ export async function runCoalescedTaskGroup(
 
 	const combinedPrompt = await buildCoalescedPrompt(manifest, step, groupTasks, agent);
 
+	// FIX (M6): write heartbeats for ALL N tasks in the coalesced group so the
+	// background watcher doesn't fire heartbeat_dead against the (single)
+	// child pi worker. Previously runCoalescedTaskGroup never wrote heartbeats,
+	// so the watcher saw `heartbeat.lastSeenAt: undefined` within 2 seconds of
+	// spawn and emitted heartbeat_dead even though the worker continued to
+	// completion (false-positive stuck-worker alarms). The singleton path
+	// (runTeamTask) writes heartbeats via persistHeartbeat — M6 needs the
+	// equivalent to avoid the false-positive.
+	updatedTasks = updatedTasks.map((t) => {
+		if (!taskIds.includes(t.id)) return t;
+		return {
+			...t,
+			heartbeat: t.heartbeat ?? createWorkerHeartbeat(t.id),
+		};
+	});
+	saveRunTasks(manifest, updatedTasks);
+
 	let rawOutput = "";
 	let success = false;
 	if (!executeWorkers) {
 		rawOutput = buildScaffoldOutput(groupTasks);
 		success = true;
 	} else {
+		// Heartbeat refresher: touch every task's heartbeat every 15s while the
+		// worker is alive. Set `alive: true` explicitly so post-completion
+		// staleness checks immediately recognize liveness.
+		const heartbeatTimer = setInterval(() => {
+			const now = new Date().toISOString();
+			updatedTasks = updatedTasks.map((t) => {
+				if (!taskIds.includes(t.id)) return t;
+				return {
+					...t,
+					heartbeat: touchWorkerHeartbeat(
+						t.heartbeat ?? createWorkerHeartbeat(t.id),
+						{ alive: true },
+					),
+				};
+			});
+			try {
+				saveRunTasks(manifest, updatedTasks);
+			} catch {
+				// Run may have been pruned mid-dispatch — best-effort only.
+			}
+		}, 15_000);
 		try {
 			const result = await runChildPi({
 				cwd: firstTask.cwd,
@@ -94,6 +133,8 @@ export async function runCoalescedTaskGroup(
 		} catch (err) {
 			rawOutput = `Worker dispatch failed: ${err instanceof Error ? err.message : String(err)}`;
 			success = false;
+		} finally {
+			clearInterval(heartbeatTimer);
 		}
 	}
 
