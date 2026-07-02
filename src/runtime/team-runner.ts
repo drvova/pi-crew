@@ -18,6 +18,7 @@ import type { TeamConfig } from "../teams/team-config.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { checkBranchFreshness } from "../worktree/branch-freshness.ts";
+import { mergeArtifacts } from "./team-runner-artifacts.ts";
 import { buildSyntheticTerminalEvidence, CrewCancellationError, cancellationReasonFromSignal } from "./cancellation.ts";
 import { planCoalescedGroups, buildDispatchUnits } from "./coalesce-tasks.ts";
 import { runCoalescedTaskGroup } from "./run-coalesced-task-group.ts";
@@ -155,12 +156,6 @@ function markBlocked(tasks: TeamTaskState[], reason: string): TeamTaskState[] {
 				}
 			: task,
 	);
-}
-
-function mergeArtifacts(items: ArtifactDescriptor[]): ArtifactDescriptor[] {
-	const byPath = new Map<string, ArtifactDescriptor>();
-	for (const item of items) byPath.set(item.path, item);
-	return [...byPath.values()];
 }
 
 function isNonTerminalTaskStatus(status: TeamTaskState["status"]): boolean {

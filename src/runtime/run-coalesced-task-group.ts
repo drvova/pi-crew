@@ -16,11 +16,13 @@ import { runChildPi } from "./child-pi.ts";
 import { splitCoalescedOutput } from "./task-runner/output-splitter.ts";
 import { buildWorkspaceTree } from "./workspace-tree.ts";
 import { saveRunTasks, updateRunStatus } from "../state/state-store.ts";
+import { writeArtifact } from "../state/artifact-store.ts";
 import { appendEventAsync } from "../state/event-log.ts";
 import type { AgentConfig } from "../agents/agent-config.ts";
 import type { CrewRuntimeMode } from "./runtime-resolver.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import type { WorkflowStep } from "../workflows/workflow-config.ts";
+import { mergeArtifacts } from "./team-runner-artifacts.ts";
 
 export interface CoalescedTaskGroupInput {
 	manifest: TeamRunManifest;
@@ -98,32 +100,46 @@ export async function runCoalescedTaskGroup(
 	const split = splitCoalescedOutput(rawOutput, taskIds);
 
 	const finishedAt = new Date().toISOString();
+	const newArtifacts: TeamRunManifest["artifacts"] = [];
 	updatedTasks = updatedTasks.map((t) => {
 		if (!taskIds.includes(t.id)) return t;
 		const entry = split.find((s) => s.taskId === t.id);
 		const ok = success && Boolean(entry?.text);
-		const resultArtifactPath = path.join(
-			manifest.stateRoot,
-			"results",
-			`${t.id}.txt`,
-		);
-		void writeFile(resultArtifactPath, entry?.text ?? rawOutput, "utf-8").catch(() => undefined);
+		const text = entry?.text ?? rawOutput;
+		// BUGFIX (M6 real dispatch): write to artifactsRoot via writeArtifact
+		// so task.resultArtifact is set and aggregateTaskOutputs can read
+		// the per-task text. Previously the coalesced path used a raw
+		// writeFile to stateRoot/results/<id>.txt which aggregated task
+		// outputs could not locate — they only consult task.resultArtifact.
+		// Result: tasks reported "EMPTY OUTPUT" in the batch summary even
+		// though on-disk results were correct.
+		const resultArtifact = writeArtifact(manifest.artifactsRoot, {
+			kind: "result",
+			relativePath: `results/${t.id}.txt`,
+			content: text,
+			producer: t.id,
+		});
+		newArtifacts.push(resultArtifact);
 		return {
 			...t,
 			status: ok ? ("completed" as const) : ("failed" as const),
 			finishedAt,
 			result: {
-				text: entry?.text ?? rawOutput,
+				text,
 				producer: groupId,
 				strategy: entry?.strategy ?? "broadcast",
 			},
+			resultArtifact,
 		};
 	});
 	saveRunTasks(manifest, updatedTasks);
+	let updatedManifest: TeamRunManifest = {
+		...manifest,
+		artifacts: mergeArtifacts([...manifest.artifacts, ...newArtifacts]),
+	};
 
-	let updatedManifest: TeamRunManifest = manifest;
 	if (success) {
-		updatedManifest = updateRunStatus(manifest, "running");
+		updatedManifest = updateRunStatus(updatedManifest, "running");
 	}
 	await appendEventAsync(updatedManifest.eventsPath, {
 		type: "task.coalesced_dispatch_end",
