@@ -76,10 +76,18 @@ function parseStepSection(id: string, body: string): WorkflowStep | undefined {
 }
 
 const parseOptionalInteger = (value: string | undefined): number | undefined => {
-	if (!value) return undefined;
-	const parsed = Number.parseInt(value, 10);
-	if (!Number.isFinite(parsed) || parsed < 1) return undefined;
-	return Math.trunc(parsed);
+	const trimmed = value?.trim();
+	if (!trimmed) return undefined;
+	const n = Number.parseInt(trimmed, 10);
+	return Number.isNaN(n) ? undefined : n;
+};
+
+const parseOptionalBoolean = (value: string | undefined): boolean | undefined => {
+	const trimmed = value?.trim().toLowerCase();
+	if (!trimmed) return undefined;
+	if (trimmed === "true" || trimmed === "yes" || trimmed === "1") return true;
+	if (trimmed === "false" || trimmed === "no" || trimmed === "0") return false;
+	return undefined;
 };
 
 /** Parse frontmatter `topology:` field. Validates against allowed enum; bad values are silently
@@ -147,6 +155,7 @@ function parseWorkflowFile(filePath: string, source: ResourceSource): WorkflowCo
 			filePath,
 			maxConcurrency: parseOptionalInteger(frontmatter.maxConcurrency),
 			topology: parseTopology(frontmatter.topology),
+			coalesceMicroTasks: parseOptionalBoolean(frontmatter.coalesceMicroTasks),
 			steps,
 		};
 	} catch {
