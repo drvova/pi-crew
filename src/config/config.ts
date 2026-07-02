@@ -66,6 +66,108 @@ import type {
 	UpdateConfigOptions,
 } from "./types.ts";
 
+// (F16) loadConfig was called 1 Hz idle / 6 Hz active with 0 cache — added 2s TTL+mtime cache following the manifestCache pattern in state-store.ts:75-130.
+const CONFIG_CACHE_TTL_MS = 2000;
+
+interface ConfigCacheEntry {
+	value: LoadedPiTeamsConfig;
+	mtimes: Record<string, number>;
+	cachedAt: number;
+}
+
+interface ConfigCacheKeyParts {
+	filePath: string;
+	legacyPath: string;
+	projectPath: string;
+	projectPiCrewJsonPath: string;
+	cwd: string | null;
+}
+
+const configCache = new Map<string, ConfigCacheEntry>();
+
+/** @internal — TTL override for unit tests (matches __test__setManifestCache pattern in state-store.ts:82). */
+export function __test__setConfigCacheTtlMs(ttlMs: number): void {
+	configCacheTtlMsOverride = ttlMs;
+}
+
+/** @internal — read the effective TTL in use by the cache. */
+export function __test__getConfigCacheTtlMs(): number {
+	return configCacheTtlMsOverride ?? CONFIG_CACHE_TTL_MS;
+}
+
+/** @internal — peek at the cached entry for a given key shape. */
+export function __test__getConfigCacheEntry(parts: ConfigCacheKeyParts): ConfigCacheEntry | undefined {
+	return configCache.get(buildConfigCacheKey(parts));
+}
+
+/** @internal — number of cached entries (for tests/diagnostics). */
+export function __test__configCacheSize(): number {
+	return configCache.size;
+}
+
+let configCacheTtlMsOverride: number | null = null;
+
+function buildConfigCacheKey(parts: ConfigCacheKeyParts): string {
+	return JSON.stringify([parts.filePath, parts.legacyPath, parts.projectPath, parts.projectPiCrewJsonPath, parts.cwd]);
+}
+
+function statMtimeMs(filePath: string): number | undefined {
+	try {
+		return fs.statSync(filePath).mtimeMs;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+		throw error;
+	}
+}
+
+function readCachedConfigParts(filePath: string, legacyPath: string, cwd: string | undefined): ConfigCacheKeyParts {
+	const projectPath = cwd ? projectConfigPath(cwd) : "";
+	const piCrewJsonPath = cwd ? projectPiCrewJsonPath(cwd) : "";
+	return {
+		filePath,
+		legacyPath,
+		projectPath,
+		projectPiCrewJsonPath: piCrewJsonPath,
+		cwd: cwd ?? null,
+	};
+}
+
+function readCacheMtimes(parts: ConfigCacheKeyParts): Record<string, number> {
+	const mtimes: Record<string, number> = {};
+	for (const p of [parts.filePath, parts.legacyPath, parts.projectPath, parts.projectPiCrewJsonPath]) {
+		if (!p) continue; // skip empty (cwd-undefined project paths)
+		const m = statMtimeMs(p);
+		if (m !== undefined) mtimes[p] = m;
+	}
+	return mtimes;
+}
+
+function matchesCachedMtimes(cached: Record<string, number>, current: Record<string, number>): boolean {
+	const cachedKeys = Object.keys(cached);
+	const currentKeys = Object.keys(current);
+	if (cachedKeys.length !== currentKeys.length) return false;
+	for (const key of cachedKeys) {
+		if (current[key] !== cached[key]) return false;
+	}
+	return true;
+}
+
+function setConfigCache(key: string, value: LoadedPiTeamsConfig, mtimes: Record<string, number>): void {
+	if (configCache.has(key)) configCache.delete(key);
+	configCache.set(key, { value, mtimes, cachedAt: Date.now() });
+	const ttlMs = configCacheTtlMsOverride ?? CONFIG_CACHE_TTL_MS;
+	// TTL eviction on insert (mirrors manifestCache eviction in state-store.ts:108-117)
+	const now = Date.now();
+	for (const [k, entry] of configCache.entries()) {
+		if (now - entry.cachedAt > ttlMs) configCache.delete(k);
+	}
+}
+
+/** Drop all cached loadConfig results. Call after config writes or from tests. */
+export function invalidateConfigCache(): void {
+	configCache.clear();
+}
+
 function resolveHomeDir(): string {
 	const envValue = process.env.PI_TEAMS_HOME?.trim();
 	const defaultHome = os.homedir();
@@ -972,6 +1074,27 @@ function readOptionalConfig(filePath: string): {
 export function loadConfig(cwd?: string): LoadedPiTeamsConfig {
 	const filePath = configPath();
 	const legacyPath = legacyConfigPath();
+
+	// (F16) Quick-win cache: skip the expensive full-reparse on hot paths
+	// (preload tick 1 Hz, per-write validation, subagent completion) when the
+	// on-disk config files are unchanged. See CONFIG_CACHE_TTL_MS at the
+	// top of this file for the rationale and the manifestCache pattern in
+	// state-store.ts:75-130 for the canonical implementation we mirror.
+	const cacheParts = readCachedConfigParts(filePath, legacyPath, cwd);
+	const cacheKey = buildConfigCacheKey(cacheParts);
+	const cached = configCache.get(cacheKey);
+	const ttlMs = configCacheTtlMsOverride ?? CONFIG_CACHE_TTL_MS;
+	if (cached && Date.now() - cached.cachedAt <= ttlMs) {
+		const currentMtimes = readCacheMtimes(cacheParts);
+		if (matchesCachedMtimes(cached.mtimes, currentMtimes)) {
+			// Refresh insertion order so a frequently-accessed key isn't
+			// evicted from the Map on the next eviction sweep.
+			configCache.delete(cacheKey);
+			configCache.set(cacheKey, cached);
+			return cached.value;
+		}
+	}
+
 	const paths = cwd ? [filePath, projectConfigPath(cwd)] : [filePath];
 	const warnings: string[] = [];
 	const legacyConfig = readOptionalConfig(legacyPath);
@@ -1015,12 +1138,20 @@ export function loadConfig(cwd?: string): LoadedPiTeamsConfig {
 			paths.push(piCrewJsonPath);
 		}
 	}
-	return {
+	const result: LoadedPiTeamsConfig = {
 		path: filePath,
 		paths,
 		config,
 		warnings: warnings.length > 0 ? warnings : undefined,
 	};
+	// Only cache when at least one of the watched paths exists — this avoids
+	// pinning stale empty results when a user later creates one of these files
+	// in the cache window. mtime stat below picks up the new file (it appears
+	// in currentMtimes but not in cached.mtimes) and triggers a re-parse.
+	if (Object.keys(readCacheMtimes(cacheParts)).length > 0) {
+		setConfigCache(cacheKey, result, readCacheMtimes(cacheParts));
+	}
+	return result;
 }
 
 export function updateConfig(patch: PiTeamsConfig, options: UpdateConfigOptions = {}): SavedPiTeamsConfig {
@@ -1042,6 +1173,9 @@ export function updateConfig(patch: PiTeamsConfig, options: UpdateConfigOptions 
 		}
 		fs.mkdirSync(path.dirname(filePath), { recursive: true });
 		atomicWriteFile(filePath, `${JSON.stringify(merged, null, 2)}\n`);
+		// (F16) Invalidate the loadConfig cache after a write — the next
+		// caller must see the new value, not a 0-2s stale snapshot.
+		invalidateConfigCache();
 		return { path: filePath, config: merged };
 	});
 }
@@ -1063,6 +1197,8 @@ export function updateAutonomousConfig(patch: PiTeamsAutonomousConfig): SavedPiT
 				: {};
 		current.autonomous = { ...currentAutonomous, ...patch };
 		atomicWriteFile(filePath, `${JSON.stringify(current, null, 2)}\n`);
+		// (F16) Invalidate the loadConfig cache after a write — see updateConfig.
+		invalidateConfigCache();
 		return { path: filePath, config: parseConfig(current) };
 	});
 }
