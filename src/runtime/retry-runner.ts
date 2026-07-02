@@ -278,7 +278,7 @@ export class RetryRunner {
 	 * Calculate backoff delay with optional capping.
 	 */
 	private calculateBackoff(baseMs: number, attempt: number, multiplier: number, maxBackoffMs?: number): number {
-		let delay = baseMs * Math.pow(multiplier, attempt - 1);
+		let delay = baseMs * multiplier ** (attempt - 1);
 		if (maxBackoffMs !== undefined) {
 			delay = Math.min(delay, maxBackoffMs);
 		}

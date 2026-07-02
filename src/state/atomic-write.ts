@@ -615,7 +615,7 @@ function flushOnePendingAtomicWrite(filePath: string): void {
 				throw error;
 			}
 			// Exponential backoff: base delay * 2^(retryCount-1), capped at 30 seconds
-			const backoffMs = Math.min(30000, current.coalesceMs * Math.pow(2, current.retryCount - 1));
+			const backoffMs = Math.min(30000, current.coalesceMs * 2 ** (current.retryCount - 1));
 			const timer = setTimeout(() => flushOnePendingAtomicWrite(filePath), backoffMs);
 			timer.unref();
 			current.timer = timer;

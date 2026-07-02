@@ -86,7 +86,7 @@ test("issue #29 — projectCrewRoot returns .crew/ when .crew/ exists (precedenc
 });
 
 test("issue #29 — projectCrewRoot returns .pi/teams/ when both .pi/ and .crew/ exist (existing .crew wins)", () => {
-	let dir = canonicalizeDir(fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-issue-29-")));
+	const dir = canonicalizeDir(fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-issue-29-")));
 	fs.mkdirSync(path.join(dir, ".pi"), { recursive: true });
 	fs.mkdirSync(path.join(dir, ".crew"), { recursive: true });
 	try {

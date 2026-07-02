@@ -6,7 +6,7 @@
  * Uses visibleWidth() for ANSI-aware padding so borders align correctly.
  */
 
-import { Container, Text, visibleWidth } from "@earendil-works/pi-tui";
+import { type Container, Text, visibleWidth } from "@earendil-works/pi-tui";
 import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
 import { truncateToWidth } from "../../utils/visual.ts";
 import type { CrewTheme } from "../theme-adapter.ts";

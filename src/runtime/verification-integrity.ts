@@ -71,9 +71,7 @@ export function snapshotManifests(cwd: string): Record<string, string> {
 		try {
 			const content = fs.readFileSync(abs);
 			snapshot[rel] = createHash("sha256").update(content).digest("hex");
-		} catch {
-			continue; // unreadable (permissions/race) — skip gracefully
-		}
+		} catch {}
 	}
 	return snapshot;
 }

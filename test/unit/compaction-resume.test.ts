@@ -49,7 +49,7 @@ describe("buildContinuationPrompt", () => {
 
 describe("triggerContinuation", () => {
 	it("calls pi.sendUserMessage with the continuation prompt", () => {
-		let sentContent: unknown = undefined;
+		let sentContent: unknown;
 		const fakePi = {
 			sendUserMessage: (content: string) => {
 				sentContent = content;

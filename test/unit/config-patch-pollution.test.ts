@@ -27,7 +27,7 @@ test("sanitizeObject: strips constructor own property", () => {
 	input.name = "ok";
 	const result = sanitizeObject(input);
 	// Verify constructor is NOT an own property of the result
-	assert.equal(Object.prototype.hasOwnProperty.call(result, "constructor"), false);
+	assert.equal(Object.hasOwn(result, "constructor"), false);
 	assert.equal((result as Record<string, unknown>).name, "ok");
 });
 
@@ -36,7 +36,7 @@ test("sanitizeObject: strips prototype key", () => {
 	input.prototype = "evil";
 	input.value = 42;
 	const result = sanitizeObject(input);
-	assert.equal(Object.prototype.hasOwnProperty.call(result, "prototype"), false);
+	assert.equal(Object.hasOwn(result, "prototype"), false);
 	assert.equal((result as Record<string, unknown>).value, 42);
 });
 
@@ -54,7 +54,7 @@ test("sanitizeObject: recursively strips from nested objects", () => {
 	const resultDeep = resultNested.deep as Record<string, unknown>;
 
 	assert.equal(Object.getOwnPropertyDescriptor(resultNested, "__proto__"), undefined);
-	assert.equal(Object.prototype.hasOwnProperty.call(resultDeep, "constructor"), false);
+	assert.equal(Object.hasOwn(resultDeep, "constructor"), false);
 	assert.equal(resultDeep.valid, true);
 	assert.equal((result as Record<string, unknown>).top, "safe");
 });
@@ -71,7 +71,7 @@ test("sanitizeObject: strips from arrays", () => {
 	const arr = result as Array<Record<string, unknown>>;
 	assert.equal(Object.getOwnPropertyDescriptor(arr[0], "__proto__"), undefined);
 	assert.equal(arr[0].ok, 1);
-	assert.equal(Object.prototype.hasOwnProperty.call(arr[1], "constructor"), false);
+	assert.equal(Object.hasOwn(arr[1], "constructor"), false);
 	assert.equal(arr[1].ok, 2);
 });
 

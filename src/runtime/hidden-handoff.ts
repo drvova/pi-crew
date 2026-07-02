@@ -172,7 +172,7 @@ export class HiddenHandoffService {
 
 		const priority = options.priority ?? this.inferPriority(summary);
 		const content = this.buildContent(summary);
-		let recipient = options.to ?? this.getParentAgentId();
+		const recipient = options.to ?? this.getParentAgentId();
 
 		if (!recipient) {
 			// No parent to send to, but we still emit the event

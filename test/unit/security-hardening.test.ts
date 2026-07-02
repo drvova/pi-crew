@@ -283,7 +283,7 @@ test("OTLP headers block prototype pollution attempts", () => {
 
 		const loaded = loadConfig(cwd);
 		const headers = loaded.config.otlp?.headers as Record<string, string> | undefined;
-		const has = (key: string) => Object.prototype.hasOwnProperty.call(headers ?? {}, key);
+		const has = (key: string) => Object.hasOwn(headers ?? {}, key);
 		// Dangerous keys should be stripped
 		assert.equal(has("__proto__"), false);
 		assert.equal(has("constructor"), false);

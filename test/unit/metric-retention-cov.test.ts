@@ -4,21 +4,21 @@ import { TimeWindowedCounter } from "../../src/observability/metric-retention.ts
 
 describe("TimeWindowedCounter inc", () => {
 	it("increments with default delta of 1", () => {
-		let now = 1000;
+		const now = 1000;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		counter.inc({ reason: "a" });
 		assert.equal(counter.count({ reason: "a" }), 1);
 	});
 
 	it("increments with custom delta", () => {
-		let now = 1000;
+		const now = 1000;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		counter.inc({ reason: "b" }, 5);
 		assert.equal(counter.count({ reason: "b" }), 5);
 	});
 
 	it("ignores non-finite deltas", () => {
-		let now = 1000;
+		const now = 1000;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		counter.inc({ reason: "c" }, Infinity);
 		counter.inc({ reason: "c" }, NaN);
@@ -26,7 +26,7 @@ describe("TimeWindowedCounter inc", () => {
 	});
 
 	it("increments multiple times and sums correctly", () => {
-		let now = 1000;
+		const now = 1000;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		counter.inc({ reason: "d" }, 3);
 		counter.inc({ reason: "d" }, 7);
@@ -36,7 +36,7 @@ describe("TimeWindowedCounter inc", () => {
 
 describe("TimeWindowedCounter count", () => {
 	it("returns 0 for labels never incremented", () => {
-		let now = 1000;
+		const now = 1000;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		assert.equal(counter.count({ missing: "label" }), 0);
 	});
@@ -62,7 +62,7 @@ describe("TimeWindowedCounter count", () => {
 	});
 
 	it("isolates different label sets", () => {
-		let now = 1000;
+		const now = 1000;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		counter.inc({ a: "1" }, 10);
 		counter.inc({ a: "2" }, 20);
@@ -73,21 +73,21 @@ describe("TimeWindowedCounter count", () => {
 
 describe("TimeWindowedCounter rate", () => {
 	it("computes per-second rate correctly", () => {
-		let now = 0;
+		const now = 0;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		counter.inc({ reason: "rate" }, 10);
 		assert.equal(counter.rate({ reason: "rate" }, 1000), 10);
 	});
 
 	it("returns 0 for zero duration", () => {
-		let now = 0;
+		const now = 0;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		counter.inc({ reason: "rate" }, 10);
 		assert.equal(counter.rate({ reason: "rate" }, 0), 0);
 	});
 
 	it("returns 0 when no events in window", () => {
-		let now = 5000;
+		const now = 5000;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		assert.equal(counter.rate({ reason: "none" }, 1000), 0);
 	});
@@ -95,13 +95,13 @@ describe("TimeWindowedCounter rate", () => {
 
 describe("TimeWindowedCounter size", () => {
 	it("returns 0 for empty counter", () => {
-		let now = 0;
+		const now = 0;
 		const counter = new TimeWindowedCounter(1000, () => now);
 		assert.equal(counter.size(), 0);
 	});
 
 	it("returns number of events after increments", () => {
-		let now = 0;
+		const now = 0;
 		const counter = new TimeWindowedCounter(10000, () => now);
 		counter.inc({ a: "1" });
 		counter.inc({ a: "2" });

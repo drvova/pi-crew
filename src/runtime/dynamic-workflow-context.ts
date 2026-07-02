@@ -254,7 +254,7 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 	// round-12 P0-1: in-memory phase state, exposed via non-enumerable getter like __finalResult.
 	// The events log is the durable source of truth for phase boundaries.
 	// round-18 P2-3: hydrate phaseState from a resumed checkpoint (backward compatible when unset).
-	let phaseState: { currentPhase: string | undefined; phases: string[] } = opts.resumedState
+	const phaseState: { currentPhase: string | undefined; phases: string[] } = opts.resumedState
 		? {
 				currentPhase: opts.resumedState.currentPhase,
 				phases: [...opts.resumedState.phases],

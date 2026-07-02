@@ -16,7 +16,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ChainRunner, type ChainTaskRunner, createChainRunner } from "../../src/runtime/chain-runner.ts";
+import { type ChainRunner, type ChainTaskRunner, createChainRunner } from "../../src/runtime/chain-runner.ts";
 import { HandoffManager, type HandoffSummary } from "../../src/runtime/handoff-manager.ts";
 
 /** Build a HandoffSummary with sensible defaults + overrides. */

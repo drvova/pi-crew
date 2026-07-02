@@ -152,10 +152,7 @@ function tryScanJson(text: string): unknown | undefined {
 		const candidate = rest.slice(0, end);
 		try {
 			return JSON.parse(candidate);
-		} catch {
-			// Not valid JSON at this position; keep scanning for the next '{'/'['.
-			continue;
-		}
+		} catch {}
 	}
 	return undefined;
 }

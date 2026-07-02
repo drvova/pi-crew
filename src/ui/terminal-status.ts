@@ -64,9 +64,7 @@ const IDLE_REASSERT_MAX_MS = 5000;
 const COMPLETE_FLASH_MS = 1500;
 
 /** Injected for tests (defaults write to the real /dev/tty). */
-export interface GhosttyWriter {
-	(seq: string): void;
-}
+export type GhosttyWriter = (seq: string) => void;
 
 let ghosttyWriter: GhosttyWriter | undefined;
 

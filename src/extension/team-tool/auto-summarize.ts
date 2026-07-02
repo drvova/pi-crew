@@ -3,7 +3,7 @@
  * Provides on/off/status commands for auto-summarization.
  */
 
-import { AutoSummarizeService, createAutoSummarizeService, DEFAULT_AUTO_SUMMARIZE_CONFIG } from "../../runtime/auto-summarize.ts";
+import { type AutoSummarizeService, createAutoSummarizeService, DEFAULT_AUTO_SUMMARIZE_CONFIG } from "../../runtime/auto-summarize.ts";
 import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 import type { PiTeamsToolResult } from "../tool-result.ts";
 import { result, type TeamContext } from "./context.ts";

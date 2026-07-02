@@ -85,7 +85,7 @@ function resolveWindowsCanonical(p: string): string {
 		// containment checks: base (from cwd, often long-name) and target
 		// (from os.tmpdir()/mkdtempSync, often short-name) must normalize to
 		// the SAME form or a contained target is wrongly rejected as "outside".
-		let real = fs.realpathSync.native(p);
+		const real = fs.realpathSync.native(p);
 		// Guard against NTFS internal paths (e.g. C:\$Extend\$Deleted)
 		if (real.includes("$Extend") || real.includes("$Deleted")) throw new Error("NTFS internal path");
 		return real;
@@ -267,10 +267,6 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 			// For the final component (target itself), ENOENT is expected for non-existent targets.
 			if (i === resolvedParts.length - 1) continue;
-			// For non-final components (parent directories), ENOENT is also acceptable —
-			// the caller will create them before the write operation if needed.
-			// We only need to ensure no existing path component is a symlink.
-			continue;
 		}
 	}
 

@@ -18,10 +18,8 @@ import type { TeamConfig } from "../teams/team-config.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { checkBranchFreshness } from "../worktree/branch-freshness.ts";
-import { mergeArtifacts } from "./team-runner-artifacts.ts";
 import { buildSyntheticTerminalEvidence, CrewCancellationError, cancellationReasonFromSignal } from "./cancellation.ts";
-import { planCoalescedGroups, buildDispatchUnits } from "./coalesce-tasks.ts";
-import { runCoalescedTaskGroup } from "./run-coalesced-task-group.ts";
+import { buildDispatchUnits, planCoalescedGroups } from "./coalesce-tasks.ts";
 import { resolveBatchConcurrency } from "./concurrency.ts";
 import { readCrewAgents, saveCrewAgents } from "./crew-agent-records.ts";
 import type { CrewRuntimeKind } from "./crew-agent-runtime.ts";
@@ -37,6 +35,7 @@ import { evaluateCrewPolicy, summarizePolicyDecisions } from "./policy-engine.ts
 import { buildRecoveryLedger, shouldRerunFailedTask } from "./recovery-recipes.ts";
 import { DEFAULT_RETRY_POLICY, executeWithRetry, type RetryPolicy } from "./retry-executor.ts";
 import { permissionForRole } from "./role-permission.ts";
+import { runCoalescedTaskGroup } from "./run-coalesced-task-group.ts";
 import { registerRunPromise, rejectRunPromise, resolveRunPromise } from "./run-tracker.ts";
 import { resolveTaskRuntimeKind } from "./runtime-policy.ts";
 import type { CrewRuntimeCapabilities } from "./runtime-resolver.ts";
@@ -45,6 +44,7 @@ import { buildExecutionPlan as buildDagExecutionPlan, getReadyTasks as getDagRea
 import { buildTaskGraphIndex, refreshTaskGraphQueues, taskGraphSnapshot } from "./task-graph-scheduler.ts";
 import { aggregateTaskOutputs } from "./task-output-context.ts";
 import { runTeamTask } from "./task-runner.ts";
+import { mergeArtifacts } from "./team-runner-artifacts.ts";
 import { clearTrackedTaskUsage } from "./usage-tracker.ts";
 import {
 	createWorkflowStateMachine,

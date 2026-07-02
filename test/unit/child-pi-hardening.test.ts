@@ -60,7 +60,7 @@ describe("#3 SIGKILL timer hardening", () => {
 		// Save originals
 		const originalKill = process.kill.bind(process);
 		const originalSetTimeout = globalThis.setTimeout.bind(globalThis);
-		let killCalls: Array<[number, string]> = [];
+		const killCalls: Array<[number, string]> = [];
 		let capturedDelay: number | undefined;
 
 		try {

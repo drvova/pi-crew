@@ -67,7 +67,7 @@ import { registerCrewShortcuts } from "./crew-shortcuts.ts";
 import { type PiCrewRpcHandle, registerPiCrewRpc } from "./cross-extension-rpc.ts";
 import { registerKnowledgeInjection } from "./knowledge-injection.ts";
 import { registerCrewMessageRenderers } from "./message-renderers.ts";
-import { type NotificationDescriptor } from "./notification-router.ts";
+import type { NotificationDescriptor } from "./notification-router.ts";
 import { runArtifactCleanup } from "./registration/artifact-cleanup.ts";
 import { registerTeamCommands } from "./registration/commands.ts";
 import { registerCompactionGuard } from "./registration/compaction-guard.ts";

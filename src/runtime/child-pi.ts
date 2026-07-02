@@ -993,7 +993,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			};
 
 			let softLimitReached = false;
-			let steerInjectionFailed = false;
+			const steerInjectionFailed = false;
 			const maxTurns = input.maxTurns;
 			// FIX (Issue #1): Bound graceTurns to prevent the hard abort condition from
 			// never triggering when an arbitrarily large value is passed.

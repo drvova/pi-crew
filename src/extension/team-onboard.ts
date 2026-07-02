@@ -67,9 +67,7 @@ function loadRunSummaries(cwd: string, options: OnboardingOptions = {}): RunSumm
 				completedAt: raw.completedAt ?? raw.updatedAt,
 				taskCount: 0, // tasks stored separately, not in manifest
 			});
-		} catch {
-			continue;
-		}
+		} catch {}
 	}
 
 	return summaries;

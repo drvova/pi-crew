@@ -143,7 +143,7 @@ test("onExit: callback fires on natural exit", async () => {
 	const { cmd, args } = exitScript(0);
 	const owner = spawnOwnedProcess(cmd, args, { name: "onexit-natural" });
 	let fired = false;
-	let observedCode: number | null | undefined = undefined;
+	let observedCode: number | null | undefined;
 	const unsub = owner.onExit((code) => {
 		fired = true;
 		observedCode = code;

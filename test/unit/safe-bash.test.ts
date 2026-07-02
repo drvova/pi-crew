@@ -144,7 +144,7 @@ test("line-continuation bypass is blocked: $\\n(evil)", () => {
 	// bash interprets $\<newline>(evil) as $(evil) command substitution
 	// Template literal with actual newline after backslash
 	const cmd = `echo \
-\$
+$
 (evil)`;
 	const result = safe.check(cmd);
 	assert.ok(result !== null, "Expected line-continuation $\\n(evil) to be blocked");

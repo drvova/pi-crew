@@ -341,7 +341,7 @@ test("PipelineRunner provides correct stage context", async () => {
 		],
 	};
 
-	let contexts: PipelineContext[] = [];
+	const contexts: PipelineContext[] = [];
 	const executeStage = async (_stage: PipelineStage, _inputs: unknown, context: PipelineContext) => {
 		contexts.push({ ...context });
 		return { result: "ok" };

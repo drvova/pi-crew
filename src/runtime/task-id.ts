@@ -58,7 +58,7 @@ export function hashToBase36(content: string, length: number): string {
  */
 export function calculateAdaptiveLength(existingCount: number, config: AdaptiveIDConfig = DEFAULT_CONFIG): number {
 	for (let length = config.minLength; length <= config.maxLength; length++) {
-		const totalPossibilities = Math.pow(36, length);
+		const totalPossibilities = 36 ** length;
 		const probability = 1 - Math.exp(-(existingCount * existingCount) / (2 * totalPossibilities));
 		if (probability <= config.maxCollisionProbability) {
 			return length;

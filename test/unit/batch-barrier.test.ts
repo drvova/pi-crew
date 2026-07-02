@@ -12,7 +12,7 @@ test("BatchBarrier: single-member batch notifies when that member completes", ()
 	const b = new BatchBarrier();
 	b.register("b1", "agent_a", { description: "Task A", type: "explorer" });
 	// Before terminal: not all done
-	let snap = b.markTerminal("b1", {
+	const snap = b.markTerminal("b1", {
 		id: "agent_a",
 		description: "Task A",
 		type: "explorer",
