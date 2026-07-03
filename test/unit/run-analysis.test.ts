@@ -50,8 +50,12 @@ test("run with inline analysis writes shared/analysis.md and registers artifact"
 
 		const manifest = loadRunManifestById(cwd, runId)?.manifest;
 		assert.ok(manifest);
+		// Cross-platform-safe lookup: artifact paths are canonicalized by writeArtifact
+		// (resolveInside), which differs from the locally-joined path on Windows
+		// (drive-letter case, separators) and macOS (symlink realpath). Compare by
+		// normalized suffix instead of exact equality.
 		const analysisDescriptor = manifest!.artifacts.find((a) =>
-			a.path === path.join(artifactsRoot, "shared", "analysis.md"),
+			a.path.replace(/\\/g, "/").endsWith("shared/analysis.md"),
 		);
 		assert.ok(analysisDescriptor, "analysis artifact must be in manifest.artifacts[]");
 		assert.equal(analysisDescriptor!.kind, "prompt");
