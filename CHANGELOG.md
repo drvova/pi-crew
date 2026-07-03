@@ -1,5 +1,54 @@
 # Changelog
 
+## [v0.9.18] — perf fix bundle-mode spawn + config cache (2026-07-02)
+
+Five commits addressing items from the v0.9.17 performance review (`docs/perf/performance-review-2026-07.md`):
+
+### Highlights
+
+- **CRITICAL — fix bundle-mode background runner spawn.** `spawnBackgroundTeamRun` in `src/runtime/async-runner.ts:226` was computing the `background-runner.ts` path via `import.meta.url-relative` resolution. The path landed correctly in source (strip-types loader) but BROKE in the bundle (default v0.9.17+): esbuild's `__esm` helper does not preserve per-module `import.meta.url`, so the path resolved to `<pi-crew>/background-runner.ts` (missing `src/runtime/`). Spawned runners then ENOENTed at ~4s into every team run. Fixed with `packageRoot()` from `utils/paths.ts` — mirrors the same pattern as the v0.9.17 fix in `pi-args.ts:10` (commit `0dd93e0`). Verified live: 3 E2E team runs after the fix (test-coalesce-static, fast-fix, research) all spawned the background runner cleanly.
+- **F4 mitigation — wire `saveRunTasksCoalesced` into the checkpoint path.** The 50ms-debounce coalescer in `state-store.ts:428` had been dormant (0 callers). Now called from `persistSingleTaskUpdate` (called ~5× per task from `task-runner.ts:233, 424, 538, 617, 1347`). Two safety guards: `flushPendingAtomicWrites()` at the top of the mtime-CAS retry loop (defeats the stale-read window under concurrent coalesced writers) and the mtime CAS itself still guards against concurrent non-coalesced writers. Trade-off: checkpoint writes are now best-effort within a 50ms window — terminal writes still use full fsync via `saveRunTasks`.
+- **F16 quick win — 2s TTL+mtime cache for `loadConfig`.** `loadConfig` had 78 callers (top: `register.ts` 11, `registration/ui.ts` 6, `team-tool.ts` 5) and was called 1 Hz idle / 6 Hz active with zero cache. Each call reads up to 4 files (legacy, user, `.crew/config.json`, `.pi/pi-crew.json`), parses JSON, runs full TypeBox `Value.Check` validation, and merges. New cache follows the same pattern as `manifest-cache.ts`. Cache key is a deterministic JSON encoding of `(filePath, legacyPath, projectPath, projectPiCrewJsonPath, cwd)`. On hit, return cached value without parsing; on miss or mtime change, re-parse. New exports for tests/ops: `__test__setConfigCacheTtlMs`, `__test__getConfigCacheTtlMs`, `__test__getConfigCacheEntry`, `__test__configCacheSize`, `invalidateConfigCache`, `flushConfigCache`. Caveat documented: caches for 2s even if the user just edited their config in a separate process — acceptable for the perf win.
+- **D — documented atomic-write-v2 migration plan.** New `docs/migration/atomic-write-v2-migration.md` (297 lines) covers why migrate (F3, F4, F6: drop the dir-fsync cost added by 13f4490), API differences, 3-phase migration plan (dual-write behind feature flag → switch default → deprecate v1), risks + mitigations, effort estimate (M = 3-5 days), and a MIGRATE decision. Existing `atomic-write-v2.ts` (0 callers today) is the v2 surface; v1 (`atomic-write.ts`) keeps symlink-safety + link+unlink atomicity. Phase 1 is gated by `PI_CREW_ATOMIC_WRITER` env flag with instant rollback.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| TSC | ✅ |
+| Lint | ✅ |
+| format:check | ✅ |
+| check:conflict-markers | ✅ |
+| check:lazy-imports | ✅ |
+| check:bundle-staleness | ✅ |
+| test:unit local (config-cache) | ✅ 7/7 |
+| test:unit local (safe-bash, post-style-fix) | ✅ 26/26 |
+| test:unit local (coalesce + atomic-write-coalesced + file-coalescer + progress-event-coalescer) | ✅ 26/26 |
+| Live E2E: test-coalesce-static (3 tasks) | ✅ all 3 resultArtifacts + heartbeats + clean closeout |
+| Live E2E: fast-fix (explore→execute→verify) | ✅ consistency=1, 14 min |
+| Live E2E: research (explore→analyze→write) | ✅ consistency=1, summary 4.7KB |
+| CI Ubuntu / Node 22 | ✅ (post-push) |
+| CI macOS / Node 22 | ✅ (post-push) |
+| CI Windows / Node 22 | ✅ (post-push) |
+
+### Changed
+
+- `src/runtime/async-runner.ts:224-235` — `runnerPath` now uses `packageRoot()` (1 import added at line 11).
+- `src/runtime/task-runner/state-helpers.ts:1-2, 57-69, 121-127` — wire `saveRunTasksCoalesced` + `flushPendingAtomicWrites` guard.
+- `src/state/state-store.ts:425-434` — export `saveRunTasksCoalesced` (was local), update doc comment.
+- `src/config/config.ts:69-166, 1077-1100` — new cache module + cache-aware `loadConfig`.
+- `test/unit/config-cache.test.ts` (new, 242 lines, 7 tests).
+- `docs/migration/atomic-write-v2-migration.md` (new, 297 lines) — migration plan + decision.
+- `docs/perf/performance-review-2026-07.md` — verification report (added in v0.9.18 cycle).
+- 31 files via biome auto-fix (`style: biome auto-fixes` commit `299338e`) — import-sort + minor semantic.
+
+### Migration notes
+
+- No public-API breaking changes. Existing workflows and configs continue to work without modification.
+- The `loadConfig` cache is transparent — first call hits disk, subsequent calls within 2s return cached value. To force a refresh (e.g. after a config edit), call `invalidateConfigCache()` from a custom integration or just wait 2s.
+- The `saveRunTasksCoalesced` swap is checkpoint-only; terminal writes remain fully durable. If a process crashes mid-50ms-buffer, the last checkpoint may be lost but the on-disk `manifest.json` + `tasks.json` source of truth is preserved.
+- The atomic-write-v2 migration plan describes a 3-phase rollout behind `PI_CREW_ATOMIC_WRITER=v1|v2` flag (default v1 until Phase 2). Users on critical/durability-sensitive deployments can opt into v2 after Phase 1 stabilizes.
+
 ## [v0.9.17] — coalesced micro-tasks (M6) ships + closeout race fix (2026-07-02)
 
 Two end-to-end correctness fixes for the M6 real-dispatch path + one workload-sizing refinement, plus a startup-latency fix discovered during user testing.
