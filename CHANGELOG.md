@@ -1,5 +1,69 @@
 # Changelog
 
+## [v0.9.19] — plan-execute workflow + main-session→planner analysis handoff (2026-07-03)
+
+New builtin workflow for the common "I already analyzed this — just plan + execute + verify it" case, plus a generic `analysis`/`analysisPath` channel on `team action='run'` for handing caller-session context to planner child workers.
+
+### Highlights
+
+- **`plan-execute` builtin workflow.** 3-step sequential (plan → execute → verify), no explore step. Designed for callers who have already done the analysis and want the planner to build directly on it. The `plan` step declares `reads: analysis.md` so the caller's pre-analysis is injected via the standard sharedReads dependency-context pipeline. Workflow count: 8 → 9 (`test/unit/discovery.test.ts` updated).
+- **`analysis` / `analysisPath` channel on `team action='run'`.** Two new optional params (mutually exclusive):
+  - `analysis` (string, ≤100 000 chars) — inline pre-analysis from the calling session
+  - `analysisPath` (string, file path within project) — pre-analysis loaded from a markdown file
+  - Both go through `sanitizeTaskText()` (SEC-007 prompt-injection stripper from `buildTaskPacket`) before being injected, so the analysis can never smuggle a directive past the planner. The text is persisted to `artifacts/{runId}/shared/analysis.md` as an audit trail. Mutual exclusivity, path containment (`resolveContainedPath` with null-byte + symlink realpath), and file-not-found / 100 KB cap are all fail-fast, checked BEFORE `createRunManifest` so validation errors never leave orphan run state. Goal-wrapped runs emit a clear `console.warn` if `analysis` is set but ignored (chain dispatch + goal-wrap don't honor v1).
+- **`reads` injection is correctly step-scoped.** Verified live: only the `plan` step (which declares `reads: analysis.md`) receives the analysis content; `execute` and `verify` prompts contain zero unique analysis headings even though the goal text references the analysis file path. This is the intended behavior — the filter limits *dependency-injected* content, not the goal itself.
+
+### Cross-platform fix (was blocking Windows CI)
+
+`run-analysis.test.ts` failed on macOS + Windows because `writeArtifact` stores canonicalized paths via `resolveInside`, while the test compared against a path built from raw `mkdtempSync` cwd. Two fixes:
+1. `fs.realpathSync` the test cwd in `makeRunCwd` — closes the macOS symlink (`/var` → `/private/var`) case.
+2. Switched the `manifest.artifacts[]` lookup to a normalized suffix compare (`a.path.replace(/\\/g, "/").endsWith("shared/analysis.md")`) — closes the Windows drive-letter-case + separator case. Robust against both realpath drift and Windows path normalization.
+
+### Defense-in-depth
+
+- `analysisPath` file size is `statSync`-checked against the same 100 KB cap as the inline channel (prevents prompt-size blowup via the file route).
+- `sanitizeTaskText` applied to both inline AND file content before any persistence or injection.
+- Path traversal on `analysisPath` is rejected with the same `resolveContainedPath` machinery used by other path-taking params (symlink-canonicalized + null-byte guarded).
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| TSC | ✅ |
+| Lint | ✅ |
+| format:check | ✅ |
+| check:conflict-markers | ✅ |
+| check:lazy-imports | ✅ |
+| check:bundle-staleness | ✅ (dist rebuilt at 3011.0 KB) |
+| test:unit (run-analysis) | ✅ 9/9 (with --test-timeout=120000) |
+| test:unit (plan-execute-workflow) | ✅ 3/3 |
+| test:unit (discovery, +1 workflow) | ✅ updated assert 8→9 |
+| Live E2E plan-execute + inline analysis | ✅ 3/3 tasks, consistency=1 |
+| Live E2E plan-execute + analysisPath (file) | ✅ planner + executor passed; verifier hit pre-existing child-Pi hang (unrelated) |
+| CI Ubuntu / Node 22 | ✅ |
+| CI macOS / Node 22 | ✅ |
+| CI Windows / Node 22 | ✅ |
+| CI fallow audit | ✅ |
+
+### Changed
+
+- `workflows/plan-execute.workflow.md` — new builtin workflow (30 lines).
+- `src/schema/team-tool-schema.ts:264-279` — new `analysis` + `analysisPath` params on `TeamToolParams` + matching interface fields.
+- `src/extension/team-tool/run.ts` — new `resolveAnalysisText()` helper (fail-fast validation + sanitize); analysis artifact write before `atomicWriteJson` of updated manifest; `reads: ["analysis.md"]` injected into direct-agent synthetic workflow when analysis is set; goal-wrap path emits a warning when analysis is provided but ignored.
+- `test/unit/discovery.test.ts:17` — workflows count 8 → 9.
+- `test/unit/plan-execute-workflow.test.ts` — new (46 lines, 3 tests).
+- `test/unit/run-analysis.test.ts` — new (242 lines, 9 tests including size cap, path traversal, mutual exclusion, file-missing).
+
+### Migration notes
+
+- Existing `team` tool callers are unaffected — both `analysis` and `analysisPath` are optional. Workflow count is `discoverWorkflows`-reflected, so `team action='list', resource='workflow'` now shows 9 builtin entries instead of 8.
+- No new dependencies. All new code uses existing `sanitizeTaskText`, `resolveContainedPath`, and `writeArtifact` machinery.
+- `plan-execute` joins the builtin workflow family alongside `default`, `fast-fix`, `research`, `review`, `implementation`, `pipeline`, `parallel-research`, and `chain`.
+
+### Known limitation (out of scope for v0.9.19)
+
+- Goal-wrapped runs and chain dispatch ignore the `analysis` param in v1 (with a `console.warn`). If callers need analysis in those modes, file an issue and we can plumb it through `goal.ts` / `chain-dispatch.ts` in a follow-up.
+
 ## [v0.9.18] — perf fix bundle-mode spawn + config cache (2026-07-02)
 
 Five commits addressing items from the v0.9.17 performance review (`docs/perf/performance-review-2026-07.md`):
