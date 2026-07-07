@@ -3,6 +3,7 @@ import type { TeamToolParamsValue } from "../schema/team-tool-schema.ts";
 import { resolveContainedPath } from "../utils/safe-paths.ts";
 // Lazy-loaded to avoid pulling team-tool.ts (and its entire runtime chain) into module load.
 import type { handleTeamTool as HandleTeamToolFn } from "./team-tool.ts";
+import { withHmacVerification } from "./rpc-hmac.ts";
 
 let _cachedHandleTeamTool: typeof HandleTeamToolFn | undefined;
 async function handleTeamTool(
@@ -143,9 +144,8 @@ function on(events: EventBusLike, channel: string, handler: (raw: unknown) => vo
 
 // SECURITY TRUST BOUNDARY: RPC channels (pi-crew:rpc:run, pi-crew:rpc:status,
 // pi-crew:rpc:live-control) are accessible to any extension on the shared event
-// bus. Mitigations applied: rate limiting (RPC_RATE_LIMIT_MAX), explicit intent
-// requirement for runs, operation allowlist for live-control reads, and cwd
-// containment validation. A full fix requires event-bus-level origin signing.
+// bus. Mitigations: rate limiting, explicit intent, operation allowlist, cwd
+// containment validation, and HMAC origin signing (see rpc-hmac.ts).
 
 export function registerPiCrewRpc(
 	events: EventBusLike | undefined,
@@ -153,13 +153,13 @@ export function registerPiCrewRpc(
 ): PiCrewRpcHandle | undefined {
 	if (!events) return undefined;
 	const unsubs = [
-		on(events, "pi-crew:rpc:ping", (raw) =>
+		on(events, "pi-crew:rpc:ping", withHmacVerification((raw) =>
 			reply(events, "pi-crew:rpc:ping", requestId(raw), {
 				success: true,
 				data: { version: PI_CREW_RPC_VERSION },
 			}),
-		),
-		on(events, "pi-crew:rpc:run", async (raw) => {
+		"pi-crew:rpc:ping")),
+		on(events, "pi-crew:rpc:run", withHmacVerification(async (raw) => {
 			const id = requestId(raw);
 			try {
 				// SECURITY (HIGH #4 fix): Rate limit RPC run requests
@@ -213,8 +213,8 @@ export function registerPiCrewRpc(
 					error: error instanceof Error ? error.message : String(error),
 				});
 			}
-		}),
-		on(events, "pi-crew:rpc:status", async (raw) => {
+		}, "pi-crew:rpc:run")),
+		on(events, "pi-crew:rpc:status", withHmacVerification(async (raw) => {
 			const id = requestId(raw);
 			try {
 				const ctx = getCtx();
@@ -241,12 +241,12 @@ export function registerPiCrewRpc(
 					error: error instanceof Error ? error.message : String(error),
 				});
 			}
-		}),
+		}, "pi-crew:rpc:status")),
 		on(events, "pi-crew:live-control", (raw) => {
 			const request = parseLiveControlRealtimeMessage(raw);
 			if (request) publishLiveControlRealtime(request);
 		}),
-		on(events, "pi-crew:rpc:live-control", async (raw) => {
+		on(events, "pi-crew:rpc:live-control", withHmacVerification(async (raw) => {
 			const id = requestId(raw);
 			try {
 				const ctx = getCtx();
@@ -296,7 +296,7 @@ export function registerPiCrewRpc(
 					error: error instanceof Error ? error.message : String(error),
 				});
 			}
-		}),
+		}, "pi-crew:rpc:live-control")),
 	];
 	return { unsubscribe: () => unsubs.forEach((unsub) => unsub()) };
 }

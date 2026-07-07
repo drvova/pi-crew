@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import { isHmacEnabled, extractSignaturePayload, verifyRpcSignature } from "../extension/rpc-hmac.ts";
 
 export interface EventBus {
 	on(event: string, handler: (data: unknown) => void): () => void;
@@ -47,6 +48,25 @@ function handleRpc<P extends { requestId: string }>(
 		if (!/^[a-zA-Z0-9_-]+$/.test(params.requestId)) {
 			throw new Error("Security: invalid requestId format");
 		}
+		// SECURITY: HMAC signature verification (when enabled).
+		if (isHmacEnabled()) {
+			const sigPayload = extractSignaturePayload(params);
+			if (!sigPayload) {
+				throw new Error("[pi-crew HMAC] Missing HMAC signature in RPC request.");
+			}
+			// Strip HMAC fields before verification (HMAC was signed over original params)
+			const originalParams = { ...params };
+			delete (originalParams as Record<string, unknown>).hmacVersion;
+			delete (originalParams as Record<string, unknown>).hmacOrigin;
+			delete (originalParams as Record<string, unknown>).hmacTimestamp;
+			delete (originalParams as Record<string, unknown>).hmacChannel;
+			delete (originalParams as Record<string, unknown>).hmacNonce;
+			delete (originalParams as Record<string, unknown>).hmacSignature;
+			const verification = verifyRpcSignature(sigPayload, originalParams);
+			if (!verification.valid) {
+				throw new Error(`[pi-crew HMAC] ${verification.reason}`);
+			}
+		}
 		try {
 			const data = await fn(params);
 			const reply: { success: true; data?: unknown } = { success: true };
@@ -72,9 +92,8 @@ export function registerCrewRpcHandlers(deps: RpcDeps): RpcHandle {
 	// operations that create or terminate child processes. Any subscriber on
 	// the shared event bus can emit these events. In a multi-extension
 	// environment, this means a malicious extension could spawn/stop agents.
-	// Mitigation (H-2): require an unguessable per-process token in addition to
-	// the legacy `source` identifier. Log all invocations for audit. A full fix
-	// still requires event-bus-level origin signing.
+	// Mitigations: HMAC origin signing (see rpc-hmac.ts) + per-process token
+	// (H-2) + legacy `source` identifier.
 	const CREW_RPC_SOURCE = "pi-crew";
 	const EXPECTED_TOKEN = getCrewRpcToken();
 
