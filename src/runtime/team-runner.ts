@@ -817,6 +817,14 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 		// final buffered progress events are durable alongside the failure state.
 		await flushEventLogBuffer();
 		return result;
+	} finally {
+		// M7+follow-up (v0.9.24): drain buffer on the success path too.
+		// Previously only the catch path flushed; under --test-force-exit the
+		// success path left pending appendEventAsync promises that the test
+		// runner detected as 'Promise resolution is still pending'. The catch
+		// still has its own flush for M7 backward compat — flushEventLogBuffer
+		// is idempotent on an empty queue.
+		await flushEventLogBuffer();
 	}
 }
 

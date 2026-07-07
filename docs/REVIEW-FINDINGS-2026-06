@@ -1,0 +1,357 @@
+# pi-crew — Findings & Remediation (2026-06)
+
+Tổng hợp chi tiết các **Vấn đề & Rủi ro** từ 3 lượt đánh giá (tổng quan dự án, subagent/quản-lý-context, hiệu năng) kèm **giải pháp xử lý chi tiết và tối ưu**.
+
+- Phiên bản đánh giá: v0.9.16
+- Môi trường kiểm chứng: Node v22.14.0, Windows; `npm ci` + `tsc --noEmit` (PASS) + `test:unit` (5747/5778 pass) + `npm run bench`.
+- Quy ước mức độ: 🔴 Cao · 🟡 Trung bình · ⚪ Thấp/Hygiene
+- Quy ước effort: S (<0.5 ngày) · M (0.5–2 ngày) · L (>2 ngày)
+
+## Bảng tổng hợp
+
+| ID | Vấn đề | Mức | Effort | Khu vực |
+|----|--------|-----|--------|---------|
+| H1 | 4 lỗ hổng "high" trong dependencies | 🔴 | M | Bảo mật/deps |
+| H2 | Cold-start nặng — bundle ESM chưa được bật | 🔴 | M | Hiệu năng |
+| H3 | `register()` p95 ~461ms (register.ts phình to) | 🔴 | M-L | Hiệu năng |
+| M1 | 7 unit test fail trên Windows (test phụ thuộc shell) | 🟡 | S-M | Test/CI |
+| M2 | Biome cấu hình nhưng không enforce trong CI | 🟡 | S | Chất lượng |
+| M3 | iterative-retrieval không được nối + scoring thô sơ | 🟡 | M | Context |
+| M4 | `contextMode: fork` là metadata no-op | 🟡 | M | Context |
+| M5 | Phối hợp cross-worker chỉ ở mức prompt, không enforce | 🟡 | L | Runtime |
+| M6 | Warm pool là stub — mỗi task trả full cold-start | 🟡 | L | Hiệu năng |
+| M7 | `appendEventBuffered` không caller + chưa có bench chứng minh | 🟡 | S-M | Hiệu năng |
+| M8 | Baseline bench không tái lập + không nằm trong CI | 🟡 | M | Hiệu năng/CI |
+| L1 | State runtime bị commit vào git (14 file `.crew/`) | ⚪ | S | Hygiene |
+| L2 | File orchestrator quá lớn | ⚪ | L | Maintainability |
+| L3 | Doc sprawl (~60 file, nhiều báo cáo one-off) | ⚪ | S | Docs |
+| L4 | Prompt bloat ở node fan-in (dependencies không prune) | ⚪ | M | Context |
+| L5 | `loadMode: "lean"` chỉ là gợi ý prompt | ⚪ | S | Context |
+| L6 | Ngưỡng truncation trên mẫu nhỏ + token heuristic char/4 | ⚪ | S | Context |
+
+---
+
+## 🔴 Mức Cao
+
+### H1 — 4 lỗ hổng "high" trong dependencies
+
+**Bằng chứng:** `npm audit` → 5 lỗ hổng (1 low, 4 high).
+- `@earendil-works/pi-coding-agent <=0.79.7`: XSS HTML export (GHSA-7v5m-pr3q-6453), load project-local extension không duyệt (GHSA-mqxh-6gq7-558m), priv-esc temp path trên Linux dùng chung (GHSA-jfgx-wxx8-mp94), race `auth.json` lộ credential (GHSA-r95r-rj6r-c39x).
+- Transitive: `undici 8.0.0–8.4.1`, `protobufjs <=7.6.2`, `ws 8.0.0–8.20.1`.
+- `esbuild 0.27.3–0.28.0` (dev): arbitrary file read khi chạy dev server trên Windows.
+
+**Nguyên nhân gốc:** đây là **peer/dev-dependency** (host Pi cung cấp lúc runtime; không bundle vào package publish). Nhưng pi-coding-agent là **runtime host** nên người dùng cuối vẫn chịu rủi ro.
+
+**Tác động:** không trực tiếp trong code pi-crew, nhưng đụng tới host runtime mà extension chạy bên trong → cần theo dõi, không "tự nhận trách nhiệm fix" code bên thứ ba.
+
+**Giải pháp chi tiết (tối ưu):**
+1. **Tách rủi ro do mình kiểm soát vs host:**
+   - Nâng dev-only ngay: `npm i -D esbuild@^0.28.1` (file-read chỉ ảnh hưởng dev server, low effort).
+   - `undici`/`protobufjs`/`ws` đến từ pi-coding-agent → không tự pin được, chỉ giải quyết qua việc nâng peer.
+2. **Nâng peer range có kiểm soát:** đổi `peerDependencies`/`devDependencies` `@earendil-works/*` từ `^0.77.0` sang range bao gồm `>=0.80.2` (bản đã vá), nhưng **giữ `peerDependenciesMeta.optional=true`** để không ép người dùng. Chạy lại bộ test + smoke (`npm run smoke:pi`) vì 0.80.x là breaking với 0.77.
+3. **Thêm gate CI cho deps:** thêm step `npm audit --audit-level=high --omit=dev` (chỉ fail trên prod-deps high) để không bị nhiễu bởi dev-only. pi-crew prod-deps (`typebox/acorn/ajv/cli-highlight/diff/jiti/yaml`) hiện sạch → gate này xanh và bắt được regression thật sau này.
+4. **Tài liệu hóa** trong `SECURITY-ISSUES.md`: ghi rõ "các advisory này thuộc host pi-coding-agent, đã vá ở 0.80.2; pi-crew khuyến nghị host >=0.80.2".
+
+**Rủi ro fix:** nâng peer 0.77→0.80 là breaking ở API host → bắt buộc chạy full `npm run ci` + `smoke:pi` trên 3 OS trước khi release.
+
+---
+
+### H2 — Cold-start nặng: bundle ESM đã build nhưng chưa được bật
+
+**Bằng chứng:**
+- `package.json#pi.extensions = ["./index.ts"]` → Pi nạp **TS nguồn** qua strip-types/jiti, parse từng file.
+- `scripts/build-bundle.mjs` đã tạo `dist/index.mjs` (~1.4MB) + sourcemap, peer-deps external. Comment trong script tự nói "ready to flip".
+- `package.json#files` **không có** `dist/` → kể cả flip cũng chưa publish bundle.
+- Bench: `register-startup.import.p95` là metric nặng nhất; báo cáo perf dự phóng flip → ≤250ms.
+
+**Nguyên nhân gốc:** bước cuối (flip entrypoint + đưa dist vào publish + prebuild) chưa làm; ADR 0006 dừng ở "Proposed/ready".
+
+**Giải pháp chi tiết (tối ưu — dual-ship an toàn):**
+1. **Prebuild khi publish:** thêm script
+   ```jsonc
+   "prepublishOnly": "npm run build:bundle",
+   "prepack": "npm run build:bundle"
+   ```
+2. **Đưa bundle vào package:** thêm `"dist/"` vào `package.json#files`.
+3. **Flip entrypoint có fallback:** trỏ `pi.extensions` sang bundle khi có, giữ TS làm fallback khi chạy từ clone chưa build. Cách an toàn nhất là một entry mỏng:
+   ```jsonc
+   "pi": { "extensions": ["./dist/index.mjs"], "skills": ["./skills"] }
+   ```
+   và **giữ `index.ts`** cho dev (chạy `tsc`/test từ source). Nếu Pi loader hỗ trợ `exports`-resolution, có thể dùng conditional exports để ưu tiên dist và fallback ts.
+4. **Smoke 3-OS bắt buộc** (`scripts/release-smoke.mjs` + `smoke:pi`) trước khi merge — vì entrypoint là bề mặt nạp extension.
+5. **Đo lại** `npm run bench` sau flip, cập nhật `baseline.json` theo runner (xem M8).
+
+**Lợi ích:** giảm cold-start import p95 mạnh nhất trong tất cả đòn bẩy (dự phóng −50%).
+
+**Rủi ro fix:** bundle sai external → kéo nhầm peer-deps; mitigate bằng `external` đã cấu hình sẵn + smoke import test (`node -e "import('./dist/index.mjs')"`).
+
+---
+
+### H3 — `register()` p95 ~461ms (register.ts 2195 dòng, nhiều static import)
+
+**Bằng chứng:** bench hiện tại `register-startup.register.p95 = 461ms` (baseline cũ 24ms; chênh vượt mức nhiễu môi trường). `src/extension/register.ts` = 2195 dòng, đầu file import tĩnh hàng chục module (notification-router, run-snapshot-cache, scheduler, observability, powerbar, render-scheduler...).
+
+**Nguyên nhân gốc:** nhiều khởi tạo + import được thực thi tại thời điểm `register()` dù phần lớn người dùng không mở dashboard/observability/powerbar trong session đó.
+
+**Giải pháp chi tiết (tối ưu):**
+1. **Profile chính xác trước khi cắt:** `npm run profile:startup` → mở `.cpuprofile` trong Chrome DevTools, xác định top frames trong `register()`.
+2. **Đẩy khởi tạo sang on-demand** (theo đúng pattern LAZY đã có):
+   - Observability (`MetricRegistry`, metric-sink, event-to-metric, OTLP): chỉ khởi tạo khi `observability.enabled` hoặc khi `/team-metrics` được gọi lần đầu.
+   - Dashboard/sidebar/powerbar: khởi tạo lười khi user mở overlay/segment đầu tiên (LiveRunSidebar đã lazy — mở rộng cho run-snapshot-cache, render-scheduler).
+   - Scheduler/heartbeat-watcher: chỉ start khi có run active đầu tiên, không phải tại register.
+3. **Tách register thành các "feature installer" nhỏ** (xem L2) gọi sau khi nhận tín hiệu cần thiết, để `register()` chỉ làm phần tối thiểu: đăng ký tool + slash command (rẻ) và hoãn phần UI/telemetry.
+4. **Thêm bench guard riêng cho register** (`bench:check`) sau khi cải thiện để chống tái phình.
+
+**Rủi ro fix:** lười hóa khởi tạo có thể đổi thứ tự side-effect (vd widget không hiện ngay). Mitigate: giữ một "warm-up" idle-callback khởi tạo nền sau first paint (đã có `runtime-warmup.ts`/`startRuntimeWarmup` — tận dụng nó).
+
+---
+
+## 🟡 Mức Trung bình
+
+### M1 — 7 unit test fail trên Windows (test phụ thuộc shell POSIX)
+
+**Bằng chứng (`test:unit`, 7 fail):**
+- `benchmark.test.ts`: `runBenchmarkSuite computes total counts` (judge `echo ok`).
+- `verification-gates.test.ts` x3: `runPhaseGates ...` (lệnh `echo 'hello'`, `exit 1`).
+- `verification-env-sanitize.test.ts` x2 (secret env qua subprocess shell).
+- `issue-29-pi-paths.test.ts`: subprocess exit code.
+Tất cả dùng cú pháp shell POSIX (`echo 'x'`, `exit 1`) chạy trên `cmd.exe` → behavior khác → assertion sai (vd length 1 thay vì 2).
+
+**Nguyên nhân gốc:** test giả định shell POSIX, không guard `win32`, trong khi repo đã có tiền lệ skip test Unix-only (commit `a75be5e`, `4089b0e`).
+
+**Tác động:** `npm test` đỏ trên máy dev Windows dù logic lõi đúng → giảm tín hiệu, dễ "quen với màu đỏ".
+
+**Giải pháp chi tiết (tối ưu — cross-platform thật, không chỉ skip):**
+1. **Thay command fixtures bằng lệnh cross-platform** thay vì skip, để vẫn có độ phủ trên Windows:
+   - `echo 'hello'` → dùng `node -e "process.stdout.write('hello')"` (chạy giống nhau mọi OS).
+   - `exit 1` → `node -e "process.exit(1)"`.
+   Cách này giữ assertion length/status đúng trên cả 3 OS.
+2. **Với test thực sự Unix-only** (vd SIGKILL-timer), giữ guard `{ skip: process.platform === 'win32' }` kèm comment lý do (đồng nhất với pattern hiện có).
+3. **Thêm trục Windows vào CI matrix** (nếu chưa chạy unit trên windows-latest) để bắt regression loại này sớm.
+4. **Helper dùng chung:** tạo `test/fixtures/cross-platform-cmd.ts` export `OK_CMD`, `FAIL_CMD`, `PRINT_SECRET_CMD` để mọi test command dùng cùng nguồn.
+
+**Rủi ro fix:** thấp; chỉ đổi fixtures test.
+
+---
+
+### M2 — Biome cấu hình nhưng không enforce trong CI
+
+**Bằng chứng:** `biome.json` đầy đủ (formatter+linter+assist) nhưng `npm run ci` = `typecheck && check:lazy-imports && test && pack` — **không gọi biome**. `npx biome check .` → 1938 errors + 383 warnings. Bóc tách: ~1840 là formatting/import-sort; **lint thật**: 162 `noUnusedVariables`, 146 `noExplicitAny` (warn), **52 `noControlCharactersInRegex`**, 9 `noAssignInExpressions`, 13 `noUselessEscapeInRegex`...
+
+**Nguyên nhân gốc:** linter tồn tại nhưng chưa được đưa vào gate → drift tích lũy.
+
+**Tác động:** chất lượng không được bảo vệ; đặc biệt **52 control-char-in-regex** có thể là lỗi parse/ReDoS thật.
+
+**Giải pháp chi tiết (tối ưu — đưa về xanh theo từng bước, không "big-bang"):**
+1. **Tách format khỏi lint để giảm ồn:**
+   - Một lần: `npx biome format --write .` (chỉ format, diff lớn nhưng cơ học, review nhanh) → loại ~1840 lỗi formatting/import.
+   - Commit riêng "style: biome format" để không lẫn với fix logic.
+2. **Sửa nhóm lint thật theo mức rủi ro:**
+   - Ưu tiên 52 `noControlCharactersInRegex` + 13 `noUselessEscapeInRegex`: rà từng regex, escape đúng hoặc dùng `\x00`-style explicit; đây là nhóm có thể ẩn bug.
+   - 9 `noAssignInExpressions`: tách assignment ra khỏi điều kiện.
+   - 162 `noUnusedVariables`: xóa/đánh dấu `_` prefix.
+   - 146 `noExplicitAny` (đang `warn`): theo AGENTS.md "avoid any" — chuyển dần sang `unknown`+validation; có thể giữ `warn` tạm thời.
+3. **Đưa vào CI tăng dần:** thêm `"lint": "biome check --linter-enabled=true --formatter-enabled=false ."` vào `ci` với `--max-diagnostics` hợp lý; bật `format --check` sau khi bước (1) xong.
+4. **Hook pre-commit** (đã gợi ý trong AGENTS.md global): chạy biome trên staged files để chặn drift mới.
+
+**Rủi ro fix:** format-write tạo diff lớn → làm trong PR riêng, không kèm thay đổi logic.
+
+---
+
+### M3 — iterative-retrieval không được nối vào runtime + scoring thô sơ
+
+**Bằng chứng:** `src/runtime/task-runner/context-retrieval.ts` export `scoreRelevance/hasConverged/refineQuery/shouldContinue`; grep toàn `src/` → **chỉ tự tham chiếu nội bộ**, không caller nào ở prompt-builder/task-runner. Doc module ghi "actual file discovery is delegated to the caller" nhưng caller không tồn tại. Scoring là keyword-match (comment thừa nhận "in production would be replaced by embedding-based similarity").
+
+**Nguyên nhân gốc:** tính năng được scaffold (logic scoring) nhưng phần "discovery + vòng lặp" chưa wire.
+
+**Tác động:** capability được kỳ vọng (worker tự khám phá context theo vòng) thực chất không hoạt động → kỳ vọng sai về chất lượng context.
+
+**Giải pháp chi tiết (chọn 1 trong 2 hướng, tránh để code "lửng"):**
+- **Hướng A — Wire thật (nếu muốn giữ tính năng):**
+  1. Trong `prompt-builder.renderTaskPrompt`, sau khi dựng workspace tree, chạy vòng retrieval: từ `step.task`+`goal` sinh `RetrievalQuery` (keyword tách từ task), dùng **`grep`/`glob` thật** (ripgrep qua child) làm "discovery" thay cho heuristic in-memory; chấm điểm bằng số match + vị trí path (BM25-lite) thay cho `scoreRelevance` keyword đơn thuần.
+  2. Giới hạn `MAX_CYCLES=3` (đã có), inject top-N file path (không nội dung) vào prompt như "Suggested files to read", để worker chủ động `read`.
+  3. Thêm unit test cho convergence trên fixture repo.
+- **Hướng B — Hạ cấp rõ ràng (nếu chưa ưu tiên):**
+  1. Đánh dấu module `@experimental` + thêm `// NOT WIRED:` ở đầu file, hoặc move sang `src/runtime/experimental/`.
+  2. Cập nhật doc để không quảng bá là tính năng đang chạy.
+
+**Khuyến nghị:** Hướng A với discovery bằng ripgrep là tối ưu (tận dụng tool có sẵn, không cần embedding hạ tầng).
+
+---
+
+### M4 — `contextMode: fresh|fork` là metadata no-op trong runtime mặc định
+
+**Bằng chứng:** `contextMode` được parse (`discover-agents.ts:261`), serialize, hiện trên UI overlay, có trong schema — nhưng grep cho thấy **không consumer runtime** (pi-args/child-pi) đổi hành vi theo nó. Child luôn `--no-session` (fresh). `inheritProjectContext` thì wired thật (env + `prompt-runtime.stripProjectContext`).
+
+**Nguyên nhân gốc:** "fork" (kế thừa session cha) chỉ khả thi ở live-session experimental, không phải child-process mặc định; field được expose mà chưa có đường thực thi.
+
+**Tác động:** user đặt `contextMode: fork` tưởng có hiệu lực nhưng bị bỏ qua âm thầm.
+
+**Giải pháp chi tiết (tối ưu — fail-loud + thực thi đúng nơi):**
+1. **Validate-time cảnh báo:** trong `discover-agents`/`validateResources`, nếu agent dùng `contextMode: fork` mà runtime hiệu lực là `child-process`, emit warning rõ ràng ("fork chỉ hỗ trợ ở live-session; sẽ chạy như fresh").
+2. **Thực thi tối thiểu cho child-process:** "fork" đầy đủ (chia sẻ conversation) không khả thi với process tách rời, nhưng có thể xấp xỉ bằng cách **seed dependency-context/parent-summary** mạnh hơn (truyền summary của parent vào prompt) — đặt sau cờ và đặt tên đúng kỳ vọng.
+3. **Hoặc** giới hạn schema: chỉ chấp nhận `fork` khi `runtime.mode=live-session`, ngược lại reject ở validate (đỡ ngộ nhận).
+
+**Khuyến nghị:** bước (1)+(3) trước (rẻ, fail-loud); (2) khi có nhu cầu thật.
+
+---
+
+### M5 — Phối hợp cross-worker chỉ ở mức prompt, không enforce
+
+**Bằng chứng:** `coordinationBridgeInstructions` (prompt-builder) yêu cầu worker "pause and request sequencing/ownership" khi nghi đụng file chung — nhưng là chỉ dẫn mềm, phụ thuộc model tuân thủ. Không có khóa file/ownership ở tầng scheduler.
+
+**Nguyên nhân gốc:** thiết kế durable+parallel ưu tiên cô lập qua worktree, nhưng với workspace dùng chung (single mode) thì hai worker song song vẫn có thể ghi đè nhau.
+
+**Tác động:** rủi ro trùng việc/ghi đè/merge-conflict khi fan-out trên cùng vùng file (giảm nhẹ nhờ worktree mode).
+
+**Giải pháp chi tiết (tối ưu — phòng thủ theo lớp):**
+1. **Ưu tiên worktree isolation cho task ghi:** khi `workspaceMode=single` và có ≥2 task song song cùng khai báo `writes`/`reads` chồng nhau → scheduler tự nâng lên worktree hoặc serialize (đã có concurrency engine; thêm bước phát hiện chồng path).
+2. **File-lease ở scheduler:** cho mỗi batch, tính giao của `step.reads/writes`; nếu giao khác rỗng giữa các task ready → không xếp chúng vào cùng batch (chuyển sang tuần tự). Đây là enforce cứng, rẻ, dựa trên metadata đã có.
+3. **Conflict-detect sau merge** (đã có `conflict-detect.ts`/`delta-conflict.ts`): nâng từ "phát hiện" lên "chặn closeout" khi phát hiện hai worker sửa cùng symbol/file.
+4. Giữ coordination prompt như lớp mềm bổ sung.
+
+**Rủi ro fix:** giảm song song trong vài trường hợp (đánh đổi đúng đắn lấy tốc độ) — chấp nhận được; có thể đặt sau cờ `limits.serializeOnPathOverlap` (default on).
+
+---
+
+### M6 — Warm pool là stub: mỗi task trả full Pi cold-start
+
+**Bằng chứng:** `child-pi-pool.ts:50 acquirePooledChild()` luôn `return null` → mọi task spawn tiến trình `pi` mới. ADR 0008 mô tả pool nhưng bị chặn bởi handshake runtime của Pi (`PI_CREW_POOL_HEALTH=1` chưa có).
+
+**Nguyên nhân gốc:** phụ thuộc tính năng phía Pi runtime (wait-for-prompt handshake) chưa tồn tại.
+
+**Tác động:** trong child-process mode, chi phí per-task lớn nhất là Pi cold-start (lặp lại mỗi task) → throughput thấp khi nhiều task nhỏ.
+
+**Giải pháp chi tiết (tối ưu — giảm chi phí mà không cần chờ Pi):**
+1. **Ngắn hạn (không cần handshake):**
+   - **Batch nhiều micro-task vào một worker:** với các task nhỏ cùng role/cwd không phụ thuộc nhau, gộp thành một prompt nhiều mục cho 1 child → cắt N cold-start xuống 1. Thêm cờ workflow `coalesceMicroTasks`.
+   - **Tái dùng artifact/context cache giữa task** (đã có manifest-cache, findRepoRoot TTL-LRU) để giảm phần khởi tạo lặp.
+2. **Trung hạn (khi Pi có handshake):** hiện thực `acquirePooledChild` theo ADR 0008, prewarm `resolveWarmPoolSize` child ở idle, health-check `PI_CREW_POOL_HEALTH`.
+3. **Đo & công khai giới hạn:** thêm bench per-task spawn cost + ghi rõ trong docs throughput hiện tại để set kỳ vọng.
+
+**Rủi ro fix:** coalesce micro-task làm giảm cô lập per-task (một task lỗi ảnh hưởng nhóm) → chỉ áp cho task read-only/độc lập, kèm guard.
+
+---
+
+### M7 — `appendEventBuffered` không có caller + chưa có bench chứng minh lợi ích
+
+**Bằng chứng:** `event-log.ts:647 appendEventBuffered` tồn tại (xử lý terminal-bypass, overflow-reject, timer.unref) nhưng grep toàn `src/` → **không caller nào**. `task.progress` vẫn đi qua `appendEvent` đồng bộ (sync lock + fsync). Bench `event-append` đo "serial vs one-file-per-append", **không** đo đường buffered → lợi ích chưa được chứng minh.
+
+**Nguyên nhân gốc:** caller-migration 2.2 còn treo; API ship trước, đo và wire sau.
+
+**Tác động:** bỏ lỡ giảm lock-churn dưới tải progress cao; đồng thời có "code chết" gây hiểu nhầm đã tối ưu.
+
+**Giải pháp chi tiết (tối ưu — đo trước, wire sau, hoặc xóa):**
+1. **Thêm bench đúng đối tượng:** mở rộng `event-append.bench.ts` thêm scenario `buffered` (N `task.progress` qua `appendEventBuffered` rồi `flushEventLogBuffer`) so với `serial`. Chỉ wire nếu buffered thắng rõ ở p95.
+2. **Nếu thắng — wire có chọn lọc:** đổi **chỉ** `task.progress` (sự kiện tần suất cao, không-terminal) ở `team-runner`/`task-runner` sang `appendEventBuffered`; **giữ** `appendEvent` cho sự kiện terminal/lifecycle (durability). Đảm bảo gọi `flushEventLogBuffer` ở các điểm: trước khi đọc events cho status/dashboard, và ở shutdown/cleanup.
+3. **Nếu không thắng — xóa API** để tránh code chết, ghi lại quyết định trong `docs/decisions/`.
+4. Thêm test crash-semantics (kill giữa buffer) để chốt caveat "mất event trong buffer khi kill -9" là chấp nhận được với progress.
+
+**Rủi ro fix:** event ordering — buffered vẫn đi qua `appendEventInsideLock` tuần tự nên seq monotonic được giữ; cần test khẳng định.
+
+---
+
+### M8 — Baseline bench không tái lập across môi trường + không nằm trong CI
+
+**Bằng chứng:** `baseline.json` ghim Node v24/máy cụ thể; chạy ở Node v22 cho "regression" giả khổng lồ (import 520ms→2049ms, register 24ms→461ms). `npm run ci` không gọi bench (baseline doc xác nhận "bench does not run as part of npm test").
+
+**Nguyên nhân gốc:** baseline tuyệt đối, một-máy; gate thủ công.
+
+**Tác động:** không bắt được regression hiệu năng thật giữa các lần; số liệu dễ gây hiểu nhầm.
+
+**Giải pháp chi tiết (tối ưu — đo tương đối, gate trong CI):**
+1. **Re-baseline theo runner:** trong CI, mỗi lần chạy: capture baseline trên chính runner đó từ commit gốc (merge-base), rồi so commit hiện tại trên **cùng máy/cùng Node** → loại nhiễu môi trường. Hoặc lưu baseline theo khóa `{os, nodeMajor}`.
+2. **Chuyển sang chỉ số tương đối nội-tiến-trình** cho các metric nhạy môi trường: đo register **so với** một baseline đo ngay trong cùng tiến trình (vd tỉ lệ với một micro-benchmark chuẩn) thay vì ms tuyệt đối.
+3. **Đưa `bench:check` vào CI** như job riêng (không chặn unit test), `THRESHOLD_PCT=15`, chỉ chạy trên một OS cố định để ổn định.
+4. **Pin Node trong dev/CI** (`.nvmrc`/`engines`) để giảm phương sai (hiện baseline v24 nhưng máy chạy v22).
+
+**Rủi ro fix:** thấp; cải thiện tooling.
+
+---
+
+## ⚪ Mức Thấp / Hygiene
+
+### L1 — State runtime bị commit vào git
+
+**Bằng chứng:** `git ls-files .crew` → 14 file (`state/subagents/*.json`, `audit/prune.jsonl`). `.gitignore` đã ignore `/.crew/` → đang hiển thị "deleted" trong working tree.
+
+**Giải pháp:**
+1. `git rm --cached -r .crew/state .crew/audit` (giữ file trên đĩa, bỏ khỏi index).
+2. Commit "chore: untrack runtime crew state".
+3. Xác nhận `.gitignore` đã chặn (đã có `/.crew/` + allowlist `!.crew/artifacts/`, `!.crew/graphs/`). Đảm bảo không vô tình commit lại qua allowlist.
+
+**Rủi ro:** thấp; không xóa file đĩa. Lưu ý đây là file người dùng đang theo dõi → chỉ untrack, không xóa.
+
+---
+
+### L2 — File orchestrator quá lớn
+
+**Bằng chứng:** `register.ts` 2195, `team-runner.ts` 2087, `config.ts` 1439, `task-runner.ts` 1434, `team-tool.ts` 1436 — trái nguyên tắc AGENTS.md "prefer small modules over large orchestrator files".
+
+**Giải pháp (incremental, không refactor lớn một lần):**
+1. `register.ts` → tách theo "feature installer": `registration/observability.ts`, `registration/ui.ts`, `registration/lifecycle.ts` (đã có `registration/commands.ts` làm mẫu). Việc này phục vụ trực tiếp H3 (lazy register).
+2. `team-runner.ts` → tách scheduler-loop vs batch-exec vs closeout-policy (một phần đã tách `adaptive-plan.ts`).
+3. Đặt ngưỡng cảnh báo độ lớn file trong review checklist (vd >1000 dòng cần lý do).
+
+**Rủi ro:** medium (đụng module nóng) → mỗi lần tách kèm `npm test` đầy đủ.
+
+---
+
+### L3 — Doc sprawl
+
+**Bằng chứng:** `docs/` ~60 file gồm nhiều báo cáo one-off (`pi-crew-v0.5.x-audit-fix-plan` x10, `pi-crew-test-roundN` x6, nhiều `followup-review-*`).
+
+**Giải pháp:**
+1. Tạo `docs/archive/` và chuyển các báo cáo lịch sử one-off vào đó.
+2. Giữ ở `docs/` gốc các "source of truth" sống: ARCHITECTURE, FEATURE_INTAKE, TEST_MATRIX, HARNESS, usage, troubleshooting.
+3. Thêm `docs/README.md` index trỏ tới tài liệu sống vs lưu trữ.
+
+**Rủi ro:** thấp.
+
+---
+
+### L4 — Prompt bloat ở node fan-in (dependencies không được prune)
+
+**Bằng chứng:** `task-output-context.ts` áp pruning (staleness) cho `sharedReads` nhưng **không** cho danh sách `dependencies`. Mỗi dep inline tới 32KB (`MAX_RESULT_INLINE_BYTES`) + structuredResults JSON + artifacts + usage. Task fan-in nhiều dep → prompt phồng.
+
+**Giải pháp chi tiết:**
+1. **Ngân sách context tổng cho dependencies:** đặt `MAX_TOTAL_DEP_INLINE_BYTES` (vd 96KB); khi vượt, ưu tiên giữ inline cho dep mới nhất/quan trọng nhất, các dep còn lại chỉ giữ `resultPath`+`fullOutputPath` (tee) để worker tự `read` khi cần.
+2. **Xếp hạng dep:** theo `status` (failed/needs-attention trước), recency, và độ liên quan tới `step.task`.
+3. **Tận dụng tee sẵn có:** với dep bị hạ xuống path-only, đảm bảo `fullOutputPath` luôn có (đã có hạ tầng tee).
+
+**Rủi ro:** thấp–medium; thêm test cho fan-in lớn.
+
+---
+
+### L5 — `loadMode: "lean"` chỉ là gợi ý prompt
+
+**Bằng chứng:** `toolGuidanceBlock` chỉ in hint; comment: "actual tool filtering at the Pi level is a future optimisation (Phase 3.2+)". Việc giới hạn tool thật đến từ `resolveToolPolicy`/`--tools`.
+
+**Giải pháp:**
+1. **Nối lean → tool policy thật:** khi `loadMode=lean` và có `defaultTools`, đưa `defaultTools` vào allowlist `--tools` của `buildPiWorkerArgs` (giao với policy hiện có), để "lean" có hiệu lực thật chứ không chỉ prompt.
+2. Cập nhật doc/`resolveToolPolicy` để `loadMode` là một nguồn allowlist hợp lệ.
+
+**Rủi ro:** thấp; cần test để chắc không siết nhầm tool cần thiết.
+
+---
+
+### L6 — Ngưỡng truncation trên mẫu nhỏ + token heuristic char/4
+
+**Bằng chứng:** `MAX_RESULT_INLINE_BYTES=32_000` tinh chỉnh từ "27 result artifacts, max 9226 bytes"; token est = char/4 (`tool-output-pruner`).
+
+**Giải pháp:**
+1. **Thu thập phân phối thật hơn:** log kích thước result/shared-read theo thời gian (đã có metrics) → tinh chỉnh ngưỡng theo p95/p99 thực, không phải mẫu 27.
+2. **Token est chính xác hơn khi cần quyết định prune lớn:** dùng ước lượng theo model tokenizer nếu Pi expose, hoặc giữ char/4 nhưng thêm hệ số theo loại nội dung (code vs văn xuôi).
+3. Đặt ngưỡng vào config (`observability`/`limits`) để tinh chỉnh không cần đổi code.
+
+**Rủi ro:** thấp.
+
+---
+
+## Thứ tự thực thi đề xuất
+
+1. **Quick wins (S):** L1 (untrack state), M1 (cross-platform test fixtures), H1 bước dev-only esbuild, M2 bước `biome format --write` + thêm lint vào CI.
+2. **Đòn bẩy hiệu năng (M):** H2 (flip bundle + smoke), M8 (bench trong CI theo runner), M7 (bench buffered → wire/xóa).
+3. **Chất lượng context (M):** M3 (wire/đánh dấu retrieval), M4 (fail-loud contextMode), L4 (ngân sách dep), L5 (lean→tool policy).
+4. **Cấu trúc & throughput (L):** H3 + L2 (tách register, lazy khởi tạo), M5 (file-lease scheduler), M6 (coalesce micro-task; pool khi Pi sẵn sàng).
+5. **Theo dõi liên tục:** H1 nâng peer 0.80.x (sau smoke 3-OS), L3 (archive docs), L6 (tinh chỉnh ngưỡng theo metric thật).
