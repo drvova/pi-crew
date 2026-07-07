@@ -410,15 +410,18 @@ export function resetEventLogMode(): void {
  * foreground-control, etc.), prefer this over the sync `appendEvent()`.
  */
 export async function appendEventAsync(eventsPath: string, event: AppendTeamEvent): Promise<TeamEvent> {
-	// Non-terminal events: route through buffer for coalesced writes (20ms default).
-	// This eliminates per-event fsync + persistSequence overhead for high-frequency events.
-	// The buffer timer is kept alive (ref'd) so standalone contexts (tests, short-lived
-	// scripts) get their events flushed before the loop drains — no per-event keepAlive
-	// intervals needed (which previously starved the event loop at high fan-out).
-	if (!TERMINAL_EVENT_TYPES.has(event.type)) {
-		return appendEventBuffered(eventsPath, event);
-	}
-	// Terminal events: direct async path for immediate durability guarantee
+	// FIX (v0.9.26): Do NOT route non-terminal events through appendEventBuffered.
+	// The buffer uses a 20ms timer + withEventLogLockAsync (promise chain), while
+	// the sync appendEvent path uses withEventLogLockSync (file lock with sleepSync).
+	// Mixing these two lock mechanisms on the same eventsPath causes a deadlock:
+	// the buffer timer can't fire while sleepSync blocks the event loop, and
+	// sleepSync can't acquire the lock while the buffer holds it via the promise
+	// chain. This deadlocked adaptive-implementation, implementation-fanout,
+	// parallel-research-dynamic, run-analysis, and team-run tests (>300s timeout).
+	// Reverted to v0.9.19 behavior: ALL events use the asyncQueues direct path.
+	// The buffer (appendEventBuffered) is still available for explicit callers
+	// that want coalesced writes (e.g., appendEventFireAndForget), but
+	// appendEventAsync itself does NOT buffer.
 	const queueKey = eventsPath;
 	const prev = asyncQueues.get(queueKey) ?? Promise.resolve();
 	const next = prev.then(async (): Promise<TeamEvent> => {
