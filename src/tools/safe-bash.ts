@@ -403,3 +403,91 @@ export const SAFE_BASH_PRESETS = {
 		allowPatterns: [],
 	},
 };
+
+/**
+ * === Whitelist Mode (opt-in, additive) ===
+ *
+ * A deny-by-default mode that checks the first token of a command against an
+ * explicit allowlist of read-only utilities. Enabled via
+ * `PI_CREW_SAFE_BASH_MODE=whitelist`. When NOT enabled, the legacy blacklist
+ * `isDangerous()` path is used unchanged.
+ */
+
+/** Commands permitted under whitelist mode (read-only utilities only). */
+const WHITELISTED_COMMANDS = new Set<string>([
+	"ls", "cat", "head", "tail", "wc", "grep", "find", "echo", "pwd",
+	"date", "whoami", "uname", "df", "du", "file", "stat",
+]);
+
+/**
+ * Shell operators/metacharacters that could chain or substitute a command past
+ * the first token. Their presence anywhere in the raw command causes the
+ * whitelist check to reject, so e.g. `ls; rm file` cannot smuggle `rm` through
+ * under a permitted first token.
+ */
+const SHELL_METACHARACTER_RE = /[|;&`()<>]|\$\(/;
+
+/**
+ * Simple shell tokenizer: extract the first token (command name) of a command,
+ * respecting single and double quotes. Leading whitespace is skipped. Quote
+ * characters are not included in the returned token (`"ls"` → `ls`). An
+ * UNMATCHED quote is treated as malformed input and returns an empty string,
+ * causing `isAllowedWhitelist()` to reject the command (unmatched quotes can
+ * indicate malformed injection attempts).
+ */
+function shellFirstToken(command: string): string {
+	let i = 0;
+	const len = command.length;
+	while (i < len && /\s/.test(command[i])) i++;
+	let token = "";
+	while (i < len) {
+		const ch = command[i];
+		if (/\s/.test(ch)) break;
+		if (ch === "'" || ch === '"') {
+			const quote = ch;
+			i++;
+			while (i < len && command[i] !== quote) {
+				token += command[i];
+				i++;
+			}
+			// Unmatched quote → malformed input, reject by returning empty string.
+			if (i >= len) return "";
+			i++; // skip closing quote
+			continue;
+		}
+		token += ch;
+		i++;
+	}
+	return token;
+}
+
+/**
+ * Whitelist check (deny-by-default). Returns true only when the command's first
+ * token is in the allowlist AND no shell operators/metacharacters are present.
+ * Quoted first tokens (e.g. `"ls" -la`) are resolved before checking.
+ */
+export function isAllowedWhitelist(command: string): boolean {
+	if (command.trim() === "") return false;
+	if (SHELL_METACHARACTER_RE.test(command)) return false;
+	const firstToken = shellFirstToken(command);
+	if (firstToken === "") return false;
+	return WHITELISTED_COMMANDS.has(firstToken);
+}
+
+/** Current safe-bash mode, controlled by the `PI_CREW_SAFE_BASH_MODE` env var. */
+export function getSafeBashMode(): "blacklist" | "whitelist" {
+	return process.env.PI_CREW_SAFE_BASH_MODE === "whitelist" ? "whitelist" : "blacklist";
+}
+
+/**
+ * Unified command check that dispatches on the active mode.
+ * @returns Error message if the command should be blocked, null if allowed.
+ */
+export function checkCommand(command: string, options: SafeBashOptions = {}): string | null {
+	if (getSafeBashMode() === "whitelist") {
+		return isAllowedWhitelist(command)
+			? null
+			: "Command blocked by safe_bash whitelist: command not in allowlist";
+	}
+	return isDangerous(command, options);
+}

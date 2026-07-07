@@ -14,7 +14,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createBashTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { isDangerous } from "./safe-bash.ts";
+import { checkCommand } from "./safe-bash.ts";
 
 export default function safeBashExtension(pi: ExtensionAPI): void {
 	const cwd = process.cwd();
@@ -35,7 +35,7 @@ export default function safeBashExtension(pi: ExtensionAPI): void {
 			),
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
-			const danger = isDangerous(params.command);
+			const danger = checkCommand(params.command);
 			if (danger) {
 				return {
 					details: {},

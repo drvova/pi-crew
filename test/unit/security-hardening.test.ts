@@ -411,3 +411,60 @@ test("child Pi does not leak NPM_TOKEN or NODE_ENV through wildcards", async () 
 	assert.equal(env.XDG_CONFIG_HOME, "/home/user/.config");
 	assert.equal(env.NPM_CONFIG_REGISTRY, "https://registry.npmjs.org");
 });
+
+// Per-task API key scoping: worker assigned to a specific model only gets that provider's keys
+test("buildChildPiSpawnOptions scopes API keys to assigned model", async () => {
+	const { buildChildPiSpawnOptions } = await import("../../src/runtime/child-pi.ts");
+	const env = {
+		PATH: "/usr/bin",
+		HOME: "/home/user",
+		OPENAI_API_KEY: "openai-secret",
+		ANTHROPIC_API_KEY: "anthropic-secret",
+		GOOGLE_API_KEY: "google-secret",
+		AWS_ACCESS_KEY_ID: "aws-key",
+		AWS_SECRET_ACCESS_KEY: "aws-secret",
+		AWS_REGION: "us-east-1",
+		ZEU_API_KEY: "zai-secret",
+	};
+
+	// Worker assigned to OpenAI model gets OpenAI keys but NOT other provider keys
+	const openaiOpts = buildChildPiSpawnOptions("/tmp/project", env, "openai/gpt-4o");
+	const openaiEnv = openaiOpts.env as Record<string, string>;
+	assert.equal(openaiEnv.OPENAI_API_KEY, "openai-secret", "OpenAI key should be present");
+	assert.equal(openaiEnv.OPENAI_ORG_ID, undefined, "OpenAI org not in env");
+	assert.equal(openaiEnv.ANTHROPIC_API_KEY, undefined, "Anthropic key should NOT be present");
+	assert.equal(openaiEnv.GOOGLE_API_KEY, undefined, "Google key should NOT be present");
+	assert.equal(openaiEnv.AWS_ACCESS_KEY_ID, undefined, "AWS key should NOT be present");
+	assert.equal(openaiEnv.ZEU_API_KEY, undefined, "ZAI key should NOT be present");
+	// System vars still present
+	assert.equal(openaiEnv.PATH, "/usr/bin");
+	assert.equal(openaiEnv.HOME, "/home/user");
+
+	// Worker assigned to Anthropic gets only Anthropic key
+	const anthropicOpts = buildChildPiSpawnOptions("/tmp/project", env, "anthropic/claude-sonnet-4-5");
+	const anthropicEnv = anthropicOpts.env as Record<string, string>;
+	assert.equal(anthropicEnv.ANTHROPIC_API_KEY, "anthropic-secret", "Anthropic key should be present");
+	assert.equal(anthropicEnv.OPENAI_API_KEY, undefined, "OpenAI key should NOT be present");
+	assert.equal(anthropicEnv.GOOGLE_API_KEY, undefined, "Google key should NOT be present");
+});
+
+// Security: when model is undefined, NO provider keys leak (deny-by-default).
+// Only BASE_ALLOWLIST system vars (PATH, HOME, etc.) pass through.
+test("buildChildPiSpawnOptions leaks no provider keys when model is undefined", async () => {
+	const { buildChildPiSpawnOptions } = await import("../../src/runtime/child-pi.ts");
+	const env = {
+		PATH: "/usr/bin",
+		HOME: "/home/user",
+		OPENAI_API_KEY: "openai-secret",
+		ANTHROPIC_API_KEY: "anthropic-secret",
+	};
+
+	// No model specified — deny-by-default: no provider keys leak
+	const opts = buildChildPiSpawnOptions("/tmp/project", env);
+	const resultEnv = opts.env as Record<string, string>;
+	assert.equal(resultEnv.OPENAI_API_KEY, undefined, "OpenAI key must NOT leak when model is undefined");
+	assert.equal(resultEnv.ANTHROPIC_API_KEY, undefined, "Anthropic key must NOT leak when model is undefined");
+	// System vars still present
+	assert.equal(resultEnv.PATH, "/usr/bin", "PATH should be present");
+	assert.equal(resultEnv.HOME, "/home/user", "HOME should be present");
+});
