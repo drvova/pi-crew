@@ -21,8 +21,57 @@ const KNOWN_PROVIDER_KEYS = new Set([
 	"ZERODEV_API_KEY",
 ]);
 
+// Map from provider prefix (lowercase) to env var names.
+// Used by providerEnvKeys() to scope API keys per task.
+const PROVIDER_ENV_KEY_MAP: Record<string, string[]> = {
+	minimax: ["MINIMAX_API_KEY", "MINIMAX_GROUP_ID"],
+	openai: ["OPENAI_API_KEY", "OPENAI_ORG_ID"],
+	anthropic: ["ANTHROPIC_API_KEY"],
+	google: ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_LANGUAGE_API_KEY"],
+	gemini: ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_LANGUAGE_API_KEY"],
+	azure: ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"],
+	"azure-openai": ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"],
+	aws: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
+	bedrock: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
+	zai: ["ZEU_API_KEY"],
+	zerodev: ["ZERODEV_API_KEY"],
+};
+
 function isKnownProviderKey(key: string): boolean {
 	return KNOWN_PROVIDER_KEYS.has(key);
+}
+
+/**
+ * Extract provider prefix from a model ID string and return the corresponding
+ * env var names. Returns empty array for unknown/custom providers or invalid input.
+ *
+ * @param modelId - Model in "provider/modelId" format (e.g. "openai/gpt-4o")
+ * @returns Array of env var names needed for this provider
+ */
+export function providerEnvKeys(modelId: string | undefined): string[] {
+	if (!modelId) return [];
+	const separatorIndex = modelId.indexOf("/");
+	if (separatorIndex <= 0) return [];
+	const provider = modelId.substring(0, separatorIndex).toLowerCase();
+	return PROVIDER_ENV_KEY_MAP[provider] ?? [];
+}
+
+/**
+ * Build a scoped allowlist that includes system vars + only the provider keys
+ * relevant to the assigned model (and its fallback chain).
+ *
+ * @param baseAllowList - Non-provider system vars to always include
+ * @param models - Model IDs to include provider keys for (primary + fallbacks)
+ * @returns Combined allowlist with scoped provider keys
+ */
+export function buildScopedAllowList(baseAllowList: string[], models: (string | undefined)[]): string[] {
+	const providerKeys = new Set<string>();
+	for (const model of models) {
+		for (const key of providerEnvKeys(model)) {
+			providerKeys.add(key);
+		}
+	}
+	return [...baseAllowList, ...providerKeys];
 }
 
 export interface SanitizeEnvOptions {

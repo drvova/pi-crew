@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sanitizeEnvSecrets } from "../../src/utils/env-filter.ts";
+import { buildScopedAllowList, providerEnvKeys, sanitizeEnvSecrets } from "../../src/utils/env-filter.ts";
 
 test("default deny-list strips secret-like keys", () => {
 	const result = sanitizeEnvSecrets({
@@ -52,4 +52,64 @@ test("allow-list glob PI_CREW_* does not match PIPELINE", () => {
 	);
 	assert.equal(result.PI_CREW_HOME, "/pi");
 	assert.equal(result.PIPELINE, undefined);
+});
+
+// --- providerEnvKeys tests ---
+
+test("providerEnvKeys extracts provider env keys for known providers", () => {
+	assert.deepEqual(providerEnvKeys("openai/gpt-4o"), ["OPENAI_API_KEY", "OPENAI_ORG_ID"]);
+	assert.deepEqual(providerEnvKeys("anthropic/claude-sonnet-4-5"), ["ANTHROPIC_API_KEY"]);
+	assert.deepEqual(providerEnvKeys("google/gemini-2.0-flash"), ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_LANGUAGE_API_KEY"]);
+	assert.deepEqual(providerEnvKeys("azure/openai/gpt-4o"), ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"]);
+	assert.deepEqual(providerEnvKeys("aws/bedrock/anthropic.claude-v2"), ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]);
+	assert.deepEqual(providerEnvKeys("zai/glm-5.2"), ["ZEU_API_KEY"]);
+	assert.deepEqual(providerEnvKeys("minimax/model"), ["MINIMAX_API_KEY", "MINIMAX_GROUP_ID"]);
+});
+
+test("providerEnvKeys returns empty array for unknown/custom providers", () => {
+	assert.deepEqual(providerEnvKeys("qwencoder/qwen3.7-max"), []);
+	assert.deepEqual(providerEnvKeys("custom/model"), []);
+});
+
+test("providerEnvKeys returns empty array for invalid input", () => {
+	assert.deepEqual(providerEnvKeys(undefined), []);
+	assert.deepEqual(providerEnvKeys("no-slash"), []);
+	assert.deepEqual(providerEnvKeys(""), []);
+});
+
+// --- buildScopedAllowList tests ---
+
+test("buildScopedAllowList includes system vars + provider keys for model", () => {
+	const baseList = ["PATH", "HOME"];
+	const result = buildScopedAllowList(baseList, ["openai/gpt-4o"]);
+	assert.ok(result.includes("PATH"));
+	assert.ok(result.includes("HOME"));
+	assert.ok(result.includes("OPENAI_API_KEY"));
+	assert.ok(result.includes("OPENAI_ORG_ID"));
+	assert.ok(!result.includes("ANTHROPIC_API_KEY"));
+});
+
+test("buildScopedAllowList includes keys for all models in chain", () => {
+	const baseList = ["PATH", "HOME"];
+	const result = buildScopedAllowList(baseList, ["openai/gpt-4o", "anthropic/claude-sonnet-4-5"]);
+	assert.ok(result.includes("OPENAI_API_KEY"));
+	assert.ok(result.includes("OPENAI_ORG_ID"));
+	assert.ok(result.includes("ANTHROPIC_API_KEY"));
+});
+
+test("buildScopedAllowList deduplicates provider keys", () => {
+	const baseList = ["PATH", "HOME"];
+	const result = buildScopedAllowList(baseList, ["openai/gpt-4o", "openai/gpt-4o-mini"]);
+	const openaiKeys = result.filter((k) => k.startsWith("OPENAI_"));
+	assert.equal(openaiKeys.length, 2); // OPENAI_API_KEY + OPENAI_ORG_ID, not duplicates
+});
+
+test("buildScopedAllowList with custom provider returns no extra keys", () => {
+	const baseList = ["PATH", "HOME"];
+	const result = buildScopedAllowList(baseList, ["qwencoder/qwen3.7-max"]);
+	assert.ok(result.includes("PATH"));
+	assert.ok(result.includes("HOME"));
+	// No provider keys for custom provider
+	assert.ok(!result.includes("OPENAI_API_KEY"));
+	assert.ok(!result.includes("ANTHROPIC_API_KEY"));
 });

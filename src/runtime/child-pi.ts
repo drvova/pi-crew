@@ -7,7 +7,7 @@ import { DEFAULT_CHILD_PI } from "../config/defaults.ts";
 import { registerChildProcess, unregisterChildProcess } from "../extension/crew-cleanup.ts";
 import type { WorkerExitStatus } from "../state/types.ts";
 import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
-import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
+import { buildScopedAllowList, sanitizeEnvSecrets } from "../utils/env-filter.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { redactJsonLine, redactSecretString } from "../utils/redaction.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
@@ -254,7 +254,53 @@ export interface ChildPiRunResult {
 	intermediateFindings?: string;
 }
 
-export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): SpawnOptions {
+// Base allowlist of non-provider env vars always passed to child workers.
+// Provider API keys are injected dynamically via buildScopedAllowList() only
+// when a model is assigned to the task (per-task key scoping).
+const BASE_ALLOWLIST: string[] = [
+	"PATH",
+	"HOME",
+	"USER",
+	"SHELL",
+	"TERM",
+	"LANG",
+	"LC_ALL",
+	"LC_COLLATE",
+	"LC_CTYPE",
+	"LC_MESSAGES",
+	"LC_MONETARY",
+	"LC_NUMERIC",
+	"LC_TIME",
+	"XDG_CONFIG_HOME",
+	"XDG_DATA_HOME",
+	"XDG_CACHE_HOME",
+	"XDG_RUNTIME_DIR",
+	// Windows essentials — see WINDOWS_ESSENTIAL_ENV_VARS (src/utils/env-allowlist.ts).
+	...WINDOWS_ESSENTIAL_ENV_VARS,
+	"NVM_BIN",
+	"NVM_DIR",
+	"NVM_INC",
+	"NODE_DISABLE_COLORS",
+	"NODE_EXTRA_CA_CERTS",
+	"NPM_CONFIG_REGISTRY",
+	"NPM_CONFIG_USERCONFIG",
+	"NPM_CONFIG_GLOBALCONFIG",
+	"PI_CREW_DEPTH",
+	"PI_CREW_MAX_DEPTH",
+	"PI_CREW_INHERIT_PROJECT_CONTEXT",
+	"PI_CREW_INHERIT_SKILLS",
+	"PI_CREW_KIND",
+	"PI_CREW_PARENT_PID",
+	"PI_TEAMS_DEPTH",
+	"PI_TEAMS_MAX_DEPTH",
+	"PI_TEAMS_INHERIT_PROJECT_CONTEXT",
+	"PI_TEAMS_INHERIT_SKILLS",
+	"PI_TEAMS_PI_BIN",
+	"PI_TEAMS_MOCK_CHILD_PI",
+	"PI_CREW_ALLOW_MOCK",
+];
+
+export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv, model?: string): SpawnOptions {
 	// SECURITY FIX (Issue #1): Validate cwd before passing to spawn.
 	// If cwd comes from an untrusted source (user input, workspace config), a malicious cwd
 	// could cause the child process to operate in an attacker-controlled directory,
@@ -284,81 +330,14 @@ export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv): S
 	// IMPORTANT: preserve model provider API keys — they are needed by the child Pi to call the LLM.
 	// Also preserve essential non-secret vars (PATH, HOME, USER, etc.) so the child process can function.
 	// Bug #12 fix: essential env vars (PATH, HOME, etc.) are always preserved so child can find npm/node.
-	const filteredEnv = sanitizeEnvSecrets(env, {
-		allowList: [
-			/*
-			 * SECURITY WARNING: All model provider API keys below are passed to EVERY child worker.
-			 * If any child is compromised (e.g. via prompt injection), all listed keys are exposed.
-			 * This is a deliberate trade-off: multi-provider setups require the child Pi process to
-			 * authenticate with whichever provider the model routes to. Reducing keys per-child
-			 * would break multi-provider functionality. Mitigations:
-			 *   - sanitizeEnvSecrets strips all env vars NOT on this list.
-			 *   - Do NOT add wildcards ("*_API_KEY") — only explicit, intended provider keys.
-			 *   - Consider per-task key scoping if the architecture allows it in the future.
-			 *
-			 * MAINTENANCE REQUIREMENT: When new secret env vars are added to the Pi ecosystem,
-			 * they MUST be explicitly added to this allowlist to be passed to child processes.
-			 * A CI check should fail if a secret-like env var (matching patterns like *_API_KEY,
-			 * *_TOKEN, *_SECRET) is detected in the codebase but not present in this list.
-			 */
-			// NOTE: Model provider API keys are NOT needed here — child Pi uses the same
-			// config file as parent Pi. Passing keys via env is a security risk.
-			"PATH",
-			"HOME",
-			"USER",
-			"SHELL",
-			"TERM",
-			"LANG",
-			// FIX: Replaced broad wildcards (LC_*, XDG_*, NVM_*, NODE_*, npm_*) with
-			// specific names. Previously NPM_TOKEN, NODE_ENV=production, NVM_RC_VERSION
-			// all leaked through wildcards.
-			"LC_ALL",
-			"LC_COLLATE",
-			"LC_CTYPE",
-			"LC_MESSAGES",
-			"LC_MONETARY",
-			"LC_NUMERIC",
-			"LC_TIME",
-			"XDG_CONFIG_HOME",
-			"XDG_DATA_HOME",
-			"XDG_CACHE_HOME",
-			"XDG_RUNTIME_DIR",
-			// Windows essentials — see WINDOWS_ESSENTIAL_ENV_VARS (src/utils/env-allowlist.ts).
-			...WINDOWS_ESSENTIAL_ENV_VARS,
-			"NVM_BIN",
-			"NVM_DIR",
-			"NVM_INC",
-			// NODE_PATH is intentionally omitted from the allowlist.
-			// NODE_PATH can reveal user environment information (e.g., NVM paths under $HOME)
-			// and the validation at lines 286-298 only filters to standard system prefixes.
-			// Removing it entirely is cleaner than best-effort filtering.
-			"NODE_DISABLE_COLORS",
-			"NODE_EXTRA_CA_CERTS",
-			"NPM_CONFIG_REGISTRY",
-			"NPM_CONFIG_USERCONFIG",
-			"NPM_CONFIG_GLOBALCONFIG",
-			// FIX: Replace PI_CREW_*/PI_TEAMS_* wildcards with explicit list of
-			// safe vars. Wildcards are fragile — any new secret var would leak.
-			// Only non-secret execution-control vars that children legitimately need.
-			"PI_CREW_DEPTH",
-			"PI_CREW_MAX_DEPTH",
-			"PI_CREW_INHERIT_PROJECT_CONTEXT",
-			"PI_CREW_INHERIT_SKILLS",
-			// PI_CREW_KIND marks this process as a crew sub-agent (vs the user's main session).
-			// doctor --zombies matches it to safely list orphaned sub-agents only.
-			"PI_CREW_KIND",
-			// PI_CREW_PARENT_PID is needed by child-pi's parent-guard (uses
-			// process.kill(pid, 0) liveness check). The PID is not a secret.
-			"PI_CREW_PARENT_PID",
-			"PI_TEAMS_DEPTH",
-			"PI_TEAMS_MAX_DEPTH",
-			"PI_TEAMS_INHERIT_PROJECT_CONTEXT",
-			"PI_TEAMS_INHERIT_SKILLS",
-			"PI_TEAMS_PI_BIN",
-			"PI_TEAMS_MOCK_CHILD_PI",
-			"PI_CREW_ALLOW_MOCK",
-		],
-	});
+	//
+	// PER-TASK KEY SCOPING: when a model is provided, only the env keys for that
+	// provider are injected (via buildScopedAllowList). When no model is given,
+	// only BASE_ALLOWLIST system vars pass through — no provider keys leak.
+	const allowList = model
+		? buildScopedAllowList(BASE_ALLOWLIST, [model])
+		: BASE_ALLOWLIST;
+	const filteredEnv = sanitizeEnvSecrets(env, { allowList });
 	// FIX: Removed delete workarounds — with explicit allowlist, these vars
 	// are no longer auto-leaked. The wildcard approach was fragile.
 
@@ -903,7 +882,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 				buildChildPiSpawnOptions(input.cwd, {
 					...process.env,
 					...built.env,
-				}),
+				}, input.model),
 			);
 			if (child.pid) {
 				activeChildProcesses.set(child.pid, child);
