@@ -250,7 +250,7 @@ export class PipelineRunner {
 			// pending". The buffered flush uses a 20ms ref'd timer that fires
 			// asynchronously; without this explicit drain, the test runner sees
 			// pending appendEventAsync promises and cancels the test file.
-			await flushEventLogBuffer(eventsPath);
+			await flushEventLogBuffer();
 		}
 	}
 
