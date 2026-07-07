@@ -208,6 +208,11 @@ export interface TeamRunManifest {
 	runKind?: "team-run" | "goal-loop" | "dynamic-workflow";
 	/** round-14 P1-5: typed workflow arguments accessible in .dwf.ts scripts via ctx.args<T>(). Any JSON value; default {} when unset. */
 	args?: unknown;
+	/** Per-run token budget snapshot. budgetTotal is the cap; budgetWarning/budgetAbort are fractions in [0,1] at which the team-runner emits run.budget_warning / run.budget_abort. budgetUnlimited=true opts out of enforcement. Optional for backward compat. */
+	budgetTotal?: number;
+	budgetWarning?: number;
+	budgetAbort?: number;
+	budgetUnlimited?: boolean;
 	summary?: string;
 	policyDecisions?: PolicyDecision[];
 	/** #2 (assessment): goal-achievement verdict — kills the silent false-green. */

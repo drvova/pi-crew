@@ -20,7 +20,7 @@ import type {
 import { logInternalError } from "../utils/internal-error.ts";
 import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 import type { WorkflowStep } from "../workflows/workflow-config.ts";
-import { captureWorktreeDiff, captureWorktreeDiffStat, prepareTaskWorkspace } from "../worktree/worktree-manager.ts";
+import { captureWorktreeDiffAsync, captureWorktreeDiffStatAsync, prepareTaskWorkspaceAsync } from "../worktree/worktree-manager.ts";
 import { reserveControlChannel } from "./agent-control.ts";
 import { appendTaskAttentionEvent } from "./attention-events.ts";
 import { buildSyntheticTerminalEvidence, cancellationReasonFromSignal } from "./cancellation.ts";
@@ -122,7 +122,7 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 	let streamBridge: ReturnType<typeof registerStreamBridge> | undefined;
 	try {
 		streamBridge = registerStreamBridge(manifest.runId);
-		const workspace = prepareTaskWorkspace(manifest, input.task, input.step.seedPaths);
+		const workspace = await prepareTaskWorkspaceAsync(manifest, input.task, input.step.seedPaths);
 		const worktree =
 			workspace.worktreePath && workspace.branch
 				? {
@@ -905,7 +905,7 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 			? writeArtifact(manifest.artifactsRoot, {
 					kind: "diff",
 					relativePath: `diffs/${task.id}.diff`,
-					content: captureWorktreeDiff(workspace.worktreePath),
+					content: await captureWorktreeDiffAsync(workspace.worktreePath),
 					producer: task.id,
 				})
 			: undefined;
@@ -913,7 +913,7 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 			? writeArtifact(manifest.artifactsRoot, {
 					kind: "metadata",
 					relativePath: `metadata/${task.id}.diff-stat.json`,
-					content: `${JSON.stringify({ ...captureWorktreeDiffStat(workspace.worktreePath), syntheticPaths: workspace.syntheticPaths ?? [], nodeModulesLinked: workspace.nodeModulesLinked ?? false }, null, 2)}\n`,
+					content: `${JSON.stringify({ ...(await captureWorktreeDiffStatAsync(workspace.worktreePath)), syntheticPaths: workspace.syntheticPaths ?? [], nodeModulesLinked: workspace.nodeModulesLinked ?? false }, null, 2)}\n`,
 					producer: task.id,
 				})
 			: undefined;

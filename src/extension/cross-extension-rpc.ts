@@ -1,9 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TeamToolParamsValue } from "../schema/team-tool-schema.ts";
 import { resolveContainedPath } from "../utils/safe-paths.ts";
+import { withHmacVerification } from "./rpc-hmac.ts";
 // Lazy-loaded to avoid pulling team-tool.ts (and its entire runtime chain) into module load.
 import type { handleTeamTool as HandleTeamToolFn } from "./team-tool.ts";
-import { withHmacVerification } from "./rpc-hmac.ts";
 
 let _cachedHandleTeamTool: typeof HandleTeamToolFn | undefined;
 async function handleTeamTool(
@@ -184,7 +184,20 @@ export function registerPiCrewRpc(
 					const ctx = getCtx();
 					if (!ctx) throw new Error("No active pi-crew session context.");
 					// Validate payload: only allow known fields from TeamToolParamsValue
-					const ALLOWED_RPC_RUN_KEYS = new Set(["goal", "team", "workflow", "async", "cwd", "config", "skill", "model"]);
+					const ALLOWED_RPC_RUN_KEYS = new Set([
+						"goal",
+						"team",
+						"workflow",
+						"async",
+						"cwd",
+						"config",
+						"skill",
+						"model",
+						"budgetTotal",
+						"budgetWarning",
+						"budgetAbort",
+						"budgetUnlimited",
+					]);
 					let params: TeamToolParamsValue;
 					if (raw && typeof raw === "object" && !Array.isArray(raw)) {
 						const filtered: Record<string, unknown> = {

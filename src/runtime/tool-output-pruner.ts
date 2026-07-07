@@ -90,8 +90,10 @@ export interface PruneResult {
 // Token estimation (rough char/4 heuristic, matching gajae-code)
 // ---------------------------------------------------------------------------
 
+import { countTokens } from "../utils/token-counter";
+
 function estimateTokens(text: string): number {
-	return Math.ceil(text.length / 4);
+	return countTokens(text);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +148,7 @@ function createPrunedNotice(tokens: number, entry: ToolResultEntry): string {
 	const generic = `[Output pruned — ${tokens} tokens]`;
 	const digest = resultDigest(entry.toolName, entry.content, entry.isError);
 	if (!digest) return generic;
-	const genericTokens = Math.ceil(generic.length / 4);
+	const genericTokens = countTokens(generic);
 	const maxTokens = Math.max(genericTokens, Math.floor(genericTokens * DIGEST_NOTICE_TOKEN_CAP_MULTIPLIER));
 	const prefix = `[Output pruned — ${tokens} tokens; `;
 	const suffix = "]";
@@ -303,7 +305,7 @@ export function pruneToolOutputs(results: ToolResultEntry[], config: PruneConfig
 			entry,
 			tokens,
 			notice,
-			savings: Math.max(0, tokens - Math.ceil(notice.length / 4)),
+			savings: Math.max(0, tokens - countTokens(notice)),
 		});
 		accumulatedTokens += tokens;
 	}

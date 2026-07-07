@@ -13,7 +13,7 @@ import { HealthStore } from "../state/health-store.ts";
 import { withRunLock } from "../state/locks.ts";
 import { loadRunManifestById, saveRunManifest, saveRunManifestAsync, saveRunTasksAsync, updateRunStatus } from "../state/state-store.ts";
 import type { ArtifactDescriptor, PolicyDecision, TaskAttemptState, TeamRunManifest, TeamTaskState } from "../state/types.ts";
-import { aggregateUsage, formatUsage } from "../state/usage.ts";
+import { aggregateUsage, formatTokens, formatUsage } from "../state/usage.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
@@ -130,6 +130,60 @@ export interface ExecuteTeamRunInput {
 	onJsonEvent?: (taskId: string, runId: string, event: unknown) => void;
 	/** Workspace where this run was initiated — used for session-scoped live-agent visibility. */
 	workspaceId: string;
+	/** Total token budget for the run. When set, enables per-task budget enforcement. */
+	budgetTotal?: number;
+	/** Budget warning threshold as a fraction (0-1). Default: 0.8 (80%). */
+	budgetWarning?: number;
+	/** Budget abort threshold as a fraction (0-1). Default: 0.95 (95%). */
+	budgetAbort?: number;
+	/** When true, skip budget enforcement entirely. */
+	budgetUnlimited?: boolean;
+}
+
+/**
+ * Result of a per-task budget check against cumulative run usage.
+ */
+export interface PerTaskBudgetCheckResult {
+	/** Whether the abort threshold was exceeded. */
+	abort: boolean;
+	/** Whether the warning threshold was exceeded. */
+	warning: boolean;
+	/** IDs of tasks that exceeded their fair share (>50% of remaining budget). */
+	fairShareViolators: string[];
+	/** Total tokens used so far. */
+	totalUsed: number;
+}
+
+/**
+ * Check cumulative token usage against per-task budget thresholds.
+ * Returns a structured result — callers decide how to act (warn vs abort).
+ *
+ * Exported for unit testing.
+ */
+export function checkPerTaskBudget(
+	tasks: TeamTaskState[],
+	budgetTotal: number,
+	budgetWarning: number,
+	budgetAbort: number,
+	fairShareFraction = 0.5,
+): PerTaskBudgetCheckResult {
+	const usage = aggregateUsage(tasks);
+	const totalUsed = (usage?.input ?? 0) + (usage?.output ?? 0) + (usage?.cacheWrite ?? 0);
+	const abort = totalUsed >= budgetAbort * budgetTotal;
+	const warning = !abort && totalUsed >= budgetWarning * budgetTotal;
+	const remainingBudget = Math.max(0, budgetTotal - totalUsed);
+	const fairShareThreshold = remainingBudget * fairShareFraction;
+	const fairShareViolators: string[] = [];
+	for (const task of tasks) {
+		if (!task.usage) continue;
+		const taskTotal = (task.usage.input ?? 0) + (task.usage.output ?? 0) + (task.usage.cacheWrite ?? 0);
+		// Only flag tasks that individually consumed a significant portion of the
+		// budget (>10% of total) AND exceeded the fair share of remaining budget.
+		if (fairShareThreshold > 0 && taskTotal > fairShareThreshold && taskTotal > budgetTotal * 0.1) {
+			fairShareViolators.push(task.id);
+		}
+	}
+	return { abort, warning, fairShareViolators, totalUsed };
 }
 
 function findStep(workflow: WorkflowConfig, task: TeamTaskState): WorkflowStep {
@@ -585,6 +639,18 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 		"running",
 		input.executeWorkers ? "Executing team workflow." : "Creating workflow prompts and placeholder results.",
 	);
+
+	// Persist budget fields on the manifest so all subsequent saveRunManifest
+	// calls (there are many in executeTeamRunCore) preserve the budget config.
+	// Without this, the spread in updateRunStatus and other transformations
+	// can drop budget fields before they reach the persistence layer.
+	if (input.budgetTotal !== undefined) manifest.budgetTotal = input.budgetTotal;
+	if (input.budgetWarning !== undefined) manifest.budgetWarning = input.budgetWarning;
+	if (input.budgetAbort !== undefined) manifest.budgetAbort = input.budgetAbort;
+	if (input.budgetUnlimited !== undefined) manifest.budgetUnlimited = input.budgetUnlimited;
+	if (manifest.budgetTotal !== undefined && manifest.budgetTotal > 0 && !manifest.budgetUnlimited) {
+		saveRunManifest(manifest);
+	}
 
 	void registerRunPromise(manifest.runId);
 
@@ -1442,6 +1508,69 @@ async function executeTeamRunCore(
 				});
 			}
 			wfMachine = { ...wfMachine, currentPhaseIndex: pi + 1 };
+		}
+
+		// Per-task budget enforcement: check cumulative usage after each batch merge.
+		// This prevents a single task from consuming 100% of the budget before
+		// abort triggers (the goal-loop only checks at turn boundaries).
+		if (input.budgetTotal !== undefined && input.budgetTotal > 0 && input.budgetUnlimited !== true) {
+			const warnThreshold = input.budgetWarning ?? 0.8;
+			const abortThreshold = input.budgetAbort ?? 0.95;
+			const budgetCheck = checkPerTaskBudget(tasks, input.budgetTotal, warnThreshold, abortThreshold);
+
+			if (budgetCheck.abort) {
+				const message = `Per-task budget abort threshold exceeded: ${formatTokens(budgetCheck.totalUsed)}/${formatTokens(input.budgetTotal)} (${Math.round((budgetCheck.totalUsed / input.budgetTotal) * 100)}%)`;
+				console.warn(`[team-runner] ${message}`);
+				await appendEventAsync(manifest.eventsPath, {
+					type: "run.budget_abort",
+					runId: manifest.runId,
+					message,
+					data: {
+						budgetTotal: input.budgetTotal,
+						budgetUsed: budgetCheck.totalUsed,
+						threshold: "abort",
+					},
+				});
+				tasks = markBlocked(tasks, `Budget abort threshold exceeded: ${message}`);
+				await saveRunTasksAsync(manifest, tasks);
+				manifest = updateRunStatus(manifest, "failed", message);
+				return { manifest, tasks };
+			}
+
+			if (budgetCheck.warning) {
+				const message = `Per-task budget warning threshold crossed: ${formatTokens(budgetCheck.totalUsed)}/${formatTokens(input.budgetTotal)} (${Math.round((budgetCheck.totalUsed / input.budgetTotal) * 100)}%)`;
+				console.warn(`[team-runner] ${message}`);
+				await appendEventAsync(manifest.eventsPath, {
+					type: "run.budget_warning",
+					runId: manifest.runId,
+					message,
+					data: {
+						budgetTotal: input.budgetTotal,
+						budgetUsed: budgetCheck.totalUsed,
+						threshold: "warning",
+					},
+				});
+			}
+
+			// Fair-share warning: flag tasks that consumed >50% of remaining budget
+			// without killing them mid-execution.
+			for (const violatorId of budgetCheck.fairShareViolators) {
+				const violator = tasks.find((t) => t.id === violatorId);
+				if (!violator) continue;
+				const taskTotal = (violator.usage?.input ?? 0) + (violator.usage?.output ?? 0) + (violator.usage?.cacheWrite ?? 0);
+				const message = `Task '${violatorId}' consumed ${formatTokens(taskTotal)} (${Math.round((taskTotal / input.budgetTotal) * 100)}% of total budget) — exceeds fair share`;
+				console.warn(`[team-runner.fair-share] ${message}`);
+				await appendEventAsync(manifest.eventsPath, {
+					type: "task.budget_fair_share",
+					runId: manifest.runId,
+					taskId: violatorId,
+					message,
+					data: {
+						budgetTotal: input.budgetTotal,
+						taskUsage: taskTotal,
+					},
+				});
+			}
 		}
 
 		const cancelledResult = results.find((item) => item.manifest.status === "cancelled");

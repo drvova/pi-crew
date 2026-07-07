@@ -350,6 +350,11 @@ export function checkSequenceGaps(eventsPath: string): { missing: number }[] {
  * from firing and degrading live-agent responsiveness.
  */
 export function appendEvent(eventsPath: string, event: AppendTeamEvent): TeamEvent {
+	// NOTE: appendEvent is a sync function that uses withEventLogLockSync (sleepSync).
+	// It cannot route through appendEventBuffered because the buffer timer requires
+	// the event loop to fire, which sleepSync blocks. Both terminal and non-terminal
+	// events use the direct sync path here. For non-terminal events, callers should
+	// prefer appendEventAsync (which routes through the buffer for coalesced writes).
 	return withEventLogLockSync(eventsPath, () => appendEventInsideLock(eventsPath, event));
 }
 
@@ -405,6 +410,19 @@ export function resetEventLogMode(): void {
  * foreground-control, etc.), prefer this over the sync `appendEvent()`.
  */
 export async function appendEventAsync(eventsPath: string, event: AppendTeamEvent): Promise<TeamEvent> {
+	// Non-terminal events: route through buffer for coalesced writes (20ms default).
+	// This eliminates per-event fsync + persistSequence overhead for high-frequency events.
+	if (!TERMINAL_EVENT_TYPES.has(event.type)) {
+		const result = appendEventBuffered(eventsPath, event);
+		// FIX: appendEventBuffered uses unref()'d timers. Keep the event loop alive
+		// so the promise resolves in standalone/test contexts where nothing else
+		// keeps the loop running. Without this, the event loop drains before the
+		// timer fires and the promise never resolves.
+		const keepAlive = setInterval(() => {}, 200);
+		void result.finally(() => clearInterval(keepAlive));
+		return result;
+	}
+	// Terminal events: direct async path for immediate durability guarantee
 	const queueKey = eventsPath;
 	const prev = asyncQueues.get(queueKey) ?? Promise.resolve();
 	const next = prev.then(async (): Promise<TeamEvent> => {

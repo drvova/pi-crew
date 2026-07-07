@@ -1,7 +1,8 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { promisify } from "node:util";
 import { loadConfig } from "../config/config.ts";
 import { DEFAULT_PATHS } from "../config/defaults.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
@@ -19,6 +20,8 @@ export interface PreparedTaskWorkspace {
 	nodeModulesLinked?: boolean;
 	syntheticPaths?: string[];
 }
+
+const execFileAsync = promisify(execFile);
 
 export interface WorktreeDiffStat {
 	filesChanged: number;
@@ -69,6 +72,52 @@ function git(cwd: string, args: string[]): string {
 	}).trim();
 }
 
+/** Build the sanitized env object shared by all git operations. */
+function gitEnv(): Record<string, string> {
+	return {
+		...sanitizeEnvSecrets(process.env, {
+			allowList: [
+				"PATH",
+				"HOME",
+				"USER",
+				...WINDOWS_ESSENTIAL_ENV_VARS,
+				"SHELL",
+				"TERM",
+				"LANG",
+				"LC_ALL",
+				"LC_COLLATE",
+				"LC_CTYPE",
+				"LC_MESSAGES",
+				"XDG_CONFIG_HOME",
+				"XDG_DATA_HOME",
+				"XDG_CACHE_HOME",
+				"NVM_BIN",
+				"NVM_DIR",
+				"NODE_PATH",
+				"GIT_CONFIG_GLOBAL",
+				"GIT_CONFIG_SYSTEM",
+				"GIT_AUTHOR_NAME",
+				"GIT_AUTHOR_EMAIL",
+				"GIT_COMMITTER_NAME",
+				"GIT_COMMITTER_EMAIL",
+			],
+		}),
+		LANG: "en_US.UTF-8",
+		LC_ALL: "en_US.UTF-8",
+	};
+}
+
+async function gitAsync(cwd: string, args: string[]): Promise<string> {
+	const { stdout } = await execFileAsync("git", args, {
+		cwd,
+		encoding: "utf-8",
+		stdio: ["ignore", "pipe", "pipe"],
+		env: gitEnv(),
+		windowsHide: true,
+	});
+	return stdout.trim();
+}
+
 // Dots are removed from branch names since they are used in path construction,
 // and dots could cause ambiguity with relative path handling on some platforms.
 // Branch names themselves support dots in git, but we strip them for safe path use.
@@ -90,6 +139,41 @@ export function assertCleanLeader(repoRoot: string): void {
 	if (status.trim()) {
 		throw new Error("Worktree mode requires a clean leader repository. Commit/stash changes or use workspaceMode: 'single'.");
 	}
+}
+
+// --- Async versions ---
+
+/** Cache for findGitRoot results keyed by cwd. Cleared per-run. */
+const _gitRootCache = new Map<string, string>();
+
+/** Clear the findGitRoot cache. Call at the start of each team run. */
+export function clearGitRootCache(): void {
+	_gitRootCache.clear();
+}
+
+export async function findGitRootAsync(cwd: string): Promise<string> {
+	const cached = _gitRootCache.get(cwd);
+	if (cached) return cached;
+	const root = await gitAsync(cwd, ["rev-parse", "--show-toplevel"]);
+	_gitRootCache.set(cwd, root);
+	return root;
+}
+
+/** Cache for assertCleanLeader results keyed by repoRoot. Cleared per-run. */
+const _cleanLeaderCache = new Set<string>();
+
+/** Clear the assertCleanLeader cache. Call at the start of each team run. */
+export function clearCleanLeaderCache(): void {
+	_cleanLeaderCache.clear();
+}
+
+export async function assertCleanLeaderAsync(repoRoot: string): Promise<void> {
+	if (_cleanLeaderCache.has(repoRoot)) return;
+	const status = await gitAsync(repoRoot, ["status", "--porcelain"]);
+	if (status.trim()) {
+		throw new Error("Worktree mode requires a clean leader repository. Commit/stash changes or use workspaceMode: 'single'.");
+	}
+	_cleanLeaderCache.add(repoRoot);
 }
 
 function linkNodeModulesIfPresent(repoRoot: string, worktreePath: string): boolean {
@@ -348,6 +432,40 @@ function pruneStaleWorktrees(repoRoot: string): void {
 	}
 }
 
+async function branchExistsAsync(repoRoot: string, branch: string): Promise<{ local: boolean; remoteOnly: boolean }> {
+	let local = false;
+	try {
+		await gitAsync(repoRoot, ["rev-parse", "--verify", `refs/heads/${branch}`]);
+		local = true;
+	} catch {}
+	if (local) return { local: true, remoteOnly: false };
+	// Check remote-tracking branch
+	try {
+		const out = (
+			await execFileAsync("git", ["for-each-ref", "--format=%(refname)", `refs/remotes/*/${branch}`], {
+				cwd: repoRoot,
+				encoding: "utf-8",
+				stdio: ["ignore", "pipe", "pipe"],
+				windowsHide: true,
+			})
+		).stdout.trim();
+		return { local: false, remoteOnly: out.length > 0 };
+	} catch {
+		return { local: false, remoteOnly: false };
+	}
+}
+
+async function pruneStaleWorktreesAsync(repoRoot: string): Promise<void> {
+	try {
+		await execFileAsync("git", ["worktree", "prune"], {
+			cwd: repoRoot,
+			stdio: ["ignore", "ignore", "ignore"],
+		});
+	} catch {
+		/* best-effort */
+	}
+}
+
 /**
  * Normalize and validate seed paths — ensure all paths stay within repoRoot.
  * Rejects path traversal (../) and absolute paths.
@@ -582,6 +700,144 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 	};
 }
 
+/** Async version of prepareTaskWorkspace — yields the event loop during git operations. */
+export async function prepareTaskWorkspaceAsync(
+	manifest: TeamRunManifest,
+	task: TeamTaskState,
+	stepSeedPaths?: string[],
+): Promise<PreparedTaskWorkspace> {
+	if (manifest.workspaceMode !== "worktree") return { cwd: task.cwd };
+	const repoRoot = await findGitRootAsync(manifest.cwd);
+	const loadedConfig = loadConfig(manifest.cwd);
+	if (loadedConfig.config.requireCleanWorktreeLeader !== false) await assertCleanLeaderAsync(repoRoot);
+	const sanitizedRunId = manifest.runId.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^-+|-+$/g, "") || "run";
+	const worktreeRoot = path.join(projectCrewRoot(manifest.cwd), DEFAULT_PATHS.state.worktreesSubdir, sanitizedRunId);
+	fs.mkdirSync(worktreeRoot, { recursive: true });
+	let resolvedWorktreeRoot = worktreeRoot;
+	try {
+		const r = fs.realpathSync.native(worktreeRoot);
+		resolvedWorktreeRoot = r.startsWith("\\\\?\\") ? r.slice(4) : r;
+	} catch {
+		try {
+			resolvedWorktreeRoot = fs.realpathSync(worktreeRoot);
+		} catch {
+			/* keep as-is */
+		}
+	}
+	const sanitizedTaskId = sanitizeBranchPart(task.id);
+	const worktreePath = path.join(resolvedWorktreeRoot, sanitizedTaskId);
+	const branch = `pi-crew/${sanitizeBranchPart(manifest.runId)}/${sanitizeBranchPart(task.id)}`;
+	let worktreeExists = false;
+	try {
+		const worktreeList = await gitAsync(repoRoot, ["worktree", "list", "--porcelain"]);
+		const normalizedWtPath =
+			process.platform === "win32"
+				? (() => {
+						try {
+							const r = fs.realpathSync.native(worktreePath);
+							return r.startsWith("\\\\?\\") ? r.slice(4) : r;
+						} catch {
+							return worktreePath;
+						}
+					})()
+						.replace(/\\/g, "/")
+						.toLowerCase()
+				: worktreePath;
+		worktreeExists = worktreeList.split("\n").some((line) => {
+			const trimmed = line.trim();
+			const matchPath = trimmed.startsWith("worktree ") ? trimmed.slice(9) : trimmed;
+			if (process.platform === "win32") {
+				return matchPath.replace(/\\/g, "/").toLowerCase() === normalizedWtPath;
+			}
+			return matchPath === worktreePath;
+		});
+	} catch {
+		worktreeExists = false;
+	}
+	if (worktreeExists) {
+		let currentBranch: string;
+		try {
+			currentBranch = await gitAsync(worktreePath, ["rev-parse", "--abbrev-ref", "HEAD"]);
+		} catch (gitError) {
+			throw new Error(
+				`Existing worktree at ${worktreePath} is not a valid git repository; cannot verify branch: ${gitError instanceof Error ? gitError.message : String(gitError)}`,
+			);
+		}
+		if (currentBranch !== branch) {
+			throw new Error(`Existing worktree branch mismatch at ${worktreePath}: expected '${branch}', got '${currentBranch}'.`);
+		}
+		const dirtyStatus = await gitAsync(worktreePath, ["status", "--porcelain"]);
+		if (dirtyStatus.trim()) {
+			logInternalError(
+				"worktree.reused.dirty",
+				new Error(`Discarding uncommitted changes in reused worktree at ${worktreePath}`),
+				`runId=${manifest.runId}, taskId=${task.id}, dirtyStatus=${dirtyStatus.trim()}`,
+			);
+			await gitAsync(worktreePath, ["checkout", "--", "."]);
+			await gitAsync(worktreePath, ["clean", "-fd"]);
+		}
+		const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
+		const mergedReused = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
+		if (mergedReused.length > 0) {
+			overlaySeedPaths(repoRoot, worktreePath, mergedReused);
+		}
+		// Re-validate leader is still clean before reusing
+		// Note: this intentionally skips the cache to re-check the live state.
+		_cleanLeaderCache.delete(repoRoot);
+		await assertCleanLeaderAsync(repoRoot);
+		return { cwd: worktreePath, worktreePath, branch, reused: true };
+	}
+	await pruneStaleWorktreesAsync(repoRoot);
+	const exists = await branchExistsAsync(repoRoot, branch);
+	let worktreeCreated = false;
+	try {
+		if (exists.local) {
+			await gitAsync(repoRoot, ["worktree", "add", worktreePath, branch]);
+		} else {
+			if (exists.remoteOnly) {
+				logInternalError(
+					"worktree.branchRemoteOnly",
+					new Error(`Branch '${branch}' exists only on remote; creating local from HEAD instead of tracking remote.`),
+					`branch=${branch}`,
+				);
+			}
+			await gitAsync(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
+		}
+		worktreeCreated = true;
+	} catch (error) {
+		if (fs.existsSync(worktreePath)) {
+			try {
+				fs.rmSync(worktreePath, { recursive: true, force: true });
+			} catch {
+				/* best-effort cleanup */
+			}
+		}
+		const msg = error instanceof Error ? error.message : String(error);
+		if (/already checked out|is already used by worktree/i.test(msg)) {
+			throw new Error(
+				`Branch '${branch}' is checked out at another worktree. Run \`team cleanup runId=${manifest.runId} force=true\` or manually remove the conflicting worktree.`,
+			);
+		}
+		throw error;
+	}
+	const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
+	const nodeModulesLinked =
+		loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
+	const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
+	const merged = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
+	if (merged.length > 0) {
+		overlaySeedPaths(repoRoot, worktreePath, merged);
+	}
+	return {
+		cwd: worktreePath,
+		worktreePath,
+		branch,
+		reused: false,
+		nodeModulesLinked,
+		syntheticPaths,
+	};
+}
+
 export function captureWorktreeDiffStat(worktreePath: string): WorktreeDiffStat {
 	try {
 		const diffStat = git(worktreePath, ["diff", "--stat"]);
@@ -601,9 +857,38 @@ export function captureWorktreeDiffStat(worktreePath: string): WorktreeDiffStat 
 	}
 }
 
+export async function captureWorktreeDiffStatAsync(worktreePath: string): Promise<WorktreeDiffStat> {
+	try {
+		const diffStat = await gitAsync(worktreePath, ["diff", "--stat"]);
+		const numstat = await gitAsync(worktreePath, ["diff", "--numstat"]);
+		let filesChanged = 0;
+		let insertions = 0;
+		let deletions = 0;
+		for (const line of numstat.split(/\r?\n/).filter(Boolean)) {
+			const [add, del] = line.split(/\s+/);
+			filesChanged += 1;
+			insertions += Number(add) || 0;
+			deletions += Number(del) || 0;
+		}
+		return { filesChanged, insertions, deletions, diffStat };
+	} catch {
+		return { filesChanged: 0, insertions: 0, deletions: 0, diffStat: "" };
+	}
+}
+
 export function captureWorktreeDiff(worktreePath: string): string {
 	try {
 		return git(worktreePath, ["diff", "--stat"]) + "\n\n" + git(worktreePath, ["diff"]);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		return `Failed to capture worktree diff: ${message}`;
+	}
+}
+
+export async function captureWorktreeDiffAsync(worktreePath: string): Promise<string> {
+	try {
+		const [stat, full] = await Promise.all([gitAsync(worktreePath, ["diff", "--stat"]), gitAsync(worktreePath, ["diff"])]);
+		return stat + "\n\n" + full;
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return `Failed to capture worktree diff: ${message}`;
@@ -635,6 +920,29 @@ export function prepareAgentWorktree(manifest: TeamRunManifest, agentId: string)
 		const branch = `pi-crew/${sanitizedRunId}/${sanitizedAgentId}`;
 		pruneStaleWorktrees(repoRoot);
 		git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
+		const nodeModulesLinked =
+			loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
+		return { cwd: worktreePath, worktreePath, branch, nodeModulesLinked };
+	} catch {
+		// Graceful fallback: no git repo, dirty leader, or git error → run normally.
+		return undefined;
+	}
+}
+
+/** Async version of prepareAgentWorktree — yields the event loop during git operations. */
+export async function prepareAgentWorktreeAsync(manifest: TeamRunManifest, agentId: string): Promise<PreparedTaskWorkspace | undefined> {
+	try {
+		const repoRoot = await findGitRootAsync(manifest.cwd);
+		const loadedConfig = loadConfig(manifest.cwd);
+		if (loadedConfig.config.requireCleanWorktreeLeader !== false) await assertCleanLeaderAsync(repoRoot);
+		const sanitizedRunId = manifest.runId.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^-+|-+$/g, "") || "run";
+		const worktreeRoot = path.join(projectCrewRoot(manifest.cwd), DEFAULT_PATHS.state.worktreesSubdir, sanitizedRunId);
+		fs.mkdirSync(worktreeRoot, { recursive: true });
+		const sanitizedAgentId = sanitizeBranchPart(agentId);
+		const worktreePath = path.join(worktreeRoot, sanitizedAgentId);
+		const branch = `pi-crew/${sanitizedRunId}/${sanitizedAgentId}`;
+		await pruneStaleWorktreesAsync(repoRoot);
+		await gitAsync(repoRoot, ["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
 		const nodeModulesLinked =
 			loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
 		return { cwd: worktreePath, worktreePath, branch, nodeModulesLinked };
@@ -693,6 +1001,62 @@ export function cleanupAgentWorktree(manifest: TeamRunManifest, worktreePath: st
 	try {
 		const repoRoot = findGitRoot(manifest.cwd);
 		git(repoRoot, ["worktree", "prune"]);
+	} catch (error) {
+		logInternalError("worktree.agent-cleanup.prune", error, `worktreePath=${worktreePath}`);
+	}
+}
+
+/** Async version of cleanupAgentWorktree — caches findGitRoot and yields during git operations. */
+export async function cleanupAgentWorktreeAsync(manifest: TeamRunManifest, worktreePath: string, branch?: string): Promise<void> {
+	// Capture diff as artifact (best-effort).
+	try {
+		const diff = await captureWorktreeDiffAsync(worktreePath);
+		if (diff.trim() && !diff.startsWith("Failed to capture worktree diff")) {
+			writeArtifact(manifest.artifactsRoot, {
+				kind: "diff",
+				relativePath: `wf/worktree-diff-${Date.now()}-${randomBytes(2).toString("hex")}.diff`,
+				content: diff,
+				producer: "dynamic-workflow",
+			});
+		}
+	} catch (error) {
+		logInternalError("worktree.agent-cleanup.diff", error, `worktreePath=${worktreePath}`);
+	}
+	// Resolve repoRoot once and reuse (cache optimization).
+	let repoRoot: string | undefined;
+	try {
+		repoRoot = await findGitRootAsync(manifest.cwd);
+	} catch {
+		// Cannot resolve repoRoot — fall back to fs.rm for the worktree.
+		try {
+			fs.rmSync(worktreePath, { recursive: true, force: true });
+		} catch (rmError) {
+			logInternalError("worktree.agent-cleanup.rm", rmError, `worktreePath=${worktreePath}`);
+		}
+		return;
+	}
+	// Remove worktree (best-effort). Try git first, then fall back to fs.rm.
+	try {
+		await gitAsync(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+	} catch (error) {
+		logInternalError("worktree.agent-cleanup.remove", error, `worktreePath=${worktreePath}`);
+		try {
+			fs.rmSync(worktreePath, { recursive: true, force: true });
+		} catch (rmError) {
+			logInternalError("worktree.agent-cleanup.rm", rmError, `worktreePath=${worktreePath}`);
+		}
+	}
+	// Delete the ephemeral agent branch (best-effort).
+	if (branch) {
+		try {
+			await gitAsync(repoRoot, ["branch", "-D", branch]);
+		} catch (error) {
+			logInternalError("worktree.agent-cleanup.branch", error, `branch=${branch}`);
+		}
+	}
+	// Prune stale worktree refs (best-effort).
+	try {
+		await gitAsync(repoRoot, ["worktree", "prune"]);
 	} catch (error) {
 		logInternalError("worktree.agent-cleanup.prune", error, `worktreePath=${worktreePath}`);
 	}

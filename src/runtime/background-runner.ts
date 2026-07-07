@@ -714,6 +714,9 @@ async function main(): Promise<void> {
 				switch (manifest.runKind ?? "team-run") {
 					default: {
 						// Existing "team-run" path — unchanged behavior.
+						// Forward budget fields from manifest (set by team-tool/run.ts
+						// from params.budgetTotal/etc.) so the team-runner's
+						// checkPerTaskBudget guard actually arms.
 						result = await executeTeamRun({
 							manifest,
 							tasks,
@@ -728,6 +731,10 @@ async function main(): Promise<void> {
 							reliability: runConfig.reliability,
 							workspaceId: manifest.ownerSessionId ?? manifest.cwd,
 							signal: abortController.signal,
+							...(manifest.budgetTotal !== undefined ? { budgetTotal: manifest.budgetTotal } : {}),
+							...(manifest.budgetWarning !== undefined ? { budgetWarning: manifest.budgetWarning } : {}),
+							...(manifest.budgetAbort !== undefined ? { budgetAbort: manifest.budgetAbort } : {}),
+							...(manifest.budgetUnlimited !== undefined ? { budgetUnlimited: manifest.budgetUnlimited } : {}),
 						});
 						break;
 					}

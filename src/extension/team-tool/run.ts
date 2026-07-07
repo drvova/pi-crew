@@ -12,7 +12,7 @@ import { createRunManifest, loadRunManifestById, updateRunStatus } from "../../s
 import { allTeams, discoverTeams } from "../../teams/discover-teams.ts";
 import { allWorkflows, discoverWorkflows } from "../../workflows/discover-workflows.ts";
 import { validateWorkflowForTeam } from "../../workflows/validate-workflow.ts";
-import { assertCleanLeader, findGitRoot } from "../../worktree/worktree-manager.ts";
+import { assertCleanLeaderAsync, findGitRootAsync } from "../../worktree/worktree-manager.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- type-only import for TS inference
 const _typeCheck: typeof ExecuteTeamRunFn = null as never as typeof ExecuteTeamRunFn;
@@ -226,7 +226,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	let resolvedCtx = ctx;
 	if (workingDir) {
 		try {
-			const gitRoot = findGitRoot(workingDir);
+			const gitRoot = await findGitRootAsync(workingDir);
 			if (gitRoot && gitRoot !== workingDir) {
 				resolvedCtx = { ...ctx, cwd: gitRoot };
 			}
@@ -241,7 +241,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	if (params.workspaceMode === "worktree") {
 		let gitRoot: string | undefined;
 		try {
-			gitRoot = findGitRoot(resolvedCtx.cwd);
+			gitRoot = await findGitRootAsync(resolvedCtx.cwd);
 		} catch {
 			// not a git repo
 		}
@@ -256,7 +256,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		const preCheckConfig = loadConfig(resolvedCtx.cwd);
 		if (preCheckConfig.config.requireCleanWorktreeLeader !== false) {
 			try {
-				assertCleanLeader(gitRoot);
+				await assertCleanLeaderAsync(gitRoot);
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
 				return result(
@@ -573,10 +573,31 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	const executedConfig = effectiveRunConfig(loadedConfig.config, params.config);
 	const runtime = await resolveCrewRuntime(executedConfig);
 	const runtimeResolution = runtimeResolutionState(runtime);
+	// DEBUG: log what we received (gated to avoid stdout pollution in production)
+	if (process.env.PI_CREW_DEBUG_BUDGET === "1") {
+		console.log(
+			"[DEBUG budget] params keys:",
+			Object.keys(params),
+			"budgetTotal:",
+			params.budgetTotal,
+			"budgetWarning:",
+			params.budgetWarning,
+			"budgetAbort:",
+			params.budgetAbort,
+		);
+	}
 	const executionManifest = {
 		...updatedManifest,
 		runtimeResolution,
 		runConfig: executedConfig,
+		// Persist budget config on the manifest so it's observable post-run
+		// (events.jsonl, status reads, audits). The team-runner reads these
+		// from the input, but persisting them means consumers can verify
+		// enforcement was armed without re-parsing the original call params.
+		...(params.budgetTotal !== undefined ? { budgetTotal: params.budgetTotal } : {}),
+		...(params.budgetWarning !== undefined ? { budgetWarning: params.budgetWarning } : {}),
+		...(params.budgetAbort !== undefined ? { budgetAbort: params.budgetAbort } : {}),
+		...(params.budgetUnlimited !== undefined ? { budgetUnlimited: params.budgetUnlimited } : {}),
 		updatedAt: new Date().toISOString(),
 	};
 	atomicWriteJson(paths.manifestPath, executionManifest);
@@ -862,6 +883,10 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 					metricRegistry: ctx.metricRegistry,
 					onJsonEvent: ctx.onJsonEvent,
 					workspaceId: ctx.sessionId ?? ctx.cwd,
+					budgetTotal: params.budgetTotal,
+					budgetWarning: params.budgetWarning,
+					budgetAbort: params.budgetAbort,
+					budgetUnlimited: params.budgetUnlimited,
 				});
 			} finally {
 				unregisterActiveRun(updatedManifest.runId);
@@ -1006,6 +1031,10 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 			metricRegistry: ctx.metricRegistry,
 			onJsonEvent: ctx.onJsonEvent,
 			workspaceId: ctx.cwd,
+			budgetTotal: params.budgetTotal,
+			budgetWarning: params.budgetWarning,
+			budgetAbort: params.budgetAbort,
+			budgetUnlimited: params.budgetUnlimited,
 		});
 	} finally {
 		unregisterActiveRun(updatedManifest.runId);

@@ -32,7 +32,7 @@ import { appendMailboxMessage, readMailbox } from "../state/mailbox.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
 import { logInternalError } from "../utils/internal-error.ts";
-import { cleanupAgentWorktree, prepareAgentWorktree } from "../worktree/worktree-manager.ts";
+import { cleanupAgentWorktreeAsync, prepareAgentWorktreeAsync } from "../worktree/worktree-manager.ts";
 import { runChildPi } from "./child-pi.ts";
 import type { DwfCheckpointState } from "./dwf-state-store.ts";
 import { mapConcurrent } from "./parallel-utils.ts";
@@ -342,7 +342,7 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				// when worktree creation is unavailable (no git repo, dirty leader).
 				let agentCwd = manifest.cwd;
 				if (call.worktree === true) {
-					const wt = prepareAgentWorktree(manifest, `dwf-agent-${Date.now()}-${randomBytes(4).toString("hex")}`);
+					const wt = await prepareAgentWorktreeAsync(manifest, `dwf-agent-${Date.now()}-${randomBytes(4).toString("hex")}`);
 					if (wt?.worktreePath) {
 						agentCwd = wt.cwd;
 						worktreePath = wt.worktreePath;
@@ -431,7 +431,7 @@ export function makeWorkflowCtx(manifest: TeamRunManifest, opts: MakeWorkflowCtx
 				// — a leak must never crash the workflow.
 				if (worktreePath) {
 					try {
-						cleanupAgentWorktree(manifest, worktreePath, worktreeBranch);
+						await cleanupAgentWorktreeAsync(manifest, worktreePath, worktreeBranch);
 					} catch (cleanupError) {
 						logInternalError("dynamic-workflow-context.worktree-cleanup", cleanupError, `worktreePath=${worktreePath}`);
 					}
