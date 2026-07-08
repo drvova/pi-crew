@@ -173,6 +173,9 @@ export function isSymlinkSafePath(filePath: string): boolean {
 // speed-up — when in doubt the next call's statSync re-verifies.
 const SYMLINK_SAFE_TTL_MS = 30_000;
 const SYMLINK_SAFE_MAX_ENTRIES = 128;
+// NOTE: This cache is process-local and assumes single-threaded access.
+// If worker-thread usage expands (e.g., worker-atomic-writer.ts), this cache
+// would need synchronization (e.g., a Mutex or WeakRef pattern).
 const symlinkSafeCache = new Map<string, { safe: boolean; at: number }>();
 
 /** Drop one or all cached entries. */
@@ -212,9 +215,14 @@ function isSymlinkSafeDirCached(filePath: string): boolean {
 	const hit = symlinkSafeCache.get(dir);
 	if (hit && now - hit.at < SYMLINK_SAFE_TTL_MS) return hit.safe;
 	// Cache miss: evaluate the ancestor-chain safety of the DIRECTORY itself.
-	// Passing `dir` (not `filePath`) makes the verdict target-independent: it
-	// walks dir's ancestors and verifies dir is not a symlink.
-	const verdict = isSymlinkSafePath(dir);
+	// Pass a synthetic file path (dir + sentinel) so `dir` is checked as an
+	// ANCESTOR rather than a target file. When `dir` itself is a symlink
+	// (e.g. macOS /tmp → /private/tmp), the ancestor-walk logic resolves it
+	// and verifies ownership — accepting known system temp dirs. Passing `dir`
+	// bare would hit the target-file symlink check at the bottom of
+	// isSymlinkSafePath, which rejects ALL symlinks without ownership
+	// resolution, causing false rejections for legitimate system dirs.
+	const verdict = isSymlinkSafePath(path.join(dir, ".symlink-safe-check"));
 	symlinkSafeCache.set(dir, { safe: verdict, at: now });
 	// Bound the cache to avoid unbounded growth across many cwds.
 	while (symlinkSafeCache.size > SYMLINK_SAFE_MAX_ENTRIES) {
@@ -580,42 +588,22 @@ export async function atomicWriteFileAsync(filePath: string, content: string, op
 		// still guarantees the reader sees either prior or new content, never torn.
 		if (durability === "full") await fd.sync();
 		await fd.close();
-		try {
-			// Re-check symlink safety immediately before rename.
-			// Between the initial isSymlinkSafePath check and here,
-			// an attacker with control of an ancestor directory could plant a
-			// symlink at the target path. If rename succeeds with a symlink at
-			// target, the symlink is atomically replaced with attacker's content.
-			// The post-rename lstat check only runs on rename failure, so we must
-			// check BEFORE the rename to catch this TOCTOU race.
-			if (!isSymlinkSafeDirCached(filePath)) {
-				try {
-					await fs.promises.rm(tempPath, { force: true });
-				} catch {
-					/* best-effort */
-				}
-				throw new Error(`Refusing to rename: target became a symlink or inside untrusted directory: ${filePath}`);
-			}
-			// Issue 1 fix: use link+unlink instead of rename to avoid following symlinks
-			await renameWithLinkAsync(tempPath, filePath);
-		} catch (renameError) {
-			let matches = false;
-			try {
-				const existing = await fs.promises.readFile(filePath, "utf-8");
-				matches = existing === content;
-			} catch {
-				/* ignore */
-			}
-			if (matches) {
-				try {
-					await fs.promises.rm(tempPath, { force: true });
-				} catch (cleanupError) {
-					logInternalError("atomic-write.cleanupAsync", cleanupError, `tempPath=${tempPath}`);
-				}
-				return;
-			}
-			throw renameError;
+		// Re-check symlink safety immediately before rename.
+		// Between the initial isSymlinkSafePath check and here,
+		// an attacker with control of an ancestor directory could plant a
+		// symlink at the target path. If rename succeeds with a symlink at
+		// target, the symlink is atomically replaced with attacker's content.
+		// The post-rename lstat check only runs on rename failure, so we must
+		// check BEFORE the rename to catch this TOCTOU race.
+		if (!isSymlinkSafeDirCached(filePath)) {
+			throw new Error(`Refusing to rename: target became a symlink or inside untrusted directory: ${filePath}`);
 		}
+		// Issue 1 fix: use link+unlink instead of rename to avoid following symlinks.
+		// Align with sync path: no content-match fallback after failed rename.
+		// The racy readFile after failed rename is unreliable (another process
+		// could write between the failed rename and the read) and inconsistent
+		// with the sync path which just throws.
+		await renameWithLinkAsync(tempPath, filePath);
 	} catch (error) {
 		try {
 			await fs.promises.rm(tempPath, { force: true });

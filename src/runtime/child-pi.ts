@@ -31,6 +31,18 @@ const MAX_COMPACT_CONTENT_CHARS = DEFAULT_CHILD_PI.maxCompactContentChars;
 const activeChildProcesses = new Map<number, ChildProcess>();
 const childHardKillTimers = new Map<number, NodeJS.Timeout>();
 
+// Periodic cleanup of dead child process entries to prevent memory leaks.
+// If a child process never emits exit/close (zombie), the entry would leak.
+setInterval(() => {
+	for (const [pid, child] of activeChildProcesses) {
+		try {
+			process.kill(pid, 0); // Throws ESRCH if dead
+		} catch {
+			activeChildProcesses.delete(pid);
+		}
+	}
+}, 60_000).unref();
+
 /**
  * SEC-1: Extract a redacted stderr/stdout excerpt for embedding in lifecycle
  * events and error messages. The in-memory stdout/stderr accumulators receive
@@ -1179,8 +1191,14 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 					// that fires the drain early if stdout goes quiet for `quietMs`
 					// after the final assistant event. Heavy children that emit a
 					// stopReason=stop message_end and then sit idle will exit in
-					// ~quietMs (default 800 ms) instead of up to 5 s. unref() so
+					// ~quietMs (default 800 ms) instead of up to up to 5 s. unref() so
 					// the poller never holds the event loop on shutdown.
+					// NOTE: The polling watcher is NOT explicitly cleared on process exit.
+					// This is safe because: (1) it's unref()'d, so it won't prevent exit;
+					// (2) the `settled || childExited` guard at the top prevents firing
+					// after the child has exited; (3) sending SIGTERM to an already-
+					// exiting process is harmless. The `finalDrainQuietMs` config allows
+					// disabling this behavior (set >= finalDrainMs, e.g., 10000).
 					const quietMs = input.finalDrainQuietMs ?? DEFAULT_CHILD_PI.finalDrainQuietMs;
 					if (quietMs < (input.finalDrainMs ?? DEFAULT_CHILD_PI.finalDrainMs)) {
 						const pollHandle = setInterval(() => {

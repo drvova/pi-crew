@@ -22,6 +22,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { logInternalError } from "../utils/internal-error.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
 import type { BeforeAgentStartEvent, ExtensionAPI } from "./pi-api.ts";
 
@@ -259,6 +260,13 @@ export function readKnowledge(cwd: string, query?: KnowledgeQuery): string {
 			knowledgeCache.delete(p);
 			return "";
 		}
+		// Security: reject symlinks to prevent information disclosure.
+		// An attacker could replace knowledge.md with a symlink to /etc/shadow
+		// or other sensitive files.
+		if (stat.isSymbolicLink) {
+			logInternalError("knowledge-injection.symlink", new Error(`Refusing to read symlink: ${p}`));
+			return "";
+		}
 		// P5 (Round 15): mtime+size cache. readKnowledge fires on every agent
 		// start (main session + every worker), re-reading the file each time.
 		// For a run with N workers this is N redundant readFileSync of the same
@@ -322,10 +330,11 @@ export function readKnowledge(cwd: string, query?: KnowledgeQuery): string {
 }
 
 /** Stat helper returning undefined on error (file missing, perms, etc.). */
-function tryStat(p: string): { mtimeMs: number; size: number } | undefined {
+function tryStat(p: string): { mtimeMs: number; size: number; isSymbolicLink: boolean } | undefined {
 	try {
-		const s = fs.statSync(p);
-		return { mtimeMs: s.mtimeMs, size: s.size };
+		// Use lstatSync to detect symlinks (statSync follows them).
+		const s = fs.lstatSync(p);
+		return { mtimeMs: s.mtimeMs, size: s.size, isSymbolicLink: s.isSymbolicLink() };
 	} catch {
 		return undefined;
 	}

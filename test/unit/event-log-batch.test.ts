@@ -3,39 +3,29 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import {
-	appendEvent,
-	appendEventAsync,
-	appendEventBuffered,
-	flushEventLogBuffer,
-	readEvents,
-	resetEventLogMode,
-} from "../../src/state/event-log.ts";
+import { appendEvent, appendEventAsync, appendEventBuffered, readEvents, resetEventLogMode } from "../../src/state/event-log.ts";
 
 test.beforeEach(() => {
 	resetEventLogMode();
 });
 
-test("non-terminal events via appendEventAsync are buffered (not written immediately)", async () => {
+test("non-terminal events via appendEventAsync are written directly (no buffering since v0.9.26)", async () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-batch-async-"));
 	const eventsPath = path.join(dir, "events.jsonl");
 	try {
-		// Use a long buffer timeout so events stay in the buffer until explicit flush
+		// Since v0.9.26, appendEventAsync does NOT buffer — it writes directly.
+		// The buffer was reverted because mixing sync and async lock mechanisms
+		// caused deadlocks. appendEventBuffered is still available for explicit
+		// coalesced writes.
 		const p1 = appendEventAsync(eventsPath, { type: "task.progress", runId: "r1", taskId: "t1", data: { step: 1 } });
 		const p2 = appendEventAsync(eventsPath, { type: "task.checkpoint", runId: "r1", taskId: "t1", data: { step: 2 } });
 
-		// Events should NOT be on disk yet (buffered for 20ms default)
-		// Small delay to confirm they're not immediately written
-		await new Promise((r) => setTimeout(r, 5));
-		assert.equal(fs.existsSync(eventsPath), false, "buffered events should not be on disk yet");
-
-		// Flush the buffer
-		await flushEventLogBuffer();
-
+		// Await both promises — events are written directly (not buffered)
 		const r1 = await p1;
 		const r2 = await p2;
+
 		const events = readEvents(eventsPath);
-		assert.equal(events.length, 2, "both buffered events written after flush");
+		assert.equal(events.length, 2, "both events written directly");
 		// Seq should be monotonic
 		assert.ok((r1.metadata?.seq ?? 0) < (r2.metadata?.seq ?? 0), "seq should be monotonic");
 	} finally {

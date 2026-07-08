@@ -75,6 +75,9 @@ export interface ManifestCacheEntry {
 // cache was invalidated, so a write to run A caused a hot-path miss in run B's
 // cache even though B's on-disk files were untouched. With per-stateRoot
 // generations, run B only misses its own cache when its own writes happen.
+// NOTE: This generation counter is process-local. Cross-process consistency
+// (e.g., parent + child processes writing to the same run) relies on the
+// mtime/size checks in loadRunManifestById, not on this counter.
 const manifestCacheGeneration = new Map<string, number>();
 function genOf(stateRoot: string): number {
 	return manifestCacheGeneration.get(stateRoot) ?? 0;
@@ -345,13 +348,28 @@ export function saveRunManifest(manifest: TeamRunManifest): void {
 	// on next read, but the returned empty tasks array could confuse callers
 	// that don't re-read.
 	const manifestStat = fs.statSync(manifestPath);
+	// Read tasks.json if it exists to avoid cache inconsistency.
+	// Without this, loadRunManifestById returns empty tasks even when tasks.json
+	// has real data, causing incorrect task state display.
+	let tasks: TeamTaskState[] = [];
+	let tasksMtimeMs = 0;
+	let tasksSize = 0;
+	try {
+		const tasksPath = path.join(manifest.stateRoot, "tasks.json");
+		const tasksStat = fs.statSync(tasksPath);
+		tasks = JSON.parse(fs.readFileSync(tasksPath, "utf-8")) as TeamTaskState[];
+		tasksMtimeMs = tasksStat.mtimeMs;
+		tasksSize = tasksStat.size;
+	} catch {
+		// tasks.json doesn't exist or is invalid — leave tasks empty
+	}
 	setManifestCache(manifest.stateRoot, {
 		manifest,
-		tasks: [],
+		tasks,
 		manifestMtimeMs: manifestStat.mtimeMs,
 		manifestSize: manifestStat.size,
-		tasksMtimeMs: 0,
-		tasksSize: 0,
+		tasksMtimeMs,
+		tasksSize,
 	});
 }
 

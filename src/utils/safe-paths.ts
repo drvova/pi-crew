@@ -255,7 +255,8 @@ export function resolveRealContainedPath(baseDir: string, targetPath: string): s
 				if (process.platform === "darwin") {
 					const resolvedSymlink = resolvedAccumulated;
 					const knownDarwinSymlinks = ["/var", "/tmp", "/etc", "/private/var", "/private/tmp", "/private/etc"];
-					if (knownDarwinSymlinks.includes(resolvedSymlink)) continue;
+					// Use prefix match to handle subdirectories like /var/folders/...
+					if (knownDarwinSymlinks.some((s) => resolvedSymlink === s || resolvedSymlink.startsWith(s + "/"))) continue;
 				}
 				throw new Error("Refusing to resolve: target path ancestor is a symlink: " + resolvedAccumulated);
 			}

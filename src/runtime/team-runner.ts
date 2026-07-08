@@ -171,14 +171,16 @@ export function checkPerTaskBudget(
 	const totalUsed = (usage?.input ?? 0) + (usage?.output ?? 0) + (usage?.cacheWrite ?? 0);
 	const abort = totalUsed >= budgetAbort * budgetTotal;
 	const warning = !abort && totalUsed >= budgetWarning * budgetTotal;
-	const remainingBudget = Math.max(0, budgetTotal - totalUsed);
-	const fairShareThreshold = remainingBudget * fairShareFraction;
+	// Fair share threshold based on TOTAL budget, not remaining budget.
+	// This ensures a task that consumed 60% of total budget is flagged even
+	// if only 40% remains (40% * 50% = 20% threshold would miss the 60% usage).
+	const fairShareThreshold = budgetTotal * fairShareFraction;
 	const fairShareViolators: string[] = [];
 	for (const task of tasks) {
 		if (!task.usage) continue;
 		const taskTotal = (task.usage.input ?? 0) + (task.usage.output ?? 0) + (task.usage.cacheWrite ?? 0);
 		// Only flag tasks that individually consumed a significant portion of the
-		// budget (>10% of total) AND exceeded the fair share of remaining budget.
+		// budget (>10% of total) AND exceeded the fair share threshold.
 		if (fairShareThreshold > 0 && taskTotal > fairShareThreshold && taskTotal > budgetTotal * 0.1) {
 			fairShareViolators.push(task.id);
 		}

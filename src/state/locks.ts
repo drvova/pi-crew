@@ -189,14 +189,13 @@ function readLockToken(filePath: string): string | undefined {
  * With token matching, A's release is a no-op for B's lock.
  */
 function timingSafeTokenMatch(a: string, b: string): boolean {
-	const bufA = Buffer.from(String(a));
-	const bufB = Buffer.from(String(b));
-	const len = Math.max(bufA.length, bufB.length);
-	const safeA = Buffer.alloc(len);
-	const safeB = Buffer.alloc(len);
-	bufA.copy(safeA);
-	bufB.copy(safeB);
-	return timingSafeEqual(safeA, safeB);
+	// Early length check prevents timing side-channel that leaks length info.
+	// Without this, timingSafeEqual compares the full padded length, revealing
+	// that the strings have different lengths via the zero-padding.
+	if (a.length !== b.length) return false;
+	const bufA = Buffer.from(a);
+	const bufB = Buffer.from(b);
+	return timingSafeEqual(bufA, bufB);
 }
 
 function releaseLock(filePath: string, token: string): void {

@@ -83,9 +83,9 @@ test("exact abort boundary (95% exactly)", () => {
 	assert.equal(result.warning, false);
 });
 
-test("fair share violator detected when task exceeds 50% of remaining budget", () => {
-	// budgetTotal=100K, 5K used so far, 95K remaining
-	// Task consumed 70K = 73.7% of remaining (95K) > 50% threshold, and > 10% of total
+test("fair share violator detected when task exceeds 50% of total budget", () => {
+	// budgetTotal=100K, fairShareThreshold = 50K (50% of total)
+	// Task consumed 70K > 50K threshold AND > 10% of total
 	const tasks = [task("a", { input: 70_000, output: 0 }), task("b", { input: 3_000, output: 2_000 })];
 	const result = checkPerTaskBudget(tasks, 100_000, 0.8, 0.95);
 	assert.deepEqual(result.fairShareViolators, ["a"]);
@@ -103,10 +103,10 @@ test("fair share violator NOT flagged when below 10% of total budget", () => {
 });
 
 test("multiple fair share violators", () => {
-	// Two tasks each consuming >50% of remaining budget
-	// total used = 96K, remaining = 4K, fairShareThreshold = 2K
-	// Both tasks consumed 48K each, which is > 2K (50% of remaining) and > 10K (10% of total)
-	const tasks = [task("a", { input: 48_000, output: 0 }), task("b", { input: 48_000, output: 0 })];
+	// Two tasks each consuming >50% of total budget
+	// budgetTotal=100K, fairShareThreshold = 50K (50% of total)
+	// Both tasks consumed 55K each, which is > 50K (50% of total) and > 10K (10% of total)
+	const tasks = [task("a", { input: 55_000, output: 0 }), task("b", { input: 55_000, output: 0 })];
 	const result = checkPerTaskBudget(tasks, 100_000, 0.8, 0.95);
 	assert.deepEqual(result.fairShareViolators.sort(), ["a", "b"]);
 });
