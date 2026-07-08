@@ -82230,8 +82230,13 @@ function formatResetTimer(resetAt) {
   const mins = Math.floor(diffMs / 6e4);
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
-  const remMins = mins % 60;
-  return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
+  if (hours < 48) {
+    const remMins = mins % 60;
+    return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d${remHours}h` : `${days}d`;
 }
 function renderBar(percent, width = 8) {
   const clamped = Math.max(0, Math.min(100, percent));

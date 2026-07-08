@@ -138,8 +138,13 @@ function formatResetTimer(resetAt: string | null): string | null {
 	const mins = Math.floor(diffMs / 60000);
 	if (mins < 60) return `${mins}m`;
 	const hours = Math.floor(mins / 60);
-	const remMins = mins % 60;
-	return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
+	if (hours < 48) {
+		const remMins = mins % 60;
+		return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
+	}
+	const days = Math.floor(hours / 24);
+	const remHours = hours % 24;
+	return remHours > 0 ? `${days}d${remHours}h` : `${days}d`;
 }
 
 // Render provider rate-limit usage as a compact status string with bars.
