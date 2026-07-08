@@ -57,6 +57,15 @@ function installFont() {
 		else log("fontconfig fc-cache not available; restart terminal if font is not visible");
 	}
 
+	if (os === "win32") {
+		// Register the per-user font in HKCU so Windows Terminal and other
+		// apps pick it up for PUA glyph fallback. Copying alone is not enough.
+		const regValue = "Crew Vibes (TrueType)";
+		const regResult = spawnSync("reg", ["add", "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", "/v", regValue, "/t", "REG_SZ", "/d", target, "/f"], { stdio: "ignore" });
+		if (regResult.status === 0) log("Registered crew-vibes font in Windows registry (HKCU)");
+		else log("Windows registry registration skipped (reg.exe unavailable); glyphs may not render until font is installed via Settings");
+	}
+
 	if (os === "darwin" || os === "win32") {
 		log("Restart your terminal (or select a Crew-Vibes-capable font) if glyphs still show as boxes");
 	}

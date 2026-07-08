@@ -179,6 +179,11 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		publishCapacity(ctx);
 		publishSpeedFooter(ctx);
 		startCapacityTimer(ctx);
+		// Set the working indicator early (matches pi's official working-indicator
+		// example) so pi has the custom frames configured before streaming begins.
+		// Calls before the loading animation exists are ignored, so we re-apply on
+		// agent_start/message_update as well.
+		applyIndicator(ctx, null, true);
 	});
 
 	pi.on("agent_start", (_event, ctx) => {
