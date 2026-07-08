@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type CrewVibesConfig, loadConfig, saveConfig } from "./config.ts";
+import { type CrewVibesConfig, loadConfig, PROVIDER_STATUS_ID, saveConfig } from "./config.ts";
 import { isWebTerminal } from "./font-detect.ts";
+import { fetchProviderUsage, clearProviderUsageCache } from "./provider-usage.ts";
 import { intervalForSpeed } from "./figures.ts";
 import {
 	asCrewTheme,
@@ -9,9 +10,11 @@ import {
 	formatSpeed,
 	getCapacityUsage,
 	renderCapacity,
+	renderProviderUsage,
 	renderSpeedFooter,
 	renderWorkingMessage,
 	setCapacityStatus,
+	setProviderStatus,
 	setSpeedStatus,
 } from "./render.ts";
 import { SpeedAnimator, SpeedTracker } from "./speed.ts";
@@ -47,6 +50,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	let liveTimer: ReturnType<typeof setInterval> | undefined;
 	let footerTimer: ReturnType<typeof setInterval> | undefined;
 	let capacityTimer: ReturnType<typeof setInterval> | undefined;
+	let providerTimer: ReturnType<typeof setInterval> | undefined;
 	let catFrameIndex = 0;
 
 	function themeOf(ctx: ExtensionContext) {
@@ -109,6 +113,12 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		capacityTimer = undefined;
 	}
 
+	function stopProviderTimer(): void {
+		if (!providerTimer) return;
+		clearInterval(providerTimer);
+		providerTimer = undefined;
+	}
+
 	function startLiveTimer(ctx: ExtensionContext): void {
 		if (liveTimer || !ctx.hasUI) return;
 		liveTimer = setInterval(() => {
@@ -148,6 +158,31 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		capacityTimer.unref?.();
 	}
 
+	function startProviderTimer(ctx: ExtensionContext): void {
+		if (providerTimer) return;
+		if (!config.capacity.providerUsage) return;
+		const interval = Math.max(10000, config.capacity.providerRefreshMs);
+
+		async function tick(): Promise<void> {
+			if (!config.enabled || !config.capacity.providerUsage) {
+				stopProviderTimer();
+				return;
+			}
+			try {
+				const usage = await fetchProviderUsage(config.capacity.providerRefreshMs);
+				const text = renderProviderUsage(themeOf(ctx), usage);
+				setProviderStatus(ctx, config, text);
+			} catch {
+				// Never crash on provider fetch failure
+				setProviderStatus(ctx, config, undefined);
+			}
+		}
+
+		tick(); // Fetch immediately on start
+		providerTimer = setInterval(tick, interval);
+		providerTimer.unref?.();
+	}
+
 	function resetWorking(ctx: ExtensionContext): void {
 		applyIndicator(ctx, null, true);
 		renderWorking(ctx, speedTracker.lastTokS);
@@ -161,22 +196,26 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			stopLiveTimer();
 			stopFooterTimer();
 			stopCapacityTimer();
+			stopProviderTimer();
 			clearVibesStatus(ctx);
 			return;
 		}
 		publishCapacity(ctx);
 		publishSpeedFooter(ctx);
+		if (config.capacity.providerUsage) startProviderTimer(ctx);
 	}
 
 	pi.on("session_start", (_event, ctx) => {
 		stopLiveTimer();
 		stopFooterTimer();
 		stopCapacityTimer();
+		stopProviderTimer();
 		config = loadConfig();
 		speedTracker.updateConfig(config.speed);
 		footerAnimator.updateDuration(config.speed.renderIntervalMs);
 		speedTracker.resetSession();
 		footerAnimator.reset(null);
+		clearProviderUsageCache();
 		if (!config.enabled) {
 			clearVibesStatus(ctx);
 			return;
@@ -184,6 +223,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		publishCapacity(ctx);
 		publishSpeedFooter(ctx);
 		startCapacityTimer(ctx);
+		startProviderTimer(ctx);
 		// Set the working indicator early (matches pi's official working-indicator
 		// example) so pi has the custom frames configured before streaming begins.
 		// Calls before the loading animation exists are ignored, so we re-apply on
@@ -274,6 +314,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		stopLiveTimer();
 		stopFooterTimer();
 		stopCapacityTimer();
+		stopProviderTimer();
 		clearVibesStatus(ctx);
 		if (ctx.hasUI) ctx.ui.setWidget("crew-vibes-cat", undefined);
 	});

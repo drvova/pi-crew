@@ -5,6 +5,7 @@ import {
 	type CapacityConfig,
 	type CrewVibesConfig,
 	capacityIcons,
+	PROVIDER_STATUS_ID,
 	SPEED_STATUS_ID,
 	type SpeedConfig,
 	type TokenDisplay,
@@ -113,8 +114,73 @@ export function clearVibesStatus(ctx: ExtensionContext): void {
 	if (!ctx?.hasUI) return;
 	ctx.ui.setStatus(SPEED_STATUS_ID, undefined);
 	ctx.ui.setStatus(CAPACITY_STATUS_ID, undefined);
+	ctx.ui.setStatus(PROVIDER_STATUS_ID, undefined);
 	if (ctx.ui.setWorkingIndicator) ctx.ui.setWorkingIndicator();
 	if (ctx.ui.setWorkingMessage) ctx.ui.setWorkingMessage();
+}
+
+// Provider rate-limit usage snapshot (mirrors provider-usage.ts interface).
+// Defined locally to avoid a phase dependency on provider-usage.ts.
+export type ProviderUsage = {
+	fiveHourPercent: number;
+	weeklyPercent: number;
+	resetAt: string | null;
+	copilotMonthlyPercent?: number;
+};
+
+/** Format a time-until-reset duration as a compact `2h30m` / `45m` / `3h` string. */
+function formatResetTimer(resetAt: string | null): string | null {
+	if (!resetAt) return null;
+	const diffMs = new Date(resetAt).getTime() - Date.now();
+	if (diffMs < 0) return null;
+	const mins = Math.floor(diffMs / 60000);
+	if (mins < 60) return `${mins}m`;
+	const hours = Math.floor(mins / 60);
+	const remMins = mins % 60;
+	return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
+}
+
+// Render provider rate-limit usage as a compact status string.
+// Returns `undefined` when there is nothing to show (null usage).
+export function renderProviderUsage(theme: CrewTheme | undefined, usage: ProviderUsage | null): string | undefined {
+	if (!usage) return undefined;
+
+	const parts: string[] = [];
+
+	// 5h window — error color at 80%+, accent otherwise
+	const fiveHourRounded = Math.round(usage.fiveHourPercent);
+	const fiveHourText = `5h: ${fiveHourRounded}%`;
+	const fiveHourColor = usage.fiveHourPercent >= 80 ? "error" : "accent";
+	parts.push(theme ? theme.fg(fiveHourColor, fiveHourText) : fiveHourText);
+
+	// Weekly window — dim
+	const weeklyRounded = Math.round(usage.weeklyPercent);
+	const weeklyText = `Wk: ${weeklyRounded}%`;
+	parts.push(theme ? theme.fg("dim", weeklyText) : weeklyText);
+
+	// Reset timer — dim
+	const resetText = formatResetTimer(usage.resetAt);
+	if (resetText) {
+		parts.push(theme ? theme.fg("dim", resetText) : resetText);
+	}
+
+	// Copilot monthly — dim (optional)
+	if (typeof usage.copilotMonthlyPercent === "number" && Number.isFinite(usage.copilotMonthlyPercent)) {
+		const monthlyRounded = Math.round(usage.copilotMonthlyPercent);
+		const monthlyText = `Mo: ${monthlyRounded}%`;
+		parts.push(theme ? theme.fg("dim", monthlyText) : monthlyText);
+	}
+
+	return parts.join(" ");
+}
+
+export function setProviderStatus(ctx: ExtensionContext, config: CrewVibesConfig, text: string | undefined): void {
+	if (!ctx?.hasUI) return;
+	if (!config.enabled || !config.capacity.providerUsage) {
+		ctx.ui.setStatus(PROVIDER_STATUS_ID, undefined);
+		return;
+	}
+	ctx.ui.setStatus(PROVIDER_STATUS_ID, text);
 }
 
 export { asCrewTheme };

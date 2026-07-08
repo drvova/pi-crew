@@ -10,6 +10,7 @@ import { hasCrewFontFile, isWebTerminal } from "./font-detect.ts";
 
 export const SPEED_STATUS_ID = "pi-crew-speed";
 export const CAPACITY_STATUS_ID = "pi-crew-capacity";
+export const PROVIDER_STATUS_ID = "pi-crew-provider";
 
 function resolveHome(): string {
 	return process.env.PI_TEAMS_HOME?.trim() || process.env.HOME || process.env.USERPROFILE || "";
@@ -43,6 +44,8 @@ export interface CapacityConfig {
 	refreshIntervalMs: number;
 	labels: [string, string, string, string, string, string];
 	icons: [string, string, string, string, string, string];
+	providerUsage: boolean;
+	providerRefreshMs: number;
 }
 
 export interface CrewVibesConfig {
@@ -74,6 +77,8 @@ export const DEFAULT_CONFIG: CrewVibesConfig = {
 		refreshIntervalMs: 2000,
 		labels: ["Orbit", "Cruise", "Warp", "Black Hole", "Supernova", "Big Bang"],
 		icons: ["", "", "", "", "", ""],
+		providerUsage: true,
+		providerRefreshMs: 300000,
 	},
 };
 
@@ -159,6 +164,8 @@ function normalizeCapacity(raw: unknown): CapacityConfig {
 		refreshIntervalMs: positiveFrom(input.refreshIntervalMs, DEFAULT_CONFIG.capacity.refreshIntervalMs),
 		labels: sextet(input.labels, DEFAULT_CONFIG.capacity.labels),
 		icons: sextet(input.icons, DEFAULT_CONFIG.capacity.icons),
+		providerUsage: boolFrom(input.providerUsage, DEFAULT_CONFIG.capacity.providerUsage),
+		providerRefreshMs: positiveFrom(input.providerRefreshMs, DEFAULT_CONFIG.capacity.providerRefreshMs),
 	};
 }
 

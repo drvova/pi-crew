@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { DEFAULT_CONFIG, normalizeConfig } from "../../src/extension/crew-vibes/config.ts";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, test } from "node:test";
+import { DEFAULT_CONFIG, normalizeConfig, PROVIDER_STATUS_ID } from "../../src/extension/crew-vibes/config.ts";
 import { capacityIndex, intervalForSpeed, isDangerStage, RUN_CREW_FRAMES } from "../../src/extension/crew-vibes/figures.ts";
+import { clearProviderUsageCache, fetchProviderUsage } from "../../src/extension/crew-vibes/provider-usage.ts";
 import {
 	asCrewTheme,
 	formatCount,
 	formatSpeed,
 	getCapacityUsage,
 	renderCapacity,
+	renderProviderUsage,
 	renderSpeedFooter,
 	renderWorkingMessage,
 } from "../../src/extension/crew-vibes/render.ts";
@@ -54,7 +59,10 @@ test("normalizeConfig accepts a valid custom sextet and tokenDisplay", () => {
 
 test("RUN_CREW_FRAMES are all equal width so the indicator does not jitter", () => {
 	const widths = RUN_CREW_FRAMES.map((frame) => frame.length);
-	assert.ok(widths.every((width) => width === widths[0]), `frames have unequal widths: ${widths.join(",")}`);
+	assert.ok(
+		widths.every((width) => width === widths[0]),
+		`frames have unequal widths: ${widths.join(",")}`,
+	);
 	assert.ok(RUN_CREW_FRAMES.length >= 3);
 });
 
@@ -174,4 +182,227 @@ test("asCrewTheme returns undefined for non-theme objects", () => {
 	assert.equal(asCrewTheme(undefined), undefined);
 	assert.equal(asCrewTheme({}), undefined);
 	assert.ok(asCrewTheme(theme));
+});
+
+// ---------------------------------------------------------------------------
+// Config: providerUsage defaults + PROVIDER_STATUS_ID
+// ---------------------------------------------------------------------------
+
+test("PROVIDER_STATUS_ID is the expected status id", () => {
+	assert.equal(PROVIDER_STATUS_ID, "pi-crew-provider");
+});
+
+test("DEFAULT_CONFIG has providerUsage enabled with 5min refresh", () => {
+	assert.equal(DEFAULT_CONFIG.capacity.providerUsage, true);
+	assert.equal(DEFAULT_CONFIG.capacity.providerRefreshMs, 300000);
+});
+
+test("normalizeConfig fills providerUsage defaults from empty input", () => {
+	const cfg = normalizeConfig({});
+	assert.equal(cfg.capacity.providerUsage, true);
+	assert.equal(cfg.capacity.providerRefreshMs, 300000);
+});
+
+test("normalizeConfig accepts custom providerUsage settings", () => {
+	const cfg = normalizeConfig({ capacity: { providerUsage: false, providerRefreshMs: 60000 } });
+	assert.equal(cfg.capacity.providerUsage, false);
+	assert.equal(cfg.capacity.providerRefreshMs, 60000);
+});
+
+test("normalizeConfig clamps invalid providerRefreshMs to the default", () => {
+	const negative = normalizeConfig({ capacity: { providerRefreshMs: -5 } });
+	assert.equal(negative.capacity.providerRefreshMs, 300000);
+	const nonNumeric = normalizeConfig({ capacity: { providerRefreshMs: "nope" } });
+	assert.equal(nonNumeric.capacity.providerRefreshMs, 300000);
+});
+
+// ---------------------------------------------------------------------------
+// render.ts: renderProviderUsage
+// ---------------------------------------------------------------------------
+
+test("renderProviderUsage returns undefined for null usage", () => {
+	assert.equal(renderProviderUsage(theme, null), undefined);
+});
+
+test("renderProviderUsage shows accent color under 80%", () => {
+	const usage = { fiveHourPercent: 45, weeklyPercent: 23, resetAt: null };
+	assert.equal(renderProviderUsage(theme, usage), "<accent>5h: 45%</accent> <dim>Wk: 23%</dim>");
+});
+
+test("renderProviderUsage shows error color at 80%+", () => {
+	const usage = { fiveHourPercent: 85, weeklyPercent: 50, resetAt: null };
+	const out = renderProviderUsage(theme, usage);
+	assert.equal(out, "<error>5h: 85%</error> <dim>Wk: 50%</dim>");
+	assert.doesNotMatch(out!, /<accent>/);
+});
+
+test("renderProviderUsage switches accent→error exactly at the 80% boundary", () => {
+	assert.match(renderProviderUsage(theme, { fiveHourPercent: 79, weeklyPercent: 5, resetAt: null })!, /<accent>5h: 79%<\/accent>/);
+	assert.match(renderProviderUsage(theme, { fiveHourPercent: 80, weeklyPercent: 5, resetAt: null })!, /<error>5h: 80%<\/error>/);
+});
+
+test("renderProviderUsage shows reset timer when resetAt is in the future", () => {
+	// ~3h from now; formatResetTimer floors minutes, so the exact h/m digits
+	// depend on sub-second drift — assert the timer segment exists, not its value.
+	const resetAt = new Date(Date.now() + 3 * 3600 * 1000).toISOString();
+	const usage = { fiveHourPercent: 30, weeklyPercent: 10, resetAt };
+	const out = renderProviderUsage(theme, usage);
+	assert.match(out!, /<dim>\d+[hm](\d+[hm])?<\/dim>/);
+});
+
+test("renderProviderUsage omits reset timer when resetAt is in the past", () => {
+	const usage = { fiveHourPercent: 30, weeklyPercent: 10, resetAt: "2000-01-01T00:00:00Z" };
+	assert.equal(renderProviderUsage(theme, usage), "<accent>5h: 30%</accent> <dim>Wk: 10%</dim>");
+});
+
+test("renderProviderUsage includes Copilot monthly percent when present", () => {
+	const usage = { fiveHourPercent: 30, weeklyPercent: 10, resetAt: null, copilotMonthlyPercent: 68 };
+	assert.equal(renderProviderUsage(theme, usage), "<accent>5h: 30%</accent> <dim>Wk: 10%</dim> <dim>Mo: 68%</dim>");
+});
+
+test("renderProviderUsage works without theme (plain text)", () => {
+	const usage = { fiveHourPercent: 45, weeklyPercent: 23, resetAt: null };
+	const out = renderProviderUsage(undefined, usage);
+	assert.equal(out, "5h: 45% Wk: 23%");
+	assert.doesNotMatch(out!, /</);
+});
+
+// ---------------------------------------------------------------------------
+// provider-usage.ts: fetchProviderUsage + cache
+//
+// These tests fully isolate HOME + provider env vars and mock globalThis.fetch
+// so they NEVER make real network calls and never depend on the host machine's
+// real ~/.pi/agent/auth.json.
+// ---------------------------------------------------------------------------
+
+const PROVIDER_ENV_KEYS = ["ANTHROPIC_OAUTH_TOKEN", "COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN", "XDG_CONFIG_HOME"] as const;
+
+/** Build a counting fetch mock whose per-URL handler returns a Response. */
+function makeFetchMock(handler: (url: string) => Response): { fn: typeof fetch; counter: { calls: number } } {
+	const counter = { calls: 0 };
+	const fn = (async (input: RequestInfo | URL, _init?: RequestInit) => {
+		counter.calls++;
+		const url = typeof input === "string" ? input : input.toString();
+		return handler(url);
+	}) as typeof fetch;
+	return { fn, counter };
+}
+
+const ANTHROPIC_USAGE_BODY = {
+	five_hour: { utilization: 45.5, resets_at: "2026-07-08T16:00:00Z" },
+	seven_day: { utilization: 23.0, resets_at: "2026-07-10T00:00:00Z" },
+};
+
+/** Mock that serves the Anthropic usage payload for anthropic URLs, empty JSON otherwise. */
+function anthropicOkMock(): { fn: typeof fetch; counter: { calls: number } } {
+	return makeFetchMock((url) =>
+		url.includes("anthropic")
+			? new Response(JSON.stringify(ANTHROPIC_USAGE_BODY), { status: 200 })
+			: new Response("{}", { status: 200 }),
+	);
+}
+
+describe("provider-usage module", () => {
+	let savedEnv: Record<string, string | undefined>;
+	let savedHome: string | undefined;
+	let tempHome: string;
+
+	beforeEach(() => {
+		savedEnv = {};
+		for (const key of PROVIDER_ENV_KEYS) savedEnv[key] = process.env[key];
+		savedHome = process.env.HOME;
+		tempHome = mkdtempSync(join(tmpdir(), "cv-provider-"));
+		// Start every test from a credential-less, network-less blank slate.
+		for (const key of PROVIDER_ENV_KEYS) delete process.env[key];
+		process.env.HOME = tempHome;
+		clearProviderUsageCache();
+	});
+
+	afterEach(() => {
+		for (const key of PROVIDER_ENV_KEYS) {
+			if (savedEnv[key] === undefined) delete process.env[key];
+			else process.env[key] = savedEnv[key];
+		}
+		if (savedHome === undefined) delete process.env.HOME;
+		else process.env.HOME = savedHome;
+		clearProviderUsageCache();
+		rmSync(tempHome, { recursive: true, force: true });
+	});
+
+	test("fetchProviderUsage returns null when no auth.json and no env token exist", async () => {
+		// tempHome has no ~/.pi/agent/auth.json and no provider env vars are set.
+		const usage = await fetchProviderUsage(0);
+		assert.equal(usage, null);
+	});
+
+	test("fetchProviderUsage caches results within TTL (single network call)", async () => {
+		process.env.ANTHROPIC_OAUTH_TOKEN = "test-token";
+		const { fn, counter } = anthropicOkMock();
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = fn;
+		try {
+			const first = await fetchProviderUsage(); // default TTL = 5 min
+			const second = await fetchProviderUsage();
+			assert.ok(first, "first call should return usage");
+			assert.equal(counter.calls, 1, "fetch invoked exactly once across two cached calls");
+			assert.equal(second, first, "cached result is the same object reference");
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	test("clearProviderUsageCache forces a fresh fetch", async () => {
+		process.env.ANTHROPIC_OAUTH_TOKEN = "test-token";
+		const { fn, counter } = anthropicOkMock();
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = fn;
+		try {
+			await fetchProviderUsage();
+			assert.equal(counter.calls, 1);
+			clearProviderUsageCache();
+			await fetchProviderUsage();
+			assert.equal(counter.calls, 2, "cache clear triggers a second fetch");
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	test("fetchProviderUsage parses Anthropic 5h + weekly usage", async () => {
+		process.env.ANTHROPIC_OAUTH_TOKEN = "test-token";
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = anthropicOkMock().fn;
+		try {
+			const usage = await fetchProviderUsage(0); // TTL=0 forces fetch
+			assert.ok(usage, "expected parsed usage");
+			assert.equal(usage!.fiveHourPercent, 45.5);
+			assert.equal(usage!.weeklyPercent, 23);
+			assert.equal(usage!.resetAt, "2026-07-08T16:00:00Z");
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	test("fetchProviderUsage returns null on non-OK HTTP response", async () => {
+		process.env.ANTHROPIC_OAUTH_TOKEN = "test-token";
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = makeFetchMock(() => new Response("Forbidden", { status: 403 })).fn;
+		try {
+			assert.equal(await fetchProviderUsage(0), null);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	test("fetchProviderUsage returns null when fetch throws (network failure)", async () => {
+		process.env.ANTHROPIC_OAUTH_TOKEN = "test-token";
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = (async () => {
+			throw new Error("ECONNREFUSED");
+		}) as typeof fetch;
+		try {
+			assert.equal(await fetchProviderUsage(0), null);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
 });

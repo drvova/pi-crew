@@ -81730,6 +81730,7 @@ function isWebTerminal() {
 // src/extension/crew-vibes/config.ts
 var SPEED_STATUS_ID = "pi-crew-speed";
 var CAPACITY_STATUS_ID = "pi-crew-capacity";
+var PROVIDER_STATUS_ID = "pi-crew-provider";
 function resolveHome() {
   return process.env.PI_TEAMS_HOME?.trim() || process.env.HOME || process.env.USERPROFILE || "";
 }
@@ -81758,7 +81759,9 @@ var DEFAULT_CONFIG2 = {
     showLabel: true,
     refreshIntervalMs: 2e3,
     labels: ["Orbit", "Cruise", "Warp", "Black Hole", "Supernova", "Big Bang"],
-    icons: ["\uE710", "\uE711", "\uE712", "\uE713", "\uE714", "\uE715"]
+    icons: ["\uE710", "\uE711", "\uE712", "\uE713", "\uE714", "\uE715"],
+    providerUsage: true,
+    providerRefreshMs: 3e5
   }
 };
 var FALLBACK_CAPACITY_ICONS = [
@@ -81830,7 +81833,9 @@ function normalizeCapacity(raw) {
     showLabel: boolFrom(input.showLabel, DEFAULT_CONFIG2.capacity.showLabel),
     refreshIntervalMs: positiveFrom(input.refreshIntervalMs, DEFAULT_CONFIG2.capacity.refreshIntervalMs),
     labels: sextet(input.labels, DEFAULT_CONFIG2.capacity.labels),
-    icons: sextet(input.icons, DEFAULT_CONFIG2.capacity.icons)
+    icons: sextet(input.icons, DEFAULT_CONFIG2.capacity.icons),
+    providerUsage: boolFrom(input.providerUsage, DEFAULT_CONFIG2.capacity.providerUsage),
+    providerRefreshMs: positiveFrom(input.providerRefreshMs, DEFAULT_CONFIG2.capacity.providerRefreshMs)
   };
 }
 function normalizeConfig(raw) {
@@ -81855,6 +81860,154 @@ function saveConfig(config) {
   mkdirSync44(dirname39(path81), { recursive: true });
   writeFileSync33(path81, `${JSON.stringify(normalizeConfig(config), null, 2)}
 `);
+}
+
+// src/extension/crew-vibes/provider-usage.ts
+import { readFileSync as readFileSync76 } from "node:fs";
+import { homedir as homedir12 } from "node:os";
+import { join as join77 } from "node:path";
+function withTimeout(ms, fn) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ms);
+  return fn(controller.signal).finally(() => clearTimeout(timeoutId));
+}
+function piAuthPath() {
+  return join77(homedir12(), ".pi", "agent", "auth.json");
+}
+function loadAnthropicToken() {
+  const envToken = process.env.ANTHROPIC_OAUTH_TOKEN?.trim();
+  if (envToken) return envToken;
+  try {
+    const data2 = JSON.parse(readFileSync76(piAuthPath(), "utf8"));
+    const token = data2.anthropic?.access;
+    return typeof token === "string" && token.length > 0 ? token : void 0;
+  } catch {
+    return void 0;
+  }
+}
+var COPILOT_TOKEN_KEYS = [
+  "oauth_token",
+  "user_token",
+  "github_token",
+  "token"
+];
+function tokenFromHostEntry(entry) {
+  if (!entry) return void 0;
+  for (const key of COPILOT_TOKEN_KEYS) {
+    const value = entry[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return void 0;
+}
+function loadLegacyCopilotToken() {
+  const configHome = process.env.XDG_CONFIG_HOME?.trim() || join77(homedir12(), ".config");
+  const candidates = [
+    join77(configHome, "github-copilot", "hosts.json"),
+    join77(homedir12(), ".github-copilot", "hosts.json")
+  ];
+  for (const hostsPath of candidates) {
+    try {
+      const data2 = JSON.parse(readFileSync76(hostsPath, "utf8"));
+      if (!data2 || typeof data2 !== "object") continue;
+      const normalized = {};
+      for (const [host, entry] of Object.entries(data2)) {
+        normalized[host.toLowerCase()] = entry;
+      }
+      const preferred = tokenFromHostEntry(normalized["github.com"]) ?? tokenFromHostEntry(normalized["api.github.com"]);
+      if (preferred) return preferred;
+      for (const entry of Object.values(normalized)) {
+        const token = tokenFromHostEntry(entry);
+        if (token) return token;
+      }
+    } catch {
+    }
+  }
+  return void 0;
+}
+function loadCopilotToken() {
+  const envToken = (process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "").trim();
+  if (envToken) return envToken;
+  try {
+    const data2 = JSON.parse(readFileSync76(piAuthPath(), "utf8"));
+    const piToken = data2["github-copilot"]?.refresh || data2["github-copilot"]?.access;
+    if (typeof piToken === "string" && piToken.length > 0) return piToken;
+  } catch {
+  }
+  return loadLegacyCopilotToken();
+}
+async function fetchAnthropicUsage(token) {
+  const data2 = await withTimeout(1e4, async (signal) => {
+    const res = await fetch("https://api.anthropic.com/api/oauth/usage", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "anthropic-beta": "oauth-2025-04-20"
+      },
+      signal
+    });
+    if (!res.ok) throw new Error(`anthropic usage HTTP ${res.status}`);
+    return await res.json();
+  });
+  return {
+    fiveHourPercent: data2.five_hour?.utilization ?? 0,
+    weeklyPercent: data2.seven_day?.utilization ?? 0,
+    resetAt: data2.five_hour?.resets_at ?? null
+  };
+}
+async function fetchCopilotMonthlyPercent(token) {
+  const data2 = await withTimeout(1e4, async (signal) => {
+    const res = await fetch("https://api.github.com/copilot_internal/user", {
+      headers: {
+        Authorization: `token ${token}`,
+        "Editor-Version": "vscode/1.96.2",
+        "User-Agent": "GitHubCopilotChat/0.26.7",
+        "X-Github-Api-Version": "2025-04-01",
+        Accept: "application/json"
+      },
+      signal
+    });
+    if (!res.ok) throw new Error(`copilot user HTTP ${res.status}`);
+    return await res.json();
+  });
+  const percentRemaining = data2.quota_snapshots?.premium_interactions?.percent_remaining;
+  if (typeof percentRemaining !== "number") return void 0;
+  return Math.max(0, 100 - percentRemaining);
+}
+var cachedUsage = null;
+var cachedAt = 0;
+function clearProviderUsageCache() {
+  cachedUsage = null;
+  cachedAt = 0;
+}
+async function fetchProviderUsage(maxAgeMs = 3e5) {
+  if (cachedUsage !== null && Date.now() - cachedAt < maxAgeMs) {
+    return cachedUsage;
+  }
+  try {
+    const anthropicToken = loadAnthropicToken();
+    if (!anthropicToken) {
+      return null;
+    }
+    const base = await fetchAnthropicUsage(anthropicToken);
+    let copilotMonthlyPercent;
+    try {
+      const copilotToken = loadCopilotToken();
+      if (copilotToken) {
+        copilotMonthlyPercent = await fetchCopilotMonthlyPercent(copilotToken);
+      }
+    } catch {
+    }
+    const usage = {
+      fiveHourPercent: base.fiveHourPercent,
+      weeklyPercent: base.weeklyPercent,
+      resetAt: base.resetAt,
+      ...copilotMonthlyPercent !== void 0 ? { copilotMonthlyPercent } : {}
+    };
+    cachedUsage = usage;
+    cachedAt = Date.now();
+    return usage;
+  } catch {
+    return null;
+  }
 }
 
 // src/extension/crew-vibes/figures.ts
@@ -81998,8 +82151,48 @@ function clearVibesStatus(ctx) {
   if (!ctx?.hasUI) return;
   ctx.ui.setStatus(SPEED_STATUS_ID, void 0);
   ctx.ui.setStatus(CAPACITY_STATUS_ID, void 0);
+  ctx.ui.setStatus(PROVIDER_STATUS_ID, void 0);
   if (ctx.ui.setWorkingIndicator) ctx.ui.setWorkingIndicator();
   if (ctx.ui.setWorkingMessage) ctx.ui.setWorkingMessage();
+}
+function formatResetTimer(resetAt) {
+  if (!resetAt) return null;
+  const diffMs = new Date(resetAt).getTime() - Date.now();
+  if (diffMs < 0) return null;
+  const mins = Math.floor(diffMs / 6e4);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
+}
+function renderProviderUsage(theme, usage) {
+  if (!usage) return void 0;
+  const parts = [];
+  const fiveHourRounded = Math.round(usage.fiveHourPercent);
+  const fiveHourText = `5h: ${fiveHourRounded}%`;
+  const fiveHourColor = usage.fiveHourPercent >= 80 ? "error" : "accent";
+  parts.push(theme ? theme.fg(fiveHourColor, fiveHourText) : fiveHourText);
+  const weeklyRounded = Math.round(usage.weeklyPercent);
+  const weeklyText = `Wk: ${weeklyRounded}%`;
+  parts.push(theme ? theme.fg("dim", weeklyText) : weeklyText);
+  const resetText = formatResetTimer(usage.resetAt);
+  if (resetText) {
+    parts.push(theme ? theme.fg("dim", resetText) : resetText);
+  }
+  if (typeof usage.copilotMonthlyPercent === "number" && Number.isFinite(usage.copilotMonthlyPercent)) {
+    const monthlyRounded = Math.round(usage.copilotMonthlyPercent);
+    const monthlyText = `Mo: ${monthlyRounded}%`;
+    parts.push(theme ? theme.fg("dim", monthlyText) : monthlyText);
+  }
+  return parts.join(" ");
+}
+function setProviderStatus(ctx, config, text) {
+  if (!ctx?.hasUI) return;
+  if (!config.enabled || !config.capacity.providerUsage) {
+    ctx.ui.setStatus(PROVIDER_STATUS_ID, void 0);
+    return;
+  }
+  ctx.ui.setStatus(PROVIDER_STATUS_ID, text);
 }
 
 // src/extension/crew-vibes/speed.ts
@@ -82272,6 +82465,7 @@ function registerCrewVibes(pi) {
   let liveTimer;
   let footerTimer;
   let capacityTimer;
+  let providerTimer;
   let catFrameIndex = 0;
   function themeOf(ctx) {
     return asCrewTheme2(ctx.hasUI ? ctx.ui.theme : void 0);
@@ -82325,6 +82519,11 @@ function registerCrewVibes(pi) {
     clearInterval(capacityTimer);
     capacityTimer = void 0;
   }
+  function stopProviderTimer() {
+    if (!providerTimer) return;
+    clearInterval(providerTimer);
+    providerTimer = void 0;
+  }
   function startLiveTimer(ctx) {
     if (liveTimer || !ctx.hasUI) return;
     liveTimer = setInterval(() => {
@@ -82360,6 +82559,27 @@ function registerCrewVibes(pi) {
     capacityTimer = setInterval(() => publishCapacity(ctx), interval);
     capacityTimer.unref?.();
   }
+  function startProviderTimer(ctx) {
+    if (providerTimer) return;
+    if (!config.capacity.providerUsage) return;
+    const interval = Math.max(1e4, config.capacity.providerRefreshMs);
+    async function tick() {
+      if (!config.enabled || !config.capacity.providerUsage) {
+        stopProviderTimer();
+        return;
+      }
+      try {
+        const usage = await fetchProviderUsage(config.capacity.providerRefreshMs);
+        const text = renderProviderUsage(themeOf(ctx), usage);
+        setProviderStatus(ctx, config, text);
+      } catch {
+        setProviderStatus(ctx, config, void 0);
+      }
+    }
+    tick();
+    providerTimer = setInterval(tick, interval);
+    providerTimer.unref?.();
+  }
   function resetWorking(ctx) {
     applyIndicator(ctx, null, true);
     renderWorking(ctx, speedTracker.lastTokS);
@@ -82372,21 +82592,25 @@ function registerCrewVibes(pi) {
       stopLiveTimer();
       stopFooterTimer();
       stopCapacityTimer();
+      stopProviderTimer();
       clearVibesStatus(ctx);
       return;
     }
     publishCapacity(ctx);
     publishSpeedFooter(ctx);
+    if (config.capacity.providerUsage) startProviderTimer(ctx);
   }
   pi.on("session_start", (_event, ctx) => {
     stopLiveTimer();
     stopFooterTimer();
     stopCapacityTimer();
+    stopProviderTimer();
     config = loadConfig2();
     speedTracker.updateConfig(config.speed);
     footerAnimator.updateDuration(config.speed.renderIntervalMs);
     speedTracker.resetSession();
     footerAnimator.reset(null);
+    clearProviderUsageCache();
     if (!config.enabled) {
       clearVibesStatus(ctx);
       return;
@@ -82394,6 +82618,7 @@ function registerCrewVibes(pi) {
     publishCapacity(ctx);
     publishSpeedFooter(ctx);
     startCapacityTimer(ctx);
+    startProviderTimer(ctx);
     applyIndicator(ctx, null, true);
   });
   pi.on("agent_start", (_event, ctx) => {
@@ -82464,6 +82689,7 @@ function registerCrewVibes(pi) {
     stopLiveTimer();
     stopFooterTimer();
     stopCapacityTimer();
+    stopProviderTimer();
     clearVibesStatus(ctx);
     if (ctx.hasUI) ctx.ui.setWidget("crew-vibes-cat", void 0);
   });
