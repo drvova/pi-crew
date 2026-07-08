@@ -122,6 +122,7 @@ export function clearVibesStatus(ctx: ExtensionContext): void {
 // Provider rate-limit usage snapshot (mirrors provider-usage.ts interface).
 // Defined locally to avoid a phase dependency on provider-usage.ts.
 export type ProviderUsage = {
+	providerName: string;
 	fiveHourPercent: number;
 	weeklyPercent: number;
 	resetAt: string | null;
@@ -154,6 +155,12 @@ export function renderProviderUsage(theme: CrewTheme | undefined, usage: Provide
 	if (!usage) return undefined;
 
 	const parts: string[] = [];
+
+	// Provider name — muted/bold
+	if (usage.providerName) {
+		const nameText = usage.providerName;
+		parts.push(theme ? theme.fg("muted", nameText) : nameText);
+	}
 
 	// 5h window — error color at 80%+, accent otherwise
 	const fiveHourBar = renderBar(usage.fiveHourPercent);

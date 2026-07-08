@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 export interface ProviderUsage {
+	providerName: string;
 	fiveHourPercent: number;
 	weeklyPercent: number;
 	resetAt: string | null; // ISO string
@@ -240,6 +241,7 @@ async function fetchZaiUsage(token: string): Promise<ProviderUsage> {
 	}
 
 	return {
+		providerName: "z.ai",
 		fiveHourPercent: tokensPercent,
 		weeklyPercent: monthlyPercent,
 		resetAt,
@@ -278,6 +280,7 @@ export async function fetchProviderUsage(maxAgeMs = 300000): Promise<ProviderUsa
 		if (anthropicToken) {
 			const base = await fetchAnthropicUsage(anthropicToken);
 			const usage: ProviderUsage = {
+				providerName: "Claude",
 				fiveHourPercent: base.fiveHourPercent,
 				weeklyPercent: base.weeklyPercent,
 				resetAt: base.resetAt,
@@ -291,6 +294,7 @@ export async function fetchProviderUsage(maxAgeMs = 300000): Promise<ProviderUsa
 		const zaiToken = loadZaiToken();
 		if (zaiToken) {
 			const usage = await fetchZaiUsage(zaiToken);
+			usage.providerName = "z.ai";
 			cachedUsage = usage;
 			cachedAt = Date.now();
 			return usage;
@@ -302,6 +306,7 @@ export async function fetchProviderUsage(maxAgeMs = 300000): Promise<ProviderUsa
 			const monthlyPercent = await fetchCopilotMonthlyPercent(copilotToken);
 			if (monthlyPercent !== undefined) {
 				const usage: ProviderUsage = {
+					providerName: "Copilot",
 					fiveHourPercent: 0,
 					weeklyPercent: monthlyPercent,
 					resetAt: null,

@@ -82012,6 +82012,7 @@ async function fetchZaiUsage(token) {
     }
   }
   return {
+    providerName: "z.ai",
     fiveHourPercent: tokensPercent,
     weeklyPercent: monthlyPercent,
     resetAt
@@ -82032,6 +82033,7 @@ async function fetchProviderUsage(maxAgeMs = 3e5) {
     if (anthropicToken) {
       const base = await fetchAnthropicUsage(anthropicToken);
       const usage = {
+        providerName: "Claude",
         fiveHourPercent: base.fiveHourPercent,
         weeklyPercent: base.weeklyPercent,
         resetAt: base.resetAt
@@ -82043,6 +82045,7 @@ async function fetchProviderUsage(maxAgeMs = 3e5) {
     const zaiToken = loadZaiToken();
     if (zaiToken) {
       const usage = await fetchZaiUsage(zaiToken);
+      usage.providerName = "z.ai";
       cachedUsage = usage;
       cachedAt = Date.now();
       return usage;
@@ -82052,6 +82055,7 @@ async function fetchProviderUsage(maxAgeMs = 3e5) {
       const monthlyPercent = await fetchCopilotMonthlyPercent(copilotToken);
       if (monthlyPercent !== void 0) {
         const usage = {
+          providerName: "Copilot",
           fiveHourPercent: 0,
           weeklyPercent: monthlyPercent,
           resetAt: null,
@@ -82231,6 +82235,10 @@ function renderBar(percent, width = 10) {
 function renderProviderUsage(theme, usage) {
   if (!usage) return void 0;
   const parts = [];
+  if (usage.providerName) {
+    const nameText = usage.providerName;
+    parts.push(theme ? theme.fg("muted", nameText) : nameText);
+  }
   const fiveHourBar = renderBar(usage.fiveHourPercent);
   const fiveHourRounded = Math.round(usage.fiveHourPercent);
   const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%`;
