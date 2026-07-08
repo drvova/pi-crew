@@ -82247,49 +82247,6 @@ var CAT_FRAMES2 = [
 ];
 var CAT_FRAME_COUNT = CAT_FRAMES2.length;
 
-// src/extension/crew-vibes/cat-widget.ts
-var CatWidget = class {
-  frameIndex = 0;
-  intervalId = null;
-  intervalMs;
-  constructor(intervalMs = 200) {
-    this.intervalMs = intervalMs;
-  }
-  start() {
-    if (this.intervalId) return;
-    this.intervalId = setInterval(() => {
-      this.frameIndex = (this.frameIndex + 1) % CAT_FRAME_COUNT;
-    }, this.intervalMs);
-  }
-  stop() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
-  }
-  setIntervalMs(ms) {
-    this.intervalMs = ms;
-    if (this.intervalId) {
-      this.stop();
-      this.start();
-    }
-  }
-  render(width) {
-    const frame = CAT_FRAMES2[this.frameIndex] ?? CAT_FRAMES2[0];
-    const lines = [];
-    for (const row of frame) {
-      const padding = Math.max(0, Math.floor((width - row.length) / 2));
-      lines.push(" ".repeat(padding) + row);
-    }
-    return lines;
-  }
-  invalidate() {
-  }
-  dispose() {
-    this.stop();
-  }
-};
-
 // src/extension/crew-vibes/index.ts
 function isAssistantMessage(message) {
   return typeof message === "object" && message !== null && message.role === "assistant";
@@ -82315,7 +82272,7 @@ function registerCrewVibes(pi) {
   let liveTimer;
   let footerTimer;
   let capacityTimer;
-  const catWidget = isWebTerminal() ? new CatWidget(config.speed.renderIntervalMs) : null;
+  let catFrameIndex = 0;
   function themeOf(ctx) {
     return asCrewTheme2(ctx.hasUI ? ctx.ui.theme : void 0);
   }
@@ -82378,6 +82335,10 @@ function registerCrewVibes(pi) {
       const speed = speedTracker.liveTokS();
       applyIndicator(ctx, speed);
       renderWorking(ctx, speed);
+      if (isWebTerminal()) {
+        catFrameIndex = (catFrameIndex + 1) % CAT_FRAMES2.length;
+        ctx.ui.setWidget("crew-vibes-cat", [...CAT_FRAMES2[catFrameIndex]], { placement: "aboveEditor" });
+      }
     }, config.speed.renderIntervalMs);
     liveTimer.unref?.();
   }
@@ -82449,9 +82410,8 @@ function registerCrewVibes(pi) {
     footerAnimator.reset(speedTracker.lastTokS);
     startLiveTimer(ctx);
     lastRenderedAt = 0;
-    if (catWidget && ctx.hasUI) {
-      catWidget.start();
-      ctx.ui.setWidget("crew-vibes-cat", (tui, theme) => catWidget, { placement: "aboveEditor" });
+    if (isWebTerminal() && ctx.hasUI) {
+      ctx.ui.setWidget("crew-vibes-cat", [...CAT_FRAMES2[0]], { placement: "aboveEditor" });
     }
   });
   pi.on("message_update", (event, ctx) => {
@@ -82480,8 +82440,7 @@ function registerCrewVibes(pi) {
     publishSpeedFooter(ctx);
     startFooterTimer(ctx);
     applyIndicator(ctx, speedTracker.lastTokS);
-    if (catWidget && ctx.hasUI) {
-      catWidget.stop();
+    if (isWebTerminal() && ctx.hasUI) {
       ctx.ui.setWidget("crew-vibes-cat", void 0);
     }
   });
@@ -82492,11 +82451,10 @@ function registerCrewVibes(pi) {
   pi.on("agent_end", (_event, ctx) => {
     speedTracker.stopMessage();
     stopLiveTimer();
-    if (catWidget) catWidget.stop();
     if (ctx && config.enabled && ctx.hasUI) {
       applyIndicator(ctx, speedTracker.lastTokS);
       ctx.ui.setWorkingMessage();
-      ctx.ui.setWidget("crew-vibes-cat", void 0);
+      if (isWebTerminal()) ctx.ui.setWidget("crew-vibes-cat", void 0);
     }
   });
   pi.on("model_select", (_event, ctx) => publishCapacity(ctx));
@@ -82506,7 +82464,6 @@ function registerCrewVibes(pi) {
     stopLiveTimer();
     stopFooterTimer();
     stopCapacityTimer();
-    if (catWidget) catWidget.stop();
     clearVibesStatus(ctx);
     if (ctx.hasUI) ctx.ui.setWidget("crew-vibes-cat", void 0);
   });

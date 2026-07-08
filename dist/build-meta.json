@@ -17196,19 +17196,8 @@
       "imports": [],
       "format": "esm"
     },
-    "src/extension/crew-vibes/cat-widget.ts": {
-      "bytes": 1377,
-      "imports": [
-        {
-          "path": "src/extension/crew-vibes/cat-frames.ts",
-          "kind": "import-statement",
-          "original": "./cat-frames.ts"
-        }
-      ],
-      "format": "esm"
-    },
     "src/extension/crew-vibes/index.ts": {
-      "bytes": 11009,
+      "bytes": 11058,
       "imports": [
         {
           "path": "src/extension/crew-vibes/config.ts",
@@ -17236,9 +17225,9 @@
           "original": "./speed.ts"
         },
         {
-          "path": "src/extension/crew-vibes/cat-widget.ts",
+          "path": "src/extension/crew-vibes/cat-frames.ts",
           "kind": "import-statement",
-          "original": "./cat-widget.ts"
+          "original": "./cat-frames.ts"
         }
       ],
       "format": "esm"
@@ -18334,7 +18323,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6573406
+      "bytes": 6571180
     },
     "dist/index.mjs": {
       "imports": [
@@ -21976,11 +21965,8 @@
         "src/extension/crew-vibes/cat-frames.ts": {
           "bytesInOutput": 935
         },
-        "src/extension/crew-vibes/cat-widget.ts": {
-          "bytesInOutput": 912
-        },
         "src/extension/crew-vibes/index.ts": {
-          "bytesInOutput": 9560
+          "bytesInOutput": 9608
         },
         "src/extension/cross-extension-rpc.ts": {
           "bytesInOutput": 8532
@@ -22016,7 +22002,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3135788
+      "bytes": 3134881
     }
   }
 }
