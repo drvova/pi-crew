@@ -1,5 +1,4 @@
 import type { SpeedConfig } from "./config.ts";
-import { isWebTerminal } from "./font-detect.ts";
 
 /**
  * Crew figures replacing the original cat glyphs from pi-speeed / pi-chonk.
@@ -60,9 +59,7 @@ const PUA_CREW_FRAMES: readonly string[] = [
  * - `"braille"` (default): standard Unicode braille spinner, works everywhere
  * - `"pua"`: runner-pose glyphs from crew-vibes.ttf, requires font install
  */
-export function crewFrames(style: "braille" | "pua" = "pua"): readonly string[] {
-	// Web terminals (gotty, wetty) cannot render PUA glyphs — use braille.
-	if (style === "pua" && isWebTerminal()) return BRAILLE_FRAMES;
+export function crewFrames(style: "braille" | "pua" = "braille"): readonly string[] {
 	return style === "pua" ? PUA_CREW_FRAMES : BRAILLE_FRAMES;
 }
 

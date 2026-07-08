@@ -1,6 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type CrewVibesConfig, loadConfig, PROVIDER_STATUS_ID, saveConfig } from "./config.ts";
-import { isWebTerminal } from "./font-detect.ts";
 import { fetchProviderUsage, clearProviderUsageCache } from "./provider-usage.ts";
 import { intervalForSpeed } from "./figures.ts";
 import {
@@ -18,7 +17,6 @@ import {
 	setSpeedStatus,
 } from "./render.ts";
 import { SpeedAnimator, SpeedTracker } from "./speed.ts";
-import { CAT_FRAMES } from "./cat-frames.ts";
 
 export const CREW_VIBES_STATUS_KEY = "pi-crew-vibes";
 
@@ -52,7 +50,6 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	let capacityTimer: ReturnType<typeof setInterval> | undefined;
 	let providerTimer: ReturnType<typeof setInterval> | undefined;
 	let lastProviderText: string | undefined;
-	let catFrameIndex = 0;
 
 	/** Strip ANSI codes to measure visible width. */
 	function visibleLen(text: string): number {
@@ -146,11 +143,6 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			const speed = speedTracker.liveTokS();
 			applyIndicator(ctx, speed);
 			renderWorking(ctx, speed);
-			// Update cat animation frame in web terminals
-			if (isWebTerminal()) {
-				catFrameIndex = (catFrameIndex + 1) % CAT_FRAMES.length;
-				ctx.ui.setWidget("crew-vibes-cat", [...CAT_FRAMES[catFrameIndex]], { placement: "aboveEditor" });
-			}
 		}, config.speed.renderIntervalMs);
 		liveTimer.unref?.();
 	}
@@ -266,10 +258,6 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		footerAnimator.reset(speedTracker.lastTokS);
 		startLiveTimer(ctx);
 		lastRenderedAt = 0;
-		// Show cat widget in web terminals
-		if (isWebTerminal() && ctx.hasUI) {
-			ctx.ui.setWidget("crew-vibes-cat", [...CAT_FRAMES[0]], { placement: "aboveEditor" });
-		}
 	});
 
 	pi.on("message_update", (event, ctx) => {
@@ -304,10 +292,6 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		publishSpeedFooter(ctx);
 		startFooterTimer(ctx);
 		applyIndicator(ctx, speedTracker.lastTokS);
-		// Remove cat widget on message end
-		if (isWebTerminal() && ctx.hasUI) {
-			ctx.ui.setWidget("crew-vibes-cat", undefined);
-		}
 	});
 
 	pi.on("turn_end", () => {
@@ -321,7 +305,6 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		if (ctx && config.enabled && ctx.hasUI) {
 			applyIndicator(ctx, speedTracker.lastTokS);
 			ctx.ui.setWorkingMessage();
-			if (isWebTerminal()) ctx.ui.setWidget("crew-vibes-cat", undefined);
 		}
 	});
 
@@ -335,7 +318,6 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		stopCapacityTimer();
 		stopProviderTimer();
 		clearVibesStatus(ctx);
-		if (ctx.hasUI) ctx.ui.setWidget("crew-vibes-cat", undefined);
 	});
 
 	async function handleCommand(args: string, ctx: ExtensionCommandContext): Promise<void> {

@@ -82157,8 +82157,7 @@ var PUA_CREW_FRAMES = [
   "\uE70E ",
   "\uE70F "
 ];
-function crewFrames(style = "pua") {
-  if (style === "pua" && isWebTerminal()) return BRAILLE_FRAMES;
+function crewFrames(style = "braille") {
   return style === "pua" ? PUA_CREW_FRAMES : BRAILLE_FRAMES;
 }
 function intervalForSpeed(config, speed) {
@@ -82519,19 +82518,6 @@ var SpeedAnimator = class {
   }
 };
 
-// src/extension/crew-vibes/cat-frames.ts
-var CAT_FRAMES2 = [
-  // Frame 0 — standing
-  ["\u2584\u2584 \u2588\u2588\u2588\u2584 ", "\u2580\u2580\u2588\u2588\u2588\u2588\u2588\u2584", "  \u2588\u2588\u2580\u2588\u2588 ", "  \u2580\u2580  \u2580\u2580"],
-  // Frame 1 — step 1
-  ["  \u2588\u2588\u2588\u2588  ", "  \u2588\u2588\u2588\u2588\u2588\u2584", "\u2584\u2588\u2588\u2588\u2588\u2588\u2588\u2580", "  \u2588\u2588 \u2580\u2588\u2584"],
-  // Frame 2 — step 2
-  [" \u2584\u2588\u2588\u2588\u2588\u2588\u2588", " \u2588\u2588\u2588\u2588\u2588\u2580 ", "\u2588\u2588\u2588\u2588\u2588\u2588\u2588 ", "\u2580\u2588\u2588\u2588\u2588\u2588\u2588 "],
-  // Frame 3 — step 3
-  ["  \u2588\u2588\u2588\u2588  ", "\u2584\u2588\u2588\u2588\u2588\u2588\u2584 ", "\u2580\u2588\u2588\u2588\u2588\u2588\u2588\u2584", "\u2584\u2588\u2580  \u2588\u2588 "]
-];
-var CAT_FRAME_COUNT = CAT_FRAMES2.length;
-
 // src/extension/crew-vibes/index.ts
 function isAssistantMessage(message) {
   return typeof message === "object" && message !== null && message.role === "assistant";
@@ -82559,7 +82545,6 @@ function registerCrewVibes(pi) {
   let capacityTimer;
   let providerTimer;
   let lastProviderText;
-  let catFrameIndex = 0;
   function visibleLen(text) {
     return text.replace(/\x1b\[[0-9;]*m/g, "").length;
   }
@@ -82636,10 +82621,6 @@ function registerCrewVibes(pi) {
       const speed = speedTracker.liveTokS();
       applyIndicator(ctx, speed);
       renderWorking(ctx, speed);
-      if (isWebTerminal()) {
-        catFrameIndex = (catFrameIndex + 1) % CAT_FRAMES2.length;
-        ctx.ui.setWidget("crew-vibes-cat", [...CAT_FRAMES2[catFrameIndex]], { placement: "aboveEditor" });
-      }
     }, config.speed.renderIntervalMs);
     liveTimer.unref?.();
   }
@@ -82738,9 +82719,6 @@ function registerCrewVibes(pi) {
     footerAnimator.reset(speedTracker.lastTokS);
     startLiveTimer(ctx);
     lastRenderedAt = 0;
-    if (isWebTerminal() && ctx.hasUI) {
-      ctx.ui.setWidget("crew-vibes-cat", [...CAT_FRAMES2[0]], { placement: "aboveEditor" });
-    }
   });
   pi.on("message_update", (event, ctx) => {
     if (!config.enabled || !config.speed.enabled || !isAssistantMessage(event.message) || !speedTracker.isStreaming) return;
@@ -82768,9 +82746,6 @@ function registerCrewVibes(pi) {
     publishSpeedFooter(ctx);
     startFooterTimer(ctx);
     applyIndicator(ctx, speedTracker.lastTokS);
-    if (isWebTerminal() && ctx.hasUI) {
-      ctx.ui.setWidget("crew-vibes-cat", void 0);
-    }
   });
   pi.on("turn_end", () => {
     speedTracker.stopMessage();
@@ -82782,7 +82757,6 @@ function registerCrewVibes(pi) {
     if (ctx && config.enabled && ctx.hasUI) {
       applyIndicator(ctx, speedTracker.lastTokS);
       ctx.ui.setWorkingMessage();
-      if (isWebTerminal()) ctx.ui.setWidget("crew-vibes-cat", void 0);
     }
   });
   pi.on("model_select", (_event, ctx) => publishCapacity(ctx));
@@ -82794,7 +82768,6 @@ function registerCrewVibes(pi) {
     stopCapacityTimer();
     stopProviderTimer();
     clearVibesStatus(ctx);
-    if (ctx.hasUI) ctx.ui.setWidget("crew-vibes-cat", void 0);
   });
   async function handleCommand(args, ctx) {
     const tokens = args.trim().split(/\s+/).filter(Boolean);
