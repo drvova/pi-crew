@@ -1,5 +1,72 @@
 # Changelog
 
+## [perf-plan-2026-07] — verified optimization plan shipped (Phases 0–3) (2026-07-08)
+
+Implements `docs/perf/optimization-plan-2026-07-verified.md` end-to-end with bench-first verification on Windows + Node 22. Not a version bump — perf-only change with the existing CLI surface unchanged.
+
+### Phase 0 — measurement infrastructure
+- New `test/bench/discover-workflows.bench.ts` (was missing — powerbar hot path).
+- New `test/bench/persist-single-task-update.bench.ts` (covers F2 + F4).
+- New `test/bench/config-load.bench.ts` (regression guard for F16 cache).
+- Extended `test/bench/event-append.bench.ts` with `nonTerminal` vs `terminal` scenarios for F3a tracking.
+- Extended `test/bench/atomic-write.bench.ts` with `bestEffortControl` scenario for F4 control.
+- Baseline artifacts: `test/bench/baseline-v0.9.26-pre-fix.json`, `…-post-phase2.json`, `…-post-phase3.json`.
+
+### Phase 1 — high-confidence, low-risk
+- **F17** `discoverWorkflows`: 5 s TTL cache + dirStamp invalidation + `invalidateWorkflowDiscoveryCache()`. Powerbar's 5 Hz scan now does 3 statSync instead of `readdirSync × 6 + N readFileSync + regex-parse`.
+- **F15** `discoverAgents`: TTL 500 ms → 5 000 ms. `discoverTeams`: same TTL+dirStamp pattern + `invalidateTeamDiscoveryCache()`.
+- **F17/F15** `management.ts`: `invalidateResourceCaches()` called on create/update/delete so new resources appear within the same action.
+- **F4** `atomicWriteFile` + `atomicWriteFileAsync` + `atomicWriteJson(+Async)` + `atomicWriteJsonCoalesced` accept `WriteDurability = "full" | "best-effort"`. Skips data `fsync` + parent-dir `fsync` when `"best-effort"`; defaults to `"full"` (back-compat). Applied `best-effort` to: mailbox delivery informational writes (`mailbox.ts:writeDeliveryState`), crew-agent progress writes (`crew-agent-records.ts:saveCrewAgentsCoalesced` / `writeCrewAgentStatusCoalesced`). Terminal writes (manifest, mailbox ack/complete, agent terminal status) keep `"full"`.
+- **F9** `ChildPiLineObserver`: `rawTextEvents` capped at 2 entries (consumer reads only the last); `intermediateFindings` capped at 32 (digest still reads last 20). Memory bound for verbose workers.
+
+### Phase 2 — correctness-sensitive wins
+- **F2** `persistSingleTaskUpdate` (in `task-runner/state-helpers.ts`): collapsed 3 redundant `statSync` per CAS attempt into 1. The 2 extra stats were rác (sync code, no I/O between calls). The remaining stat still protects against unlocked best-effort writers (`async-notifier.ts:54`, `crash-recovery.ts:98/416/464`).
+- **F3a** `event-log.ts` sync `appendEvent`: `fsync` skipped for non-terminal events. Terminal events (run/task completed/failed/cancelled/...) still fsync to close the append ↔ persistSequence crash window. Async path's fsync was already removed in v0.9.26 revert (commit `414b973`); F3a's sync-path win is the meaningful delta.
+- **F5** `atomic-write.ts:isSymlinkSafeDirCached`: 30 s TTL LRU keyed by `dirname(filePath)` for the ancestor-chain walk. Target-file lstat still runs every call. `invalidateSymlinkSafeCache(dir)` exported.
+- **F1** `state-store.ts`: generation counter moved from global `number` to `Map<stateRoot, number>`. A write to run A no longer bumps run B's generation → cache hits for sibling runs preserved under multi-run load.
+
+### Phase 3 — safety-tier
+- **F12** `child-pi.ts` finalDrain: a parallel 200 ms unref'd polling watcher starts when the drain timer arms (i.e. after `isFinalAssistantEvent`). If stdout goes silent for ≥ `finalDrainQuietMs` (default 800 ms), the watcher fires the same SIGTERM/hardKill path as the 5 s ceiling. Heavy well-behaved workers exit at ~800 ms instead of up to 5 s. New `DEFAULT_CHILD_PI.finalDrainQuietMs` config (set to ≥ `finalDrainMs` to disable). New optional `reason: "stdout-quiet"` field on `ChildPiLifecycleEvent`.
+- **F6** — NOT shipped in this change. Deferred entirely (see Deferred section).
+
+### Bench results (Windows, Node v22.14.0, `npm run bench`, ITERS=200)
+
+| Bench | Baseline p50 | Post p50 | Δ |
+|---|---|---|---|
+| `discover-workflows.firstCall` | 3.76 ms | 1.20 ms | **-68%** |
+| `discover-workflows.subsequent` | 1.77 ms | 0.78 ms | **-56%** |
+| `event-append.nonTerminal` | 22.6 ms | 13.84 ms | **-39%** |
+| `event-append.serial` | 13.0 ms | 7.78 ms | -40% |
+| `persist-single-task-update.durable` | 4.96 ms | 3.54 ms | **-29%** |
+| `persist-single-task-update.burst10` | 5.20 ms | 5.52 ms | within noise |
+| `atomic-write-json.cold` | 1.71 ms | 4.01 ms | high variance on tmpfs (multi-run 2.4–4.8 ms) |
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | ✅ pass |
+| `npm run lint` | ✅ after `biome format --write` on touched files |
+| `npm run format:check` | ✅ pass |
+| `npm run check:lazy-imports` | ✅ pass |
+| Targeted unit tests F17+F4+F9 (6 suites) | ✅ 61 pass |
+| Targeted unit tests F2+F3a+F5+F1 (12 suites) | ✅ 68 pass |
+| Targeted unit tests F12 (10 suites) | ✅ 57 pass |
+| `npm run bench` | ✅ results.json reproducible within ±15% batch-to-batch |
+
+### Migration / rollback
+
+- All atomic-write callers retain `"full"` durability by default. `durability: "best-effort"` was wired only where informational-loss tolerance was verified by existing recovery paths (event-reconstructor + crash-recovery).
+- TTL caches invalidate on real resource create/update/delete via `invalidateResourceCaches()`; engine restart clears the process-local Map.
+- F5 symlink cache: only the *directory* ancestor-chain verdict is cached (30 s TTL); the target-file symlink check (`isTargetNotSymlink`) runs uncached on every call, so a mid-window symlink swap at the target path is still caught. `invalidateSymlinkSafeCache(dir)` exported.
+- F12 quiet-window: behavior change ONLY when a child emits `stopReason=stop` then stops emitting stdout. Set `DEFAULT_CHILD_PI.finalDrainQuietMs >= finalDrainMs` to disable.
+
+### Deferred (out of scope)
+
+- **F3b** mở rộng buffering qua `appendEventAsync` — vừa revert ở `414b973` (deadlock). Cần RCA.
+- **F6** (toàn bộ) — archive-list cache cho `mailbox.ts:safeReadMailboxFile` VÀ delivery-state append-only JSONL + compaction. Chưa implement dòng nào trong đợt này. Cần format migration + reader compat.
+- **In-memory task state** — cần ADR riêng + cross-process invalidation protocol.
+
 ## [v0.9.22] — fix: batch buffered event-log flush (25-85x faster) (2026-07-07)
 
 P0 follow-up to v0.9.21 event batching. The buffered flush path was calling `appendEventInsideLock` per-event, which triggered an `fsyncSync` per queued event. This defeated the entire point of batching — for 100 buffered events the flush took ~3s on tmpfs instead of the expected ~20ms.

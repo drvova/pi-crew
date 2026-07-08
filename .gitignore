@@ -3,6 +3,8 @@ dist/
 coverage/
 *.log
 *.tmp
+# Test temp dirs (verification-env-sanitize.test.ts) — created and removed by tests, but left behind on cancel.
+.test-artifacts-tmp*/
 .DS_Store
 .pi/
 .crew/cache/
