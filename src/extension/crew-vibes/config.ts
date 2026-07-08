@@ -72,7 +72,7 @@ export const DEFAULT_CONFIG: CrewVibesConfig = {
 		showLabel: true,
 		refreshIntervalMs: 2000,
 		labels: ["Solo", "Duo", "Squad", "Crew", "Full deck", "All hands"],
-		icons: ["\uE710", "\uE711", "\uE712", "\uE713", "\uE714", "\uE715"],
+		icons: ["", "", "", "", "", ""],
 	},
 };
 

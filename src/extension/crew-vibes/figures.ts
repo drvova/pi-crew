@@ -14,22 +14,22 @@ import type { SpeedConfig } from "./config.ts";
 // (see intervalForSpeed). Install the font via `npm run install:crew-font`
 // or the postinstall hook; without it the glyphs render as tofu boxes.
 export const RUN_CREW_FRAMES: readonly string[] = [
-	"\uE700 ",
-	"\uE701 ",
-	"\uE702 ",
-	"\uE703 ",
-	"\uE704 ",
-	"\uE705 ",
-	"\uE706 ",
-	"\uE707 ",
-	"\uE708 ",
-	"\uE709 ",
-	"\uE70A ",
-	"\uE70B ",
-	"\uE70C ",
-	"\uE70D ",
-	"\uE70E ",
-	"\uE70F ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
+	" ",
 ] as const;
 
 /**
