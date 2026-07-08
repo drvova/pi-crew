@@ -226,19 +226,19 @@ test("renderProviderUsage returns undefined for null usage", () => {
 
 test("renderProviderUsage shows accent color under 80%", () => {
 	const usage = { providerName: "Test", fiveHourPercent: 45, weeklyPercent: 23, resetAt: null };
-	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2588\u2591]+ 45%<\/accent> <dim>Wk [\u2588\u2591]+ 23%<\/dim>/);
+	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2501\u2504]+ 45%<\/accent> <dim>Wk [\u2501\u2504]+ 23%<\/dim>/);
 });
 
 test("renderProviderUsage shows error color at 80%+", () => {
 	const usage = { providerName: "Test", fiveHourPercent: 85, weeklyPercent: 50, resetAt: null };
 	const out = renderProviderUsage(theme, usage);
-	assert.match(out!, /<error>5h [\u2588\u2591]+ 85%<\/error> <dim>Wk [\u2588\u2591]+ 50%<\/dim>/);
+	assert.match(out!, /<error>5h [\u2501\u2504]+ 85%<\/error> <dim>Wk [\u2501\u2504]+ 50%<\/dim>/);
 	assert.doesNotMatch(out!, /<accent>/);
 });
 
 test("renderProviderUsage switches accent→error exactly at the 80% boundary", () => {
-	assert.match(renderProviderUsage(theme, { providerName: "Test", fiveHourPercent: 79, weeklyPercent: 5, resetAt: null })!, /<accent>5h [\u2588\u2591]+ 79%<\/accent>/);
-	assert.match(renderProviderUsage(theme, { providerName: "Test", fiveHourPercent: 80, weeklyPercent: 5, resetAt: null })!, /<error>5h [\u2588\u2591]+ 80%<\/error>/);
+	assert.match(renderProviderUsage(theme, { providerName: "Test", fiveHourPercent: 79, weeklyPercent: 5, resetAt: null })!, /<accent>5h [\u2501\u2504]+ 79%<\/accent>/);
+	assert.match(renderProviderUsage(theme, { providerName: "Test", fiveHourPercent: 80, weeklyPercent: 5, resetAt: null })!, /<error>5h [\u2501\u2504]+ 80%<\/error>/);
 });
 
 test("renderProviderUsage shows reset timer when resetAt is in the future", () => {
@@ -252,18 +252,18 @@ test("renderProviderUsage shows reset timer when resetAt is in the future", () =
 
 test("renderProviderUsage omits reset timer when resetAt is in the past", () => {
 	const usage = { providerName: "Test", fiveHourPercent: 30, weeklyPercent: 10, resetAt: "2000-01-01T00:00:00Z" };
-	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2588\u2591]+ 30%<\/accent> <dim>Wk [\u2588\u2591]+ 10%<\/dim>/);
+	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2501\u2504]+ 30%<\/accent> <dim>Wk [\u2501\u2504]+ 10%<\/dim>/);
 });
 
 test("renderProviderUsage includes Copilot monthly percent when present", () => {
 	const usage = { providerName: "Test", fiveHourPercent: 30, weeklyPercent: 10, resetAt: null, copilotMonthlyPercent: 68 };
-	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2588\u2591]+ 30%<\/accent> <dim>Wk [\u2588\u2591]+ 10%<\/dim> <dim>Mo: 68%<\/dim>/);
+	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2501\u2504]+ 30%<\/accent> <dim>Wk [\u2501\u2504]+ 10%<\/dim> <dim>Mo: 68%<\/dim>/);
 });
 
 test("renderProviderUsage works without theme (plain text)", () => {
 	const usage = { providerName: "Test", fiveHourPercent: 45, weeklyPercent: 23, resetAt: null };
 	const out = renderProviderUsage(undefined, usage);
-	assert.match(out!, /^Test 5h [\u2588\u2591]+ 45% Wk [\u2588\u2591]+ 23%$/);
+	assert.match(out!, /^Test 5h [\u2501\u2504]+ 45% Wk [\u2501\u2504]+ 23%$/);
 	assert.doesNotMatch(out!, /</);
 });
 

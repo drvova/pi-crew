@@ -144,11 +144,12 @@ function formatResetTimer(resetAt: string | null): string | null {
 // Render provider rate-limit usage as a compact status string with bars.
 // Returns `undefined` when there is nothing to show (null usage).
 
-/** Render a 10-cell progress bar: [█████░░░░░░] for 50%. */
-function renderBar(percent: number, width = 10): string {
+/** Render a progress bar using heavy line characters (matches pi-sub-bar style).
+ * `━━━━━━┄┄┄┄` for 60% — filled uses ━ (U+2501), empty uses ┄ (U+2504). */
+function renderBar(percent: number, width = 8): string {
 	const clamped = Math.max(0, Math.min(100, percent));
 	const filled = Math.round((clamped / 100) * width);
-	return `${"\u2588".repeat(filled)}${"\u2591".repeat(width - filled)}`;
+	return `${"\u2501".repeat(filled)}${"\u2504".repeat(width - filled)}`;
 }
 
 export function renderProviderUsage(theme: CrewTheme | undefined, usage: ProviderUsage | null): string | undefined {

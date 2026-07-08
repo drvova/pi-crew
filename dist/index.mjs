@@ -82227,10 +82227,10 @@ function formatResetTimer(resetAt) {
   const remMins = mins % 60;
   return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
 }
-function renderBar(percent, width = 10) {
+function renderBar(percent, width = 8) {
   const clamped = Math.max(0, Math.min(100, percent));
   const filled = Math.round(clamped / 100 * width);
-  return `${"\u2588".repeat(filled)}${"\u2591".repeat(width - filled)}`;
+  return `${"\u2501".repeat(filled)}${"\u2504".repeat(width - filled)}`;
 }
 function renderProviderUsage(theme, usage) {
   if (!usage) return void 0;
