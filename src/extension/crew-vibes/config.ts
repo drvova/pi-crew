@@ -88,9 +88,11 @@ const FALLBACK_CAPACITY_ICONS: [string, string, string, string, string, string] 
 	"\u2B22 ", // ⬢ filled hexagon (oh lawd)
 ];
 
-/** Return capacity icons: PUA glyphs when font is available, else fallback. */
+/** Return capacity icons: standard Unicode glyphs that render on any terminal.
+ * PUA glyphs (U+E710..U+E715) require crew-vibes.ttf AND terminal PUA
+ * support — many terminals cannot render them even with the font installed. */
 export function capacityIcons(): [string, string, string, string, string, string] {
-	return hasCrewFontFile() ? DEFAULT_CONFIG.capacity.icons : FALLBACK_CAPACITY_ICONS;
+	return FALLBACK_CAPACITY_ICONS;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
