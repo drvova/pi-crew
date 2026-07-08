@@ -54,6 +54,18 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	let lastProviderText: string | undefined;
 	let catFrameIndex = 0;
 
+	/** Strip ANSI codes to measure visible width. */
+	function visibleLen(text: string): number {
+		return text.replace(/\x1b\[[0-9;]*m/g, "").length;
+	}
+
+	/** Left-align `left`, right-align `right` on the same line. */
+	function spreadLine(left: string, right: string): string {
+		const cols = process.stdout.columns || 120;
+		const padding = Math.max(2, cols - visibleLen(left) - visibleLen(right));
+		return left + " ".repeat(padding) + right;
+	}
+
 	function themeOf(ctx: ExtensionContext) {
 		return asCrewTheme(ctx.hasUI ? ctx.ui.theme : undefined);
 	}
@@ -66,7 +78,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		}
 		const capText = renderCapacity(themeOf(ctx), config.capacity, getCapacityUsage(ctx));
 		// Combine capacity + provider on one line with spacing
-		const combined = lastProviderText ? `${capText}  \u2502  ${lastProviderText}` : capText;
+		const combined = lastProviderText ? spreadLine(capText, lastProviderText) : capText;
 		setCapacityStatus(ctx, config, combined);
 	}
 

@@ -82542,6 +82542,14 @@ function registerCrewVibes(pi) {
   let providerTimer;
   let lastProviderText;
   let catFrameIndex = 0;
+  function visibleLen(text) {
+    return text.replace(/\x1b\[[0-9;]*m/g, "").length;
+  }
+  function spreadLine(left, right) {
+    const cols = process.stdout.columns || 120;
+    const padding = Math.max(2, cols - visibleLen(left) - visibleLen(right));
+    return left + " ".repeat(padding) + right;
+  }
   function themeOf(ctx) {
     return asCrewTheme2(ctx.hasUI ? ctx.ui.theme : void 0);
   }
@@ -82552,7 +82560,7 @@ function registerCrewVibes(pi) {
       return;
     }
     const capText = renderCapacity(themeOf(ctx), config.capacity, getCapacityUsage(ctx));
-    const combined = lastProviderText ? `${capText}  \u2502  ${lastProviderText}` : capText;
+    const combined = lastProviderText ? spreadLine(capText, lastProviderText) : capText;
     setCapacityStatus(ctx, config, combined);
   }
   function publishSpeedFooter(ctx, speed = footerAnimator.value()) {
