@@ -2,7 +2,9 @@ import type { SpeedConfig } from "./config.ts";
 
 /**
  * Crew figures replacing the original cat glyphs from pi-speeed / pi-chonk.
- * Uses plain ASCII/emoji so no bundled font is required.
+ * Uses PUA glyphs (U+E700..U+E70F) from the bundled crew-vibes.ttf font;
+ * run `npm run install:crew-font` or rely on the postinstall hook.
+ * Without the font the glyphs render as tofu boxes.
  */
 
 // Speed indicator: 16 runner poses stored as PUA glyphs in the bundled

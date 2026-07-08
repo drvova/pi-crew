@@ -1,8 +1,4 @@
-import type {
-	ExtensionAPI,
-	ExtensionCommandContext,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type CrewVibesConfig, loadConfig, saveConfig } from "./config.ts";
 import { intervalForSpeed } from "./figures.ts";
 import {
@@ -55,7 +51,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	}
 
 	function publishCapacity(ctx: ExtensionContext): void {
-		if (!ctx || !ctx.hasUI) return;
+		if (!ctx?.hasUI) return;
 		if (!config.enabled || !config.capacity.enabled) {
 			setCapacityStatus(ctx, config, undefined);
 			return;
@@ -156,6 +152,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		if (!config.enabled) {
 			stopLiveTimer();
 			stopFooterTimer();
+			stopCapacityTimer();
 			clearVibesStatus(ctx);
 			return;
 		}
@@ -276,7 +273,13 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			const usage = getCapacityUsage(ctx);
 			const stage = config.capacity.icons.length
 				? config.capacity.labels[
-						Math.max(0, Math.min(config.capacity.labels.length - 1, Math.floor(((usage.percent ?? 0) / 100) * config.capacity.labels.length)))
+						Math.max(
+							0,
+							Math.min(
+								config.capacity.labels.length - 1,
+								Math.floor(((usage.percent ?? 0) / 100) * config.capacity.labels.length),
+							),
+						)
 					]
 				: "?";
 			ctx.ui.notify(
@@ -304,10 +307,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			return;
 		}
 
-		ctx.ui.notify(
-			"Usage: /team-vibes [on|off|speed on|off|capacity on|off]",
-			"error",
-		);
+		ctx.ui.notify("Usage: /team-vibes [on|off|speed on|off|capacity on|off]", "error");
 	}
 
 	pi.registerCommand("team-vibes", {

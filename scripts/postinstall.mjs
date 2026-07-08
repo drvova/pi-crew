@@ -26,17 +26,22 @@ function run(scriptRel) {
 }
 
 function main() {
-	// Dev clones ship scripts/build-bundle.mjs and devDeps (esbuild) so the
-	// bundle rebuilds; published packages omit both and rely on committed
-	// dist/index.mjs, so this best-effort build simply no-ops.
-	const bundleStatus = run("scripts/build-bundle.mjs");
-	if (bundleStatus !== 0) {
-		console.warn(
-			"[pi-crew] postinstall: bundle build skipped or failed; using committed dist/ (or strip-types fallback). Run npm run build:bundle to retry.",
-		);
+	try {
+		// Dev clones ship scripts/build-bundle.mjs and devDeps (esbuild) so the
+		// bundle rebuilds; published packages omit both and rely on committed
+		// dist/index.mjs, so this best-effort build simply no-ops.
+		const bundleStatus = run("scripts/build-bundle.mjs");
+		if (bundleStatus !== 0) {
+			console.warn(
+				"[pi-crew] postinstall: bundle build skipped or failed; using committed dist/ (or strip-types fallback). Run npm run build:bundle to retry.",
+			);
+		}
+		// Font install is best-effort and must never fail the install.
+		run("scripts/install-crew-vibes-font.mjs");
+	} catch (err) {
+		// Postinstall must NEVER fail the install (SEC-M2).
+		console.warn("[pi-crew] postinstall: best-effort step failed:", err instanceof Error ? err.message : err);
 	}
-	// Font install is best-effort and must never fail the install.
-	run("scripts/install-crew-vibes-font.mjs");
 }
 
 main();

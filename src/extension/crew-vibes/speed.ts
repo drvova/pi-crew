@@ -10,10 +10,7 @@ export type TokenEvent = { time: number; tokens: number };
 
 const COMPACTION_THRESHOLD = 5000;
 
-export type EngineConfig = Pick<
-	SpeedConfig,
-	"slidingWindowMs" | "minReliableDurationMs" | "maxDisplayTokS"
->;
+export type EngineConfig = Pick<SpeedConfig, "slidingWindowMs" | "minReliableDurationMs" | "maxDisplayTokS">;
 
 export function estimateTokensFromDelta(text: string): number {
 	if (!text) return 0;
@@ -29,6 +26,7 @@ export class TokenSpeedEngine {
 	private _events: TokenEvent[] = [];
 	private _windowStartIndex = 0;
 	private _lastStableTokS = 0;
+	private _lastUsageOutput = 0;
 	private _config: EngineConfig;
 
 	constructor(config: EngineConfig) {
@@ -105,6 +103,7 @@ export class TokenSpeedEngine {
 		this._events = [];
 		this._windowStartIndex = 0;
 		this._lastStableTokS = 0;
+		this._lastUsageOutput = 0;
 	}
 
 	stop(): void {
@@ -117,7 +116,11 @@ export class TokenSpeedEngine {
 	recordDelta(delta: string, usageOutput?: number): void {
 		if (!this._isStreaming) return;
 		if (usageOutput !== undefined && usageOutput > 0) {
-			this.recordTokens(usageOutput);
+			// usageOutput may be cumulative across message_update events. Track the
+			// delta to avoid inflating _tokenCount by N× the true total.
+			const increment = usageOutput - this._lastUsageOutput;
+			this._lastUsageOutput = usageOutput;
+			this.recordTokens(Math.max(0, increment));
 			return;
 		}
 		this.recordTokens(estimateTokensFromDelta(delta));

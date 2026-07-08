@@ -64,11 +64,11 @@ import { registerCrewAutocomplete } from "./crew-autocomplete.ts";
 import { registerCleanupHandler } from "./crew-cleanup.ts";
 import { registerCrewInputRouter } from "./crew-input-router.ts";
 import { registerCrewShortcuts } from "./crew-shortcuts.ts";
+import { registerCrewVibes } from "./crew-vibes/index.ts";
 import { type PiCrewRpcHandle, registerPiCrewRpc } from "./cross-extension-rpc.ts";
 import { registerKnowledgeInjection } from "./knowledge-injection.ts";
 import { registerCrewMessageRenderers } from "./message-renderers.ts";
 import type { NotificationDescriptor } from "./notification-router.ts";
-import { registerCrewVibes } from "./crew-vibes/index.ts";
 import { runArtifactCleanup } from "./registration/artifact-cleanup.ts";
 import { registerTeamCommands } from "./registration/commands.ts";
 import { registerCompactionGuard } from "./registration/compaction-guard.ts";
@@ -1547,5 +1547,9 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		enabled: loadConfig(process.cwd()).config.reliability?.ambientStatusInjection !== false,
 	});
 
-	registerCrewVibes(pi);
+	try {
+		registerCrewVibes(pi);
+	} catch (err) {
+		console.warn("[pi-crew] crew-vibes initialization failed:", err instanceof Error ? err.message : err);
+	}
 }

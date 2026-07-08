@@ -31,3 +31,4 @@ vscode-extension/
 !.crew/artifacts/.gitkeep
 !.crew/graphs/.gitkeepfallow-audit-report/
 live-test-research.md
+fallow-audit-report/
