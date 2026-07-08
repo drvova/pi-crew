@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.9.27] — crew-vibes provider usage + animation fixes (2026-07-08)
+
+### Features
+- **Provider rate-limit usage display**: fetches Anthropic / z.ai / Copilot quota data and shows progress bars in the status bar (5h window + weekly/monthly window with reset timers)
+- **Space journey capacity labels**: Orbit → Cruise → Warp → Black Hole → Supernova → Big Bang
+- **Auto-detect web terminals** (gotty, wetty) via cgroup walk — falls back to braille spinner automatically
+- **Provider name** shown in usage bar (z.ai / Claude / Copilot)
+- **Reset timer in days** for long windows (>48h → `30d16h`)
+
+### Fixes
+- **z.ai epoch ms resetAt**: `nextResetTime` is epoch milliseconds, was stored as-is → wrong timer. Now converted to ISO string.
+- **Separate 5h/weekly reset timers**: each window has its own reset time instead of one shared
+- **pi footer sanitizer**: collapses `/ +/g → " "`, destroying space padding. Fixed with non-breaking space (U+00A0)
+- **postinstall.mjs**: wrap main() in try/catch — postinstall must never fail npm install (SEC-M2)
+- **Capacity timer leak**: stopCapacityTimer() in applyConfig disabled path
+- **Cumulative usage delta**: track `_lastUsageOutput` to avoid inflating token count
+
+### Bundle
+- Rebuilt dist/index.mjs with all crew-vibes changes
+
 ## [perf-plan-2026-07] — verified optimization plan shipped (Phases 0–3) (2026-07-08)
 
 Implements `docs/perf/optimization-plan-2026-07-verified.md` end-to-end with bench-first verification on Windows + Node 22. Not a version bump — perf-only change with the existing CLI surface unchanged.

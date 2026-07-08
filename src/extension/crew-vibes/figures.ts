@@ -31,7 +31,6 @@ const BRAILLE_FRAMES: readonly string[] = [
 	"\u280F ", // ⠏
 ] as const;
 
-
 // ── PUA runner frames (opt-in) ────────────────────────────────────────
 // 16 runner poses from the bundled crew-vibes.ttf font.  Only usable when
 // the font is installed AND the terminal renders PUA codepoints correctly.

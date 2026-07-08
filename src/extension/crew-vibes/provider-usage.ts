@@ -76,12 +76,7 @@ type CopilotHostEntry = {
 	token?: string;
 };
 
-const COPILOT_TOKEN_KEYS: Array<keyof CopilotHostEntry> = [
-	"oauth_token",
-	"user_token",
-	"github_token",
-	"token",
-];
+const COPILOT_TOKEN_KEYS: Array<keyof CopilotHostEntry> = ["oauth_token", "user_token", "github_token", "token"];
 
 function tokenFromHostEntry(entry: CopilotHostEntry | undefined): string | undefined {
 	if (!entry) return undefined;
@@ -95,10 +90,7 @@ function tokenFromHostEntry(entry: CopilotHostEntry | undefined): string | undef
 /** Scan legacy Copilot hosts.json locations for a usable token. */
 function loadLegacyCopilotToken(): string | undefined {
 	const configHome = process.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
-	const candidates = [
-		join(configHome, "github-copilot", "hosts.json"),
-		join(homedir(), ".github-copilot", "hosts.json"),
-	];
+	const candidates = [join(configHome, "github-copilot", "hosts.json"), join(homedir(), ".github-copilot", "hosts.json")];
 	for (const hostsPath of candidates) {
 		try {
 			const data = JSON.parse(readFileSync(hostsPath, "utf8")) as Record<string, CopilotHostEntry>;
@@ -122,12 +114,7 @@ function loadLegacyCopilotToken(): string | undefined {
 
 /** Load the Copilot token from auth.json, env vars, then legacy locations. */
 export function loadCopilotToken(): string | undefined {
-	const envToken = (
-		process.env.COPILOT_GITHUB_TOKEN ||
-		process.env.GH_TOKEN ||
-		process.env.GITHUB_TOKEN ||
-		""
-	).trim();
+	const envToken = (process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "").trim();
 	if (envToken) return envToken;
 	try {
 		const data = JSON.parse(readFileSync(piAuthPath(), "utf8")) as {
@@ -151,7 +138,9 @@ type AnthropicUsageResponse = {
 	seven_day?: { utilization?: number; resets_at?: string };
 };
 
-async function fetchAnthropicUsage(token: string): Promise<Pick<ProviderUsage, "fiveHourPercent" | "weeklyPercent" | "fiveHourResetAt" | "weeklyResetAt">> {
+async function fetchAnthropicUsage(
+	token: string,
+): Promise<Pick<ProviderUsage, "fiveHourPercent" | "weeklyPercent" | "fiveHourResetAt" | "weeklyResetAt">> {
 	const data = await withTimeout(10000, async (signal) => {
 		const res = await fetch("https://api.anthropic.com/api/oauth/usage", {
 			headers: {
@@ -235,9 +224,12 @@ async function fetchZaiUsage(token: string): Promise<ProviderUsage> {
 	for (const limit of limits) {
 		const pct = limit.percentage ?? 0;
 		// nextResetTime from z.ai is epoch ms (number) — convert to ISO string
-		const resetIso = typeof limit.nextResetTime === "number"
-			? new Date(limit.nextResetTime).toISOString()
-			: (typeof limit.nextResetTime === "string" ? limit.nextResetTime : null);
+		const resetIso =
+			typeof limit.nextResetTime === "number"
+				? new Date(limit.nextResetTime).toISOString()
+				: typeof limit.nextResetTime === "string"
+					? limit.nextResetTime
+					: null;
 
 		if (limit.type === "TOKENS_LIMIT") {
 			tokensPercent = pct;

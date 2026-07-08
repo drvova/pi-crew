@@ -81896,12 +81896,7 @@ function loadZaiToken() {
     return void 0;
   }
 }
-var COPILOT_TOKEN_KEYS = [
-  "oauth_token",
-  "user_token",
-  "github_token",
-  "token"
-];
+var COPILOT_TOKEN_KEYS = ["oauth_token", "user_token", "github_token", "token"];
 function tokenFromHostEntry(entry) {
   if (!entry) return void 0;
   for (const key of COPILOT_TOKEN_KEYS) {
@@ -81912,10 +81907,7 @@ function tokenFromHostEntry(entry) {
 }
 function loadLegacyCopilotToken() {
   const configHome = process.env.XDG_CONFIG_HOME?.trim() || join77(homedir12(), ".config");
-  const candidates = [
-    join77(configHome, "github-copilot", "hosts.json"),
-    join77(homedir12(), ".github-copilot", "hosts.json")
-  ];
+  const candidates = [join77(configHome, "github-copilot", "hosts.json"), join77(homedir12(), ".github-copilot", "hosts.json")];
   for (const hostsPath of candidates) {
     try {
       const data2 = JSON.parse(readFileSync76(hostsPath, "utf8"));
@@ -82484,33 +82476,13 @@ var SpeedAnimator = class {
 // src/extension/crew-vibes/cat-frames.ts
 var CAT_FRAMES2 = [
   // Frame 0 — standing
-  [
-    "\u2584\u2584 \u2588\u2588\u2588\u2584 ",
-    "\u2580\u2580\u2588\u2588\u2588\u2588\u2588\u2584",
-    "  \u2588\u2588\u2580\u2588\u2588 ",
-    "  \u2580\u2580  \u2580\u2580"
-  ],
+  ["\u2584\u2584 \u2588\u2588\u2588\u2584 ", "\u2580\u2580\u2588\u2588\u2588\u2588\u2588\u2584", "  \u2588\u2588\u2580\u2588\u2588 ", "  \u2580\u2580  \u2580\u2580"],
   // Frame 1 — step 1
-  [
-    "  \u2588\u2588\u2588\u2588  ",
-    "  \u2588\u2588\u2588\u2588\u2588\u2584",
-    "\u2584\u2588\u2588\u2588\u2588\u2588\u2588\u2580",
-    "  \u2588\u2588 \u2580\u2588\u2584"
-  ],
+  ["  \u2588\u2588\u2588\u2588  ", "  \u2588\u2588\u2588\u2588\u2588\u2584", "\u2584\u2588\u2588\u2588\u2588\u2588\u2588\u2580", "  \u2588\u2588 \u2580\u2588\u2584"],
   // Frame 2 — step 2
-  [
-    " \u2584\u2588\u2588\u2588\u2588\u2588\u2588",
-    " \u2588\u2588\u2588\u2588\u2588\u2580 ",
-    "\u2588\u2588\u2588\u2588\u2588\u2588\u2588 ",
-    "\u2580\u2588\u2588\u2588\u2588\u2588\u2588 "
-  ],
+  [" \u2584\u2588\u2588\u2588\u2588\u2588\u2588", " \u2588\u2588\u2588\u2588\u2588\u2580 ", "\u2588\u2588\u2588\u2588\u2588\u2588\u2588 ", "\u2580\u2588\u2588\u2588\u2588\u2588\u2588 "],
   // Frame 3 — step 3
-  [
-    "  \u2588\u2588\u2588\u2588  ",
-    "\u2584\u2588\u2588\u2588\u2588\u2588\u2584 ",
-    "\u2580\u2588\u2588\u2588\u2588\u2588\u2588\u2584",
-    "\u2584\u2588\u2580  \u2588\u2588 "
-  ]
+  ["  \u2588\u2588\u2588\u2588  ", "\u2584\u2588\u2588\u2588\u2588\u2588\u2584 ", "\u2580\u2588\u2588\u2588\u2588\u2588\u2588\u2584", "\u2584\u2588\u2580  \u2588\u2588 "]
 ];
 var CAT_FRAME_COUNT = CAT_FRAMES2.length;
 
