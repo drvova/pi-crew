@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 
@@ -31,4 +31,28 @@ export function hasCrewFontFile(): boolean {
 	const p = fontPath();
 	_hasFontFile = p !== "" && existsSync(p);
 	return _hasFontFile;
+}
+
+/** Returns true when running in a web-based terminal (gotty, wetty, etc.)
+ * where system fonts are not available for PUA rendering. */
+export function isWebTerminal(): boolean {
+	if (process.env.GOTTY || process.env.WEBTERM) return true;
+	if (process.env.TERM === "dumb") return true;
+	try {
+		// Check current process and ancestors — gotty is often the grandparent
+		// (gotty → tmux → pi), so /proc/self/cgroup may not contain it.
+		let pid = process.pid;
+		for (let i = 0; i < 6 && pid > 1; i++) {
+			const cgroup = readFileSync(`/proc/${pid}/cgroup`, "utf8");
+			if (cgroup.includes("gotty") || cgroup.includes("wetty")) return true;
+			const match = cgroup.match(/\d+:.*:(.*)/);
+			// Read PPid from status
+			const status = readFileSync(`/proc/${pid}/status`, "utf8");
+			const ppid = status.match(/^PPid:\s+(\d+)/m);
+			pid = ppid ? Number.parseInt(ppid[1], 10) : 1;
+		}
+	} catch {
+		// not Linux or /proc not available
+	}
+	return false;
 }

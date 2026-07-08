@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { hasCrewFontFile } from "./font-detect.ts";
+import { hasCrewFontFile, isWebTerminal } from "./font-detect.ts";
 
 /**
  * Self-contained config for the crew-vibes module (speed + capacity meters).
@@ -92,6 +92,8 @@ const FALLBACK_CAPACITY_ICONS: [string, string, string, string, string, string] 
  * PUA glyphs (U+E710..U+E715) require crew-vibes.ttf AND terminal PUA
  * support — many terminals cannot render them even with the font installed. */
 export function capacityIcons(): [string, string, string, string, string, string] {
+	// Web terminals cannot render PUA glyphs — use fallback.
+	if (isWebTerminal()) return FALLBACK_CAPACITY_ICONS;
 	return hasCrewFontFile() ? DEFAULT_CONFIG.capacity.icons : FALLBACK_CAPACITY_ICONS;
 }
 

@@ -81684,11 +81684,11 @@ function registerCrewShortcuts(pi) {
 var CREW_SHORTCUT_KEYS = CREW_SHORTCUTS.map((s) => s.key);
 
 // src/extension/crew-vibes/config.ts
-import { existsSync as existsSync76, mkdirSync as mkdirSync44, readFileSync as readFileSync74, writeFileSync as writeFileSync33 } from "node:fs";
+import { existsSync as existsSync76, mkdirSync as mkdirSync44, readFileSync as readFileSync75, writeFileSync as writeFileSync33 } from "node:fs";
 import { dirname as dirname39, join as join76 } from "node:path";
 
 // src/extension/crew-vibes/font-detect.ts
-import { existsSync as existsSync75 } from "node:fs";
+import { existsSync as existsSync75, readFileSync as readFileSync74 } from "node:fs";
 import { homedir as homedir11, platform } from "node:os";
 import { join as join75 } from "node:path";
 function fontPath() {
@@ -81708,6 +81708,23 @@ function hasCrewFontFile() {
   const p = fontPath();
   _hasFontFile = p !== "" && existsSync75(p);
   return _hasFontFile;
+}
+function isWebTerminal() {
+  if (process.env.GOTTY || process.env.WEBTERM) return true;
+  if (process.env.TERM === "dumb") return true;
+  try {
+    let pid = process.pid;
+    for (let i2 = 0; i2 < 6 && pid > 1; i2++) {
+      const cgroup = readFileSync74(`/proc/${pid}/cgroup`, "utf8");
+      if (cgroup.includes("gotty") || cgroup.includes("wetty")) return true;
+      const match = cgroup.match(/\d+:.*:(.*)/);
+      const status = readFileSync74(`/proc/${pid}/status`, "utf8");
+      const ppid = status.match(/^PPid:\s+(\d+)/m);
+      pid = ppid ? Number.parseInt(ppid[1], 10) : 1;
+    }
+  } catch {
+  }
+  return false;
 }
 
 // src/extension/crew-vibes/config.ts
@@ -81759,6 +81776,7 @@ var FALLBACK_CAPACITY_ICONS = [
   // ⬢ filled hexagon (oh lawd)
 ];
 function capacityIcons() {
+  if (isWebTerminal()) return FALLBACK_CAPACITY_ICONS;
   return hasCrewFontFile() ? DEFAULT_CONFIG2.capacity.icons : FALLBACK_CAPACITY_ICONS;
 }
 function asRecord10(value) {
@@ -81827,7 +81845,7 @@ function loadConfig2() {
   try {
     const path81 = configPath2();
     if (!existsSync76(path81)) return normalizeConfig(void 0);
-    return normalizeConfig(JSON.parse(readFileSync74(path81, "utf8")));
+    return normalizeConfig(JSON.parse(readFileSync75(path81, "utf8")));
   } catch {
     return normalizeConfig(void 0);
   }
@@ -81881,6 +81899,7 @@ var PUA_CREW_FRAMES = [
   "\uE70F "
 ];
 function crewFrames(style = "pua") {
+  if (style === "pua" && isWebTerminal()) return BRAILLE_FRAMES;
   return style === "pua" ? PUA_CREW_FRAMES : BRAILLE_FRAMES;
 }
 function intervalForSpeed(config, speed) {

@@ -17118,7 +17118,7 @@
       "format": "esm"
     },
     "src/extension/crew-vibes/font-detect.ts": {
-      "bytes": 1295,
+      "bytes": 2265,
       "imports": [
         {
           "path": "node:fs",
@@ -17139,7 +17139,7 @@
       "format": "esm"
     },
     "src/extension/crew-vibes/config.ts": {
-      "bytes": 6584,
+      "bytes": 6714,
       "imports": [
         {
           "path": "node:fs",
@@ -17160,8 +17160,14 @@
       "format": "esm"
     },
     "src/extension/crew-vibes/figures.ts": {
-      "bytes": 3611,
-      "imports": [],
+      "bytes": 3800,
+      "imports": [
+        {
+          "path": "src/extension/crew-vibes/font-detect.ts",
+          "kind": "import-statement",
+          "original": "./font-detect.ts"
+        }
+      ],
       "format": "esm"
     },
     "src/extension/crew-vibes/render.ts": {
@@ -18302,7 +18308,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6566187
+      "bytes": 6568160
     },
     "dist/index.mjs": {
       "imports": [
@@ -21927,13 +21933,13 @@
           "bytesInOutput": 1204
         },
         "src/extension/crew-vibes/config.ts": {
-          "bytesInOutput": 4872
+          "bytesInOutput": 4927
         },
         "src/extension/crew-vibes/font-detect.ts": {
-          "bytesInOutput": 809
+          "bytesInOutput": 1467
         },
         "src/extension/crew-vibes/figures.ts": {
-          "bytesInOutput": 1273
+          "bytesInOutput": 1338
         },
         "src/extension/crew-vibes/render.ts": {
           "bytesInOutput": 3655
@@ -21978,7 +21984,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3132520
+      "bytes": 3133298
     }
   }
 }
