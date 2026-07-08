@@ -82223,15 +82223,22 @@ function formatResetTimer(resetAt) {
   const remMins = mins % 60;
   return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
 }
+function renderBar(percent, width = 10) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  const filled = Math.round(clamped / 100 * width);
+  return `${"\u2588".repeat(filled)}${"\u2591".repeat(width - filled)}`;
+}
 function renderProviderUsage(theme, usage) {
   if (!usage) return void 0;
   const parts = [];
+  const fiveHourBar = renderBar(usage.fiveHourPercent);
   const fiveHourRounded = Math.round(usage.fiveHourPercent);
-  const fiveHourText = `5h: ${fiveHourRounded}%`;
+  const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%`;
   const fiveHourColor = usage.fiveHourPercent >= 80 ? "error" : "accent";
   parts.push(theme ? theme.fg(fiveHourColor, fiveHourText) : fiveHourText);
+  const weeklyBar = renderBar(usage.weeklyPercent);
   const weeklyRounded = Math.round(usage.weeklyPercent);
-  const weeklyText = `Wk: ${weeklyRounded}%`;
+  const weeklyText = `Wk ${weeklyBar} ${weeklyRounded}%`;
   parts.push(theme ? theme.fg("dim", weeklyText) : weeklyText);
   const resetText = formatResetTimer(usage.resetAt);
   if (resetText) {

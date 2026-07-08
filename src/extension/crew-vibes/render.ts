@@ -140,22 +140,32 @@ function formatResetTimer(resetAt: string | null): string | null {
 	return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
 }
 
-// Render provider rate-limit usage as a compact status string.
+// Render provider rate-limit usage as a compact status string with bars.
 // Returns `undefined` when there is nothing to show (null usage).
+
+/** Render a 10-cell progress bar: [█████░░░░░░] for 50%. */
+function renderBar(percent: number, width = 10): string {
+	const clamped = Math.max(0, Math.min(100, percent));
+	const filled = Math.round((clamped / 100) * width);
+	return `${"\u2588".repeat(filled)}${"\u2591".repeat(width - filled)}`;
+}
+
 export function renderProviderUsage(theme: CrewTheme | undefined, usage: ProviderUsage | null): string | undefined {
 	if (!usage) return undefined;
 
 	const parts: string[] = [];
 
 	// 5h window — error color at 80%+, accent otherwise
+	const fiveHourBar = renderBar(usage.fiveHourPercent);
 	const fiveHourRounded = Math.round(usage.fiveHourPercent);
-	const fiveHourText = `5h: ${fiveHourRounded}%`;
+	const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%`;
 	const fiveHourColor = usage.fiveHourPercent >= 80 ? "error" : "accent";
 	parts.push(theme ? theme.fg(fiveHourColor, fiveHourText) : fiveHourText);
 
 	// Weekly window — dim
+	const weeklyBar = renderBar(usage.weeklyPercent);
 	const weeklyRounded = Math.round(usage.weeklyPercent);
-	const weeklyText = `Wk: ${weeklyRounded}%`;
+	const weeklyText = `Wk ${weeklyBar} ${weeklyRounded}%`;
 	parts.push(theme ? theme.fg("dim", weeklyText) : weeklyText);
 
 	// Reset timer — dim
