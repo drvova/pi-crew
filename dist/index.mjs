@@ -82214,6 +82214,83 @@ var SpeedAnimator = class {
   }
 };
 
+// src/extension/crew-vibes/cat-frames.ts
+var CAT_FRAMES2 = [
+  // Frame 0 — standing
+  [
+    "\u2584\u2584 \u2588\u2588\u2588\u2584 ",
+    "\u2580\u2580\u2588\u2588\u2588\u2588\u2588\u2584",
+    "  \u2588\u2588\u2580\u2588\u2588 ",
+    "  \u2580\u2580  \u2580\u2580"
+  ],
+  // Frame 1 — step 1
+  [
+    "  \u2588\u2588\u2588\u2588  ",
+    "  \u2588\u2588\u2588\u2588\u2588\u2584",
+    "\u2584\u2588\u2588\u2588\u2588\u2588\u2588\u2580",
+    "  \u2588\u2588 \u2580\u2588\u2584"
+  ],
+  // Frame 2 — step 2
+  [
+    " \u2584\u2588\u2588\u2588\u2588\u2588\u2588",
+    " \u2588\u2588\u2588\u2588\u2588\u2580 ",
+    "\u2588\u2588\u2588\u2588\u2588\u2588\u2588 ",
+    "\u2580\u2588\u2588\u2588\u2588\u2588\u2588 "
+  ],
+  // Frame 3 — step 3
+  [
+    "  \u2588\u2588\u2588\u2588  ",
+    "\u2584\u2588\u2588\u2588\u2588\u2588\u2584 ",
+    "\u2580\u2588\u2588\u2588\u2588\u2588\u2588\u2584",
+    "\u2584\u2588\u2580  \u2588\u2588 "
+  ]
+];
+var CAT_FRAME_COUNT = CAT_FRAMES2.length;
+
+// src/extension/crew-vibes/cat-widget.ts
+var CatWidget = class {
+  frameIndex = 0;
+  intervalId = null;
+  intervalMs;
+  constructor(intervalMs = 200) {
+    this.intervalMs = intervalMs;
+  }
+  start() {
+    if (this.intervalId) return;
+    this.intervalId = setInterval(() => {
+      this.frameIndex = (this.frameIndex + 1) % CAT_FRAME_COUNT;
+      this.cachedLines = null;
+    }, this.intervalMs);
+  }
+  stop() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+  setIntervalMs(ms) {
+    this.intervalMs = ms;
+    if (this.intervalId) {
+      this.stop();
+      this.start();
+    }
+  }
+  render(width) {
+    const frame = CAT_FRAMES2[this.frameIndex] ?? CAT_FRAMES2[0];
+    const lines = [];
+    for (const row of frame) {
+      const padding = Math.max(0, Math.floor((width - row.length) / 2));
+      lines.push(" ".repeat(padding) + row);
+    }
+    return lines;
+  }
+  invalidate() {
+  }
+  dispose() {
+    this.stop();
+  }
+};
+
 // src/extension/crew-vibes/index.ts
 function isAssistantMessage(message) {
   return typeof message === "object" && message !== null && message.role === "assistant";
@@ -82239,6 +82316,7 @@ function registerCrewVibes(pi) {
   let liveTimer;
   let footerTimer;
   let capacityTimer;
+  const catWidget = isWebTerminal() ? new CatWidget(config.speed.renderIntervalMs) : null;
   function themeOf(ctx) {
     return asCrewTheme2(ctx.hasUI ? ctx.ui.theme : void 0);
   }
@@ -82372,6 +82450,10 @@ function registerCrewVibes(pi) {
     footerAnimator.reset(speedTracker.lastTokS);
     startLiveTimer(ctx);
     lastRenderedAt = 0;
+    if (catWidget && ctx.hasUI) {
+      catWidget.start();
+      ctx.ui.setWidget("crew-vibes-cat", (tui, theme) => catWidget, { placement: "aboveEditor" });
+    }
   });
   pi.on("message_update", (event, ctx) => {
     if (!config.enabled || !config.speed.enabled || !isAssistantMessage(event.message) || !speedTracker.isStreaming) return;
@@ -82399,6 +82481,10 @@ function registerCrewVibes(pi) {
     publishSpeedFooter(ctx);
     startFooterTimer(ctx);
     applyIndicator(ctx, speedTracker.lastTokS);
+    if (catWidget && ctx.hasUI) {
+      catWidget.stop();
+      ctx.ui.setWidget("crew-vibes-cat", void 0);
+    }
   });
   pi.on("turn_end", () => {
     speedTracker.stopMessage();
@@ -82407,9 +82493,12 @@ function registerCrewVibes(pi) {
   pi.on("agent_end", (_event, ctx) => {
     speedTracker.stopMessage();
     stopLiveTimer();
-    if (!ctx || !config.enabled || !ctx.hasUI) return;
-    applyIndicator(ctx, speedTracker.lastTokS);
-    ctx.ui.setWorkingMessage();
+    if (catWidget) catWidget.stop();
+    if (ctx && config.enabled && ctx.hasUI) {
+      applyIndicator(ctx, speedTracker.lastTokS);
+      ctx.ui.setWorkingMessage();
+      ctx.ui.setWidget("crew-vibes-cat", void 0);
+    }
   });
   pi.on("model_select", (_event, ctx) => publishCapacity(ctx));
   pi.on("session_compact", (_event, ctx) => publishCapacity(ctx));
@@ -82418,7 +82507,9 @@ function registerCrewVibes(pi) {
     stopLiveTimer();
     stopFooterTimer();
     stopCapacityTimer();
+    if (catWidget) catWidget.stop();
     clearVibesStatus(ctx);
+    if (ctx.hasUI) ctx.ui.setWidget("crew-vibes-cat", void 0);
   });
   async function handleCommand(args, ctx) {
     const tokens = args.trim().split(/\s+/).filter(Boolean);

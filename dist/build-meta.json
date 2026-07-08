@@ -17191,13 +17191,34 @@
       "imports": [],
       "format": "esm"
     },
+    "src/extension/crew-vibes/cat-frames.ts": {
+      "bytes": 895,
+      "imports": [],
+      "format": "esm"
+    },
+    "src/extension/crew-vibes/cat-widget.ts": {
+      "bytes": 1425,
+      "imports": [
+        {
+          "path": "src/extension/crew-vibes/cat-frames.ts",
+          "kind": "import-statement",
+          "original": "./cat-frames.ts"
+        }
+      ],
+      "format": "esm"
+    },
     "src/extension/crew-vibes/index.ts": {
-      "bytes": 10263,
+      "bytes": 11009,
       "imports": [
         {
           "path": "src/extension/crew-vibes/config.ts",
           "kind": "import-statement",
           "original": "./config.ts"
+        },
+        {
+          "path": "src/extension/crew-vibes/font-detect.ts",
+          "kind": "import-statement",
+          "original": "./font-detect.ts"
         },
         {
           "path": "src/extension/crew-vibes/figures.ts",
@@ -17213,6 +17234,11 @@
           "path": "src/extension/crew-vibes/speed.ts",
           "kind": "import-statement",
           "original": "./speed.ts"
+        },
+        {
+          "path": "src/extension/crew-vibes/cat-widget.ts",
+          "kind": "import-statement",
+          "original": "./cat-widget.ts"
         }
       ],
       "format": "esm"
@@ -18308,7 +18334,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6568160
+      "bytes": 6573474
     },
     "dist/index.mjs": {
       "imports": [
@@ -21947,8 +21973,14 @@
         "src/extension/crew-vibes/speed.ts": {
           "bytesInOutput": 6470
         },
+        "src/extension/crew-vibes/cat-frames.ts": {
+          "bytesInOutput": 935
+        },
+        "src/extension/crew-vibes/cat-widget.ts": {
+          "bytesInOutput": 943
+        },
         "src/extension/crew-vibes/index.ts": {
-          "bytesInOutput": 9003
+          "bytesInOutput": 9560
         },
         "src/extension/cross-extension-rpc.ts": {
           "bytesInOutput": 8532
@@ -21984,7 +22016,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3133298
+      "bytes": 3135819
     }
   }
 }
