@@ -68,6 +68,21 @@ export function loadZaiToken(): string | undefined {
 	}
 }
 
+/** Load the Minimax API key from env or auth.json. */
+export function loadMinimaxToken(): string | undefined {
+	const envKey = process.env.MINIMAX_API_KEY?.trim();
+	if (envKey) return envKey;
+	try {
+		const data = JSON.parse(readFileSync(piAuthPath(), "utf8")) as {
+			minimax?: { key?: string };
+		};
+		const key = data.minimax?.key;
+		return typeof key === "string" && key.length > 0 ? key : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** Copilot host entry keys used by the legacy GitHub Copilot CLI. */
 type CopilotHostEntry = {
 	oauth_token?: string;
@@ -262,6 +277,51 @@ export function clearProviderUsageCache(): void {
 	cachedAt = 0;
 }
 
+/** Minimax token plan remains response shape. */
+type MinimaxModelRemain = {
+	model_name?: string;
+	current_interval_remaining_percent?: number;
+	current_weekly_remaining_percent?: number;
+	end_time?: number;
+	weekly_end_time?: number;
+};
+type MinimaxUsageResponse = {
+	model_remains?: MinimaxModelRemain[];
+	base_resp?: { status_code?: number; status_msg?: string };
+};
+
+async function fetchMinimaxUsage(token: string): Promise<ProviderUsage> {
+	const data = await withTimeout(10000, async (signal) => {
+		const res = await fetch("https://www.minimax.io/v1/token_plan/remains", {
+			headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+			signal,
+		});
+		if (!res.ok) throw new Error(`minimax usage HTTP ${res.status}`);
+		return (await res.json()) as MinimaxUsageResponse;
+	});
+	if (data.base_resp?.status_code !== 0) throw new Error(data.base_resp?.status_msg || "minimax API error");
+
+	// Find the "general" model (text/chat). Fall back to first model.
+	const models = data.model_remains ?? [];
+	const general = models.find((m) => m.model_name === "general") ?? models[0];
+	if (!general) throw new Error("minimax: no model data");
+
+	// remaining_percent → used percent
+	const intervalUsed = 100 - (general.current_interval_remaining_percent ?? 100);
+	const weeklyUsed = 100 - (general.current_weekly_remaining_percent ?? 100);
+
+	const intervalReset = typeof general.end_time === "number" ? new Date(general.end_time).toISOString() : null;
+	const weeklyReset = typeof general.weekly_end_time === "number" ? new Date(general.weekly_end_time).toISOString() : null;
+
+	return {
+		providerName: "Minimax",
+		fiveHourPercent: intervalUsed,
+		fiveHourResetAt: intervalReset,
+		weeklyPercent: weeklyUsed,
+		weeklyResetAt: weeklyReset,
+	};
+}
+
 /**
  * Fetch provider rate-limit usage, caching the result for `maxAgeMs`.
  *
@@ -290,6 +350,19 @@ export async function fetchProviderUsage(maxAgeMs = 300000): Promise<ProviderUsa
 			cachedUsage = usage;
 			cachedAt = Date.now();
 			return usage;
+		}
+
+		// Try Minimax (before z.ai — user typically has both)
+		const minimaxToken = loadMinimaxToken();
+		if (minimaxToken) {
+			try {
+				const usage = await fetchMinimaxUsage(minimaxToken);
+				cachedUsage = usage;
+				cachedAt = Date.now();
+				return usage;
+			} catch {
+				// minimax failed, try next
+			}
 		}
 
 		// Try z.ai

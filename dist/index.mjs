@@ -81896,6 +81896,17 @@ function loadZaiToken() {
     return void 0;
   }
 }
+function loadMinimaxToken() {
+  const envKey = process.env.MINIMAX_API_KEY?.trim();
+  if (envKey) return envKey;
+  try {
+    const data2 = JSON.parse(readFileSync76(piAuthPath(), "utf8"));
+    const key = data2.minimax?.key;
+    return typeof key === "string" && key.length > 0 ? key : void 0;
+  } catch {
+    return void 0;
+  }
+}
 var COPILOT_TOKEN_KEYS = ["oauth_token", "user_token", "github_token", "token"];
 function tokenFromHostEntry(entry) {
   if (!entry) return void 0;
@@ -82020,6 +82031,31 @@ function clearProviderUsageCache() {
   cachedUsage = null;
   cachedAt = 0;
 }
+async function fetchMinimaxUsage(token) {
+  const data2 = await withTimeout(1e4, async (signal) => {
+    const res = await fetch("https://www.minimax.io/v1/token_plan/remains", {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal
+    });
+    if (!res.ok) throw new Error(`minimax usage HTTP ${res.status}`);
+    return await res.json();
+  });
+  if (data2.base_resp?.status_code !== 0) throw new Error(data2.base_resp?.status_msg || "minimax API error");
+  const models = data2.model_remains ?? [];
+  const general = models.find((m) => m.model_name === "general") ?? models[0];
+  if (!general) throw new Error("minimax: no model data");
+  const intervalUsed = 100 - (general.current_interval_remaining_percent ?? 100);
+  const weeklyUsed = 100 - (general.current_weekly_remaining_percent ?? 100);
+  const intervalReset = typeof general.end_time === "number" ? new Date(general.end_time).toISOString() : null;
+  const weeklyReset = typeof general.weekly_end_time === "number" ? new Date(general.weekly_end_time).toISOString() : null;
+  return {
+    providerName: "Minimax",
+    fiveHourPercent: intervalUsed,
+    fiveHourResetAt: intervalReset,
+    weeklyPercent: weeklyUsed,
+    weeklyResetAt: weeklyReset
+  };
+}
 async function fetchProviderUsage(maxAgeMs = 3e5) {
   if (cachedUsage !== null && Date.now() - cachedAt < maxAgeMs) {
     return cachedUsage;
@@ -82038,6 +82074,16 @@ async function fetchProviderUsage(maxAgeMs = 3e5) {
       cachedUsage = usage;
       cachedAt = Date.now();
       return usage;
+    }
+    const minimaxToken = loadMinimaxToken();
+    if (minimaxToken) {
+      try {
+        const usage = await fetchMinimaxUsage(minimaxToken);
+        cachedUsage = usage;
+        cachedAt = Date.now();
+        return usage;
+      } catch {
+      }
     }
     const zaiToken = loadZaiToken();
     if (zaiToken) {
