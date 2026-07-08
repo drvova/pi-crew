@@ -80,11 +80,49 @@ try {
 	}
 	batch.sort((a, b) => a - b);
 
+	// Scenario 3 (F3a): terminal vs non-terminal cost. Today both go through
+	// the same fsync-on-every-event path. Once F3a (fsync only on terminal
+	// events) ships, the `nonTerminal` series should drop noticeably while the
+	// `terminal` series stays flat. Each iteration targets a fresh file so
+	// we measure the single-call fsync cost in isolation, not log-growth cost.
+	const nonTerminal: number[] = [];
+	for (let i = 0; i < ITERS; i++) {
+		const fp = path.join(tmpRoot, "nonterm", `evt-${i}.jsonl`);
+		fs.mkdirSync(path.dirname(fp), { recursive: true });
+		fs.writeFileSync(fp, "");
+		const t0 = performance.now();
+		appendEvent(fp, {
+			type: "task.progress",
+			runId: "bench-evt",
+			data: { i },
+		});
+		nonTerminal.push(performance.now() - t0);
+	}
+	nonTerminal.sort((a, b) => a - b);
+
+	const terminal: number[] = [];
+	for (let i = 0; i < ITERS; i++) {
+		const fp = path.join(tmpRoot, "term", `evt-${i}.jsonl`);
+		fs.mkdirSync(path.dirname(fp), { recursive: true });
+		fs.writeFileSync(fp, "");
+		const t0 = performance.now();
+		appendEvent(fp, {
+			type: "task.completed",
+			runId: "bench-evt",
+			data: { i },
+		});
+		terminal.push(performance.now() - t0);
+	}
+	terminal.sort((a, b) => a - b);
+
 	const out = {
 		name: "event-append",
 		iters: ITERS,
 		serial: stats(serial),
 		batch: stats(batch),
+		// F3a tracking: post-fix, non-terminal should drop, terminal stays
+		nonTerminal: stats(nonTerminal),
+		terminal: stats(terminal),
 	};
 	process.stdout.write(JSON.stringify(out) + "\n");
 } finally {

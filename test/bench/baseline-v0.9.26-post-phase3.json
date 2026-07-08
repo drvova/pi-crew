@@ -1,0 +1,229 @@
+{
+  "capturedAt": "2026-07-08T03:20:03.388Z",
+  "node": "v22.14.0",
+  "platform": "win32",
+  "results": {
+    "atomic-write-json": {
+      "name": "atomic-write-json",
+      "iters": 200,
+      "payloadBytes": 355,
+      "cold": {
+        "min": 2.94,
+        "p50": 3.64,
+        "p95": 4.85,
+        "p99": 5.32,
+        "max": 5.94
+      },
+      "warm": {
+        "min": 2.87,
+        "p50": 3.68,
+        "p95": 4.74,
+        "p99": 5.02,
+        "max": 5.16
+      },
+      "bestEffortControl": {
+        "min": 2.54,
+        "p50": 3.51,
+        "p95": 4.71,
+        "p99": 5.86,
+        "max": 6.58
+      }
+    },
+    "config-load": {
+      "name": "config-load",
+      "iters": 200,
+      "coldMiss": {
+        "min": 2.34,
+        "p50": 2.86,
+        "p95": 5.24,
+        "p99": 9.96,
+        "max": 11.33
+      },
+      "warmHit": {
+        "min": 0.79,
+        "p50": 0.99,
+        "p95": 2.35,
+        "p99": 3.25,
+        "max": 4.17
+      },
+      "coldAfterMtimeChange": {
+        "min": 2.34,
+        "p50": 2.94,
+        "p95": 6.28,
+        "p99": 8.82,
+        "max": 11.02
+      }
+    },
+    "discover-workflows": {
+      "name": "discover-workflows",
+      "iters": 200,
+      "cwdIsProject": true,
+      "builtinCount": 9,
+      "userCount": 0,
+      "projectCount": 0,
+      "firstCall": {
+        "min": 3.53,
+        "p50": 3.53,
+        "p95": 3.53,
+        "p99": 3.53,
+        "max": 3.53
+      },
+      "subsequent": {
+        "min": 0.97,
+        "p50": 1.29,
+        "p95": 3.66,
+        "p99": 8.98,
+        "max": 10.05
+      },
+      "allRepeats": {
+        "min": 0.96,
+        "p50": 1.29,
+        "p95": 3.66,
+        "p99": 8.98,
+        "max": 10.05
+      }
+    },
+    "event-append": {
+      "name": "event-append",
+      "iters": 200,
+      "serial": {
+        "min": 6.45,
+        "p50": 8,
+        "p95": 10.23,
+        "p99": 23.58,
+        "max": 146.49
+      },
+      "batch": {
+        "min": 7.85,
+        "p50": 14.8,
+        "p95": 18.72,
+        "p99": 60.76,
+        "max": 97.5
+      },
+      "nonTerminal": {
+        "min": 15.09,
+        "p50": 19.83,
+        "p95": 101.84,
+        "p99": 127.67,
+        "max": 1566.81
+      },
+      "terminal": {
+        "min": 17.67,
+        "p50": 22.7,
+        "p95": 27.89,
+        "p99": 34.25,
+        "max": 87.14
+      }
+    },
+    "persist-single-task-update": {
+      "name": "persist-single-task-update",
+      "iters": 200,
+      "burstSize": 10,
+      "durableWrite": {
+        "min": 2.7,
+        "p50": 3.31,
+        "p95": 4.37,
+        "p99": 5.56,
+        "max": 8.38
+      },
+      "coalescedFlush": {
+        "min": 2.78,
+        "p50": 3.72,
+        "p95": 5.4,
+        "p99": 5.64,
+        "max": 6.03
+      },
+      "burst10": {
+        "min": 3.41,
+        "p50": 4.54,
+        "p95": 5.23,
+        "p99": 5.23,
+        "max": 5.47
+      },
+      "perWriteInBurst": {
+        "min": 0.34,
+        "p50": 0.45,
+        "p95": 0.52,
+        "p99": 0.52,
+        "max": 0.55
+      }
+    },
+    "register-startup": {
+      "name": "register-startup",
+      "unit": "ms",
+      "iters": 20,
+      "import": {
+        "min": 1896.61,
+        "p50": 2065.21,
+        "p95": 2316.03,
+        "p99": 2316.03,
+        "max": 4293.56
+      },
+      "register": {
+        "min": 358.03,
+        "p50": 406.97,
+        "p95": 530.7,
+        "p99": 530.7,
+        "max": 872.18
+      }
+    },
+    "render-flush": {
+      "name": "render-flush",
+      "unit": "ms",
+      "iters": 200,
+      "eventsPerIter": 200,
+      "min": 0.08,
+      "p50": 0.17,
+      "p95": 0.74,
+      "p99": 1.39,
+      "max": 1.85
+    },
+    "snapshot-cache": {
+      "name": "snapshot-cache",
+      "unit": "ms",
+      "iters": 50,
+      "tasks": 10,
+      "events": 200,
+      "cold": {
+        "min": 4.45,
+        "p50": 5.59,
+        "p95": 7.46,
+        "p99": 8.2,
+        "max": 8.61
+      },
+      "warm": {
+        "min": 4.47,
+        "p50": 5.31,
+        "p95": 7.84,
+        "p99": 9.51,
+        "max": 14.52
+      }
+    },
+    "task-graph-scheduler": {
+      "name": "task-graph-scheduler",
+      "iters": 50,
+      "tasksPerDag": 21,
+      "buildIndex": {
+        "min": 0.01,
+        "p50": 0.01,
+        "p95": 0.09,
+        "p99": 0.67,
+        "max": 0.95
+      },
+      "refreshQueues": {
+        "min": 0.01,
+        "p50": 0.01,
+        "p95": 0.02,
+        "p99": 0.03,
+        "max": 0.76
+      },
+      "fullRun": {
+        "min": 0.02,
+        "p50": 0.02,
+        "p95": 0.04,
+        "p99": 0.13,
+        "max": 0.34
+      }
+    }
+  }
+}
