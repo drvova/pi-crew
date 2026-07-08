@@ -52,9 +52,21 @@ function installFont() {
 	log(`Installed crew-vibes font to ${target}`);
 
 	if (os === "linux") {
-		const result = spawnSync("fc-cache", ["-f", targetDir], { stdio: "ignore" });
-		if (result.status === 0) log("Refreshed font cache");
+		// Refresh fontconfig cache so newly installed font is immediately
+		// available to all terminals.  -fv for verbose + forced rebuild.
+		const result = spawnSync("fc-cache", ["-fv", targetDir], { stdio: "ignore" });
+		if (result.status === 0) log("Refreshed font cache (fc-cache -fv)");
 		else log("fontconfig fc-cache not available; restart terminal if font is not visible");
+
+		// Verify font is actually indexed by fontconfig
+		const verify = spawnSync("fc-match", [":charset=E700"], { encoding: "utf8" });
+		if (verify.stdout && verify.stdout.includes(FONT_NAME)) {
+			log("Font verified: fc-match U+E700 -> crew-vibes.ttf");
+		} else {
+			log("WARNING: fc-match did not resolve U+E700 to crew-vibes.ttf");
+			log("  Run: fc-cache -fv " + targetDir);
+			log("  Then restart your terminal.");
+		}
 	}
 
 	if (os === "win32") {
