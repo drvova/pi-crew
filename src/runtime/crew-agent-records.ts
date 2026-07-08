@@ -338,7 +338,9 @@ export function upsertCrewAgent(manifest: TeamRunManifest, record: CrewAgentReco
 
 export function writeCrewAgentStatus(manifest: TeamRunManifest, record: CrewAgentRecord): void {
 	ensureAgentStateDir(manifest, record.taskId);
-	atomicWriteJson(agentStatusPath(manifest, record.taskId), redactSecrets(record));
+	// F4: terminal agent status (completed/failed/cancelled/blocked) — keep full
+	// durability so the notifier/dashboard health sees the final state immediately.
+	atomicWriteJson(agentStatusPath(manifest, record.taskId), redactSecrets(record), { durability: "full" });
 }
 
 // 2.5 — coalesced variants. Buffer per-agent record + aggregate writes for
@@ -350,14 +352,19 @@ const AGENT_COALESCE_MS = 250;
 export function saveCrewAgentsCoalesced(manifest: TeamRunManifest, records: CrewAgentRecord[]): void {
 	const filePath = agentsPath(manifest);
 	fs.mkdirSync(manifest.stateRoot, { recursive: true });
-	atomicWriteJsonCoalesced(filePath, redactSecrets(records), AGENT_COALESCE_MS);
+	// F4: progress write — best-effort is safe because the terminal
+	// writeCrewAgentStatus above remains durable and the notifier watches the
+	// events.jsonl independently of these JSON files.
+	atomicWriteJsonCoalesced(filePath, redactSecrets(records), AGENT_COALESCE_MS, { durability: "best-effort" });
 	asyncAgentReaderCache.delete(filePath);
 	for (const record of records) writeCrewAgentStatusCoalesced(manifest, record);
 }
 
 export function writeCrewAgentStatusCoalesced(manifest: TeamRunManifest, record: CrewAgentRecord): void {
 	ensureAgentStateDir(manifest, record.taskId);
-	atomicWriteJsonCoalesced(agentStatusPath(manifest, record.taskId), redactSecrets(record), AGENT_COALESCE_MS);
+	atomicWriteJsonCoalesced(agentStatusPath(manifest, record.taskId), redactSecrets(record), AGENT_COALESCE_MS, {
+		durability: "best-effort",
+	});
 }
 
 /** @internal Flush all coalesced agent writes synchronously. Hook into cleanup paths. */

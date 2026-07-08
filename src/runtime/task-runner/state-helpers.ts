@@ -68,45 +68,24 @@ export function persistSingleTaskUpdate(
 				const latest = loadRunManifestById(manifest.cwd, manifest.runId)?.tasks ?? fallbackTasks;
 				merged = updateTask(latest, taskWithCheckpoint);
 
-				// Re-stat to detect concurrent writes
+				// F2: collapsed from 3 redundant statSync calls into 1. The previous
+				// implementation re-checked mtime twice more after load and before
+				// write, but since the code is synchronous and `loadRunManifestById`
+				// holds no I/O-yield between the load and this stat, those re-checks
+				// always returned the same mtime and added nothing. The one CAS below
+				// remains necessary for best-effort writers (async-notifier,
+				// crash-recovery) that don't acquire the run lock.
 				let currentMtime: number;
 				try {
 					currentMtime = fs.statSync(manifest.tasksPath).mtimeMs;
 				} catch {
-					currentMtime = 0;
+					// Run state deleted (prune/forget) — nothing to persist.
+					return fallbackTasks;
 				}
 
 				if (currentMtime !== baseMtime) {
 					// Another writer committed — their update is in latest, re-merge on top
 					baseMtime = currentMtime;
-					continue;
-				}
-
-				// No concurrent writer — check that our merged result is based on the
-				// same base we observed (no intermediate writer between our load and check)
-				let recheckMtime: number;
-				try {
-					recheckMtime = fs.statSync(manifest.tasksPath).mtimeMs;
-				} catch {
-					// Run state deleted (prune/forget) — nothing to persist.
-					return fallbackTasks;
-				}
-				if (recheckMtime !== baseMtime) {
-					baseMtime = recheckMtime;
-					continue;
-				}
-
-				// Final pre-write mtime check to catch any concurrent writer that completed
-				// between the recheck and saveRunTasks
-				let preWriteMtime: number;
-				try {
-					preWriteMtime = fs.statSync(manifest.tasksPath).mtimeMs;
-				} catch {
-					preWriteMtime = 0;
-				}
-				if (preWriteMtime !== baseMtime) {
-					// Another writer committed — retry
-					baseMtime = preWriteMtime;
 					continue;
 				}
 

@@ -396,7 +396,11 @@ export function readDeliveryState(manifest: TeamRunManifest): MailboxDeliverySta
 	}
 }
 
-function writeDeliveryState(manifest: TeamRunManifest, state: MailboxDeliveryState): void {
+function writeDeliveryState(
+	manifest: TeamRunManifest,
+	state: MailboxDeliveryState,
+	options?: { durability?: "full" | "best-effort" },
+): void {
 	ensureRunMailbox(manifest);
 	// Prune oldest entries if capped
 	const MAX_DELIVERY_MESSAGES = 10000;
@@ -408,7 +412,12 @@ function writeDeliveryState(manifest: TeamRunManifest, state: MailboxDeliverySta
 		const trimmed = sorted.slice(0, MAX_DELIVERY_MESSAGES);
 		state.messages = Object.fromEntries(trimmed);
 	}
-	atomicWriteFile(deliveryFile(manifest, true), `${JSON.stringify(redactSecrets(state), null, 2)}\n`);
+	// F4: mailbox delivery is informational — accept losing the very last write on
+	// a hard crash (the next message will overwrite it on disk). Cheaper fsync on
+	// the hot path; terminal/reply paths still pass full durability below.
+	atomicWriteFile(deliveryFile(manifest, true), `${JSON.stringify(redactSecrets(state), null, 2)}\n`, {
+		durability: options?.durability ?? "best-effort",
+	});
 }
 
 /**
@@ -472,7 +481,8 @@ export function appendMailboxMessage(
 		const delivery = readDeliveryState(manifest);
 		delivery.messages[complete.id] = complete.status;
 		delivery.updatedAt = createdAt;
-		writeDeliveryState(manifest, delivery);
+		// F4: complete transitions are terminal-ish — keep full durability.
+		writeDeliveryState(manifest, delivery, { durability: "full" });
 	});
 	return complete;
 }
@@ -554,7 +564,8 @@ export function acknowledgeMailboxMessage(manifest: TeamRunManifest, messageId: 
 		if (!delivery.messages[messageId]) throw new Error(`Mailbox message '${messageId}' not found.`);
 		delivery.messages[messageId] = "acknowledged";
 		delivery.updatedAt = new Date().toISOString();
-		writeDeliveryState(manifest, delivery);
+		// F4: acknowledge is terminal for that message — keep full durability.
+		writeDeliveryState(manifest, delivery, { durability: "full" });
 		return delivery;
 	});
 }

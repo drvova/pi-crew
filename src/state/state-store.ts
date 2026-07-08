@@ -70,9 +70,15 @@ export interface ManifestCacheEntry {
 	generation?: number;
 }
 
-// Global generation counter incremented on each cache invalidation.
-// Detects staleness even when mtime/size are spoofed by an attacker.
-let manifestCacheGeneration = 0;
+// F1: per-stateRoot generation counter. The previous global counter was
+// incremented on every `invalidateRunCache` call regardless of which state's
+// cache was invalidated, so a write to run A caused a hot-path miss in run B's
+// cache even though B's on-disk files were untouched. With per-stateRoot
+// generations, run B only misses its own cache when its own writes happen.
+const manifestCacheGeneration = new Map<string, number>();
+function genOf(stateRoot: string): number {
+	return manifestCacheGeneration.get(stateRoot) ?? 0;
+}
 
 const MANIFEST_CACHE_TTL_MS = 15 * 1000; // 15 seconds (FIX: increased from 5s for read-heavy workloads; 5s was too short causing unnecessary cache invalidation)
 const LOAD_MANIFEST_RETRY_LIMIT = 5; // Configurable retry limit for mtime/size stability checks under contention
@@ -94,7 +100,9 @@ export const MANIFEST_CACHE_TTL_MS_VALUE = MANIFEST_CACHE_TTL_MS;
 function setManifestCache(stateRoot: string, entry: ManifestCacheEntry): void {
 	if (manifestCache.has(stateRoot)) manifestCache.delete(stateRoot);
 	entry.cachedAt = Date.now();
-	entry.generation = manifestCacheGeneration;
+	// Stamp with the *current* per-root generation so a concurrent writer's
+	// increment between read and write invalidates this cache hit.
+	entry.generation = genOf(stateRoot);
 	// FIX: Evict all stale entries by TTL before adding new entry.
 	// This ensures entries that are never accessed still get evicted
 	// based on TTL, not just entries that are hit.
@@ -129,7 +137,10 @@ function useProjectState(cwd: string): boolean {
 
 function invalidateRunCache(stateRoot: string): void {
 	manifestCache.delete(stateRoot);
-	manifestCacheGeneration++;
+	// F1: only bump the generation of THIS stateRoot — sibling runs keep their
+	// generation intact, so concurrent writes to run A no longer evict run B's
+	// hot cache.
+	manifestCacheGeneration.set(stateRoot, genOf(stateRoot) + 1);
 }
 
 function scopeBaseRoot(cwd: string): string {
@@ -642,7 +653,7 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 		cached.manifestSize === manifestStat.size &&
 		cached.tasksMtimeMs === tasksMtimeMs &&
 		cached.tasksSize === (tasksStat?.size ?? 0) &&
-		cached.generation === manifestCacheGeneration
+		cached.generation === genOf(stateRoot)
 	) {
 		// TTL eviction: expire stale entries even if mtime matches
 		// FIX: Also evict entries where cachedAt is undefined — such entries are
@@ -758,7 +769,7 @@ export async function loadRunManifestByIdAsync(
 		cached.manifestSize === manifestStat.size &&
 		cached.tasksMtimeMs === tasksMtimeMs &&
 		cached.tasksSize === (tasksStat?.size ?? 0) &&
-		cached.generation === manifestCacheGeneration
+		cached.generation === genOf(stateRoot)
 	) {
 		// TTL eviction: expire stale entries even if mtime matches
 		// FIX: Also evict entries where cachedAt is undefined — such entries are

@@ -816,16 +816,22 @@ function appendEventInsideLock(eventsPath: string, event: AppendTeamEvent): Team
 	const seq = fullEvent.metadata?.seq ?? 0;
 	if (!skippedDueToSize) {
 		fs.appendFileSync(eventsPath, `${JSON.stringify(redactSecrets(fullEvent))}\n`, "utf-8");
-		// FIX: fsync to ensure event content is flushed to disk before persisting
-		// the sequence number. This closes the crash window between appendFileSync
-		// and persistSequence where sequence reuse could occur on restart.
-		const fd = fs.openSync(eventsPath, "r+");
-		try {
-			fs.fsyncSync(fd);
-		} catch {
-			// EPERM on Windows CI: best-effort flush
-		} finally {
-			fs.closeSync(fd);
+		// F3a: skip data fsync for non-terminal events. We still call `persistSequence`
+		// below, which means the .seq sidecar might briefly outpace the actual data
+		// on disk in a crash, but the event-reconstructor (`event-reconstructor.ts`)
+		// already handles inconsistent-tail recovery (appends after the sidecar's
+		// claimed sequence are simply ignored on a lossless recovery scan). We trade
+		// 1 ms of fsync per event on Windows for informational events; terminal
+		// events keep the strict window between append and persistSequence.
+		if (isTerminal) {
+			const fd = fs.openSync(eventsPath, "r+");
+			try {
+				fs.fsyncSync(fd);
+			} catch {
+				// EPERM on Windows CI: best-effort flush
+			} finally {
+				fs.closeSync(fd);
+			}
 		}
 		// FIX: Persist sequence AFTER the event append to prevent sequence reuse
 		// on crash. Only update the sidecar when the event is definitively written.

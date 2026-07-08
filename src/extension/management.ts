@@ -3,20 +3,31 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentConfig, ResourceSource, RoutingMetadata } from "../agents/agent-config.ts";
 import { serializeAgent } from "../agents/agent-serializer.ts";
-import { discoverAgents } from "../agents/discover-agents.ts";
+import { discoverAgents, invalidateAgentDiscoveryCache } from "../agents/discover-agents.ts";
 import type { PiTeamsConfig } from "../config/config.ts";
 import type { TeamToolParamsValue } from "../schema/team-tool-schema.ts";
-import { allTeams, discoverTeams } from "../teams/discover-teams.ts";
+import { allTeams, discoverTeams, invalidateTeamDiscoveryCache } from "../teams/discover-teams.ts";
 import type { TeamConfig, TeamRole } from "../teams/team-config.ts";
 import { serializeTeam } from "../teams/team-serializer.ts";
 import { hasOwn, parseConfigObject, requireString, sanitizeName } from "../utils/names.ts";
 import { projectCrewRoot, userPiRoot } from "../utils/paths.ts";
-import { allWorkflows, discoverWorkflows } from "../workflows/discover-workflows.ts";
+import { allWorkflows, discoverWorkflows, invalidateWorkflowDiscoveryCache } from "../workflows/discover-workflows.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { serializeWorkflow } from "../workflows/workflow-serializer.ts";
 import { enforceDestructiveIntent } from "./team-tool/intent-policy.ts";
 import type { TeamToolDetails } from "./team-tool-types.ts";
 import { type PiTeamsToolResult, toolResult } from "./tool-result.ts";
+
+/**
+ * Invalidate all discovery caches that may have read the on-disk resource
+ * file we are about to (or just did) write. Called once per create/update/delete
+ * to keep the 5 s TTL caches in sync without forcing a per-render full rescan.
+ */
+function invalidateResourceCaches(): void {
+	invalidateAgentDiscoveryCache();
+	invalidateTeamDiscoveryCache();
+	invalidateWorkflowDiscoveryCache();
+}
 
 interface ManagementContext {
 	cwd: string;
@@ -385,6 +396,9 @@ export function handleCreate(params: TeamToolParamsValue, ctx: ManagementContext
 			true,
 		);
 	}
+	// F17/F15: bust the discovery caches so future powerbar/scheduler reads see
+	// the new file immediately (instead of after the 5 s TTL expires).
+	invalidateResourceCaches();
 	return result(`Created ${params.resource} '${name}' at ${filePath}.`);
 }
 
@@ -507,9 +521,13 @@ export function handleUpdate(params: TeamToolParamsValue, ctx: ManagementContext
 			true,
 		);
 	}
+	// F17/F15: bust the discovery caches so the renamed/updated resource is
+	// visible immediately. updateReferencesForRename may have rewritten peer
+	// files too, so we invalidate AFTER that pass completes.
 	const updatedRefs = params.updateReferences
 		? updateReferencesForRename(ctx, params.resource!, current.name, nextName, source, false)
 		: [];
+	invalidateResourceCaches();
 	return result(
 		[
 			`Updated ${params.resource} at ${nextPath}. Backup: ${backupPath}.`,
@@ -546,5 +564,7 @@ export function handleDelete(params: TeamToolParamsValue, ctx: ManagementContext
 			true,
 		);
 	}
+	// F17/F15: bust the discovery caches so the deletion is visible immediately.
+	invalidateResourceCaches();
 	return result(`Deleted ${params.resource} at ${resolved.resource!.filePath}. Backup: ${backupPath}.`);
 }

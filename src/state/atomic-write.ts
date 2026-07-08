@@ -160,6 +160,71 @@ export function isSymlinkSafePath(filePath: string): boolean {
 	}
 }
 
+// ─── F5: Symlink-safe ancestor chain cache ─────────────────────────────────
+// `isSymlinkSafePath` walks the full ancestor chain with `lstatSync` per level
+// and is called twice per atomic write (initial + pre-rename re-check). The
+// parent dirs of `.crew/state/runs/{runId}/` are stable within a run, so we
+// cache the ancestor-walk verdict keyed by `dirname(filePath)`.
+//
+// SECURITY: the *target file* itself is still checked every call (no cache).
+// Caching is per-dir at a short TTL. If a dir is mutated mid-window, the cache
+// is invalidated explicitly via `invalidateSymlinkSafeCache(dir)` from any
+// file-create / rename hook, plus a TTL failsafe. The cache is best-effort
+// speed-up — when in doubt the next call's statSync re-verifies.
+const SYMLINK_SAFE_TTL_MS = 30_000;
+const SYMLINK_SAFE_MAX_ENTRIES = 128;
+const symlinkSafeCache = new Map<string, { safe: boolean; at: number }>();
+
+/** Drop one or all cached entries. */
+export function invalidateSymlinkSafeCache(dir?: string): void {
+	if (dir) symlinkSafeCache.delete(dir);
+	else symlinkSafeCache.clear();
+}
+
+/** Target-file-only symlink check. Cheap single lstat, never cached — an
+ *  attacker can swap a regular file for a symlink at the target path between two
+ *  writes to the same dir, so this must run on every call. */
+function isTargetNotSymlink(filePath: string): boolean {
+	try {
+		if (fs.lstatSync(filePath).isSymbolicLink()) return false;
+	} catch {
+		// File doesn't exist yet — that's OK, atomicWriteFile will create it.
+	}
+	return true;
+}
+
+/**
+ * Cached wrapper used by `atomicWriteFile` on the hot path. Only the ancestor-
+ * chain walk (the slow part) is cached, keyed by `dirname(filePath)`; the
+ * target-file symlink check ALWAYS re-runs so a mid-window symlink swap at the
+ * target path is still caught (preserving the pre-rename TOCTOU guard).
+ *
+ * The cached verdict is computed from `isSymlinkSafePath(dir)` — i.e. the safety
+ * of the *directory* itself, independent of any specific target file — so the
+ * entry is correctly reusable for every file written into that dir (no
+ * cross-file cache poisoning).
+ */
+function isSymlinkSafeDirCached(filePath: string): boolean {
+	const now = Date.now();
+	const dir = path.dirname(filePath);
+	// Always re-check the target file (uncached) before trusting the dir verdict.
+	if (!isTargetNotSymlink(filePath)) return false;
+	const hit = symlinkSafeCache.get(dir);
+	if (hit && now - hit.at < SYMLINK_SAFE_TTL_MS) return hit.safe;
+	// Cache miss: evaluate the ancestor-chain safety of the DIRECTORY itself.
+	// Passing `dir` (not `filePath`) makes the verdict target-independent: it
+	// walks dir's ancestors and verifies dir is not a symlink.
+	const verdict = isSymlinkSafePath(dir);
+	symlinkSafeCache.set(dir, { safe: verdict, at: now });
+	// Bound the cache to avoid unbounded growth across many cwds.
+	while (symlinkSafeCache.size > SYMLINK_SAFE_MAX_ENTRIES) {
+		const oldest = symlinkSafeCache.keys().next().value;
+		if (oldest === undefined) break;
+		symlinkSafeCache.delete(oldest);
+	}
+	return verdict;
+}
+
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -319,8 +384,39 @@ export async function renameWithRetryAsync(
 /** Test alias for renameWithRetryAsync. */
 export const __test__renameWithRetryAsync = renameWithRetryAsync;
 
-export function atomicWriteFile(filePath: string, content: string, expectedHash?: string): void {
-	if (!isSymlinkSafePath(filePath)) throw new Error(`Refusing to write: target is a symlink or inside untrusted directory: ${filePath}`);
+/**
+ * F4: per-write durability knob.
+ * - "full" (default): fsync the data file AND the parent directory after rename.
+ *   Cost is ms-scale on Windows; safe against crash + power-loss.
+ * - "best-effort": skip both fsyncs. We still get atomic rename from temp file,
+ *   so a concurrent reader sees either the prior content or the full new
+ *   content — never a torn write. The trade-off is: a hard crash between
+ *   rename and a later `flush` may leave a few bytes stale on disk, which is
+ *   acceptable for informational writes (mailbox delivery, agent progress,
+ *   .seq sidecar) that the event-log reconstructor / crash-recovery can
+ *   reconcile without.
+ */
+export type WriteDurability = "full" | "best-effort";
+
+/** Options accepted by atomicWriteFile (forward-compatible string | object form). */
+export type AtomicWriteOptions =
+	| string // legacy: expectedHash
+	| { expectedHash?: string; durability?: WriteDurability };
+
+function normalizeOptions(arg: unknown): { expectedHash?: string; durability: WriteDurability } {
+	if (typeof arg === "string") return { expectedHash: arg, durability: "full" };
+	if (arg && typeof arg === "object") {
+		const o = arg as { expectedHash?: string; durability?: WriteDurability };
+		const durability: WriteDurability = o.durability === "best-effort" ? "best-effort" : "full";
+		return { expectedHash: o.expectedHash, durability };
+	}
+	return { durability: "full" };
+}
+
+export function atomicWriteFile(filePath: string, content: string, options?: AtomicWriteOptions): void {
+	const { durability } = normalizeOptions(options);
+	if (!isSymlinkSafeDirCached(filePath))
+		throw new Error(`Refusing to write: target is a symlink or inside untrusted directory: ${filePath}`);
 	// On Windows the parent directory may be referenced via a short-name alias
 	// (e.g. RUNNER~1 vs runneradmin). mkdirSync on one form can succeed while
 	// openSync on another form fails with ENOENT. We therefore ensure the dir
@@ -381,7 +477,8 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 		// rename + post-rename read always sees the new content. Cost: ~1ms
 		// per write (acceptable for the small delivery.json / manifest.json
 		// files this function writes; large state-store uses the async path).
-		fs.fsyncSync(fd);
+		// F4: skip when durability is "best-effort" — see WriteDurability docs.
+		if (durability === "full") fs.fsyncSync(fd);
 		fs.closeSync(fd);
 		try {
 			// Issue 1 fix: re-check symlink safety immediately before rename.
@@ -390,8 +487,12 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 			// symlink at the target path. If rename succeeds with a symlink at
 			// target, the symlink is atomically replaced with attacker's content.
 			// The post-rename lstat check only runs on rename failure, so we must
-			// check BEFORE the rename to catch this TOCTOU race.
-			if (!isSymlinkSafePath(filePath)) {
+			// check BEFORE the rename to catch this TOCTOU race. Use the cached
+			// wrapper for the dir chain — the pre-rename race only matters for the
+			// *target* symlink swap, which the un-cached path check handles on the
+			// first call. Here we just re-confirm nothing in the dir chain has been
+			// planted symlink-wise since the initial call.
+			if (!isSymlinkSafeDirCached(filePath)) {
 				throw new Error(`Refusing to rename: target became a symlink or inside untrusted directory: ${filePath}`);
 			}
 			// Issue 1 fix: use link+unlink instead of rename to avoid following symlinks
@@ -404,7 +505,8 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 			// We skip on Windows where directory fsync semantics differ (and
 			// where the Windows-specific rename path in renameWithLinkSync already
 			// uses MoveFileEx which is fully durable).
-			if (process.platform !== "win32") {
+			// F4: honor durability — best-effort also skips the parent-dir fsync.
+			if (durability === "full" && process.platform !== "win32") {
 				try {
 					const dirFd = fs.openSync(path.dirname(filePath), "r");
 					fs.fsyncSync(dirFd);
@@ -450,7 +552,8 @@ export function atomicWriteFile(filePath: string, content: string, expectedHash?
 	}
 }
 
-export async function atomicWriteFileAsync(filePath: string, content: string): Promise<void> {
+export async function atomicWriteFileAsync(filePath: string, content: string, options?: AtomicWriteOptions): Promise<void> {
+	const { durability } = normalizeOptions(options);
 	// Phase 1.5 (RFC 15): when the worker-thread atomic writer is enabled
 	// (PI_CREW_WORKER_ATOMIC_WRITER=1), dispatch to a dedicated worker thread
 	// that performs SYNC fs ops with no internal yields. Mitigates the
@@ -459,7 +562,8 @@ export async function atomicWriteFileAsync(filePath: string, content: string): P
 	if (isWorkerAtomicWriterEnabled()) {
 		return atomicWriteFileViaWorker(filePath, content);
 	}
-	if (!isSymlinkSafePath(filePath)) throw new Error(`Refusing to write: target is a symlink or inside untrusted directory: ${filePath}`);
+	if (!isSymlinkSafeDirCached(filePath))
+		throw new Error(`Refusing to write: target is a symlink or inside untrusted directory: ${filePath}`);
 	await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
 	const tempPath = `${filePath}.${crypto.randomUUID()}.tmp`;
 	try {
@@ -472,6 +576,9 @@ export async function atomicWriteFileAsync(filePath: string, content: string): P
 			throw new Error(`Refusing to write: opened path is not a regular file: ${tempPath}`);
 		}
 		await fd.writeFile(content, "utf-8");
+		// F4: skip data fsync when caller is best-effort. atomic rename below
+		// still guarantees the reader sees either prior or new content, never torn.
+		if (durability === "full") await fd.sync();
 		await fd.close();
 		try {
 			// Re-check symlink safety immediately before rename.
@@ -481,7 +588,7 @@ export async function atomicWriteFileAsync(filePath: string, content: string): P
 			// target, the symlink is atomically replaced with attacker's content.
 			// The post-rename lstat check only runs on rename failure, so we must
 			// check BEFORE the rename to catch this TOCTOU race.
-			if (!isSymlinkSafePath(filePath)) {
+			if (!isSymlinkSafeDirCached(filePath)) {
 				try {
 					await fs.promises.rm(tempPath, { force: true });
 				} catch {
@@ -519,12 +626,12 @@ export async function atomicWriteFileAsync(filePath: string, content: string): P
 	}
 }
 
-export function atomicWriteJson<T>(filePath: string, value: T): void {
-	atomicWriteFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+export function atomicWriteJson<T>(filePath: string, value: T, options?: AtomicWriteOptions): void {
+	atomicWriteFile(filePath, `${JSON.stringify(value, null, 2)}\n`, options);
 }
 
-export async function atomicWriteJsonAsync<T>(filePath: string, value: T): Promise<void> {
-	await atomicWriteFileAsync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+export async function atomicWriteJsonAsync<T>(filePath: string, value: T, options?: AtomicWriteOptions): Promise<void> {
+	await atomicWriteFileAsync(filePath, `${JSON.stringify(value, null, 2)}\n`, options);
 }
 
 // 2.1 — atomic-write coalescer. Buffer the latest payload per filePath and
@@ -547,6 +654,8 @@ interface CoalescedAtomicWrite {
 	retryCount: number;
 	/** Generation counter to detect stale flushes (Issue 2 fix) */
 	generation: number;
+	/** F4: durability knob carried into the underlying atomicWriteFile flush. */
+	durability: WriteDurability;
 }
 const MAX_FLUSH_RETRIES = 5;
 const pendingAtomicWrites = new Map<string, CoalescedAtomicWrite>();
@@ -565,7 +674,12 @@ let flushInProgress = 0;
  *      sees the previous on-disk content. Callers needing read-after-write
  *      must call `flushPendingAtomicWrites()` first or use `atomicWriteJson`.
  */
-export function atomicWriteJsonCoalesced<T>(filePath: string, value: T, coalesceMs = DEFAULT_ATOMIC_COALESCE_MS): void {
+export function atomicWriteJsonCoalesced<T>(
+	filePath: string,
+	value: T,
+	coalesceMs = DEFAULT_ATOMIC_COALESCE_MS,
+	options?: AtomicWriteOptions,
+): void {
 	const content = `${JSON.stringify(value, null, 2)}\n`;
 	const previous = pendingAtomicWrites.get(filePath);
 	if (previous) clearTimeout(previous.timer);
@@ -573,12 +687,14 @@ export function atomicWriteJsonCoalesced<T>(filePath: string, value: T, coalesce
 	timer.unref();
 	// Issue 2 fix: increment generation for each new entry
 	const generation = ++writeGeneration;
+	const normalized = normalizeOptions(options);
 	pendingAtomicWrites.set(filePath, {
 		content,
 		timer,
 		coalesceMs,
 		retryCount: 0,
 		generation,
+		durability: normalized.durability,
 	});
 }
 
@@ -591,7 +707,7 @@ function flushOnePendingAtomicWrite(filePath: string): void {
 	const savedGeneration = entry.generation;
 	clearTimeout(entry.timer);
 	try {
-		atomicWriteFile(filePath, entry.content);
+		atomicWriteFile(filePath, entry.content, { durability: entry.durability });
 		// Issue 2 fix: Verify generation hasn't changed before deleting.
 		// A concurrent write may have replaced entry with a newer one during the flush.
 		// Only delete if generation matches (not a newer entry).

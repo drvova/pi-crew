@@ -176,6 +176,10 @@ export interface ChildPiLifecycleEvent {
 	stderrExcerpt?: string;
 	/** Timestamp (ISO). */
 	ts: string;
+	/** F12: optional cause for `final_drain` events. `"stdout-quiet"` indicates
+	 *  the drain was triggered by the quiet-window early-exit rather than the
+	 *  default 5 s ceiling. Other drain reasons (default) leave this undefined. */
+	reason?: "stdout-quiet";
 	/** Phase-0 diagnostic (HB-003a): the signal that killed the child (when
 	 *  available). Was previously discarded after building the error string. */
 	signal?: string;
@@ -205,6 +209,9 @@ export interface ChildPiRunInput {
 	onLifecycleEvent?: (event: ChildPiLifecycleEvent) => void;
 	maxDepth?: number;
 	finalDrainMs?: number;
+	/** F12: early-exit the drain when stdout has been silent for this many ms
+	 *  after the final assistant event. Set to ≥ finalDrainMs to disable. */
+	finalDrainQuietMs?: number;
 	hardKillMs?: number;
 	responseTimeoutMs?: number;
 	/** Soft limit on assistant turns — inject steer at this count. */
@@ -569,17 +576,22 @@ function compactChildPiLine(line: string): {
 export class ChildPiLineObserver {
 	private buffer = "";
 	private readonly input: ChildPiRunInput;
-	/** RAW (uncapped) assistant-text fragments, accumulated in arrival order.
-	 *  Mirrors {@link parsePiJsonOutput}'s textEvents/finalText extraction but
-	 *  operates on the RAW event stream instead of the 16K-compacted transcript.
-	 *  This is the source of the AUTHORITATIVE result.txt; the transcript stays
-	 *  compacted (memory bound). */
+	/** F9: bounded ring buffer for RAW assistant-text fragments. Consumers
+	 * (getRawFinalText) only read the last element, but the legacy implementation
+	 * accumulated every fragment unconditionally, which let a verbose/long-running
+	 * worker grow this array linearly with output. We retain the last 2 entries:
+	 * the consumer needs the last; we keep the second-to-last only as a defensive
+	 * fence against a race where a final event arrives just after the consumer
+	 * read (the previous "last" is still the most-recent pre-final text in that
+	 * window). 2 is well below any plausible consumer's "tail-only" need while
+	 * bounding memory. */
+	private static readonly MAX_RAW_TEXT_EVENTS = 2;
 	private readonly rawTextEvents: string[] = [];
-	/** #7 hardening: bounded digest of intermediate findings. When a worker spends
-	 *  its entire budget on tool calls (never emits a final assistant text),
-	 *  getRawFinalText() returns undefined but this digest captures the last
-	 *  display lines (tool results, stdout fragments) before budget exhaustion.
-	 *  Capped at MAX_INTERMEDIATE_DIGEST_LINES so result artifacts stay bounded. */
+	/** F9: bounded ring buffer for intermediate findings. The downstream digest
+	 * (getIntermediateFindings) slices the last 20, but the array previously grew
+	 * to 1000s of entries. We keep MAX_INTERMEDIATE_DIGEST_LINES + headroom so
+	 * the public API behaviour is preserved (still returns "last 20 lines"). */
+	private static readonly MAX_INTERMEDIATE_FINDINGS = 32;
 	private readonly intermediateFindings: string[] = [];
 
 	constructor(input: ChildPiRunInput) {
@@ -633,12 +645,19 @@ export class ChildPiLineObserver {
 			const rawParsed = JSON.parse(line);
 			const rawTexts = extractText(rawParsed);
 			if (rawTexts.length > 0) {
+				// F9: trim from the front if the push would exceed the cap. Slice's
+				// second arg excludes the index, so this drops the oldest entries
+				// while keeping the freshly pushed tail.
 				this.rawTextEvents.push(...rawTexts);
+				const rawOverflow = this.rawTextEvents.length - ChildPiLineObserver.MAX_RAW_TEXT_EVENTS;
+				if (rawOverflow > 0) this.rawTextEvents.splice(0, rawOverflow);
 				// Also capture raw assistant text as intermediate findings — the last raw
 				// text may be a partial answer before the worker ran out of budget.
 				const last = rawTexts[rawTexts.length - 1];
 				if (last.trim().length > 0) {
 					this.intermediateFindings.push(last.trim());
+					const findingsOverflow = this.intermediateFindings.length - ChildPiLineObserver.MAX_INTERMEDIATE_FINDINGS;
+					if (findingsOverflow > 0) this.intermediateFindings.splice(0, findingsOverflow);
 				}
 			}
 		} catch {
@@ -663,6 +682,8 @@ export class ChildPiLineObserver {
 			// findings. This ensures we capture tool output even when no assistant text
 			// is emitted (budget exhausted on tool calls).
 			this.intermediateFindings.push(compact.displayLine!.trim());
+			const findingsOverflow = this.intermediateFindings.length - ChildPiLineObserver.MAX_INTERMEDIATE_FINDINGS;
+			if (findingsOverflow > 0) this.intermediateFindings.splice(0, findingsOverflow);
 		}
 	}
 }
@@ -921,6 +942,10 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			// handler know a drain timer existed even after clearFinalDrainTimers() ran;
 			// spawnMonotonicMs gives us relative timing to distinguish a race from a crash.
 			let finalDrainArmed = false;
+			// F12: monotonic timestamp of the last stdout JSON event (any event —
+			// we want to know when stdout *stopped*, not when the final assistant
+			// event arrived). Updated on every onJsonEvent dispatch.
+			let lastStdoutActivityMonotonicMs = performance.now();
 			let finalDrainFiredMonotonicMs: number | undefined;
 			const spawnMonotonicMs = performance.now();
 			let finalAssistantEventMonotonicMs: number | undefined;
@@ -1141,10 +1166,74 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 						completeOperation(eventOpId);
 						throw err;
 					}
+					// F12: capture monotonic timestamp BEFORE dispatching — any stdout
+					// JSON event counts as activity. This lets the quiet-window
+					// detection measure "time since last byte of stdout" accurately
+					// regardless of what onJsonEvent does.
+					lastStdoutActivityMonotonicMs = performance.now();
 					input.onJsonEvent?.(event);
 					if (!isFinalAssistantEvent(event) || childExited || settled || finalDrainTimer) return;
 					finalAssistantEventMonotonicMs = performance.now();
 					finalDrainArmed = true; // Phase-0 diagnostic: track that a drain timer was created.
+					// F12: alongside the 5 s ceiling timer, start a polling watcher
+					// that fires the drain early if stdout goes quiet for `quietMs`
+					// after the final assistant event. Heavy children that emit a
+					// stopReason=stop message_end and then sit idle will exit in
+					// ~quietMs (default 800 ms) instead of up to 5 s. unref() so
+					// the poller never holds the event loop on shutdown.
+					const quietMs = input.finalDrainQuietMs ?? DEFAULT_CHILD_PI.finalDrainQuietMs;
+					if (quietMs < (input.finalDrainMs ?? DEFAULT_CHILD_PI.finalDrainMs)) {
+						const pollHandle = setInterval(() => {
+							if (settled || childExited) {
+								clearInterval(pollHandle);
+								pollHandle.unref();
+								return;
+							}
+							const sinceLast = performance.now() - lastStdoutActivityMonotonicMs;
+							if (sinceLast >= quietMs) {
+								clearInterval(pollHandle);
+								pollHandle.unref();
+								// Trigger the same drain path as the 5 s timer:
+								// mark forced, fire final_drain lifecycle, SIGTERM.
+								forcedFinalDrain = true;
+								finalDrainFiredMonotonicMs = performance.now();
+								input.onLifecycleEvent?.({
+									type: "final_drain",
+									pid: child.pid,
+									ts: new Date().toISOString(),
+									reason: "stdout-quiet",
+								});
+								try {
+									child.kill(process.platform === "win32" ? undefined : "SIGTERM");
+								} catch (error) {
+									logInternalError("child-pi.quiet-drain-term", error, `pid=${child.pid}`);
+								}
+								// Mark for hard kill fallback so the existing timer is
+								// still reaped if it ever fires later.
+								hardKillTimer = setTimeout(() => {
+									if (settled || childExited) return;
+									try {
+										hardKilled = true;
+										input.onLifecycleEvent?.({
+											type: "hard_kill",
+											pid: child.pid,
+											ts: new Date().toISOString(),
+										});
+										child.kill(process.platform === "win32" ? undefined : "SIGKILL");
+									} catch (error) {
+										logInternalError("child-pi.quiet-drain-hard-kill", error, `pid=${child.pid}`);
+									}
+								}, hardKillMs);
+								hardKillTimer.unref();
+								// Cancel the 5 s ceiling so we don't double-fire.
+								if (finalDrainTimer) {
+									clearTimeout(finalDrainTimer);
+									finalDrainTimer = undefined;
+								}
+							}
+						}, 200);
+						pollHandle.unref();
+					}
 					finalDrainTimer = setTimeout(() => {
 						if (settled || childExited) return;
 						forcedFinalDrain = true;

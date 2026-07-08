@@ -198,15 +198,86 @@ function parseDynamicWorkflowFile(filePath: string, source: ResourceSource): Wor
 	}
 }
 
+// ─── Workflow Discovery Cache (F17) ──────────────────────────────────────
+// Mirrors the Agent Discovery Cache pattern (see discover-agents.ts:493-556).
+// `discoverWorkflows(cwd)` is called on the powerbar hot path (≤200 ms coalesce =
+// up to ~5 Hz when a run is active + emitting events). Without caching, each call
+// walks 3 roots, each requiring readdirSync × 2 + readFileSync + regex-parse per
+// `.workflow.md`. We use TTL + dir-stamp invalidation so the cache survives
+// steady-state rendering yet still picks up file changes within a few seconds.
+//
+// SECURITY: ResourceIdentity preserved — same precedence + same parsers as before.
+// Reviewers: there is no path-component concern; this only memoises a pure function
+// of the filesystem state into a process-local Map.
+const WORKFLOW_DISCOVERY_TTL_MS = 5000;
+const WORKFLOW_DISCOVERY_MAX_ENTRIES = 32;
+interface CachedWorkflowEntry {
+	result: WorkflowDiscoveryResult;
+	expiresAt: number;
+	/** mtime tuple of the 3 workflow source dirs; change ⇒ invalidate early. */
+	dirStamp: string;
+}
+const workflowCache = new Map<string, CachedWorkflowEntry>();
+
+/** Compact mtime signature for the 3 workflow source dirs. Cheap (3 statSync). */
+function workflowDirStamp(cwd: string): string {
+	const dirs = [
+		path.join(packageRoot(), "workflows"),
+		path.join(userPiRoot(), "workflows"),
+		path.join(projectCrewRoot(cwd), "workflows"),
+	];
+	let out = "";
+	for (const d of dirs) {
+		try {
+			const st = fs.statSync(d);
+			out += `${st.mtimeMs}|`;
+		} catch {
+			out += "0|";
+		}
+	}
+	return out;
+}
+
+/** Drop one or all cached entries. Called from management actions and tests. */
+export function invalidateWorkflowDiscoveryCache(cwd?: string): void {
+	if (cwd) {
+		workflowCache.delete(cwd);
+	} else {
+		workflowCache.clear();
+	}
+}
+
 export function discoverWorkflows(cwd: string): WorkflowDiscoveryResult {
 	if (!cwd || typeof cwd !== "string") {
 		return { builtin: [], user: [], project: [] };
 	}
-	return {
+	// F17: serve from cache when both TTL is fresh AND dir-stamp is unchanged.
+	// `dirStamp` is a 3-stat pulse we run on every cached call — it is much
+	// cheaper than the disk scan it protects against (3 statSync vs 2 readdirSync
+	// + N readFileSync + regex parse per `.workflow.md`).
+	const now = Date.now();
+	const stamp = workflowDirStamp(cwd);
+	const cached = workflowCache.get(cwd);
+	if (cached && cached.expiresAt > now && cached.dirStamp === stamp) {
+		return cached.result;
+	}
+	const result: WorkflowDiscoveryResult = {
 		builtin: readWorkflowDir(path.join(packageRoot(), "workflows"), "builtin"),
 		user: readWorkflowDir(path.join(userPiRoot(), "workflows"), "user"),
 		project: readWorkflowDir(path.join(projectCrewRoot(cwd), "workflows"), "project"),
 	};
+	workflowCache.set(cwd, {
+		result,
+		expiresAt: now + WORKFLOW_DISCOVERY_TTL_MS,
+		dirStamp: stamp,
+	});
+	// Bounded LRU-ish eviction by insertion order (Map iteration order).
+	while (workflowCache.size > WORKFLOW_DISCOVERY_MAX_ENTRIES) {
+		const oldest = workflowCache.keys().next().value;
+		if (oldest === undefined) break;
+		workflowCache.delete(oldest);
+	}
+	return result;
 }
 
 export function allWorkflows(discovery: WorkflowDiscoveryResult | undefined): WorkflowConfig[] {

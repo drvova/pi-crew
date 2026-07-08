@@ -1,6 +1,11 @@
 export const DEFAULT_CHILD_PI: Readonly<{
 	postExitStdioGuardMs: number;
 	finalDrainMs: number;
+	/** F12: early-exit the drain if stdout goes silent for ≥ this many ms after
+	 *  the final assistant event AND the assistant already emitted
+	 *  message_end with stopReason=stop. Lets well-behaved workers finish in
+	 *  ~800 ms instead of the full 5 s ceiling. Set to >= finalDrainMs to disable. */
+	finalDrainQuietMs: number;
 	hardKillMs: number;
 	responseTimeoutMs: number;
 	maxCaptureBytes: number;
@@ -11,6 +16,7 @@ export const DEFAULT_CHILD_PI: Readonly<{
 }> = {
 	postExitStdioGuardMs: 3000,
 	finalDrainMs: 5000,
+	finalDrainQuietMs: 800,
 	hardKillMs: 3000,
 	// Child workers can spend more than a few seconds in provider calls or long-running tools without emitting stdout.
 	// Keep this as a coarse stuck-worker guard rather than a short per-message latency budget.

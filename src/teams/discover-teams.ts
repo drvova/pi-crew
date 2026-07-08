@@ -114,12 +114,67 @@ function readTeamDir(dir: string, source: ResourceSource): TeamConfig[] {
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// ─── Team Discovery Cache (F15) ──────────────────────────────────────────
+// Mirrors the Workflow Discovery Cache (see workflows/discover-workflows.ts).
+// `discoverTeams(cwd)` is called from recommend/scheduler paths and previously
+// re-scanned 3 roots on every call. 5 s TTL + dir-stamp invalidation keeps
+// changes (e.g. user edits a `.team.md`) visible within a few seconds without
+// paying a full re-scan per call.
+const TEAM_DISCOVERY_TTL_MS = 5000;
+const TEAM_DISCOVERY_MAX_ENTRIES = 32;
+interface CachedTeamEntry {
+	result: TeamDiscoveryResult;
+	expiresAt: number;
+	dirStamp: string;
+}
+const teamCache = new Map<string, CachedTeamEntry>();
+
+function teamDirStamp(cwd: string): string {
+	const dirs = [path.join(packageRoot(), "teams"), path.join(userPiRoot(), "teams"), path.join(projectCrewRoot(cwd), "teams")];
+	let out = "";
+	for (const d of dirs) {
+		try {
+			out += `${fs.statSync(d).mtimeMs}|`;
+		} catch {
+			out += "0|";
+		}
+	}
+	return out;
+}
+
+/** Drop one or all cached entries. Called from management actions and tests. */
+export function invalidateTeamDiscoveryCache(cwd?: string): void {
+	if (cwd) {
+		teamCache.delete(cwd);
+	} else {
+		teamCache.clear();
+	}
+}
+
 export function discoverTeams(cwd: string): TeamDiscoveryResult {
-	return {
+	// F15: serve from cache when both TTL is fresh AND dir-stamp is unchanged.
+	const now = Date.now();
+	const stamp = teamDirStamp(cwd);
+	const cached = teamCache.get(cwd);
+	if (cached && cached.expiresAt > now && cached.dirStamp === stamp) {
+		return cached.result;
+	}
+	const result: TeamDiscoveryResult = {
 		builtin: readTeamDir(path.join(packageRoot(), "teams"), "builtin"),
 		user: readTeamDir(path.join(userPiRoot(), "teams"), "user"),
 		project: readTeamDir(path.join(projectCrewRoot(cwd), "teams"), "project"),
 	};
+	teamCache.set(cwd, {
+		result,
+		expiresAt: now + TEAM_DISCOVERY_TTL_MS,
+		dirStamp: stamp,
+	});
+	while (teamCache.size > TEAM_DISCOVERY_MAX_ENTRIES) {
+		const oldest = teamCache.keys().next().value;
+		if (oldest === undefined) break;
+		teamCache.delete(oldest);
+	}
+	return result;
 }
 
 export function allTeams(discovery: TeamDiscoveryResult | undefined): TeamConfig[] {

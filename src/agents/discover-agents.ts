@@ -490,7 +490,12 @@ function applyAgentOverrides(agents: AgentConfig[], cwd: string, loadedConfig?: 
 // SEC-005 Fix: Uses version-based cache for atomic invalidation.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const DISCOVERY_CACHE_TTL_MS = 500;
+// F15: raised from 500 ms -> 5 s. The cache-version stamp (SEC-005) plus
+// explicit `invalidateAgentDiscoveryCache()` calls from management actions
+// (create/update/delete) cover correctness on edit; 5 s TTL is plenty for the
+// powerbar / scheduler hot path (~5 Hz when a run is active) and matches the
+// TTL we use for workflow / team discovery caches.
+const DISCOVERY_CACHE_TTL_MS = 5000;
 interface CachedDiscoveryEntry {
 	result: AgentDiscoveryResult;
 	expiresAt: number;
