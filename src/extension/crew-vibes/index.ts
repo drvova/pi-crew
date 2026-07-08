@@ -228,6 +228,8 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		speedTracker.resetSession();
 		footerAnimator.reset(null);
 		clearProviderUsageCache();
+		// Initialize provider from current model — model_select only fires on manual switch
+		currentProvider = (ctx.model as { provider?: string } | undefined)?.provider;
 		if (!config.enabled) {
 			clearVibesStatus(ctx);
 			return;

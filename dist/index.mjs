@@ -82690,6 +82690,7 @@ function registerCrewVibes(pi) {
     speedTracker.resetSession();
     footerAnimator.reset(null);
     clearProviderUsageCache();
+    currentProvider = ctx.model?.provider;
     if (!config.enabled) {
       clearVibesStatus(ctx);
       return;
