@@ -10,8 +10,8 @@
  * Replaces the old `postinstall` shell chain so the font install runs on
  * every platform without relying on shell-specific chaining (`;`/`&&`).
  */
-import { existsSync, spawnSync } from "node:child_process";
-import { spawnSync as spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,7 +21,7 @@ const root = join(__dirname, "..");
 function run(scriptRel) {
 	const abs = join(root, scriptRel);
 	if (!existsSync(abs)) return 1;
-	const result = spawn(process.execPath, [abs], { stdio: "inherit" });
+	const result = spawnSync(process.execPath, [abs], { stdio: "inherit" });
 	return result.status ?? 1;
 }
 
