@@ -58,7 +58,7 @@ export const DEFAULT_CONFIG: CrewVibesConfig = {
 	enabled: true,
 	speed: {
 		enabled: true,
-		footer: true,
+		footer: false,
 		indicator: true,
 		label: "tok/s",
 		renderIntervalMs: 250,

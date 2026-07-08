@@ -81741,7 +81741,7 @@ var DEFAULT_CONFIG2 = {
   enabled: true,
   speed: {
     enabled: true,
-    footer: true,
+    footer: false,
     indicator: true,
     label: "tok/s",
     renderIntervalMs: 250,
@@ -81961,7 +81961,8 @@ async function fetchAnthropicUsage(token) {
   return {
     fiveHourPercent: data2.five_hour?.utilization ?? 0,
     weeklyPercent: data2.seven_day?.utilization ?? 0,
-    resetAt: data2.five_hour?.resets_at ?? null
+    fiveHourResetAt: data2.five_hour?.resets_at ?? null,
+    weeklyResetAt: data2.seven_day?.resets_at ?? null
   };
 }
 async function fetchCopilotMonthlyPercent(token) {
@@ -82000,22 +82001,25 @@ async function fetchZaiUsage(token) {
   const limits = data2.data?.limits ?? [];
   let tokensPercent = 0;
   let monthlyPercent = 0;
-  let resetAt = null;
+  let tokensResetAt = null;
+  let monthlyResetAt = null;
   for (const limit of limits) {
     const pct = limit.percentage ?? 0;
+    const resetIso = typeof limit.nextResetTime === "number" ? new Date(limit.nextResetTime).toISOString() : typeof limit.nextResetTime === "string" ? limit.nextResetTime : null;
     if (limit.type === "TOKENS_LIMIT") {
       tokensPercent = pct;
-      resetAt = limit.nextResetTime ?? resetAt;
+      tokensResetAt = resetIso;
     } else if (limit.type === "TIME_LIMIT") {
       monthlyPercent = pct;
-      resetAt = limit.nextResetTime ?? resetAt;
+      monthlyResetAt = resetIso;
     }
   }
   return {
     providerName: "z.ai",
     fiveHourPercent: tokensPercent,
+    fiveHourResetAt: tokensResetAt,
     weeklyPercent: monthlyPercent,
-    resetAt
+    weeklyResetAt: monthlyResetAt
   };
 }
 var cachedUsage = null;
@@ -82035,8 +82039,9 @@ async function fetchProviderUsage(maxAgeMs = 3e5) {
       const usage = {
         providerName: "Claude",
         fiveHourPercent: base.fiveHourPercent,
+        fiveHourResetAt: base.fiveHourResetAt,
         weeklyPercent: base.weeklyPercent,
-        resetAt: base.resetAt
+        weeklyResetAt: base.weeklyResetAt
       };
       cachedUsage = usage;
       cachedAt = Date.now();
@@ -82057,8 +82062,9 @@ async function fetchProviderUsage(maxAgeMs = 3e5) {
         const usage = {
           providerName: "Copilot",
           fiveHourPercent: 0,
+          fiveHourResetAt: null,
           weeklyPercent: monthlyPercent,
-          resetAt: null,
+          weeklyResetAt: null,
           copilotMonthlyPercent: monthlyPercent
         };
         cachedUsage = usage;
@@ -82241,17 +82247,15 @@ function renderProviderUsage(theme, usage) {
   }
   const fiveHourBar = renderBar(usage.fiveHourPercent);
   const fiveHourRounded = Math.round(usage.fiveHourPercent);
-  const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%`;
+  const fiveHourReset = formatResetTimer(usage.fiveHourResetAt);
+  const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%${fiveHourReset ? " " + fiveHourReset : ""}`;
   const fiveHourColor = usage.fiveHourPercent >= 80 ? "error" : "accent";
   parts.push(theme ? theme.fg(fiveHourColor, fiveHourText) : fiveHourText);
   const weeklyBar = renderBar(usage.weeklyPercent);
   const weeklyRounded = Math.round(usage.weeklyPercent);
-  const weeklyText = `Wk ${weeklyBar} ${weeklyRounded}%`;
+  const weeklyReset = formatResetTimer(usage.weeklyResetAt);
+  const weeklyText = `Wk ${weeklyBar} ${weeklyRounded}%${weeklyReset ? " " + weeklyReset : ""}`;
   parts.push(theme ? theme.fg("dim", weeklyText) : weeklyText);
-  const resetText = formatResetTimer(usage.resetAt);
-  if (resetText) {
-    parts.push(theme ? theme.fg("dim", resetText) : resetText);
-  }
   if (typeof usage.copilotMonthlyPercent === "number" && Number.isFinite(usage.copilotMonthlyPercent)) {
     const monthlyRounded = Math.round(usage.copilotMonthlyPercent);
     const monthlyText = `Mo: ${monthlyRounded}%`;

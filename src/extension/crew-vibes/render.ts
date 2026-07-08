@@ -124,8 +124,9 @@ export function clearVibesStatus(ctx: ExtensionContext): void {
 export type ProviderUsage = {
 	providerName: string;
 	fiveHourPercent: number;
+	fiveHourResetAt: string | null;
 	weeklyPercent: number;
-	resetAt: string | null;
+	weeklyResetAt: string | null;
 	copilotMonthlyPercent?: number;
 };
 
@@ -166,21 +167,17 @@ export function renderProviderUsage(theme: CrewTheme | undefined, usage: Provide
 	// 5h window — error color at 80%+, accent otherwise
 	const fiveHourBar = renderBar(usage.fiveHourPercent);
 	const fiveHourRounded = Math.round(usage.fiveHourPercent);
-	const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%`;
+	const fiveHourReset = formatResetTimer(usage.fiveHourResetAt);
+	const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%${fiveHourReset ? " " + fiveHourReset : ""}`;
 	const fiveHourColor = usage.fiveHourPercent >= 80 ? "error" : "accent";
 	parts.push(theme ? theme.fg(fiveHourColor, fiveHourText) : fiveHourText);
 
 	// Weekly window — dim
 	const weeklyBar = renderBar(usage.weeklyPercent);
 	const weeklyRounded = Math.round(usage.weeklyPercent);
-	const weeklyText = `Wk ${weeklyBar} ${weeklyRounded}%`;
+	const weeklyReset = formatResetTimer(usage.weeklyResetAt);
+	const weeklyText = `Wk ${weeklyBar} ${weeklyRounded}%${weeklyReset ? " " + weeklyReset : ""}`;
 	parts.push(theme ? theme.fg("dim", weeklyText) : weeklyText);
-
-	// Reset timer — dim
-	const resetText = formatResetTimer(usage.resetAt);
-	if (resetText) {
-		parts.push(theme ? theme.fg("dim", resetText) : resetText);
-	}
 
 	// Copilot monthly — dim (optional)
 	if (typeof usage.copilotMonthlyPercent === "number" && Number.isFinite(usage.copilotMonthlyPercent)) {

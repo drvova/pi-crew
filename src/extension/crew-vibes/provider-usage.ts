@@ -16,9 +16,10 @@ import { join } from "node:path";
 export interface ProviderUsage {
 	providerName: string;
 	fiveHourPercent: number;
+	fiveHourResetAt: string | null;
 	weeklyPercent: number;
-	resetAt: string | null; // ISO string
-	copilotMonthlyPercent?: number; // optional, for Copilot
+	weeklyResetAt: string | null;
+	copilotMonthlyPercent?: number;
 }
 
 /** AbortController + setTimeout helper. Always clears the timer. */
@@ -150,7 +151,7 @@ type AnthropicUsageResponse = {
 	seven_day?: { utilization?: number; resets_at?: string };
 };
 
-async function fetchAnthropicUsage(token: string): Promise<Pick<ProviderUsage, "fiveHourPercent" | "weeklyPercent" | "resetAt">> {
+async function fetchAnthropicUsage(token: string): Promise<Pick<ProviderUsage, "fiveHourPercent" | "weeklyPercent" | "fiveHourResetAt" | "weeklyResetAt">> {
 	const data = await withTimeout(10000, async (signal) => {
 		const res = await fetch("https://api.anthropic.com/api/oauth/usage", {
 			headers: {
@@ -165,7 +166,8 @@ async function fetchAnthropicUsage(token: string): Promise<Pick<ProviderUsage, "
 	return {
 		fiveHourPercent: data.five_hour?.utilization ?? 0,
 		weeklyPercent: data.seven_day?.utilization ?? 0,
-		resetAt: data.five_hour?.resets_at ?? null,
+		fiveHourResetAt: data.five_hour?.resets_at ?? null,
+		weeklyResetAt: data.seven_day?.resets_at ?? null,
 	};
 }
 
@@ -227,24 +229,31 @@ async function fetchZaiUsage(token: string): Promise<ProviderUsage> {
 	const limits = data.data?.limits ?? [];
 	let tokensPercent = 0;
 	let monthlyPercent = 0;
-	let resetAt: string | null = null;
+	let tokensResetAt: string | null = null;
+	let monthlyResetAt: string | null = null;
 
 	for (const limit of limits) {
 		const pct = limit.percentage ?? 0;
+		// nextResetTime from z.ai is epoch ms (number) — convert to ISO string
+		const resetIso = typeof limit.nextResetTime === "number"
+			? new Date(limit.nextResetTime).toISOString()
+			: (typeof limit.nextResetTime === "string" ? limit.nextResetTime : null);
+
 		if (limit.type === "TOKENS_LIMIT") {
 			tokensPercent = pct;
-			resetAt = limit.nextResetTime ?? resetAt;
+			tokensResetAt = resetIso;
 		} else if (limit.type === "TIME_LIMIT") {
 			monthlyPercent = pct;
-			resetAt = limit.nextResetTime ?? resetAt;
+			monthlyResetAt = resetIso;
 		}
 	}
 
 	return {
 		providerName: "z.ai",
 		fiveHourPercent: tokensPercent,
+		fiveHourResetAt: tokensResetAt,
 		weeklyPercent: monthlyPercent,
-		resetAt,
+		weeklyResetAt: monthlyResetAt,
 	};
 }
 
@@ -282,8 +291,9 @@ export async function fetchProviderUsage(maxAgeMs = 300000): Promise<ProviderUsa
 			const usage: ProviderUsage = {
 				providerName: "Claude",
 				fiveHourPercent: base.fiveHourPercent,
+				fiveHourResetAt: base.fiveHourResetAt,
 				weeklyPercent: base.weeklyPercent,
-				resetAt: base.resetAt,
+				weeklyResetAt: base.weeklyResetAt,
 			};
 			cachedUsage = usage;
 			cachedAt = Date.now();
@@ -308,8 +318,9 @@ export async function fetchProviderUsage(maxAgeMs = 300000): Promise<ProviderUsa
 				const usage: ProviderUsage = {
 					providerName: "Copilot",
 					fiveHourPercent: 0,
+					fiveHourResetAt: null,
 					weeklyPercent: monthlyPercent,
-					resetAt: null,
+					weeklyResetAt: null,
 					copilotMonthlyPercent: monthlyPercent,
 				};
 				cachedUsage = usage;

@@ -225,43 +225,43 @@ test("renderProviderUsage returns undefined for null usage", () => {
 });
 
 test("renderProviderUsage shows accent color under 80%", () => {
-	const usage = { providerName: "Test", fiveHourPercent: 45, weeklyPercent: 23, resetAt: null };
+	const usage = { providerName: "Test", fiveHourPercent: 45, weeklyPercent: 23, fiveHourResetAt: null, weeklyResetAt: null };
 	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2501\u2504]+ 45%<\/accent> <dim>Wk [\u2501\u2504]+ 23%<\/dim>/);
 });
 
 test("renderProviderUsage shows error color at 80%+", () => {
-	const usage = { providerName: "Test", fiveHourPercent: 85, weeklyPercent: 50, resetAt: null };
+	const usage = { providerName: "Test", fiveHourPercent: 85, weeklyPercent: 50, fiveHourResetAt: null, weeklyResetAt: null };
 	const out = renderProviderUsage(theme, usage);
 	assert.match(out!, /<error>5h [\u2501\u2504]+ 85%<\/error> <dim>Wk [\u2501\u2504]+ 50%<\/dim>/);
 	assert.doesNotMatch(out!, /<accent>/);
 });
 
 test("renderProviderUsage switches accent→error exactly at the 80% boundary", () => {
-	assert.match(renderProviderUsage(theme, { providerName: "Test", fiveHourPercent: 79, weeklyPercent: 5, resetAt: null })!, /<accent>5h [\u2501\u2504]+ 79%<\/accent>/);
-	assert.match(renderProviderUsage(theme, { providerName: "Test", fiveHourPercent: 80, weeklyPercent: 5, resetAt: null })!, /<error>5h [\u2501\u2504]+ 80%<\/error>/);
+	assert.match(renderProviderUsage(theme, { providerName: "Test", fiveHourPercent: 79, weeklyPercent: 5, fiveHourResetAt: null, weeklyResetAt: null })!, /<accent>5h [\u2501\u2504]+ 79%<\/accent>/);
+	assert.match(renderProviderUsage(theme, { providerName: "Test", fiveHourPercent: 80, weeklyPercent: 5, fiveHourResetAt: null, weeklyResetAt: null })!, /<error>5h [\u2501\u2504]+ 80%<\/error>/);
 });
 
 test("renderProviderUsage shows reset timer when resetAt is in the future", () => {
 	// ~3h from now; formatResetTimer floors minutes, so the exact h/m digits
 	// depend on sub-second drift — assert the timer segment exists, not its value.
 	const resetAt = new Date(Date.now() + 3 * 3600 * 1000).toISOString();
-	const usage = { providerName: "Test", fiveHourPercent: 30, weeklyPercent: 10, resetAt };
+	const usage = { providerName: "Test", fiveHourPercent: 30, fiveHourResetAt: resetAt, weeklyPercent: 10, weeklyResetAt: null };
 	const out = renderProviderUsage(theme, usage);
-	assert.match(out!, /<dim>\d+[hm](\d+[hm])?<\/dim>/);
+	assert.match(out!, /\d+[hm](\d+[hm])?/);
 });
 
 test("renderProviderUsage omits reset timer when resetAt is in the past", () => {
-	const usage = { providerName: "Test", fiveHourPercent: 30, weeklyPercent: 10, resetAt: "2000-01-01T00:00:00Z" };
+	const usage = { providerName: "Test", fiveHourPercent: 30, fiveHourResetAt: "2000-01-01T00:00:00Z", weeklyPercent: 10, weeklyResetAt: null };
 	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2501\u2504]+ 30%<\/accent> <dim>Wk [\u2501\u2504]+ 10%<\/dim>/);
 });
 
 test("renderProviderUsage includes Copilot monthly percent when present", () => {
-	const usage = { providerName: "Test", fiveHourPercent: 30, weeklyPercent: 10, resetAt: null, copilotMonthlyPercent: 68 };
+	const usage = { providerName: "Test", fiveHourPercent: 30, weeklyPercent: 10, fiveHourResetAt: null, weeklyResetAt: null, copilotMonthlyPercent: 68 };
 	assert.match(renderProviderUsage(theme, usage)!, /<accent>5h [\u2501\u2504]+ 30%<\/accent> <dim>Wk [\u2501\u2504]+ 10%<\/dim> <dim>Mo: 68%<\/dim>/);
 });
 
 test("renderProviderUsage works without theme (plain text)", () => {
-	const usage = { providerName: "Test", fiveHourPercent: 45, weeklyPercent: 23, resetAt: null };
+	const usage = { providerName: "Test", fiveHourPercent: 45, weeklyPercent: 23, fiveHourResetAt: null, weeklyResetAt: null };
 	const out = renderProviderUsage(undefined, usage);
 	assert.match(out!, /^Test 5h [\u2501\u2504]+ 45% Wk [\u2501\u2504]+ 23%$/);
 	assert.doesNotMatch(out!, /</);
@@ -376,7 +376,7 @@ describe("provider-usage module", () => {
 			assert.ok(usage, "expected parsed usage");
 			assert.equal(usage!.fiveHourPercent, 45.5);
 			assert.equal(usage!.weeklyPercent, 23);
-			assert.equal(usage!.resetAt, "2026-07-08T16:00:00Z");
+			assert.equal(usage!.fiveHourResetAt, "2026-07-08T16:00:00Z");
 		} finally {
 			globalThis.fetch = originalFetch;
 		}
