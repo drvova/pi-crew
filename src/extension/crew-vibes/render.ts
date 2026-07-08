@@ -1,7 +1,14 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { CrewTheme } from "../../ui/theme-adapter.ts";
-import { CAPACITY_STATUS_ID, type CapacityConfig, type CrewVibesConfig, SPEED_STATUS_ID, type SpeedConfig, type TokenDisplay } from "./config.ts";
-import { capacityIndex, isDangerStage, RUN_CREW_FRAMES } from "./figures.ts";
+import {
+	CAPACITY_STATUS_ID,
+	type CapacityConfig,
+	type CrewVibesConfig,
+	SPEED_STATUS_ID,
+	type SpeedConfig,
+	type TokenDisplay,
+} from "./config.ts";
+import { capacityIndex, crewFrames, isDangerStage } from "./figures.ts";
 
 export type CapacityUsage = {
 	tokens: number | null;
@@ -45,13 +52,16 @@ export function renderSpeedFooter(theme: CrewTheme | undefined, config: SpeedCon
 
 export function renderWorkingMessage(theme: CrewTheme | undefined, config: SpeedConfig, speed: number | null): string {
 	const left = "Working";
-	const speedText = theme ? `${theme.fg(speed === null ? "dim" : "accent", speed === null ? "--" : speed.toFixed(1))} ${theme.fg("dim", config.label)}` : `${speed === null ? "--" : speed.toFixed(1)} ${config.label}`;
+	const speedText = theme
+		? `${theme.fg(speed === null ? "dim" : "accent", speed === null ? "--" : speed.toFixed(1))} ${theme.fg("dim", config.label)}`
+		: `${speed === null ? "--" : speed.toFixed(1)} ${config.label}`;
 	return theme ? `${theme.fg("muted", left)}  ${speedText}` : `${left}  ${speedText}`;
 }
 
 export function crewIndicatorFrames(theme: CrewTheme | undefined): string[] {
-	if (!theme) return [...RUN_CREW_FRAMES];
-	return RUN_CREW_FRAMES.map((frame) => theme.fg("accent", frame));
+	const frames = crewFrames();
+	if (!theme) return [...frames];
+	return frames.map((frame) => theme.fg("accent", frame));
 }
 
 function formatCapacityPrefix(config: CapacityConfig, usage: CapacityUsage): string {
@@ -80,7 +90,7 @@ export function renderCapacity(theme: CrewTheme | undefined, config: CapacityCon
 }
 
 export function setSpeedStatus(ctx: ExtensionContext, config: CrewVibesConfig, text: string | undefined): void {
-	if (!ctx || !ctx.hasUI) return;
+	if (!ctx?.hasUI) return;
 	if (!config.enabled || !config.speed.enabled || !config.speed.footer) {
 		ctx.ui.setStatus(SPEED_STATUS_ID, undefined);
 		return;
@@ -89,7 +99,7 @@ export function setSpeedStatus(ctx: ExtensionContext, config: CrewVibesConfig, t
 }
 
 export function setCapacityStatus(ctx: ExtensionContext, config: CrewVibesConfig, text: string | undefined): void {
-	if (!ctx || !ctx.hasUI) return;
+	if (!ctx?.hasUI) return;
 	if (!config.enabled || !config.capacity.enabled) {
 		ctx.ui.setStatus(CAPACITY_STATUS_ID, undefined);
 		return;
@@ -98,7 +108,7 @@ export function setCapacityStatus(ctx: ExtensionContext, config: CrewVibesConfig
 }
 
 export function clearVibesStatus(ctx: ExtensionContext): void {
-	if (!ctx || !ctx.hasUI) return;
+	if (!ctx?.hasUI) return;
 	ctx.ui.setStatus(SPEED_STATUS_ID, undefined);
 	ctx.ui.setStatus(CAPACITY_STATUS_ID, undefined);
 	if (ctx.ui.setWorkingIndicator) ctx.ui.setWorkingIndicator();

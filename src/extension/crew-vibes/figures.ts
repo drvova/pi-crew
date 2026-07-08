@@ -1,4 +1,5 @@
 import type { SpeedConfig } from "./config.ts";
+import { hasCrewFont } from "./font-detect.ts";
 
 /**
  * Crew figures replacing the original cat glyphs from pi-speeed / pi-chonk.
@@ -13,24 +14,51 @@ import type { SpeedConfig } from "./config.ts";
 // a constant 2-cell width across frames. Faster tok/s cycles frames faster
 // (see intervalForSpeed). Install the font via `npm run install:crew-font`
 // or the postinstall hook; without it the glyphs render as tofu boxes.
-export const RUN_CREW_FRAMES: readonly string[] = [
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
-	" ",
+const PUA_CREW_FRAMES: readonly string[] = [
+	"\uE700 ",
+	"\uE701 ",
+	"\uE702 ",
+	"\uE703 ",
+	"\uE704 ",
+	"\uE705 ",
+	"\uE706 ",
+	"\uE707 ",
+	"\uE708 ",
+	"\uE709 ",
+	"\uE70A ",
+	"\uE70B ",
+	"\uE70C ",
+	"\uE70D ",
+	"\uE70E ",
+	"\uE70F ",
 ] as const;
+
+// Fallback frames using standard Unicode block elements that render on any
+// terminal without a custom font.  8 frames — half the PUA count — both
+// produce a smooth animation at the same cadence because the Loader cycles
+// frames independently via its own setInterval.
+const ASCII_FALLBACK_FRAMES: readonly string[] = [
+	"\u258C ",
+	"\u258D ",
+	"\u258E ",
+	"\u258F ",
+	"\u2590 ",
+	"\u2591 ",
+	"\u2592 ",
+	"\u2593 ",
+] as const;
+
+// Re-export PUA frames for direct consumers that don't need the font check.
+export const RUN_CREW_FRAMES = PUA_CREW_FRAMES;
+
+/**
+ * Return the best available indicator frames.
+ * Returns PUA glyphs when crew-vibes.ttf is installed, otherwise falls back
+ * to standard Unicode block elements that render on any terminal.
+ */
+export function crewFrames(): readonly string[] {
+	return hasCrewFont() ? PUA_CREW_FRAMES : ASCII_FALLBACK_FRAMES;
+}
 
 /**
  * Map a tok/s reading to a working-indicator frame interval in ms.

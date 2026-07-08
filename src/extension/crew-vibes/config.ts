@@ -92,7 +92,10 @@ function positiveFrom(raw: unknown, fallback: number): number {
 	return typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : fallback;
 }
 
-function sextet(raw: unknown, fallback: [string, string, string, string, string, string]): [string, string, string, string, string, string] {
+function sextet(
+	raw: unknown,
+	fallback: [string, string, string, string, string, string],
+): [string, string, string, string, string, string] {
 	if (Array.isArray(raw) && raw.length === 6 && raw.every((entry) => typeof entry === "string")) {
 		return raw as [string, string, string, string, string, string];
 	}
