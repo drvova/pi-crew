@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.28] — maxTokens cap + real-time steering + provider-per-model (2026-07-09)
+
+### Features
+- **maxTokens cap for background workers**: agent config `maxTokens: N` sets `PI_CREW_MAX_OUTPUT` env var; prompt-runtime hooks `before_provider_request` to cap `payload.max_tokens`
+- **Real-time child steering**: team tool writes steers to JSONL file in real-time; child's prompt-runtime polls file every 500ms and injects via `pi.sendMessage({deliverAs:"steer"})`
+- **Provider quota follows selected model**: `fetchProviderUsage()` now takes a provider parameter; quota section shows data for the current model's provider only, hides for unsupported providers
+- **Minimax provider quota**: fetches from `https://www.minimax.io/v1/token_plan/remains` (interval + weekly usage with reset timers)
+
+### Fixes
+- **currentProvider not initialized**: quota bar was always hidden because `model_select` only fires on manual switch; now reads `ctx.model.provider` at `session_start`
+- **Animation stability**: PUA cat frames for native terminals, braille fallback for web terminals (gotty/wetty). Removed unstable cat widget and isWebTerminal detection for default behavior
+- **PI_CREW_MAX_OUTPUT_TOKENS → PI_CREW_MAX_OUTPUT**: renamed to avoid `isSecretKey` detection ("TOKEN" pattern)
+- **BASE_ALLOWLIST**: added `PI_CREW_MAX_OUTPUT` and `PI_CREW_STEERING_FILE` so `sanitizeEnvSecrets` passes them through
+- **parseAgentFile**: now parses `maxTokens` from agent definition frontmatter
+
 ## [0.9.27] — crew-vibes provider usage + animation fixes (2026-07-08)
 
 ### Features

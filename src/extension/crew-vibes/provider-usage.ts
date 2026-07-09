@@ -357,7 +357,14 @@ async function fetchForProvider(provider: string): Promise<ProviderUsage | null>
 			if (!token) return null;
 			const pct = await fetchCopilotMonthlyPercent(token);
 			if (pct === undefined) return null;
-			return { providerName: "Copilot", fiveHourPercent: 0, fiveHourResetAt: null, weeklyPercent: pct, weeklyResetAt: null, copilotMonthlyPercent: pct };
+			return {
+				providerName: "Copilot",
+				fiveHourPercent: 0,
+				fiveHourResetAt: null,
+				weeklyPercent: pct,
+				weeklyResetAt: null,
+				copilotMonthlyPercent: pct,
+			};
 		}
 		default:
 			return null;

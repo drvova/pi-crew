@@ -98,14 +98,21 @@ export default function registerPiTeamsPromptRuntime(pi: ExtensionAPI): void {
 						try {
 							const entry = JSON.parse(line) as { type?: string; message?: string };
 							if (entry.type === "steer" && entry.message) {
-								pi.sendMessage({ customType: "crew-steer", content: entry.message, display: false }, { deliverAs: "steer" });
+								pi.sendMessage(
+									{ customType: "crew-steer", content: entry.message, display: false },
+									{ deliverAs: "steer" },
+								);
 							}
 						} catch {
 							// Malformed line — skip
 						}
 					}
 				} finally {
-					try { fs.closeSync(fd); } catch { /* already closed */ }
+					try {
+						fs.closeSync(fd);
+					} catch {
+						/* already closed */
+					}
 				}
 			} catch {
 				// File doesn't exist yet or read error — will retry next tick
