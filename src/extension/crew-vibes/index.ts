@@ -52,28 +52,18 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	let lastProviderText: string | undefined;
 	let currentProvider: string | undefined;
 
-	// B7-adjacent: auto-detect provider from model name when ctx.model.provider
-	// is missing (common during sub-agent runs where no model_select fires).
-	function detectProviderFromModel(model?: { name?: string; provider?: string }): string | undefined {
-		// Prefer explicit provider if available.
-		if (model?.provider) return model.provider;
-		// Infer from model name patterns.
-		const name = (model?.name ?? "").toLowerCase();
-		if (name.includes("claude") || name.includes("anthropic")) return "anthropic";
-		if (name.includes("copilot") || name.includes("github")) return "github-copilot";
-		if (name.includes("minimax")) return "minimax";
-		if (name.includes("z-ai") || name.includes("zai")) return "zai";
-		return undefined;
+	/** Strip ANSI codes to measure visible width. */
+	function visibleLen(text: string): number {
+		return text.replace(/\x1b\[[0-9;]*m/g, "").length;
 	}
 
-	/** Try to refresh currentProvider from ctx.model — called on every turn/message
-	 * so sub-agent runs that change the model stay in sync. */
-	function refreshProvider(ctx: ExtensionContext): void {
-		const detected = detectProviderFromModel(ctx.model as { name?: string; provider?: string } | undefined);
-		if (detected && detected !== currentProvider) {
-			currentProvider = detected;
-			clearProviderUsageCache();
-		}
+	/** Left-align `left`, right-align `right` on the same line.
+	 * Uses non-breaking space (U+00A0) for padding because pi's
+	 * sanitizeStatusText collapses regular spaces: / +/g → " ". */
+	function spreadLine(left: string, right: string): string {
+		const cols = process.stdout.columns || 120;
+		const padding = Math.max(2, cols - visibleLen(left) - visibleLen(right));
+		return left + "\u00A0".repeat(padding) + right;
 	}
 
 	function themeOf(ctx: ExtensionContext) {
@@ -87,17 +77,9 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			return;
 		}
 		const capText = renderCapacity(themeOf(ctx), config.capacity, getCapacityUsage(ctx));
-		setCapacityStatus(ctx, config, capText);
-	}
-
-	/** Publish provider quota on its own status line (pi-crew-quota). */
-	function publishProviderQuota(ctx: ExtensionContext): void {
-		if (!ctx?.hasUI) return;
-		if (!config.enabled || !config.capacity.providerUsage) {
-			setProviderStatus(ctx, config, undefined);
-			return;
-		}
-		setProviderStatus(ctx, config, lastProviderText);
+		// Combine capacity + provider on one line with spacing
+		const combined = lastProviderText ? spreadLine(capText, lastProviderText) : capText;
+		setCapacityStatus(ctx, config, combined);
 	}
 
 	function publishSpeedFooter(ctx: ExtensionContext, speed = footerAnimator.value()): void {
@@ -199,11 +181,13 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			try {
 				const usage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
 				lastProviderText = renderProviderUsage(themeOf(ctx), usage);
+				// Re-render combined capacity + provider line
+				publishCapacity(ctx);
 			} catch {
 				// Never crash on provider fetch failure
 				lastProviderText = undefined;
+				publishCapacity(ctx);
 			}
-			publishProviderQuota(ctx);
 		}
 
 		tick(); // Fetch immediately on start
@@ -229,7 +213,6 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			return;
 		}
 		publishCapacity(ctx);
-		publishProviderQuota(ctx);
 		publishSpeedFooter(ctx);
 		if (config.capacity.providerUsage) startProviderTimer(ctx);
 	}
@@ -246,7 +229,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		footerAnimator.reset(null);
 		clearProviderUsageCache();
 		// Initialize provider from current model — model_select only fires on manual switch
-		currentProvider = detectProviderFromModel(ctx.model as { name?: string; provider?: string } | undefined);
+		currentProvider = (ctx.model as { provider?: string } | undefined)?.provider;
 		if (!config.enabled) {
 			clearVibesStatus(ctx);
 			return;
@@ -264,18 +247,15 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 
 	pi.on("agent_start", (_event, ctx) => {
 		if (!config.enabled) return;
-		refreshProvider(ctx);
 		resetWorking(ctx);
 	});
 
 	pi.on("turn_start", (_event, ctx) => {
 		if (!config.enabled) return;
-		refreshProvider(ctx);
 		resetWorking(ctx);
 	});
 
 	pi.on("message_start", (event, ctx) => {
-		refreshProvider(ctx);
 		if (!config.enabled || !config.speed.enabled || !isAssistantMessage(event.message)) return;
 		speedTracker.startMessage();
 		footerAnimator.reset(speedTracker.lastTokS);
@@ -306,7 +286,6 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	pi.on("message_end", (event, ctx) => {
 		if (!isAssistantMessage(event.message)) return;
 		publishCapacity(ctx);
-		publishProviderQuota(ctx);
 		if (!config.enabled || !config.speed.enabled || !speedTracker.isStreaming) return;
 
 		const completed = speedTracker.finishMessage(assistantUsageOutput(event.message) ?? 0, assistantStopReason(event.message));
@@ -333,19 +312,12 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	});
 
 	pi.on("model_select", (event, ctx) => {
-		currentProvider = detectProviderFromModel((event as { model?: { name?: string; provider?: string } }).model);
+		currentProvider = (event as { model?: { provider?: string } }).model?.provider;
 		clearProviderUsageCache();
 		publishCapacity(ctx);
-		publishProviderQuota(ctx);
 	});
-	pi.on("session_compact", (_event, ctx) => {
-		publishCapacity(ctx);
-		publishProviderQuota(ctx);
-	});
-	pi.on("session_tree", (_event, ctx) => {
-		publishCapacity(ctx);
-		publishProviderQuota(ctx);
-	});
+	pi.on("session_compact", (_event, ctx) => publishCapacity(ctx));
+	pi.on("session_tree", (_event, ctx) => publishCapacity(ctx));
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		stopLiveTimer();
