@@ -406,7 +406,7 @@ test("handleChainRun returns a structured summary with runIds in data", WIN32_SK
 	assert.equal(res.details.data?.chain, true);
 	assert.equal(res.details.data?.steps, 2);
 	assert.ok(Array.isArray(res.details.data?.runIds));
-	assert.equal((res.details.data?.runIds as string[]).length, 2);
+	assert.equal((res.details.data?.runIds ?? []).length, 2);
 	// Summary text references both steps.
 	const first = res.content?.[0];
 	const text = first && "text" in first ? first.text : "";

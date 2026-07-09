@@ -103,7 +103,7 @@
     "@earendil-works/pi-tui": "*"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.49",
+    "@sinclair/typebox": "^0.34.50",
     "acorn": "^8.17.0",
     "ajv": "^8.20.0",
     "cli-highlight": "^2.1.11",
@@ -112,13 +112,13 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "^2.5.3",
     "@earendil-works/pi-agent-core": "^0.77.0",
     "@earendil-works/pi-ai": "^0.77.0",
     "@earendil-works/pi-coding-agent": "^0.77.0",
     "@earendil-works/pi-tui": "^0.77.0",
     "esbuild": "^0.28.1",
-    "tsx": "^4.22.3",
+    "tsx": "^4.23.0",
     "typescript": "^5.9.3"
   },
   "peerDependenciesMeta": {
