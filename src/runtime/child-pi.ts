@@ -894,6 +894,20 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 	});
 	// Pass steering file path to child for real-time steer injection
 	if (input.steeringFile) built.env.PI_CREW_STEERING_FILE = input.steeringFile;
+	// B5: if the parent already aborted before we spawn, do not start the child
+	// at all. Spawning a doomed process wastes resources, and the abort listener
+	// registered below will not re-fire for an already-aborted signal (so the
+	// child would only be killed later by the response-timeout path). Return a
+	// cancelled-style result immediately.
+	if (input.signal?.aborted) {
+		return {
+			exitCode: null,
+			stdout: "",
+			stderr: "",
+			error: "Aborted before spawn (parent AbortSignal already aborted)",
+			aborted: true,
+		};
+	}
 	const spawnSpec = getPiSpawnCommand(built.args);
 	try {
 		return await new Promise<ChildPiRunResult>((resolve) => {
