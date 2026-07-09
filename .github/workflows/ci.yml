@@ -37,6 +37,17 @@ jobs:
         run: npm install
       - name: Typecheck
         run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Format check
+        run: npm run format:check
+      - name: Checks (conflict markers / lazy imports)
+        # check:bundle-staleness is intentionally excluded — it is mtime-based
+        # (newest src/ vs dist/index.mjs) and only meaningful locally, since a
+        # fresh `git checkout` on CI resets all file mtimes to ~now.
+        run: |
+          npm run check:conflict-markers
+          npm run check:lazy-imports
       - name: Test
         run: npm test
       - name: Pack dry run
