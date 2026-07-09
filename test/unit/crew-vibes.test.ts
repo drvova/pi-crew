@@ -189,7 +189,7 @@ test("asCrewTheme returns undefined for non-theme objects", () => {
 // ---------------------------------------------------------------------------
 
 test("PROVIDER_STATUS_ID is the expected status id", () => {
-	assert.equal(PROVIDER_STATUS_ID, "pi-crew-bar");
+	assert.equal(PROVIDER_STATUS_ID, "pi-crew-quota");
 });
 
 test("DEFAULT_CONFIG has providerUsage enabled with 5min refresh", () => {
