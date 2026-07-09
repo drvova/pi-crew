@@ -610,6 +610,46 @@ function snapshotDirtyWorktree(
 	}
 }
 
+/**
+ * Best-effort removal of a just-created worktree + its branch. Used when a
+ * post-creation step (setup hook, node_modules link, seed overlay) fails, so
+ * the run does not leak an orphaned worktree dir + branch that would block the
+ * next run with an "already checked out" error.
+ */
+function cleanupCreatedWorktree(repoRoot: string, worktreePath: string, branch: string): void {
+	try {
+		git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+	} catch {
+		try {
+			if (fs.existsSync(worktreePath)) fs.rmSync(worktreePath, { recursive: true, force: true });
+		} catch {
+			/* best-effort */
+		}
+	}
+	try {
+		git(repoRoot, ["branch", "-D", branch]);
+	} catch {
+		/* best-effort */
+	}
+}
+
+async function cleanupCreatedWorktreeAsync(repoRoot: string, worktreePath: string, branch: string): Promise<void> {
+	try {
+		await gitAsync(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+	} catch {
+		try {
+			if (fs.existsSync(worktreePath)) fs.rmSync(worktreePath, { recursive: true, force: true });
+		} catch {
+			/* best-effort */
+		}
+	}
+	try {
+		await gitAsync(repoRoot, ["branch", "-D", branch]);
+	} catch {
+		/* best-effort */
+	}
+}
+
 export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskState, stepSeedPaths?: string[]): PreparedTaskWorkspace {
 	if (manifest.workspaceMode !== "worktree") return { cwd: task.cwd };
 	const repoRoot = findGitRoot(manifest.cwd);
@@ -740,23 +780,30 @@ export function prepareTaskWorkspace(manifest: TeamRunManifest, task: TeamTaskSt
 		}
 		throw error;
 	}
-	const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
-	const nodeModulesLinked =
-		loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
-	// Overlay seed paths from config + step-level seedPaths
-	const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
-	const merged = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
-	if (merged.length > 0) {
-		overlaySeedPaths(repoRoot, worktreePath, merged);
+	try {
+		const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
+		const nodeModulesLinked =
+			loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
+		// Overlay seed paths from config + step-level seedPaths
+		const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
+		const merged = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
+		if (merged.length > 0) {
+			overlaySeedPaths(repoRoot, worktreePath, merged);
+		}
+		return {
+			cwd: worktreePath,
+			worktreePath,
+			branch,
+			reused: false,
+			nodeModulesLinked,
+			syntheticPaths,
+		};
+	} catch (setupError) {
+		// Hook/link/seed failure AFTER worktree+branch creation: clean up to avoid
+		// an orphaned worktree dir + branch that would block the next run.
+		cleanupCreatedWorktree(repoRoot, worktreePath, branch);
+		throw setupError;
 	}
-	return {
-		cwd: worktreePath,
-		worktreePath,
-		branch,
-		reused: false,
-		nodeModulesLinked,
-		syntheticPaths,
-	};
 }
 
 /** Async version of prepareTaskWorkspace — yields the event loop during git operations. */
@@ -880,22 +927,29 @@ export async function prepareTaskWorkspaceAsync(
 		}
 		throw error;
 	}
-	const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
-	const nodeModulesLinked =
-		loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
-	const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
-	const merged = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
-	if (merged.length > 0) {
-		overlaySeedPaths(repoRoot, worktreePath, merged);
+	try {
+		const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
+		const nodeModulesLinked =
+			loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
+		const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
+		const merged = normalizeSeedPaths([...globalSeedPaths, ...(stepSeedPaths ?? [])], repoRoot);
+		if (merged.length > 0) {
+			overlaySeedPaths(repoRoot, worktreePath, merged);
+		}
+		return {
+			cwd: worktreePath,
+			worktreePath,
+			branch,
+			reused: false,
+			nodeModulesLinked,
+			syntheticPaths,
+		};
+	} catch (setupError) {
+		// Hook/link/seed failure AFTER worktree+branch creation: clean up to avoid
+		// an orphaned worktree dir + branch that would block the next run.
+		await cleanupCreatedWorktreeAsync(repoRoot, worktreePath, branch);
+		throw setupError;
 	}
-	return {
-		cwd: worktreePath,
-		worktreePath,
-		branch,
-		reused: false,
-		nodeModulesLinked,
-		syntheticPaths,
-	};
 }
 
 export function captureWorktreeDiffStat(worktreePath: string): WorktreeDiffStat {

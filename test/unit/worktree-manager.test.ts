@@ -157,3 +157,30 @@ test("setupHook never uses shell:true regardless of platform (C3 security fix)",
 	// Verify node hook handling is preserved
 	assert.ok(hookSection.includes("process.execPath"), "Node hook handling via process.execPath is preserved");
 });
+
+test(
+	"prepareTaskWorkspace cleans up worktree+branch when a post-creation step fails (C5 regression)",
+	() => {
+		const repo = makeRepoTemp("pi-crew-wt-c5-");
+		initGitRepo(repo);
+		const manifest = minimalManifest(repo, "run-c5");
+		const task = minimalTask("task-c5", repo);
+		// A seedPath that escapes repoRoot makes normalizeSeedPaths throw AFTER the
+		// worktree+branch were created. Without the fix this leaked an orphaned
+		// worktree dir + branch that blocked the next run with "already checked out".
+		assert.throws(
+			() => prepareTaskWorkspace(manifest, task, ["../../../etc/passwd"]),
+			/seedPaths entries must stay inside repoRoot/i,
+		);
+		// No orphaned branch should remain.
+		const branches = execFileSync("git", ["branch", "--list", "pi-crew/run-c5/task-c5"], {
+			cwd: repo,
+			encoding: "utf-8",
+		}).trim();
+		assert.equal(branches, "", "orphaned branch must be cleaned up after post-creation failure");
+		// No orphaned worktree entry should remain.
+		const worktrees = execFileSync("git", ["worktree", "list"], { cwd: repo, encoding: "utf-8" });
+		assert.ok(!worktrees.includes("task-c5"), "orphaned worktree must be cleaned up after post-creation failure");
+		fs.rmSync(repo, { recursive: true, force: true });
+	},
+);
