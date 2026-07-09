@@ -102,4 +102,22 @@ describe("H2: Event log sync/async coordination", () => {
 		const lines = content.trim().split("\n").filter(Boolean);
 		assert.ok(lines.length >= 1, "Should have at least the sync event");
 	});
+
+	it("assigns unique seqs to many concurrent async appends (C7 regression)", async () => {
+		// Regression for the unconditional-delete bug in the asyncQueues promise
+		// chain: with 3+ overlapping callers, an earlier caller's success handler
+		// deleted a later caller's promise, letting the next caller bypass
+		// serialization -> nextSequence ran concurrently and produced duplicate
+		// seqs. With correct compare-and-delete serialization, all seqs are unique.
+		const N = 60;
+		const results = await Promise.all(
+			Array.from({ length: N }, (_, i) =>
+				appendEventAsync(eventsPath, { type: `test.c7.${i}`, runId: "test-run" }),
+			),
+		);
+		const seqs = results.map((r) => r.metadata?.seq).filter((s): s is number => typeof s === "number");
+		const unique = new Set(seqs);
+		assert.equal(unique.size, seqs.length, `duplicate seqs detected: ${seqs.length - unique.size} collisions`);
+		assert.equal(seqs.length, N, "every event must have a seq");
+	});
 });

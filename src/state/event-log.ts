@@ -390,7 +390,13 @@ async function withEventLogLockAsync(eventsPath: string, fn: () => Promise<void>
 	try {
 		await next;
 	} finally {
-		asyncLocks.delete(queueKey);
+		// Compare-and-delete: only remove our entry if it still points at our
+		// promise. With 3+ overlapping callers, an earlier caller's finally would
+		// otherwise delete a later caller's promise, letting the next caller start
+		// immediately (in parallel) -> broken mutual exclusion, duplicate seqs.
+		if (asyncLocks.get(queueKey) === next) {
+			asyncLocks.delete(queueKey);
+		}
 	}
 }
 
@@ -588,27 +594,31 @@ export async function appendEventAsync(eventsPath: string, event: AppendTeamEven
 		}
 		return fullEvent;
 	});
-	asyncQueues.set(
-		queueKey,
-		next.then(
-			() => {
+	const tail = next.then(
+		() => {
+			// Compare-and-delete: only remove our entry if it still points at our
+			// tail promise. An older caller deleting unconditionally would wipe a
+			// newer caller's promise, letting the next caller bypass serialization
+			// -> duplicate seqs / interleaved appends.
+			if (asyncQueues.get(queueKey) === tail) {
 				asyncQueues.delete(queueKey);
-			},
-			(error) => {
-				// FIX: Wrap error handler in try-catch to ensure asyncQueues.delete
-				// always runs, even if logging itself throws.
-				try {
-					logInternalError("event-log.async-queue", error, eventsPath);
-				} catch {
-					// logging failed — ensure queue is still cleaned up
-				}
-				// FIX: Reset queue to a resolved state instead of deleting it.
-				// This prevents cascading failures where a single transient error
-				// (e.g., ENOSPC) causes all subsequent events on the same path to fail.
-				asyncQueues.set(queueKey, Promise.resolve());
-			},
-		),
+			}
+		},
+		(error) => {
+			// FIX: Wrap error handler in try-catch to ensure asyncQueues.delete
+			// always runs, even if logging itself throws.
+			try {
+				logInternalError("event-log.async-queue", error, eventsPath);
+			} catch {
+				// logging failed — ensure queue is still cleaned up
+			}
+			// FIX: Reset queue to a resolved state instead of deleting it.
+			// This prevents cascading failures where a single transient error
+			// (e.g., ENOSPC) causes all subsequent events on the same path to fail.
+			asyncQueues.set(queueKey, Promise.resolve());
+		},
 	);
+	asyncQueues.set(queueKey, tail);
 	return next;
 }
 
