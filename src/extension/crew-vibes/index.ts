@@ -50,6 +50,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	let capacityTimer: ReturnType<typeof setInterval> | undefined;
 	let providerTimer: ReturnType<typeof setInterval> | undefined;
 	let lastProviderText: string | undefined;
+	let lastCapacityText: string | undefined;
 	let currentProvider: string | undefined;
 
 	// B7-adjacent: auto-detect provider from model name when ctx.model.provider
@@ -88,11 +89,12 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	function publishCapacity(ctx: ExtensionContext): void {
 		if (!ctx?.hasUI) return;
 		if (!config.enabled || !config.capacity.enabled) {
+			lastCapacityText = undefined;
 			setCapacityStatus(ctx, config, undefined);
 			return;
 		}
-		const capText = renderCapacity(themeOf(ctx), config.capacity, getCapacityUsage(ctx));
-		setCapacityStatus(ctx, config, capText);
+		lastCapacityText = renderCapacity(themeOf(ctx), config.capacity, getCapacityUsage(ctx));
+		setCapacityStatus(ctx, config, lastCapacityText);
 	}
 
 	/** Publish provider quota on its own status line (pi-crew-quota), padded
@@ -110,10 +112,13 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		}
 		const cols = process.stdout.columns || 120;
 		const quotaVisibleWidth = visibleLen(lastProviderText);
-		// Pi joins: capacity + " " + quotaPadded. We want the trailing visible
-		// column of `quotaPadded` to land at or near column `cols`. So the padding
-		// inside `quotaPadded` is cols - quotaVisibleWidth - 1 (for the joining space).
-		const pad = Math.max(0, cols - quotaVisibleWidth - 1);
+		const capVisibleWidth = lastCapacityText ? visibleLen(lastCapacityText) : 0;
+		// Pi joins: capacity + " " + quotaPadded. Subtract BOTH capacity and
+		// quota widths from cols (plus 1 for the joining space) so the joined
+		// line always fits within terminal width — no truncation by pi.
+		// When capacity text grows (e.g. sub-agent appends info), pad shrinks
+		// dynamically, keeping quota fully visible.
+		const pad = Math.max(0, cols - quotaVisibleWidth - capVisibleWidth - 1);
 		const padded = "\u00A0".repeat(pad) + lastProviderText;
 		setProviderStatus(ctx, config, padded);
 	}
