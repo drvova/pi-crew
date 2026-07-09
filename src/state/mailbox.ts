@@ -463,16 +463,19 @@ export function appendMailboxMessage(
 		replyContent: message.replyContent,
 	};
 	// H2 fix: wrap append in cross-process lock to prevent interleaving on Windows.
+	// B8: rotation (rename + recreate) also runs INSIDE the lock so it is serialized
+	// with appends — otherwise a concurrent append between rename and recreate can
+	// be truncated to an empty file.
 	withEventLogLockSync(mailboxFile(manifest, complete.direction, complete.taskId), () => {
 		fs.appendFileSync(
 			mailboxFile(manifest, complete.direction, complete.taskId),
 			`${JSON.stringify(redactSecrets(complete))}\n`,
 			"utf-8",
 		);
+		// 3.3 — rotate mailbox file if it has grown past 10 MB. Cheap stat check;
+		// rotates at most once per append.
+		rotateMailboxFileIfNeeded(mailboxFile(manifest, complete.direction, complete.taskId));
 	});
-	// 3.3 — rotate mailbox file if it has grown past 10 MB. Cheap stat
-	// check; rotates at most once per append.
-	rotateMailboxFileIfNeeded(mailboxFile(manifest, complete.direction, complete.taskId));
 	// BUGFIX (Round 12 C3): the delivery.json read-modify-write below was
 	// UNLOCKED, so concurrent appendMailboxMessage calls could interleave and
 	// clobber each other's delivery entries (lost-update race). FIX: wrap the
