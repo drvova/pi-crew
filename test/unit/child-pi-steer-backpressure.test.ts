@@ -38,18 +38,21 @@ function sliceBetween(src: string, startAnchor: string, endAnchor: string): stri
 	return src.slice(start, end + endAnchor.length);
 }
 
-test("HB-003a source contract: steer-backpressure branch does NOT call killProcessTree", () => {
-	// The fix removed `killProcessTree(child.pid, child)` from both the
-	// `!writeSucceeded` (backpressure) and the `else` (not-writable) branches.
-	// A regression that reintroduces either call must fail this test.
-	const steerBlock = sliceBetween(childPiSource, "// Inject steer via stdin to tell child to wrap up.", "// Hard abort");
+test("HB-003a source contract: steer-injection does NOT call killProcessTree", () => {
+	// C8: the soft-limit "wrap up" steer is now delivered by appending to the
+	// steering JSONL file the child polls (PI_CREW_STEERING_FILE), not via stdin
+	// (the child is spawned with stdio:["ignore",...], so child.stdin was null and
+	// the old stdin branch was dead code that only spammed logs). The HB-003a
+	// invariant still holds: the steer path must NOT kill the worker — the
+	// hard-abort below (maxTurns + graceTurns) is the real enforcement.
+	const steerBlock = sliceBetween(childPiSource, '// C8: deliver the "wrap up" advisory', "// Hard abort");
 	assert.ok(steerBlock.length > 0, "steer-injection block must be locatable in child-pi.ts");
 
-	// The block must STILL log the conditions (we kept the diagnostics)...
-	assert.match(steerBlock, /steer-backpressure/, "backpressure log must remain");
-	assert.match(steerBlock, /steer-not-writable/, "not-writable log must remain");
+	// Delivered via the steering file, not stdin.
+	assert.match(steerBlock, /input\.steeringFile/, "steer must be delivered via the steering file");
+	assert.match(steerBlock, /appendFileSync/, "steer must append to the steering file");
 
-	// ...but must NOT kill the worker on either branch.
+	// Must NOT kill the worker on the steer path (regression guard for HB-003a).
 	const killCalls = steerBlock.match(/killProcessTree\(/g) ?? [];
 	assert.equal(
 		killCalls.length,
@@ -58,7 +61,7 @@ test("HB-003a source contract: steer-backpressure branch does NOT call killProce
 	);
 
 	// And the rationale comment must be present so a future edit understands why.
-	assert.match(steerBlock, /ADVISORY/i, "steer-injection block must document that steer is advisory (rationale for not killing)");
+	assert.match(steerBlock, /Advisory only/i, "steer-injection block must document that steer is advisory (rationale for not killing)");
 });
 
 test("HB-003a source contract: hard-abort at maxTurns + graceTurns still enforces the limit", () => {

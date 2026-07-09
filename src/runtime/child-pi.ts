@@ -1129,45 +1129,30 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 								turnCount += 1;
 								if (maxTurns !== undefined && !softLimitReached && turnCount >= maxTurns) {
 									softLimitReached = true;
-									// Inject steer via stdin to tell child to wrap up.
-									// Steer injection is ADVISORY: it asks the worker to wrap up. The real
-									// enforcement is the hard-abort at maxTurns + graceTurns (below). So a
-									// failed/non-writable stdin must NOT kill the worker — that destroys a
-									// valid answer already in stdout (Phase-0 root cause of the
-									// disableTools/maxTurns:1 exit-null bug). Just log + let the hard-abort
-									// path handle a genuinely runaway worker.
-									if (child.stdin?.writable) {
-										const steerPayload =
-											JSON.stringify({
-												type: "steer",
-												message:
-													"You have reached your turn limit. Wrap up immediately — provide your final answer now.",
-											}) + "\n";
-										const writeSucceeded = child.stdin.write(steerPayload);
-										if (!writeSucceeded) {
-											// Normal Node backpressure: the payload is buffered and will flush on
-											// 'drain'. NOT a failure — do NOT kill the worker. The steer is
-											// advisory; if the worker ignores it and runs past maxTurns +
-											// graceTurns, the hard-abort below terminates it.
+									// C8: deliver the "wrap up" advisory by appending to the steering JSONL
+									// file the child polls (PI_CREW_STEERING_FILE). The child is spawned with
+									// stdio:["ignore",...], so child.stdin is null and the old stdin branch was
+									// dead code that only spammed logs on every soft-limit hit. Advisory only —
+									// the hard-abort below at maxTurns + graceTurns is the real enforcement, so
+									// a failed write must NOT kill the worker.
+									if (input.steeringFile) {
+										try {
+											fs.appendFileSync(
+												input.steeringFile,
+												JSON.stringify({
+													type: "steer",
+													message:
+														"You have reached your turn limit. Wrap up immediately — provide your final answer now.",
+												}) + "\n",
+												"utf-8",
+											);
+										} catch (err) {
 											logInternalError(
-												"child-pi.steer-backpressure",
-												new Error(
-													"stdin write returned false (normal backpressure); steer buffered, worker NOT killed",
-												),
+												"child-pi.steer-write-failed",
+												err instanceof Error ? err : new Error(String(err)),
 												`pid=${child.pid}`,
 											);
 										}
-									} else {
-										// stdin closed (worker already finished) or otherwise unwritable.
-										// Also advisory — the worker is done or nearly done; let it exit
-										// naturally. Hard-abort remains the safety net for true runaways.
-										logInternalError(
-											"child-pi.steer-not-writable",
-											new Error(
-												"stdin not writable when attempting steer injection (worker may be done); worker NOT killed",
-											),
-											`pid=${child.pid}`,
-										);
 									}
 								} else if (maxTurns !== undefined && softLimitReached && turnCount >= maxTurns + (graceTurns ?? 5)) {
 									// Hard abort — terminate after grace turns
