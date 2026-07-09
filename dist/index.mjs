@@ -81974,7 +81974,7 @@ var DEFAULT_CONFIG2 = {
     labels: ["Orbit", "Cruise", "Warp", "Black Hole", "Supernova", "Big Bang"],
     icons: ["\uE710", "\uE711", "\uE712", "\uE713", "\uE714", "\uE715"],
     providerUsage: true,
-    providerRefreshMs: 3e5
+    providerRefreshMs: 12e4
   }
 };
 var FALLBACK_CAPACITY_ICONS = [
@@ -83040,24 +83040,25 @@ function registerCrewVibes(pi) {
     capacityTimer = setInterval(() => refreshFooter(ctx), interval);
     capacityTimer.unref?.();
   }
+  async function fetchProviderAndRefresh(ctx) {
+    if (!config.enabled || !config.capacity.providerUsage) {
+      lastProviderUsage = null;
+      refreshFooter(ctx);
+      return;
+    }
+    try {
+      lastProviderUsage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
+    } catch {
+      lastProviderUsage = null;
+    }
+    refreshFooter(ctx);
+  }
   function startProviderTimer(ctx) {
     if (providerTimer) return;
     if (!config.capacity.providerUsage) return;
     const interval = Math.max(1e4, config.capacity.providerRefreshMs);
-    async function tick() {
-      if (!config.enabled || !config.capacity.providerUsage) {
-        stopProviderTimer();
-        return;
-      }
-      try {
-        lastProviderUsage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
-      } catch {
-        lastProviderUsage = null;
-      }
-      refreshFooter(ctx);
-    }
-    tick();
-    providerTimer = setInterval(tick, interval);
+    fetchProviderAndRefresh(ctx);
+    providerTimer = setInterval(() => fetchProviderAndRefresh(ctx), interval);
     providerTimer.unref?.();
   }
   function resetWorking(ctx) {
@@ -83163,7 +83164,7 @@ function registerCrewVibes(pi) {
   pi.on("model_select", (event, ctx) => {
     currentProvider = event.model?.provider;
     clearProviderUsageCache();
-    refreshFooter(ctx);
+    fetchProviderAndRefresh(ctx);
   });
   pi.on("thinking_level_select", (event, ctx) => {
     currentThinkingLevel = event.level;

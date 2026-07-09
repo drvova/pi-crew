@@ -78,7 +78,7 @@ export const DEFAULT_CONFIG: CrewVibesConfig = {
 		labels: ["Orbit", "Cruise", "Warp", "Black Hole", "Supernova", "Big Bang"],
 		icons: ["", "", "", "", "", ""],
 		providerUsage: true,
-		providerRefreshMs: 300000,
+		providerRefreshMs: 120000,
 	},
 };
 

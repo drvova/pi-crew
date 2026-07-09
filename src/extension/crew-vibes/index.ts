@@ -170,27 +170,32 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		capacityTimer.unref?.();
 	}
 
+	/** Fetch provider usage for currentProvider and refresh the footer.
+	 *  Called on start, on each timer tick, and immediately when the
+	 *  provider changes (model_select) so the quota reflects the new
+	 *  provider without waiting for the next 5-minute tick. */
+	async function fetchProviderAndRefresh(ctx: ExtensionContext): Promise<void> {
+		if (!config.enabled || !config.capacity.providerUsage) {
+			lastProviderUsage = null;
+			refreshFooter(ctx);
+			return;
+		}
+		try {
+			lastProviderUsage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
+		} catch {
+			// Never crash on provider fetch failure
+			lastProviderUsage = null;
+		}
+		refreshFooter(ctx);
+	}
+
 	function startProviderTimer(ctx: ExtensionContext): void {
 		if (providerTimer) return;
 		if (!config.capacity.providerUsage) return;
 		const interval = Math.max(10000, config.capacity.providerRefreshMs);
 
-		async function tick(): Promise<void> {
-			if (!config.enabled || !config.capacity.providerUsage) {
-				stopProviderTimer();
-				return;
-			}
-			try {
-				lastProviderUsage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
-			} catch {
-				// Never crash on provider fetch failure
-				lastProviderUsage = null;
-			}
-			refreshFooter(ctx);
-		}
-
-		tick(); // Fetch immediately on start
-		providerTimer = setInterval(tick, interval);
+		fetchProviderAndRefresh(ctx); // Fetch immediately on start
+		providerTimer = setInterval(() => fetchProviderAndRefresh(ctx), interval);
 		providerTimer.unref?.();
 	}
 
@@ -317,7 +322,9 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	pi.on("model_select", (event, ctx) => {
 		currentProvider = (event as { model?: { provider?: string } }).model?.provider;
 		clearProviderUsageCache();
-		refreshFooter(ctx);
+		// Fetch immediately so the quota reflects the new provider without
+		// waiting for the next 5-minute timer tick.
+		fetchProviderAndRefresh(ctx);
 	});
 	pi.on("thinking_level_select", (event, ctx) => {
 		currentThinkingLevel = (event as { level?: unknown }).level as string | undefined;
