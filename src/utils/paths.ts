@@ -39,7 +39,13 @@ export function packageRoot(): string {
 }
 
 export function userPiRoot(): string {
-	const home = process.env.PI_TEAMS_HOME?.trim() || os.homedir();
+	// F4: a misconfigured PI_TEAMS_HOME can be the literal string "undefined"
+	// (e.g. PI_TEAMS_HOME=$UNSET_VAR in a shell), which would build paths like
+	// "undefined/.pi/agent" relative to cwd and silently create a junk "undefined/"
+	// tree. Treat the literal "undefined" (and empty) as unset and fall back to
+	// os.homedir().
+	const rawHome = process.env.PI_TEAMS_HOME?.trim();
+	const home = rawHome && rawHome !== "undefined" ? rawHome : os.homedir();
 	const resolved = path.join(home, ".pi", "agent");
 
 	// Reject symlinks to prevent confusion attacks where PI_TEAMS_HOME points to

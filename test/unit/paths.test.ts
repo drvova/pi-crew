@@ -63,6 +63,21 @@ test("userPiRoot falls back to homedir when PI_TEAMS_HOME unset", () => {
 	}
 });
 
+test("userPiRoot ignores a literal 'undefined' PI_TEAMS_HOME (F4 regression)", () => {
+	// A misconfigured shell (PI_TEAMS_HOME=$UNSET_VAR) sets the literal string
+	// "undefined", which previously built "undefined/.pi/agent" relative to cwd.
+	const origHome = process.env.PI_TEAMS_HOME;
+	try {
+		process.env.PI_TEAMS_HOME = "undefined";
+		const result = userPiRoot();
+		assert.ok(!result.startsWith("undefined"), `must not produce a relative 'undefined/...' path, got: ${result}`);
+		assert.ok(result.includes(".pi") && result.includes("agent"), `Expected .pi/agent in ${result}`);
+	} finally {
+		if (origHome === undefined) delete process.env.PI_TEAMS_HOME;
+		else process.env.PI_TEAMS_HOME = origHome;
+	}
+});
+
 test("findRepoRoot returns undefined for directory with no markers", () => {
 	const dir = makeTempDir();
 	try {
