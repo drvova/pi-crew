@@ -1162,7 +1162,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/object/object.mjs": {
-      "bytes": 889,
+      "bytes": 1819,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/create/type.mjs",
@@ -1311,7 +1311,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/mapped/mapped.mjs": {
-      "bytes": 4548,
+      "bytes": 4564,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/symbols/index.mjs",
@@ -1825,7 +1825,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/composite/composite.mjs": {
-      "bytes": 1271,
+      "bytes": 1285,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/intersect/index.mjs",
@@ -2034,7 +2034,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/const/const.mjs": {
-      "bytes": 2735,
+      "bytes": 2751,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/any/index.mjs",
@@ -2623,7 +2623,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/record/record.mjs": {
-      "bytes": 5120,
+      "bytes": 5136,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/create/type.mjs",
@@ -2700,7 +2700,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/instantiate/instantiate.mjs": {
-      "bytes": 4356,
+      "bytes": 4370,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/clone/type.mjs",
@@ -2952,7 +2952,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/omit/omit.mjs": {
-      "bytes": 3441,
+      "bytes": 3457,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/create/type.mjs",
@@ -3086,7 +3086,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/pick/pick.mjs": {
-      "bytes": 3208,
+      "bytes": 3224,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/create/type.mjs",
@@ -3199,7 +3199,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/partial/partial.mjs": {
-      "bytes": 3347,
+      "bytes": 3363,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/create/type.mjs",
@@ -3297,7 +3297,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/required/required.mjs": {
-      "bytes": 3339,
+      "bytes": 3355,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/create/type.mjs",
@@ -3385,7 +3385,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/module/compute.mjs": {
-      "bytes": 7687,
+      "bytes": 7701,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/create/index.mjs",
@@ -3849,7 +3849,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/type/type/json.mjs": {
-      "bytes": 8130,
+      "bytes": 8144,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/type/any/index.mjs",
@@ -4843,6 +4843,11 @@
       ],
       "format": "esm"
     },
+    "node_modules/@sinclair/typebox/build/esm/system/evaluate.mjs": {
+      "bytes": 216,
+      "imports": [],
+      "format": "esm"
+    },
     "node_modules/@sinclair/typebox/build/esm/system/system.mjs": {
       "bytes": 1451,
       "imports": [
@@ -4870,8 +4875,13 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/system/index.mjs": {
-      "bytes": 60,
+      "bytes": 92,
       "imports": [
+        {
+          "path": "node_modules/@sinclair/typebox/build/esm/system/evaluate.mjs",
+          "kind": "import-statement",
+          "original": "./evaluate.mjs"
+        },
         {
           "path": "node_modules/@sinclair/typebox/build/esm/system/policy.mjs",
           "kind": "import-statement",
@@ -5628,7 +5638,7 @@
       "format": "esm"
     },
     "node_modules/@sinclair/typebox/build/esm/value/delta/delta.mjs": {
-      "bytes": 6248,
+      "bytes": 6266,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/value/guard/index.mjs",
@@ -6119,7 +6129,7 @@
       "format": "esm"
     },
     "src/state/atomic-write.ts": {
-      "bytes": 33696,
+      "bytes": 34938,
       "imports": [
         {
           "path": "node:crypto",
@@ -6201,7 +6211,7 @@
       "format": "esm"
     },
     "src/utils/paths.ts": {
-      "bytes": 8387,
+      "bytes": 8780,
       "imports": [
         {
           "path": "node:fs",
@@ -6232,7 +6242,7 @@
       "format": "esm"
     },
     "src/config/config.ts": {
-      "bytes": 49215,
+      "bytes": 49492,
       "imports": [
         {
           "path": "node:fs",
@@ -6351,7 +6361,7 @@
       "format": "esm"
     },
     "src/state/event-log.ts": {
-      "bytes": 46263,
+      "bytes": 49212,
       "imports": [
         {
           "path": "node:crypto",
@@ -6753,7 +6763,7 @@
       "format": "esm"
     },
     "src/runtime/stale-reconciler.ts": {
-      "bytes": 27771,
+      "bytes": 28209,
       "imports": [
         {
           "path": "node:fs",
@@ -6774,6 +6784,11 @@
           "path": "src/errors.ts",
           "kind": "import-statement",
           "original": "../errors.ts"
+        },
+        {
+          "path": "src/state/atomic-write.ts",
+          "kind": "import-statement",
+          "original": "../state/atomic-write.ts"
         },
         {
           "path": "src/state/state-store.ts",
@@ -7336,12 +7351,12 @@
       "format": "esm"
     },
     "src/runtime/post-exit-stdio-guard.ts": {
-      "bytes": 1987,
+      "bytes": 2805,
       "imports": [],
       "format": "esm"
     },
     "src/runtime/child-pi.ts": {
-      "bytes": 65884,
+      "bytes": 66015,
       "imports": [
         {
           "path": "node:child_process",
@@ -7485,7 +7500,7 @@
       "format": "esm"
     },
     "src/ui/pi-ui-compat.ts": {
-      "bytes": 2204,
+      "bytes": 2664,
       "imports": [],
       "format": "esm"
     },
@@ -8267,7 +8282,7 @@
       "format": "esm"
     },
     "src/state/mailbox.ts": {
-      "bytes": 27973,
+      "bytes": 28177,
       "imports": [
         {
           "path": "node:fs",
@@ -13076,7 +13091,7 @@
       "format": "esm"
     },
     "src/worktree/cleanup.ts": {
-      "bytes": 11546,
+      "bytes": 12361,
       "imports": [
         {
           "path": "node:child_process",
@@ -14369,7 +14384,7 @@
       "format": "esm"
     },
     "src/worktree/worktree-manager.ts": {
-      "bytes": 40499,
+      "bytes": 44420,
       "imports": [
         {
           "path": "node:child_process",
@@ -15124,7 +15139,7 @@
       "format": "esm"
     },
     "src/runtime/team-runner.ts": {
-      "bytes": 76483,
+      "bytes": 76143,
       "imports": [
         {
           "path": "node:fs",
@@ -17159,27 +17174,6 @@
       ],
       "format": "esm"
     },
-    "src/extension/crew-vibes/provider-usage.ts": {
-      "bytes": 13202,
-      "imports": [
-        {
-          "path": "node:fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:os",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:path",
-          "kind": "import-statement",
-          "external": true
-        }
-      ],
-      "format": "esm"
-    },
     "src/extension/crew-vibes/figures.ts": {
       "bytes": 3603,
       "imports": [
@@ -17207,28 +17201,90 @@
       ],
       "format": "esm"
     },
+    "src/extension/crew-vibes/footer.ts": {
+      "bytes": 11470,
+      "imports": [
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/ui/pi-ui-compat.ts",
+          "kind": "import-statement",
+          "original": "../../ui/pi-ui-compat.ts"
+        },
+        {
+          "path": "src/ui/theme-adapter.ts",
+          "kind": "import-statement",
+          "original": "../../ui/theme-adapter.ts"
+        },
+        {
+          "path": "src/utils/visual.ts",
+          "kind": "import-statement",
+          "original": "../../utils/visual.ts"
+        },
+        {
+          "path": "src/extension/crew-vibes/render.ts",
+          "kind": "import-statement",
+          "original": "./render.ts"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/extension/crew-vibes/provider-usage.ts": {
+      "bytes": 13202,
+      "imports": [
+        {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
     "src/extension/crew-vibes/speed.ts": {
       "bytes": 7688,
       "imports": [],
       "format": "esm"
     },
     "src/extension/crew-vibes/index.ts": {
-      "bytes": 12760,
+      "bytes": 13076,
       "imports": [
+        {
+          "path": "src/ui/pi-ui-compat.ts",
+          "kind": "import-statement",
+          "original": "../../ui/pi-ui-compat.ts"
+        },
         {
           "path": "src/extension/crew-vibes/config.ts",
           "kind": "import-statement",
           "original": "./config.ts"
         },
         {
-          "path": "src/extension/crew-vibes/provider-usage.ts",
-          "kind": "import-statement",
-          "original": "./provider-usage.ts"
-        },
-        {
           "path": "src/extension/crew-vibes/figures.ts",
           "kind": "import-statement",
           "original": "./figures.ts"
+        },
+        {
+          "path": "src/extension/crew-vibes/footer.ts",
+          "kind": "import-statement",
+          "original": "./footer.ts"
+        },
+        {
+          "path": "src/extension/crew-vibes/provider-usage.ts",
+          "kind": "import-statement",
+          "original": "./provider-usage.ts"
         },
         {
           "path": "src/extension/crew-vibes/render.ts",
@@ -18334,7 +18390,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6599888
+      "bytes": 6635627
     },
     "dist/index.mjs": {
       "imports": [
@@ -19744,6 +19800,11 @@
           "external": true
         },
         {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
           "path": "node:fs",
           "kind": "import-statement",
           "external": true
@@ -20015,7 +20076,7 @@
           "bytesInOutput": 131
         },
         "node_modules/@sinclair/typebox/build/esm/type/object/object.mjs": {
-          "bytesInOutput": 604
+          "bytesInOutput": 606
         },
         "node_modules/@sinclair/typebox/build/esm/type/object/index.mjs": {
           "bytesInOutput": 125
@@ -20380,11 +20441,14 @@
         "node_modules/@sinclair/typebox/build/esm/index.mjs": {
           "bytesInOutput": 1592
         },
+        "node_modules/@sinclair/typebox/build/esm/system/evaluate.mjs": {
+          "bytesInOutput": 105
+        },
         "node_modules/@sinclair/typebox/build/esm/system/system.mjs": {
           "bytesInOutput": 1177
         },
         "node_modules/@sinclair/typebox/build/esm/system/index.mjs": {
-          "bytesInOutput": 139
+          "bytesInOutput": 160
         },
         "node_modules/@sinclair/typebox/build/esm/errors/function.mjs": {
           "bytesInOutput": 7002
@@ -20534,7 +20598,7 @@
           "bytesInOutput": 5243
         },
         "src/state/atomic-write.ts": {
-          "bytesInOutput": 16802
+          "bytesInOutput": 17427
         },
         "src/config/defaults.ts": {
           "bytesInOutput": 4426
@@ -20543,13 +20607,13 @@
           "bytesInOutput": 7427
         },
         "src/utils/paths.ts": {
-          "bytesInOutput": 5172
+          "bytesInOutput": 5235
         },
         "src/config/suggestions.ts": {
           "bytesInOutput": 1330
         },
         "src/config/config.ts": {
-          "bytesInOutput": 38804
+          "bytesInOutput": 39089
         },
         "src/errors.ts": {
           "bytesInOutput": 8094
@@ -20561,13 +20625,13 @@
           "bytesInOutput": 2161
         },
         "src/utils/redaction.ts": {
-          "bytesInOutput": 7334
+          "bytesInOutput": 7336
         },
         "src/state/event-log-rotation.ts": {
           "bytesInOutput": 4478
         },
         "src/state/event-log.ts": {
-          "bytesInOutput": 26471
+          "bytesInOutput": 27227
         },
         "src/hooks/registry.ts": {
           "bytesInOutput": 4422
@@ -20615,7 +20679,7 @@
           "bytesInOutput": 4162
         },
         "src/runtime/stale-reconciler.ts": {
-          "bytesInOutput": 16290
+          "bytesInOutput": 16497
         },
         "src/runtime/worker-heartbeat.ts": {
           "bytesInOutput": 580
@@ -20678,7 +20742,7 @@
           "bytesInOutput": 806
         },
         "src/runtime/compact-stages/deduplicate-stage.ts": {
-          "bytesInOutput": 706
+          "bytesInOutput": 708
         },
         "src/runtime/compact-stages/head-snap-stage.ts": {
           "bytesInOutput": 115
@@ -20702,10 +20766,10 @@
           "bytesInOutput": 4327
         },
         "src/runtime/post-exit-stdio-guard.ts": {
-          "bytesInOutput": 1642
+          "bytesInOutput": 1801
         },
         "src/runtime/child-pi.ts": {
-          "bytesInOutput": 45400
+          "bytesInOutput": 45369
         },
         "src/runtime/heartbeat-gradient.ts": {
           "bytesInOutput": 953
@@ -20714,7 +20778,7 @@
           "bytesInOutput": 1800
         },
         "src/ui/pi-ui-compat.ts": {
-          "bytesInOutput": 883
+          "bytesInOutput": 1048
         },
         "src/runtime/cancellation.ts": {
           "bytesInOutput": 2293
@@ -20810,7 +20874,7 @@
           "bytesInOutput": 4392
         },
         "src/state/mailbox.ts": {
-          "bytesInOutput": 18400
+          "bytesInOutput": 18402
         },
         "src/extension/help.ts": {
           "bytesInOutput": 2863
@@ -20951,10 +21015,10 @@
           "bytesInOutput": 742
         },
         "node_modules/yaml/dist/stringify/stringifyNumber.js": {
-          "bytesInOutput": 930
+          "bytesInOutput": 934
         },
         "node_modules/yaml/dist/schema/core/float.js": {
-          "bytesInOutput": 1623
+          "bytesInOutput": 1626
         },
         "node_modules/yaml/dist/schema/core/int.js": {
           "bytesInOutput": 1584
@@ -20978,7 +21042,7 @@
           "bytesInOutput": 995
         },
         "node_modules/yaml/dist/schema/yaml-1.1/float.js": {
-          "bytesInOutput": 1734
+          "bytesInOutput": 1737
         },
         "node_modules/yaml/dist/schema/yaml-1.1/int.js": {
           "bytesInOutput": 2434
@@ -20987,7 +21051,7 @@
           "bytesInOutput": 3112
         },
         "node_modules/yaml/dist/schema/yaml-1.1/timestamp.js": {
-          "bytesInOutput": 3467
+          "bytesInOutput": 3476
         },
         "node_modules/yaml/dist/schema/yaml-1.1/schema.js": {
           "bytesInOutput": 1019
@@ -21020,25 +21084,25 @@
           "bytesInOutput": 587
         },
         "node_modules/yaml/dist/compose/resolve-block-map.js": {
-          "bytesInOutput": 4818
+          "bytesInOutput": 4823
         },
         "node_modules/yaml/dist/compose/resolve-block-seq.js": {
           "bytesInOutput": 1872
         },
         "node_modules/yaml/dist/compose/resolve-end.js": {
-          "bytesInOutput": 1277
+          "bytesInOutput": 1281
         },
         "node_modules/yaml/dist/compose/resolve-flow-collection.js": {
-          "bytesInOutput": 8154
+          "bytesInOutput": 8163
         },
         "node_modules/yaml/dist/compose/compose-collection.js": {
           "bytesInOutput": 3240
         },
         "node_modules/yaml/dist/compose/resolve-block-scalar.js": {
-          "bytesInOutput": 7000
+          "bytesInOutput": 7013
         },
         "node_modules/yaml/dist/compose/resolve-flow-scalar.js": {
-          "bytesInOutput": 6996
+          "bytesInOutput": 7003
         },
         "node_modules/yaml/dist/compose/compose-scalar.js": {
           "bytesInOutput": 3426
@@ -21059,7 +21123,7 @@
           "bytesInOutput": 7053
         },
         "node_modules/yaml/dist/parse/cst-stringify.js": {
-          "bytesInOutput": 1702
+          "bytesInOutput": 1705
         },
         "node_modules/yaml/dist/parse/cst-visit.js": {
           "bytesInOutput": 2066
@@ -21074,7 +21138,7 @@
           "bytesInOutput": 926
         },
         "node_modules/yaml/dist/parse/parser.js": {
-          "bytesInOutput": 29532
+          "bytesInOutput": 29543
         },
         "node_modules/yaml/dist/public-api.js": {
           "bytesInOutput": 3905
@@ -21467,7 +21531,7 @@
           "bytesInOutput": 3357
         },
         "src/worktree/cleanup.ts": {
-          "bytesInOutput": 9026
+          "bytesInOutput": 9609
         },
         "src/extension/import-index.ts": {
           "bytesInOutput": 2153
@@ -21644,7 +21708,7 @@
           "bytesInOutput": 2538
         },
         "src/worktree/worktree-manager.ts": {
-          "bytesInOutput": 21100
+          "bytesInOutput": 24179
         },
         "src/runtime/event-stream-bridge.ts": {
           "bytesInOutput": 2321
@@ -21728,7 +21792,7 @@
           "bytesInOutput": 3398
         },
         "src/runtime/team-runner.ts": {
-          "bytesInOutput": 57383
+          "bytesInOutput": 57487
         },
         "src/runtime/pipeline-runner.ts": {
           "bytesInOutput": 12070
@@ -21743,10 +21807,10 @@
           "bytesInOutput": 1051
         },
         "src/state/crew-init.ts": {
-          "bytesInOutput": 5201
+          "bytesInOutput": 5207
         },
         "src/runtime/chain-parser.ts": {
-          "bytesInOutput": 4973
+          "bytesInOutput": 4978
         },
         "src/runtime/chain-runner.ts": {
           "bytesInOutput": 15774
@@ -21848,7 +21912,7 @@
           "bytesInOutput": 4158
         },
         "src/ui/run-dashboard.ts": {
-          "bytesInOutput": 27549
+          "bytesInOutput": 27552
         },
         "src/ui/overlays/confirm-overlay.ts": {
           "bytesInOutput": 2247
@@ -21869,7 +21933,7 @@
           "bytesInOutput": 15659
         },
         "src/ui/settings-overlay.ts": {
-          "bytesInOutput": 30584
+          "bytesInOutput": 30589
         },
         "src/extension/registration/commands.ts": {
           "bytesInOutput": 40488
@@ -21973,26 +22037,29 @@
         "src/extension/crew-shortcuts.ts": {
           "bytesInOutput": 1204
         },
+        "src/extension/crew-vibes/index.ts": {
+          "bytesInOutput": 10806
+        },
         "src/extension/crew-vibes/config.ts": {
           "bytesInOutput": 5220
         },
         "src/extension/crew-vibes/font-detect.ts": {
           "bytesInOutput": 1467
         },
-        "src/extension/crew-vibes/provider-usage.ts": {
-          "bytesInOutput": 9012
-        },
         "src/extension/crew-vibes/figures.ts": {
           "bytesInOutput": 1218
         },
+        "src/extension/crew-vibes/footer.ts": {
+          "bytesInOutput": 8220
+        },
         "src/extension/crew-vibes/render.ts": {
-          "bytesInOutput": 5773
+          "bytesInOutput": 5531
+        },
+        "src/extension/crew-vibes/provider-usage.ts": {
+          "bytesInOutput": 9012
         },
         "src/extension/crew-vibes/speed.ts": {
           "bytesInOutput": 6470
-        },
-        "src/extension/crew-vibes/index.ts": {
-          "bytesInOutput": 10666
         },
         "src/extension/cross-extension-rpc.ts": {
           "bytesInOutput": 8532
@@ -22028,7 +22095,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3147196
+      "bytes": 3161714
     }
   }
 }

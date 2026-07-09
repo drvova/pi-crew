@@ -191,8 +191,22 @@ class CrewVibesFooter implements FooterComponent {
 		const modelName = model?.id || "no-model";
 		let rightSideWithoutProvider = modelName;
 		if (model?.reasoning) {
-			const level = this.source.getThinkingLevel() || "off";
-			rightSideWithoutProvider = level === "off" ? `${modelName} • thinking off` : `${modelName} • ${level}`;
+			// Prefer the authoritative thinking level from session state
+			// (buildSessionContext), which reflects the current effective level
+			// including the model default — not just the last thinking_level_select
+			// event (which only fires on manual switch).
+			let level = this.source.getThinkingLevel();
+			try {
+				const ctx = this.ctx.sessionManager as { buildSessionContext?: () => { thinkingLevel?: string } };
+				if (typeof ctx.buildSessionContext === "function") {
+					const resolved = ctx.buildSessionContext()?.thinkingLevel;
+					if (resolved) level = resolved;
+				}
+			} catch {
+				// buildSessionContext may throw on empty/early sessions — fall back.
+			}
+			const finalLevel = level || "off";
+			rightSideWithoutProvider = finalLevel === "off" ? `${modelName} • thinking off` : `${modelName} • ${finalLevel}`;
 		}
 
 		let rightSide = rightSideWithoutProvider;

@@ -1810,7 +1810,7 @@ var init_iterator2 = __esm({
 function RequiredArray(properties) {
   return globalThis.Object.keys(properties).filter((key) => !IsOptional(properties[key]));
 }
-function _Object(properties, options) {
+function _Object_(properties, options) {
   const required = RequiredArray(properties);
   const schema = required.length > 0 ? { [Kind]: "Object", type: "object", required, properties } : { [Kind]: "Object", type: "object", properties };
   return CreateType(schema, options);
@@ -1821,7 +1821,7 @@ var init_object = __esm({
     init_type2();
     init_symbols2();
     init_kind();
-    Object2 = _Object;
+    Object2 = _Object_;
   }
 });
 
@@ -4435,6 +4435,12 @@ var init_esm = __esm({
   }
 });
 
+// node_modules/@sinclair/typebox/build/esm/system/evaluate.mjs
+var init_evaluate = __esm({
+  "node_modules/@sinclair/typebox/build/esm/system/evaluate.mjs"() {
+  }
+});
+
 // node_modules/@sinclair/typebox/build/esm/system/system.mjs
 var TypeSystemDuplicateTypeKind, TypeSystemDuplicateFormat, TypeSystem;
 var init_system = __esm({
@@ -4475,6 +4481,7 @@ var init_system = __esm({
 // node_modules/@sinclair/typebox/build/esm/system/index.mjs
 var init_system2 = __esm({
   "node_modules/@sinclair/typebox/build/esm/system/index.mjs"() {
+    init_evaluate();
     init_policy();
     init_system();
   }
@@ -8522,8 +8529,8 @@ function sleepSync(ms) {
 }
 function sleep(ms, signal) {
   if (signal?.aborted) return Promise.reject(new Error("aborted"));
-  return new Promise((resolve21, reject) => {
-    const timer = setTimeout(resolve21, ms);
+  return new Promise((resolve22, reject) => {
+    const timer = setTimeout(resolve22, ms);
     signal?.addEventListener(
       "abort",
       () => {
@@ -8567,9 +8574,9 @@ function getWorker() {
   return worker;
 }
 function dispatch(kind, payload) {
-  return new Promise((resolve21, reject) => {
+  return new Promise((resolve22, reject) => {
     const id = nextRequestId++;
-    pending.set(id, { resolve: resolve21, reject });
+    pending.set(id, { resolve: resolve22, reject });
     try {
       getWorker().postMessage({ kind, id, ...payload });
     } catch (error) {
@@ -8802,7 +8809,7 @@ function isSymlinkSafeDirCached(filePath) {
   return verdict;
 }
 function sleep2(ms) {
-  return new Promise((resolve21) => setTimeout(resolve21, ms));
+  return new Promise((resolve22) => setTimeout(resolve22, ms));
 }
 function isRetryableRenameError(error) {
   return Boolean(
@@ -8820,15 +8827,24 @@ function renameWithLinkSync(tempPath, filePath, retries = 8) {
     try {
       if (process.platform === "win32") {
         try {
-          fs2.unlinkSync(filePath);
-        } catch {
-        }
-        try {
           fs2.renameSync(tempPath, filePath);
           return;
         } catch (renameError) {
           lastError = renameError;
-          if (!isRetryableLinkError(renameError) || attempt === retries) break;
+          if (isRetryableLinkError(renameError) && attempt !== retries) {
+          } else {
+            try {
+              fs2.unlinkSync(filePath);
+            } catch {
+            }
+            try {
+              fs2.renameSync(tempPath, filePath);
+              return;
+            } catch (renameError2) {
+              lastError = renameError2;
+              if (!isRetryableLinkError(renameError2) || attempt === retries) break;
+            }
+          }
         }
       } else {
         try {
@@ -8855,15 +8871,24 @@ async function renameWithLinkAsync(tempPath, filePath, retries = 8) {
     try {
       if (process.platform === "win32") {
         try {
-          await fs2.promises.unlink(filePath);
-        } catch {
-        }
-        try {
           await fs2.promises.rename(tempPath, filePath);
           return;
         } catch (renameError) {
           lastError = renameError;
-          if (!isRetryableLinkError(renameError) || attempt === retries) break;
+          if (isRetryableLinkError(renameError) && attempt !== retries) {
+          } else {
+            try {
+              await fs2.promises.unlink(filePath);
+            } catch {
+            }
+            try {
+              await fs2.promises.rename(tempPath, filePath);
+              return;
+            } catch (renameError2) {
+              lastError = renameError2;
+              if (!isRetryableLinkError(renameError2) || attempt === retries) break;
+            }
+          }
         }
       } else {
         try {
@@ -9400,7 +9425,7 @@ function acquireLockWithRetry(filePath, staleMs, kind = "file") {
   }
 }
 function sleep3(ms) {
-  return new Promise((resolve21) => setTimeout(resolve21, ms));
+  return new Promise((resolve22) => setTimeout(resolve22, ms));
 }
 async function acquireLockWithRetryAsync(filePath, staleMs, kind = "file") {
   let attempt = 0;
@@ -9533,7 +9558,8 @@ function packageRoot() {
   return path4.resolve(path4.dirname(fileURLToPath(import.meta.url)), "..", "..");
 }
 function userPiRoot() {
-  const home = process.env.PI_TEAMS_HOME?.trim() || os2.homedir();
+  const rawHome = process.env.PI_TEAMS_HOME?.trim();
+  const home = rawHome && rawHome !== "undefined" ? rawHome : os2.homedir();
   const resolved = path4.join(home, ".pi", "agent");
   let isSymlink2 = false;
   try {
@@ -10254,7 +10280,11 @@ function parseWorktreeConfig(value) {
   const worktree = {
     setupHook: setupHook ? setupHook : void 0,
     setupHookTimeoutMs: parsePositiveInteger(obj.setupHookTimeoutMs, 3e5),
-    linkNodeModules: parseWithSchema(Type.Boolean(), obj.linkNodeModules)
+    linkNodeModules: parseWithSchema(Type.Boolean(), obj.linkNodeModules),
+    // C6: seedPaths was declared in the type + schema but never parsed here, so
+    // loadedConfig.config.worktree?.seedPaths was always undefined -> the global
+    // worktree seed overlay (worktree-manager.ts) silently never applied.
+    seedPaths: parseStringList(obj.seedPaths)
   };
   return Object.values(worktree).some((entry) => entry !== void 0) ? worktree : void 0;
 }
@@ -11300,7 +11330,7 @@ function redactInlineSecrets(value) {
     if (keyLen > 0 && j < value.length && (value[j] === "=" || value[j] === ":")) {
       const key = value.substring(i2, j);
       if (isSecretKey(key)) {
-        const sep9 = value[j];
+        const sep10 = value[j];
         let k = j + 1;
         let valLen = 0;
         while (k < value.length && valLen < 500 && value[k] !== " " && value[k] !== "," && value[k] !== ";" && value[k] !== '"' && value[k] !== "\r" && value[k] !== "\n") {
@@ -11309,7 +11339,7 @@ function redactInlineSecrets(value) {
         }
         if (valLen > 0) {
           result4.push(key);
-          result4.push(sep9);
+          result4.push(sep10);
           result4.push("***");
           i2 = k;
           redacted = true;
@@ -11676,6 +11706,19 @@ function persistSequence(eventsPath, seq) {
     logInternalError("event-log.persist-sequence-file", error, `eventsPath=${eventsPath}`);
   }
 }
+function reserveSequence(eventsPath) {
+  let last = seqCounters.get(eventsPath);
+  if (last === void 0) {
+    last = nextSequence(eventsPath) - 1;
+  }
+  const next = last + 1;
+  seqCounters.set(eventsPath, next);
+  return next;
+}
+function advanceSequenceCounter(eventsPath, seq) {
+  const last = seqCounters.get(eventsPath);
+  if (last === void 0 || seq > last) seqCounters.set(eventsPath, seq);
+}
 function computeEventFingerprint(event) {
   return createHash2("sha256").update(
     JSON.stringify({
@@ -11717,11 +11760,14 @@ async function withEventLogLockAsync(eventsPath, fn) {
   try {
     await next;
   } finally {
-    asyncLocks.delete(queueKey);
+    if (asyncLocks.get(queueKey) === next) {
+      asyncLocks.delete(queueKey);
+    }
   }
 }
 function resetEventLogMode() {
   asyncQueues.clear();
+  seqCounters.clear();
 }
 async function appendEventAsync(eventsPath, event) {
   const queueKey = eventsPath;
@@ -11732,8 +11778,9 @@ async function appendEventAsync(eventsPath, event) {
     let seq;
     if (baseMetadata?.seq !== void 0) {
       seq = baseMetadata.seq;
+      advanceSequenceCounter(eventsPath, seq);
     } else {
-      seq = nextSequence(eventsPath);
+      seq = reserveSequence(eventsPath);
     }
     let metadata = {
       seq,
@@ -11857,21 +11904,21 @@ async function appendEventAsync(eventsPath, event) {
     }
     return fullEvent;
   });
-  asyncQueues.set(
-    queueKey,
-    next.then(
-      () => {
+  const tail = next.then(
+    () => {
+      if (asyncQueues.get(queueKey) === tail) {
         asyncQueues.delete(queueKey);
-      },
-      (error) => {
-        try {
-          logInternalError("event-log.async-queue", error, eventsPath);
-        } catch {
-        }
-        asyncQueues.set(queueKey, Promise.resolve());
       }
-    )
+    },
+    (error) => {
+      try {
+        logInternalError("event-log.async-queue", error, eventsPath);
+      } catch {
+      }
+      asyncQueues.set(queueKey, Promise.resolve());
+    }
   );
+  asyncQueues.set(queueKey, tail);
   return next;
 }
 async function appendEventBatchInsideLock(eventsPath, queue) {
@@ -11895,7 +11942,7 @@ async function appendEventBatchInsideLock(eventsPath, queue) {
   } catch (error) {
     logInternalError("event-log.batch-size-check", error, `eventsPath=${eventsPath}`);
   }
-  const startingSeq = queue[0]?.event.metadata?.seq ?? nextSequence(eventsPath);
+  const startingSeq = queue[0]?.event.metadata?.seq ?? reserveSequence(eventsPath);
   let nextSeq = startingSeq;
   const finalized = [];
   let lastSeq = 0;
@@ -11931,6 +11978,7 @@ async function appendEventBatchInsideLock(eventsPath, queue) {
 `, fullEvent });
     lastSeq = seq;
   }
+  advanceSequenceCounter(eventsPath, lastSeq);
   try {
     if (fs8.existsSync(eventsPath) && fs8.statSync(eventsPath).size > MAX_EVENTS_BYTES) {
       logInternalError(
@@ -11972,8 +12020,11 @@ async function appendEventBatchInsideLock(eventsPath, queue) {
 function appendEventInsideLock(eventsPath, event) {
   fs8.mkdirSync(path6.dirname(eventsPath), { recursive: true });
   const baseMetadata = event.metadata;
+  const explicitSeq = baseMetadata?.seq;
+  const seq = explicitSeq ?? reserveSequence(eventsPath);
+  if (explicitSeq !== void 0) advanceSequenceCounter(eventsPath, seq);
   let metadata = {
-    seq: baseMetadata?.seq ?? nextSequence(eventsPath),
+    seq,
     provenance: baseMetadata?.provenance ?? "team_runner",
     ...baseMetadata?.parentEventId ? { parentEventId: baseMetadata.parentEventId } : {},
     ...baseMetadata?.attemptId ? { attemptId: baseMetadata.attemptId } : {},
@@ -12028,7 +12079,6 @@ function appendEventInsideLock(eventsPath, event) {
   } catch (error) {
     logInternalError("event-log.size-check", error, `eventsPath=${eventsPath}`);
   }
-  const seq = fullEvent.metadata?.seq ?? 0;
   if (!skippedDueToSize) {
     fs8.appendFileSync(eventsPath, `${JSON.stringify(redactSecrets(fullEvent))}
 `, "utf-8");
@@ -12080,9 +12130,9 @@ function appendEventBuffered(eventsPath, event, bufferMs = DEFAULT_BUFFER_MS) {
     }
     return Promise.resolve(appendEvent(eventsPath, event));
   }
-  return new Promise((resolve21, reject) => {
+  return new Promise((resolve22, reject) => {
     const queue = bufferedQueues.get(eventsPath) ?? [];
-    queue.push({ event, resolve: resolve21, reject });
+    queue.push({ event, resolve: resolve22, reject });
     bufferedQueues.set(eventsPath, queue);
     if (!bufferedTimers.has(eventsPath)) {
       const timer = setTimeout(() => {
@@ -12195,7 +12245,7 @@ function dedupeTerminalEvents(events) {
   }
   return output;
 }
-var TERMINAL_EVENT_TYPES, MAX_EVENTS_BYTES, sequenceCache, MAX_SEQUENCE_CACHE_ENTRIES, appendCounter, overflowCounter, MAX_SEQUENCE_CACHE_ENTRIES_VALUE, asyncQueues, asyncLocks, bufferedQueues, bufferedTimers, DEFAULT_BUFFER_MS;
+var TERMINAL_EVENT_TYPES, MAX_EVENTS_BYTES, sequenceCache, MAX_SEQUENCE_CACHE_ENTRIES, appendCounter, overflowCounter, MAX_SEQUENCE_CACHE_ENTRIES_VALUE, seqCounters, asyncQueues, asyncLocks, bufferedQueues, bufferedTimers, DEFAULT_BUFFER_MS;
 var init_event_log = __esm({
   "src/state/event-log.ts"() {
     "use strict";
@@ -12216,6 +12266,7 @@ var init_event_log = __esm({
     appendCounter = 0;
     overflowCounter = 0;
     MAX_SEQUENCE_CACHE_ENTRIES_VALUE = MAX_SEQUENCE_CACHE_ENTRIES;
+    seqCounters = /* @__PURE__ */ new Map();
     asyncQueues = /* @__PURE__ */ new Map();
     asyncLocks = /* @__PURE__ */ new Map();
     bufferedQueues = /* @__PURE__ */ new Map();
@@ -12428,8 +12479,8 @@ function resolveContainedPath(baseDir, targetPath2) {
   const resolved = path7.isAbsolute(targetPath2) ? path7.resolve(targetPath2) : path7.resolve(base, targetPath2);
   const baseNorm = resolveCanonicalPath(base);
   const resolvedNorm = resolveCanonicalPath(resolved);
-  const relative8 = process.platform === "win32" ? path7.relative(baseNorm.toLowerCase(), resolvedNorm.toLowerCase()) : path7.relative(baseNorm, resolvedNorm);
-  if (relative8.startsWith("..") || path7.isAbsolute(relative8)) throw new Error(`Path is outside ${baseDir}: ${targetPath2}`);
+  const relative9 = process.platform === "win32" ? path7.relative(baseNorm.toLowerCase(), resolvedNorm.toLowerCase()) : path7.relative(baseNorm, resolvedNorm);
+  if (relative9.startsWith("..") || path7.isAbsolute(relative9)) throw new Error(`Path is outside ${baseDir}: ${targetPath2}`);
   return resolved;
 }
 function resolveCanonicalPath(p) {
@@ -12611,8 +12662,8 @@ function resolveRealContainedPath(baseDir, targetPath2) {
       throw new Error(`Path is outside ${baseDir}: ${targetPath2}`);
     }
   } else {
-    const relative8 = path7.relative(realBase, realTarget);
-    if (relative8.startsWith("..") || path7.isAbsolute(relative8)) throw new Error(`Path is outside ${baseDir}: ${targetPath2}`);
+    const relative9 = path7.relative(realBase, realTarget);
+    if (relative9.startsWith("..") || path7.isAbsolute(relative9)) throw new Error(`Path is outside ${baseDir}: ${targetPath2}`);
   }
   return realTarget;
 }
@@ -14562,7 +14613,7 @@ async function respondAsBackground(targetAgentId, fromId, message, opts) {
   return awaitPendingReply(corrId, targetAgentId, fromId, timeoutMs, opts?.signal);
 }
 function awaitPendingReply(corrId, targetAgentId, fromId, timeoutMs, signal) {
-  return new Promise((resolve21) => {
+  return new Promise((resolve22) => {
     const deadline = Date.now() + timeoutMs;
     let settled = false;
     let timer;
@@ -14576,7 +14627,7 @@ function awaitPendingReply(corrId, targetAgentId, fromId, timeoutMs, signal) {
       const set2 = pendingRepliesByTarget.get(targetAgentId);
       set2?.delete(corrId);
       if (set2 && set2.size === 0) pendingRepliesByTarget.delete(targetAgentId);
-      resolve21(result4);
+      resolve22(result4);
     };
     timer = setTimeout(() => finish({ ok: false, corrId, timedOut: true }), timeoutMs);
     if (signal) {
@@ -14748,7 +14799,9 @@ function checkResultFile(manifest, tasks) {
     (t2) => t2.status === "completed" || t2.status === "failed" || t2.status === "cancelled" || t2.status === "skipped" || t2.status === "needs_attention"
   );
   if (allTerminal) {
-    manifest.status = "completed";
+    const hasFailed = tasks.some((t2) => t2.status === "failed");
+    const onlyCancelledOrSkipped = tasks.every((t2) => t2.status === "cancelled" || t2.status === "skipped");
+    manifest.status = hasFailed ? "failed" : onlyCancelledOrSkipped ? "cancelled" : "completed";
     saveRunManifest(manifest);
     for (const task of tasks) {
       try {
@@ -14994,14 +15047,14 @@ function reconcileOrphanedTempWorkspaces(now = Date.now(), options) {
             const tasks = JSON.parse(fs16.readFileSync(tasksPath, "utf-8"));
             const result4 = reconcileStaleRun(manifest, tasks, now);
             if (result4.repaired && result4.repairedTasks) {
-              fs16.writeFileSync(tasksPath, JSON.stringify(result4.repairedTasks, null, 2));
+              atomicWriteJson(tasksPath, result4.repairedTasks);
               const updated = {
                 ...manifest,
                 status: "cancelled",
                 updatedAt: new Date(now).toISOString(),
                 summary: `Stale run reconciled: ${result4.detail}`
               };
-              fs16.writeFileSync(manifestPath, JSON.stringify(updated, null, 2));
+              atomicWriteJson(manifestPath, updated);
               for (const task of result4.repairedTasks) {
                 try {
                   upsertCrewAgent(updated, recordFromTask(updated, task, "scaffold"));
@@ -15152,6 +15205,7 @@ var init_stale_reconciler = __esm({
   "src/runtime/stale-reconciler.ts"() {
     "use strict";
     init_errors3();
+    init_atomic_write();
     init_state_store();
     init_crew_agent_records();
     init_process_status();
@@ -17307,7 +17361,7 @@ var init_subagent_manager = __esm({
             await record.promise.catch((error) => {
               logInternalError("subagent-manager.waitForRecord", error, `id=${id}`);
             });
-          else await new Promise((resolve21) => setTimeout(resolve21, 100));
+          else await new Promise((resolve22) => setTimeout(resolve22, 100));
         }
       }
       setMaxConcurrent(value) {
@@ -17405,7 +17459,7 @@ var init_subagent_manager = __esm({
         while (record.runId && (record.status === "running" || record.status === "blocked")) {
           const loaded = loadRunManifestById(cwd, record.runId);
           if (!loaded) {
-            await new Promise((resolve21) => setTimeout(resolve21, this.pollIntervalMs));
+            await new Promise((resolve22) => setTimeout(resolve22, this.pollIntervalMs));
             continue;
           }
           if (loaded.manifest.status === "completed") {
@@ -17438,7 +17492,7 @@ var init_subagent_manager = __esm({
             savePersistedSubagentRecord(cwd, record);
             return;
           }
-          await new Promise((resolve21) => setTimeout(resolve21, this.pollIntervalMs));
+          await new Promise((resolve22) => setTimeout(resolve22, this.pollIntervalMs));
         }
       }
       scheduleBlockedTerminalPoll(cwd, record) {
@@ -17786,8 +17840,8 @@ var init_deduplicate_stage = __esm({
           const cur = lines[i2];
           if (cur !== out[out.length - 1]) out.push(cur);
         }
-        const sep9 = text.includes("\r\n") ? "\r\n" : "\n";
-        return out.join(sep9);
+        const sep10 = text.includes("\r\n") ? "\r\n" : "\n";
+        return out.join(sep10);
       }
     };
     DEDUPLICATE_STAGE = new DeduplicateStage();
@@ -18257,13 +18311,20 @@ function attachPostExitStdioGuard(child, options) {
     stderrEnded = true;
     if (stdoutEnded && stderrEnded) clearTimers();
   });
-  child.on("exit", () => {
-    exited = true;
-    armIdleTimer();
+  const armHardTimer = () => {
     if (hardTimer) return;
     hardTimer = setTimeout(destroyUnendedStdio, hardMs);
     hardTimer.unref();
-  });
+  };
+  const onExit = () => {
+    exited = true;
+    armIdleTimer();
+    armHardTimer();
+  };
+  if (child.exitCode != null || child.signalCode != null) {
+    onExit();
+  }
+  child.on("exit", onExit);
   child.on("close", clearTimers);
   child.on("error", clearTimers);
   return clearTimers;
@@ -18295,14 +18356,20 @@ function clearHardKillTimer(pid) {
   clearTimeout(timer);
   childHardKillTimers.delete(pid);
 }
+function spawnTaskkillSafe(pid) {
+  const taskkillChild = spawn("taskkill", ["/pid", String(pid), "/t", "/f"], {
+    stdio: "ignore",
+    windowsHide: true
+  });
+  taskkillChild.on("error", (err2) => {
+    logInternalError("child-pi.taskkill-spawn-error", err2 instanceof Error ? err2 : new Error(String(err2)), `pid=${pid}`);
+  });
+}
 function killProcessPid(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return;
   try {
     if (process.platform === "win32") {
-      spawn("taskkill", ["/pid", String(pid), "/t", "/f"], {
-        stdio: "ignore",
-        windowsHide: true
-      });
+      spawnTaskkillSafe(pid);
       const verifyTimer = setTimeout(() => {
         try {
           process.kill(pid, 0);
@@ -18312,10 +18379,7 @@ function killProcessPid(pid) {
             `pid=${pid}`
           );
           try {
-            spawn("taskkill", ["/pid", String(pid), "/t", "/f"], {
-              stdio: "ignore",
-              windowsHide: true
-            });
+            spawnTaskkillSafe(pid);
           } catch {
           }
         } catch {
@@ -18716,9 +18780,18 @@ ${JSON.stringify({ type: "message_end", usage: { input: 10, output: 5, cost: 1e-
     role: input.role
   });
   if (input.steeringFile) built.env.PI_CREW_STEERING_FILE = input.steeringFile;
+  if (input.signal?.aborted) {
+    return {
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+      error: "Aborted before spawn (parent AbortSignal already aborted)",
+      aborted: true
+    };
+  }
   const spawnSpec = getPiSpawnCommand(built.args);
   try {
-    return await new Promise((resolve21) => {
+    return await new Promise((resolve22) => {
       for (const key of Object.keys(built.env)) {
         if (!key.startsWith("PI_CREW_") && !key.startsWith("PI_TEAMS_")) {
           throw new Error(
@@ -18889,29 +18962,23 @@ ${JSON.stringify({ type: "message_end", usage: { input: 10, output: 5, cost: 1e-
                 turnCount += 1;
                 if (maxTurns !== void 0 && !softLimitReached && turnCount >= maxTurns) {
                   softLimitReached = true;
-                  if (child.stdin?.writable) {
-                    const steerPayload = JSON.stringify({
-                      type: "steer",
-                      message: "You have reached your turn limit. Wrap up immediately \u2014 provide your final answer now."
-                    }) + "\n";
-                    const writeSucceeded = child.stdin.write(steerPayload);
-                    if (!writeSucceeded) {
+                  if (input.steeringFile) {
+                    try {
+                      fs27.appendFileSync(
+                        input.steeringFile,
+                        JSON.stringify({
+                          type: "steer",
+                          message: "You have reached your turn limit. Wrap up immediately \u2014 provide your final answer now."
+                        }) + "\n",
+                        "utf-8"
+                      );
+                    } catch (err2) {
                       logInternalError(
-                        "child-pi.steer-backpressure",
-                        new Error(
-                          "stdin write returned false (normal backpressure); steer buffered, worker NOT killed"
-                        ),
+                        "child-pi.steer-write-failed",
+                        err2 instanceof Error ? err2 : new Error(String(err2)),
                         `pid=${child.pid}`
                       );
                     }
-                  } else {
-                    logInternalError(
-                      "child-pi.steer-not-writable",
-                      new Error(
-                        "stdin not writable when attempting steer injection (worker may be done); worker NOT killed"
-                      ),
-                      `pid=${child.pid}`
-                    );
                   }
                 } else if (maxTurns !== void 0 && softLimitReached && turnCount >= maxTurns + (graceTurns ?? 5)) {
                   try {
@@ -19042,7 +19109,7 @@ ${JSON.stringify({ type: "message_end", usage: { input: 10, output: 5, cost: 1e-
           cleanupErrors.push(error instanceof Error ? error.message : String(error));
         }
         try {
-          resolve21({
+          resolve22({
             ...result4,
             rawFinalText: lineObserver.getRawFinalText(),
             intermediateFindings: lineObserver.getIntermediateFindings(),
@@ -19556,6 +19623,11 @@ function setExtensionWidget(ctx, key, content, options) {
   const { persist: _persist, ...widgetOptions } = options ?? {};
   ctx.ui.setWidget(key, content, widgetOptions);
 }
+function setFooter(ctx, factory) {
+  const record = maybeRecord(ctx.ui);
+  const fn = record?.setFooter;
+  if (typeof fn === "function") fn.call(ctx.ui, factory);
+}
 function showCustom(ctx, factory, options) {
   const custom = ctx.ui.custom;
   return custom(factory, options);
@@ -19695,7 +19767,7 @@ var init_cancellation_token = __esm({
       wait(ms) {
         this.throwIfCancelled();
         if (ms <= 0) return Promise.resolve();
-        return new Promise((resolve21, reject) => {
+        return new Promise((resolve22, reject) => {
           let timeout;
           const cleanup = () => {
             if (timeout) clearTimeout(timeout);
@@ -19707,7 +19779,7 @@ var init_cancellation_token = __esm({
           };
           timeout = setTimeout(() => {
             cleanup();
-            resolve21();
+            resolve22();
           }, ms);
           this.signal.addEventListener("abort", onAbort, { once: true });
         });
@@ -23641,8 +23713,8 @@ function taskMailboxDir(manifest, taskId, create = false) {
   const tasksRoot = safeMailboxTasksRoot(manifest, create);
   const normalizedTaskId = safeTaskId(taskId);
   const resolved = path32.resolve(tasksRoot, normalizedTaskId);
-  const relative8 = path32.relative(tasksRoot, resolved);
-  if (relative8.startsWith("..") || path32.isAbsolute(relative8)) throw new Error(`Invalid mailbox task id: ${taskId}`);
+  const relative9 = path32.relative(tasksRoot, resolved);
+  if (relative9.startsWith("..") || path32.isAbsolute(relative9)) throw new Error(`Invalid mailbox task id: ${taskId}`);
   if (create) fs37.mkdirSync(resolved, { recursive: true });
   if (fs37.existsSync(resolved) && fs37.lstatSync(resolved).isSymbolicLink()) throw new Error(`Invalid mailbox task directory: ${resolved}`);
   return resolved;
@@ -23876,8 +23948,8 @@ function appendMailboxMessage(manifest, message) {
 `,
       "utf-8"
     );
+    rotateMailboxFileIfNeeded(mailboxFile(manifest, complete.direction, complete.taskId));
   });
-  rotateMailboxFileIfNeeded(mailboxFile(manifest, complete.direction, complete.taskId));
   withFileLockSync(deliveryFile(manifest, true), () => {
     const delivery = readDeliveryState(manifest);
     delivery.messages[complete.id] = complete.status;
@@ -26087,9 +26159,9 @@ async function isLiveSessionRuntimeAvailable(timeoutMs = 1500, env = process.env
   try {
     return await Promise.race([
       probe(),
-      new Promise((resolve21) => {
+      new Promise((resolve22) => {
         timer = setTimeout(
-          () => resolve21({
+          () => resolve22({
             available: false,
             reason: `Timed out probing optional Pi SDK live-session runtime after ${timeoutMs}ms.`
           }),
@@ -28632,9 +28704,9 @@ var require_stringifyNumber = __commonJS({
     function stringifyNumber({ format: format2, minFractionDigits, tag, value }) {
       if (typeof value === "bigint")
         return String(value);
-      const num = typeof value === "number" ? value : Number(value);
-      if (!isFinite(num))
-        return isNaN(num) ? ".nan" : num < 0 ? "-.inf" : ".inf";
+      const num2 = typeof value === "number" ? value : Number(value);
+      if (!isFinite(num2))
+        return isNaN(num2) ? ".nan" : num2 < 0 ? "-.inf" : ".inf";
       let n = Object.is(value, -0) ? "-0" : JSON.stringify(value);
       if (!format2 && minFractionDigits && (!tag || tag === "tag:yaml.org,2002:float") && /^-?\d/.test(n) && !n.includes("e")) {
         let i2 = n.indexOf(".");
@@ -28674,8 +28746,8 @@ var require_float = __commonJS({
       test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str),
       stringify(node) {
-        const num = Number(node.value);
-        return isFinite(num) ? num.toExponential() : stringifyNumber.stringifyNumber(node);
+        const num2 = Number(node.value);
+        return isFinite(num2) ? num2.toExponential() : stringifyNumber.stringifyNumber(node);
       }
     };
     var float = {
@@ -29114,8 +29186,8 @@ var require_float2 = __commonJS({
       test: /^[-+]?(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str.replace(/_/g, "")),
       stringify(node) {
-        const num = Number(node.value);
-        return isFinite(num) ? num.toExponential() : stringifyNumber.stringifyNumber(node);
+        const num2 = Number(node.value);
+        return isFinite(num2) ? num2.toExponential() : stringifyNumber.stringifyNumber(node);
       }
     };
     var float = {
@@ -29317,23 +29389,23 @@ var require_timestamp = __commonJS({
     function parseSexagesimal(str, asBigInt) {
       const sign = str[0];
       const parts = sign === "-" || sign === "+" ? str.substring(1) : str;
-      const num = (n) => asBigInt ? BigInt(n) : Number(n);
-      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num(60) + num(p), num(0));
-      return sign === "-" ? num(-1) * res : res;
+      const num2 = (n) => asBigInt ? BigInt(n) : Number(n);
+      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num2(60) + num2(p), num2(0));
+      return sign === "-" ? num2(-1) * res : res;
     }
     function stringifySexagesimal(node) {
       let { value } = node;
-      let num = (n) => n;
+      let num2 = (n) => n;
       if (typeof value === "bigint")
-        num = (n) => BigInt(n);
+        num2 = (n) => BigInt(n);
       else if (isNaN(value) || !isFinite(value))
         return stringifyNumber.stringifyNumber(node);
       let sign = "";
       if (value < 0) {
         sign = "-";
-        value *= num(-1);
+        value *= num2(-1);
       }
-      const _60 = num(60);
+      const _60 = num2(60);
       const parts = [value % _60];
       if (value < 60) {
         parts.unshift(0);
@@ -30250,10 +30322,10 @@ var require_resolve_block_map = __commonJS({
       let offset2 = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep9, value } = collItem;
+        const { start, key, sep: sep10, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep9?.[0],
+          next: key ?? sep10?.[0],
           offset: offset2,
           onError,
           parentIndent: bm.indent,
@@ -30267,7 +30339,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset2, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep9) {
+          if (!keyProps.anchor && !keyProps.tag && !sep10) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map3.comment)
@@ -30291,7 +30363,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map3.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep9 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep10 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -30307,7 +30379,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset2, sep9, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset2, sep10, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset2 = valueNode.range[2];
@@ -30398,7 +30470,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep9 = "";
+        let sep10 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -30412,13 +30484,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep9 + cb;
-              sep9 = "";
+                comment += sep10 + cb;
+              sep10 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep9 += source;
+                sep10 += source;
               hasSpace = true;
               break;
             default:
@@ -30461,18 +30533,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset2 = fc.offset + fc.start.source.length;
       for (let i2 = 0; i2 < fc.items.length; ++i2) {
         const collItem = fc.items[i2];
-        const { start, key, sep: sep9, value } = collItem;
+        const { start, key, sep: sep10, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep9?.[0],
+          next: key ?? sep10?.[0],
           offset: offset2,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep9 && !value) {
+          if (!props.anchor && !props.tag && !sep10 && !value) {
             if (i2 === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i2 < fc.items.length - 1)
@@ -30526,8 +30598,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep9 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep9, null, props, onError);
+        if (!isMap && !sep10 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep10, null, props, onError);
           coll.items.push(valueNode);
           offset2 = valueNode.range[2];
           if (isBlock(value))
@@ -30539,7 +30611,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep9 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep10 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -30550,8 +30622,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep9)
-                for (const st of sep9) {
+              if (sep10)
+                for (const st of sep10) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -30568,7 +30640,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep9, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep10, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -30748,7 +30820,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i2 + 1;
       }
       let value = "";
-      let sep9 = "";
+      let sep10 = "";
       let prevMoreIndented = false;
       for (let i2 = 0; i2 < contentStart; ++i2)
         value += lines[i2][0].slice(trimIndent) + "\n";
@@ -30765,24 +30837,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep9 + indent.slice(trimIndent) + content;
-          sep9 = "\n";
+          value += sep10 + indent.slice(trimIndent) + content;
+          sep10 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep9 === " ")
-            sep9 = "\n";
-          else if (!prevMoreIndented && sep9 === "\n")
-            sep9 = "\n\n";
-          value += sep9 + indent.slice(trimIndent) + content;
-          sep9 = "\n";
+          if (sep10 === " ")
+            sep10 = "\n";
+          else if (!prevMoreIndented && sep10 === "\n")
+            sep10 = "\n\n";
+          value += sep10 + indent.slice(trimIndent) + content;
+          sep10 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep9 === "\n")
+          if (sep10 === "\n")
             value += "\n";
           else
-            sep9 = "\n";
+            sep10 = "\n";
         } else {
-          value += sep9 + content;
-          sep9 = " ";
+          value += sep10 + content;
+          sep10 = " ";
           prevMoreIndented = false;
         }
       }
@@ -30964,25 +31036,25 @@ var require_resolve_flow_scalar = __commonJS({
       if (!match)
         return source;
       let res = match[1];
-      let sep9 = " ";
+      let sep10 = " ";
       let pos = first.lastIndex;
       line4.lastIndex = pos;
       while (match = line4.exec(source)) {
         if (match[1] === "") {
-          if (sep9 === "\n")
-            res += sep9;
+          if (sep10 === "\n")
+            res += sep10;
           else
-            sep9 = "\n";
+            sep10 = "\n";
         } else {
-          res += sep9 + match[1];
-          sep9 = " ";
+          res += sep10 + match[1];
+          sep10 = " ";
         }
         pos = line4.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep9 + (match?.[1] ?? "");
+      return res + sep10 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -31792,14 +31864,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep9, value }) {
+    function stringifyItem({ start, key, sep: sep10, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep9)
-        for (const st of sep9)
+      if (sep10)
+        for (const st of sep10)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -32966,18 +33038,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep9;
+          let sep10;
           if (scalar.end) {
-            sep9 = scalar.end;
-            sep9.push(this.sourceToken);
+            sep10 = scalar.end;
+            sep10.push(this.sourceToken);
             delete scalar.end;
           } else
-            sep9 = [this.sourceToken];
+            sep10 = [this.sourceToken];
           const map3 = {
             type: "block-map",
             offset: scalar.offset,
             indent: scalar.indent,
-            items: [{ start, key: scalar, sep: sep9 }]
+            items: [{ start, key: scalar, sep: sep10 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map3;
@@ -33130,15 +33202,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep9 = it.sep;
-                  sep9.push(this.sourceToken);
+                  const sep10 = it.sep;
+                  sep10.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep9 }]
+                    items: [{ start: start2, key, sep: sep10 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -33332,13 +33404,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep9 = fc.end.splice(1, fc.end.length);
-            sep9.push(this.sourceToken);
+            const sep10 = fc.end.splice(1, fc.end.length);
+            sep10.push(this.sourceToken);
             const map3 = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep9 }]
+              items: [{ start, key: fc, sep: sep10 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map3;
@@ -38245,7 +38317,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref2];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve21.call(this, root, ref2);
+      let _sch = resolve22.call(this, root, ref2);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref2];
         const { schemaId } = this.opts;
@@ -38272,7 +38344,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve21(root, ref2) {
+    function resolve22(root, ref2) {
       let sch;
       while (typeof (sch = this.refs[ref2]) == "string")
         ref2 = sch;
@@ -38903,55 +38975,55 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve21(baseURI, relativeURI, options) {
+    function resolve22(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse6(baseURI, schemelessOptions), parse6(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative8, options, skipNormalization) {
+    function resolveComponent(base, relative9, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse6(serialize(base, options), options);
-        relative8 = parse6(serialize(relative8, options), options);
+        relative9 = parse6(serialize(relative9, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative8.scheme) {
-        target.scheme = relative8.scheme;
-        target.userinfo = relative8.userinfo;
-        target.host = relative8.host;
-        target.port = relative8.port;
-        target.path = removeDotSegments(relative8.path || "");
-        target.query = relative8.query;
+      if (!options.tolerant && relative9.scheme) {
+        target.scheme = relative9.scheme;
+        target.userinfo = relative9.userinfo;
+        target.host = relative9.host;
+        target.port = relative9.port;
+        target.path = removeDotSegments(relative9.path || "");
+        target.query = relative9.query;
       } else {
-        if (relative8.userinfo !== void 0 || relative8.host !== void 0 || relative8.port !== void 0) {
-          target.userinfo = relative8.userinfo;
-          target.host = relative8.host;
-          target.port = relative8.port;
-          target.path = removeDotSegments(relative8.path || "");
-          target.query = relative8.query;
+        if (relative9.userinfo !== void 0 || relative9.host !== void 0 || relative9.port !== void 0) {
+          target.userinfo = relative9.userinfo;
+          target.host = relative9.host;
+          target.port = relative9.port;
+          target.path = removeDotSegments(relative9.path || "");
+          target.query = relative9.query;
         } else {
-          if (!relative8.path) {
+          if (!relative9.path) {
             target.path = base.path;
-            if (relative8.query !== void 0) {
-              target.query = relative8.query;
+            if (relative9.query !== void 0) {
+              target.query = relative9.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative8.path[0] === "/") {
-              target.path = removeDotSegments(relative8.path);
+            if (relative9.path[0] === "/") {
+              target.path = removeDotSegments(relative9.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative8.path;
+                target.path = "/" + relative9.path;
               } else if (!base.path) {
-                target.path = relative8.path;
+                target.path = relative9.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative8.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative9.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative8.query;
+            target.query = relative9.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -38959,7 +39031,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative8.fragment;
+      target.fragment = relative9.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -39161,7 +39233,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize: normalize2,
-      resolve: resolve21,
+      resolve: resolve22,
       resolveComponent,
       equal,
       serialize,
@@ -42638,7 +42710,7 @@ ${input.prompt}` : input.prompt;
             );
           } catch {
           }
-          await new Promise((resolve21) => setTimeout(resolve21, DEFAULT_LIVE_SESSION.yieldPollIntervalMs));
+          await new Promise((resolve22) => setTimeout(resolve22, DEFAULT_LIVE_SESSION.yieldPollIntervalMs));
           if (customToolYieldResolved && customToolYieldResult) {
             yieldResult = customToolYieldResult;
           } else {
@@ -42682,7 +42754,7 @@ ${input.prompt}` : input.prompt;
           }
         }
         const pollInterval = DEFAULT_LIVE_SESSION.yieldPollIntervalMs;
-        await new Promise((resolve21) => setTimeout(resolve21, pollInterval));
+        await new Promise((resolve22) => setTimeout(resolve22, pollInterval));
         if (customToolYieldResolved && customToolYieldResult) {
           yieldResult = customToolYieldResult;
           break;
@@ -44113,13 +44185,13 @@ var init_checkpoint = __esm({
 import * as fs51 from "node:fs";
 import * as path43 from "node:path";
 function registerRunPromise(runId) {
-  let resolve21;
+  let resolve22;
   let reject;
   const promise = new Promise((res, rej) => {
-    resolve21 = res;
+    resolve22 = res;
     reject = rej;
   });
-  const entry = { promise, resolve: resolve21, reject };
+  const entry = { promise, resolve: resolve22, reject };
   activeRunPromises.set(runId, entry);
   return entry;
 }
@@ -44644,11 +44716,11 @@ function readSkillMarkdown(cwd, name) {
   if (cached) skillReadCache.delete(cacheKey2);
   for (const entry of candidateSkillDirs(cwd)) {
     try {
-      const relative8 = path44.join(name, "SKILL.md");
-      const contained = resolveContainedPath(entry.root, relative8);
+      const relative9 = path44.join(name, "SKILL.md");
+      const contained = resolveContainedPath(entry.root, relative9);
       if (!fs52.existsSync(contained)) continue;
       if (fs52.lstatSync(contained).isSymbolicLink()) continue;
-      const filePath = resolveRealContainedPath(entry.root, relative8);
+      const filePath = resolveRealContainedPath(entry.root, relative9);
       const stat2 = fs52.statSync(filePath);
       return rememberSkill(cacheKey2, {
         path: filePath,
@@ -47069,7 +47141,7 @@ function buildTeamDoctorReport(input) {
   );
   const sections = [
     section("Runtime", () => {
-      const git3 = commandExists("git", ["--version"]);
+      const git4 = commandExists("git", ["--version"]);
       const pi = piCommandExists();
       return [
         { label: "cwd", ok: true, detail: input.cwd },
@@ -47079,7 +47151,7 @@ function buildTeamDoctorReport(input) {
           detail: `${process.platform}/${process.arch} node=${process.version}`
         },
         { label: "pi command", ok: pi.ok, detail: pi.detail },
-        { label: "git command", ok: git3.ok, detail: git3.detail },
+        { label: "git command", ok: git4.ok, detail: git4.detail },
         {
           label: "config",
           ok: input.configErrors.length === 0,
@@ -49314,6 +49386,21 @@ function cleanupRunWorktrees(manifest, options = {}) {
     const branchName = `pi-crew/${manifest.runId}/${sanitizeBranchPart(entry.name)}`;
     const safeBranchName = sanitizeBranchPart(entry.name);
     if (dirty) {
+      if (!options.force) {
+        const safePreserveName = sanitizeFilename(entry.name);
+        const artifact = writeArtifact(manifest.artifactsRoot, {
+          kind: "diff",
+          relativePath: `cleanup/${safePreserveName}.diff`,
+          content: captureDiff(worktreePath),
+          producer: "worktree-cleanup"
+        });
+        result4.artifactPaths.push(artifact.path);
+        result4.preserved.push({
+          path: worktreePath,
+          reason: "dirty worktree preserved \u2014 pass force=true to auto-commit and remove"
+        });
+        continue;
+      }
       if (options.signal?.aborted) break;
       try {
         const statusBefore = git(worktreePath, ["status", "--porcelain"]);
@@ -54066,8 +54153,8 @@ function safeSharedName(name) {
 function sharedPath(manifest, name) {
   const sharedRoot = path61.resolve(manifest.artifactsRoot, "shared");
   const resolved = path61.resolve(sharedRoot, safeSharedName(name));
-  const relative8 = path61.relative(sharedRoot, resolved);
-  if (relative8.startsWith("..") || path61.isAbsolute(relative8)) throw new Error(`Invalid shared artifact name: ${name}`);
+  const relative9 = path61.relative(sharedRoot, resolved);
+  if (relative9.startsWith("..") || path61.isAbsolute(relative9)) throw new Error(`Invalid shared artifact name: ${name}`);
   return resolved;
 }
 function tryParseJson(text) {
@@ -54082,8 +54169,8 @@ function listTaskArtifacts(manifest, taskId) {
   const produced = manifest.artifacts.filter((a) => a.producer === taskId);
   if (produced.length === 0) return void 0;
   return produced.map((a) => {
-    const relative8 = path61.relative(manifest.artifactsRoot, a.path);
-    return relative8.startsWith("..") ? a.path : relative8;
+    const relative9 = path61.relative(manifest.artifactsRoot, a.path);
+    return relative9.startsWith("..") ? a.path : relative9;
   });
 }
 function aggregateUsage2(task) {
@@ -55372,6 +55459,45 @@ import { randomBytes as randomBytes2 } from "node:crypto";
 import * as fs75 from "node:fs";
 import * as path63 from "node:path";
 import { promisify } from "node:util";
+function git3(cwd, args) {
+  return execFileSync6("git", args, {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...sanitizeEnvSecrets(process.env, {
+        allowList: [
+          "PATH",
+          "HOME",
+          "USER",
+          ...WINDOWS_ESSENTIAL_ENV_VARS,
+          "SHELL",
+          "TERM",
+          "LANG",
+          "LC_ALL",
+          "LC_COLLATE",
+          "LC_CTYPE",
+          "LC_MESSAGES",
+          "XDG_CONFIG_HOME",
+          "XDG_DATA_HOME",
+          "XDG_CACHE_HOME",
+          "NVM_BIN",
+          "NVM_DIR",
+          "NODE_PATH",
+          "GIT_CONFIG_GLOBAL",
+          "GIT_CONFIG_SYSTEM",
+          "GIT_AUTHOR_NAME",
+          "GIT_AUTHOR_EMAIL",
+          "GIT_COMMITTER_NAME",
+          "GIT_COMMITTER_EMAIL"
+        ]
+      }),
+      LANG: "en_US.UTF-8",
+      LC_ALL: "en_US.UTF-8"
+    },
+    windowsHide: true
+  }).trim();
+}
 function gitEnv() {
   return {
     ...sanitizeEnvSecrets(process.env, {
@@ -55458,9 +55584,9 @@ function linkNodeModulesIfPresent(repoRoot, worktreePath) {
 }
 function normalizeSyntheticPath(worktreePath, rawPath) {
   const resolved = path63.resolve(worktreePath, rawPath);
-  const relative8 = path63.relative(worktreePath, resolved);
-  if (!relative8 || relative8.startsWith("..") || path63.isAbsolute(relative8)) throw new Error(`synthetic path escapes worktree: ${rawPath}`);
-  return path63.normalize(relative8);
+  const relative9 = path63.relative(worktreePath, resolved);
+  if (!relative9 || relative9.startsWith("..") || path63.isAbsolute(relative9)) throw new Error(`synthetic path escapes worktree: ${rawPath}`);
+  return path63.normalize(relative9);
 }
 function isAllowedSetupHook(hookPath) {
   if (!hookPath || hookPath.trim().length === 0) return false;
@@ -55690,6 +55816,64 @@ function overlaySeedPaths(repoRoot, worktreePath, seedPaths) {
     });
   }
 }
+function snapshotDirtyWorktree(manifest, task, worktreePath, dirtyStatus) {
+  try {
+    const parts = [
+      `# Worktree recovery snapshot`,
+      `runId: ${manifest.runId}  taskId: ${task.id}  path: ${worktreePath}`,
+      `capturedAt: ${(/* @__PURE__ */ new Date()).toISOString()}`,
+      ""
+    ];
+    let trackedDiff = "";
+    try {
+      trackedDiff = git3(worktreePath, ["diff", "HEAD"]);
+    } catch {
+      trackedDiff = "";
+    }
+    if (trackedDiff.trim()) {
+      parts.push("## Tracked changes (`git diff HEAD`)", "```diff", trackedDiff, "```", "");
+    }
+    for (const line4 of dirtyStatus.split("\n")) {
+      if (!line4.startsWith("?? ")) continue;
+      const rel = line4.slice(3).replace(/^"|"$/g, "");
+      if (!rel) continue;
+      try {
+        const abs = path63.join(worktreePath, rel);
+        if (!fs75.existsSync(abs) || fs75.statSync(abs).isDirectory()) continue;
+        const content = fs75.readFileSync(abs, "utf-8");
+        parts.push(`## Untracked file: ${rel}`, "```", content, "```", "");
+      } catch {
+      }
+    }
+    writeArtifact(manifest.artifactsRoot, {
+      kind: "diff",
+      relativePath: `worktree-recovery/${task.id}-${Date.now()}.md`,
+      content: parts.join("\n"),
+      producer: "worktree-manager.snapshotDirtyWorktree",
+      retention: "run"
+    });
+  } catch (err2) {
+    logInternalError(
+      "worktree.recovery.snapshotFailed",
+      err2 instanceof Error ? err2 : new Error(String(err2)),
+      `runId=${manifest.runId}, taskId=${task.id}`
+    );
+  }
+}
+async function cleanupCreatedWorktreeAsync(repoRoot, worktreePath, branch) {
+  try {
+    await gitAsync(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+  } catch {
+    try {
+      if (fs75.existsSync(worktreePath)) fs75.rmSync(worktreePath, { recursive: true, force: true });
+    } catch {
+    }
+  }
+  try {
+    await gitAsync(repoRoot, ["branch", "-D", branch]);
+  } catch {
+  }
+}
 async function prepareTaskWorkspaceAsync(manifest, task, stepSeedPaths) {
   if (manifest.workspaceMode !== "worktree") return { cwd: task.cwd };
   const repoRoot = await findGitRootAsync(manifest.cwd);
@@ -55747,16 +55931,17 @@ async function prepareTaskWorkspaceAsync(manifest, task, stepSeedPaths) {
     }
     const dirtyStatus = await gitAsync(worktreePath, ["status", "--porcelain"]);
     if (dirtyStatus.trim()) {
+      snapshotDirtyWorktree(manifest, task, worktreePath, dirtyStatus);
       logInternalError(
         "worktree.reused.dirty",
-        new Error(`Discarding uncommitted changes in reused worktree at ${worktreePath}`),
+        new Error(`Discarding uncommitted changes in reused worktree at ${worktreePath} (snapshot saved to artifacts)`),
         `runId=${manifest.runId}, taskId=${task.id}, dirtyStatus=${dirtyStatus.trim()}`
       );
       await gitAsync(worktreePath, ["checkout", "--", "."]);
       await gitAsync(worktreePath, ["clean", "-fd"]);
     }
-    const globalSeedPaths2 = loadedConfig.config.worktree?.seedPaths ?? [];
-    const mergedReused = normalizeSeedPaths([...globalSeedPaths2, ...stepSeedPaths ?? []], repoRoot);
+    const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
+    const mergedReused = normalizeSeedPaths([...globalSeedPaths, ...stepSeedPaths ?? []], repoRoot);
     if (mergedReused.length > 0) {
       overlaySeedPaths(repoRoot, worktreePath, mergedReused);
     }
@@ -55796,21 +55981,26 @@ async function prepareTaskWorkspaceAsync(manifest, task, stepSeedPaths) {
     }
     throw error;
   }
-  const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
-  const nodeModulesLinked = loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
-  const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
-  const merged = normalizeSeedPaths([...globalSeedPaths, ...stepSeedPaths ?? []], repoRoot);
-  if (merged.length > 0) {
-    overlaySeedPaths(repoRoot, worktreePath, merged);
+  try {
+    const syntheticPaths = runSetupHook(manifest, task, repoRoot, worktreePath, branch);
+    const nodeModulesLinked = loadedConfig.config.worktree?.linkNodeModules === true ? linkNodeModulesIfPresent(repoRoot, worktreePath) : false;
+    const globalSeedPaths = loadedConfig.config.worktree?.seedPaths ?? [];
+    const merged = normalizeSeedPaths([...globalSeedPaths, ...stepSeedPaths ?? []], repoRoot);
+    if (merged.length > 0) {
+      overlaySeedPaths(repoRoot, worktreePath, merged);
+    }
+    return {
+      cwd: worktreePath,
+      worktreePath,
+      branch,
+      reused: false,
+      nodeModulesLinked,
+      syntheticPaths
+    };
+  } catch (setupError) {
+    await cleanupCreatedWorktreeAsync(repoRoot, worktreePath, branch);
+    throw setupError;
   }
-  return {
-    cwd: worktreePath,
-    worktreePath,
-    branch,
-    reused: false,
-    nodeModulesLinked,
-    syntheticPaths
-  };
 }
 async function captureWorktreeDiffStatAsync(worktreePath) {
   try {
@@ -56870,7 +57060,7 @@ import * as fs79 from "node:fs";
 import * as path67 from "node:path";
 async function detectRipgrep() {
   if (cachedRgCheck !== void 0) return cachedRgCheck;
-  return await new Promise((resolve21) => {
+  return await new Promise((resolve22) => {
     let settled = false;
     try {
       const child = spawn3("rg", ["--version"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -56882,7 +57072,7 @@ async function detectRipgrep() {
         if (settled) return;
         settled = true;
         cachedRgCheck = { available: false };
-        resolve21(cachedRgCheck);
+        resolve22(cachedRgCheck);
       });
       child.on("close", (code) => {
         if (settled) return;
@@ -56892,13 +57082,13 @@ async function detectRipgrep() {
         } else {
           cachedRgCheck = { available: false };
         }
-        resolve21(cachedRgCheck);
+        resolve22(cachedRgCheck);
       });
     } catch {
       if (settled) return;
       settled = true;
       cachedRgCheck = { available: false };
-      resolve21(cachedRgCheck);
+      resolve22(cachedRgCheck);
     }
   });
 }
@@ -56915,7 +57105,7 @@ function reasonFor(file, keywords2) {
   return `keyword match: ${hits.join(", ")}`;
 }
 function runRipgrep(args, cwd) {
-  return new Promise((resolve21, reject) => {
+  return new Promise((resolve22, reject) => {
     let settled = false;
     let stdout = "";
     let stderr = "";
@@ -56936,7 +57126,7 @@ function runRipgrep(args, cwd) {
         if (settled) return;
         settled = true;
         if (code === 0 || code === 1) {
-          resolve21(stdout);
+          resolve22(stdout);
         } else {
           reject(new Error(`rg exited ${code}: ${stderr.slice(0, 200)}`));
         }
@@ -57213,9 +57403,9 @@ function artifactReference(artifactsRoot, artifact) {
   if (!artifact) return void 0;
   const root = path68.resolve(artifactsRoot);
   const target = path68.resolve(artifact.path);
-  const relative8 = path68.relative(root, target);
-  if (!relative8 || relative8.startsWith("..") || path68.isAbsolute(relative8)) return void 0;
-  return relative8.replaceAll("\\", "/");
+  const relative9 = path68.relative(root, target);
+  if (!relative9 || relative9.startsWith("..") || path68.isAbsolute(relative9)) return void 0;
+  return relative9.replaceAll("\\", "/");
 }
 function buildWorkerPromptPipeline(input) {
   return {
@@ -57427,7 +57617,7 @@ async function executeCommand(command, cwd, timeoutMs = 12e4) {
   const start = Date.now();
   let output = "";
   let exitCode = null;
-  return new Promise((resolve21) => {
+  return new Promise((resolve22) => {
     const shell = spawn4("sh", ["-c", command], {
       cwd,
       timeout: timeoutMs,
@@ -57441,7 +57631,7 @@ async function executeCommand(command, cwd, timeoutMs = 12e4) {
     });
     const timer = setTimeout(() => {
       shell.kill("SIGKILL");
-      resolve21({
+      resolve22({
         exitCode: -1,
         output: output + "\n[TIMEOUT: Command exceeded limit]",
         durationMs: Date.now() - start
@@ -57452,7 +57642,7 @@ async function executeCommand(command, cwd, timeoutMs = 12e4) {
     shell.on("close", (code) => {
       clearTimer();
       exitCode = code;
-      resolve21({
+      resolve22({
         exitCode,
         output: output.slice(-1e5),
         // Cap at 100KB
@@ -57461,7 +57651,7 @@ async function executeCommand(command, cwd, timeoutMs = 12e4) {
     });
     shell.on("error", (err2) => {
       clearTimer();
-      resolve21({
+      resolve22({
         exitCode: -1,
         output: `Execution error: ${err2.message}`,
         durationMs: Date.now() - start
@@ -60200,8 +60390,9 @@ async function executeTeamRun(input) {
   } catch (error) {
     stopTeamHeartbeat();
     const message = error instanceof Error ? error.message : String(error);
-    const freshManifest = manifest;
-    const freshTasks = refreshTaskGraphQueues(input.tasks);
+    const fresh = loadRunManifestById(manifest.cwd, manifest.runId);
+    const freshManifest = fresh?.manifest ?? manifest;
+    const freshTasks = refreshTaskGraphQueues(fresh?.tasks ?? input.tasks);
     const failedAt = (/* @__PURE__ */ new Date()).toISOString();
     const tasks = freshTasks.map(
       (task) => task.status === "running" || task.status === "queued" || task.status === "waiting" ? {
@@ -61787,19 +61978,19 @@ function parseRoot(start) {
 function safeJoin(...parts) {
   const filtered = parts.filter(Boolean);
   if (filtered.length === 0) return "";
-  const sep9 = filtered.some((p) => p.includes("\\")) ? "\\" : "/";
+  const sep10 = filtered.some((p) => p.includes("\\")) ? "\\" : "/";
   const firstPart = filtered[0];
   let leading = "";
-  if (sep9 === "\\") {
+  if (sep10 === "\\") {
     if (firstPart.startsWith("\\\\")) leading = "\\\\";
     else if (firstPart.startsWith("\\")) leading = "\\";
   } else if (firstPart.startsWith("/")) {
     leading = "/";
   }
-  const firstPartStripped = sep9 === "\\" ? firstPart.replace(/^\\{1,2}/, "") : firstPart.replace(/^\/+/, "");
+  const firstPartStripped = sep10 === "\\" ? firstPart.replace(/^\\{1,2}/, "") : firstPart.replace(/^\/+/, "");
   const rest = filtered.slice(1);
-  const joined = [firstPartStripped, ...rest].filter(Boolean).join(sep9);
-  const collapsed = joined.replace(new RegExp(`${sep9 === "\\" ? "\\\\" : "/"}{2,}`, "g"), sep9);
+  const joined = [firstPartStripped, ...rest].filter(Boolean).join(sep10);
+  const collapsed = joined.replace(new RegExp(`${sep10 === "\\" ? "\\\\" : "/"}{2,}`, "g"), sep10);
   return leading + collapsed;
 }
 function safeDirname(p) {
@@ -61956,12 +62147,12 @@ function tokenize(input) {
       continue;
     }
     if (/[0-9]/.test(input[i2])) {
-      let num = "";
+      let num2 = "";
       while (i2 < input.length && /[0-9]/.test(input[i2])) {
-        num += input[i2];
+        num2 += input[i2];
         i2++;
       }
-      tokens.push({ type: "NUMBER", value: num });
+      tokens.push({ type: "NUMBER", value: num2 });
       continue;
     }
     if (/[a-zA-Z_]/.test(input[i2])) {
@@ -62027,8 +62218,8 @@ var init_chain_parser = __esm({
         while (this.pos < this.tokens.length) {
           if (this.peek("COLON")) {
             this.consume("COLON");
-            const num = this.consume("NUMBER");
-            step.loopCount = Number.parseInt(num.value, 10);
+            const num2 = this.consume("NUMBER");
+            step.loopCount = Number.parseInt(num2.value, 10);
           } else if (this.peek("FLAG", "with-context")) {
             this.consume("FLAG");
             step.withContext = true;
@@ -68932,7 +69123,7 @@ var init_deterministic_ast = __esm({
 });
 
 // src/runtime/dwf-state-store.ts
-import { existsSync as existsSync70, mkdirSync as mkdirSync42, readFileSync as readFileSync68, unlinkSync as unlinkSync11 } from "node:fs";
+import { existsSync as existsSync70, mkdirSync as mkdirSync42, readFileSync as readFileSync69, unlinkSync as unlinkSync11 } from "node:fs";
 import { dirname as dirname37 } from "node:path";
 var DwfStore;
 var init_dwf_state_store = __esm({
@@ -68953,7 +69144,7 @@ var init_dwf_state_store = __esm({
         const path81 = this.path;
         try {
           if (!existsSync70(path81)) return void 0;
-          const raw = readFileSync68(path81, "utf-8");
+          const raw = readFileSync69(path81, "utf-8");
           const parsed = JSON.parse(raw);
           if (!parsed || typeof parsed !== "object" || typeof parsed.runId !== "string") return void 0;
           return parsed;
@@ -69164,14 +69355,14 @@ var init_semaphore = __esm({
         if (this.#queue.length >= _Semaphore.MAX_QUEUE) {
           throw new Error(`Semaphore queue full: ${this.#queue.length} waiters (max ${_Semaphore.MAX_QUEUE}); cannot acquire slot`);
         }
-        const { promise, resolve: resolve21 } = (() => {
+        const { promise, resolve: resolve22 } = (() => {
           let res;
           const p = new Promise((r) => {
             res = r;
           });
           return { promise: p, resolve: res };
         })();
-        this.#queue.push(resolve21);
+        this.#queue.push(resolve22);
         return promise;
       }
       release() {
@@ -69775,7 +69966,7 @@ var dynamic_workflow_runner_exports = {};
 __export(dynamic_workflow_runner_exports, {
   runDynamicWorkflow: () => runDynamicWorkflow
 });
-import { readFileSync as readFileSync69 } from "node:fs";
+import { readFileSync as readFileSync70 } from "node:fs";
 import { join as join71 } from "node:path";
 function assertStructuredCloneable(value, name) {
   try {
@@ -69800,7 +69991,7 @@ function resolveScriptPath(workflow, cwd) {
   );
 }
 async function loadWorkflowModule(scriptPath) {
-  const scriptSource = readFileSync69(scriptPath, "utf-8");
+  const scriptSource = readFileSync70(scriptPath, "utf-8");
   if (isDeterminismCheckEnabled()) {
     assertDeterministicScript(scriptSource);
   }
@@ -69923,7 +70114,7 @@ async function runDynamicWorkflow(input) {
 }
 function readFinalArtifact(artifactPath) {
   try {
-    return readFileSync69(artifactPath, "utf-8");
+    return readFileSync70(artifactPath, "utf-8");
   } catch (error) {
     logInternalError("dynamic-workflow-runner.readFinal", error, `artifactPath=${artifactPath}`);
     return `(failed to read final artifact ${artifactPath})`;
@@ -73818,7 +74009,7 @@ var init_run_dashboard = __esm({
           const borderFill = (count2) => new DynamicCrewBorder(this.theme).render(count2)[0];
           const border2 = (left, right) => `${fg("border", left)}${borderFill(borderWidth)}${fg("border", right)}`;
           const row = (text) => `\u2502 ${pad(truncate(text, innerWidth - 1), innerWidth - 1)}\u2502`;
-          const sep9 = () => border2("\u251C", "\u2524");
+          const sep10 = () => border2("\u251C", "\u2524");
           const lines = [];
           if (this.showHelp) {
             lines.push(...new HelpOverlay(this.theme).render(width));
@@ -73828,7 +74019,7 @@ var init_run_dashboard = __esm({
               row(
                 `${fg("accent", "\u2590")} ${this.theme.bold("pi-crew")} \xB7 ${this.runs.length} runs  ${fg("dim", "1-6 pane \xB7 \u2191\u2193 \xB7 Enter \xB7 ? help \xB7 Esc")}`
               ),
-              sep9()
+              sep10()
             );
             if (this.runs.length === 0) {
               lines.push(row(fg("dim", "No runs yet.")));
@@ -73876,7 +74067,7 @@ var init_run_dashboard = __esm({
                 const agents = snap?.agents ?? agentsFor2(selectedRun, this.options.snapshotCache);
                 const statusStr = isLikelyOrphanedActiveRun(r, agents) ? "stale" : r.status;
                 const selectedTasks = snap?.tasks ?? readRunTasks2(r, this.options.snapshotCache);
-                lines.push(sep9());
+                lines.push(sep10());
                 lines.push(row(`${fg("accent", "\u25B8")} ${truncate(sanitizeLine(r.goal), innerWidth - 6)}`));
                 const isTerminal = statusStr === "failed" || statusStr === "cancelled" || statusStr === "stopped";
                 const reason = isTerminal ? summarizeTerminalReason(r, selectedTasks, snap?.cancellationReason) : void 0;
@@ -75808,10 +75999,10 @@ var init_settings_overlay = __esm({
               typeof current2 === "number" ? String(current2) : "",
               this.theme,
               (value) => {
-                const num = value === "" ? void 0 : Number(value);
-                if (num !== void 0 && !Number.isNaN(num)) {
-                  this.changedValues.set(def.id, num);
-                  this.callbacks.onChange(def.id, num);
+                const num2 = value === "" ? void 0 : Number(value);
+                if (num2 !== void 0 && !Number.isNaN(num2)) {
+                  this.changedValues.set(def.id, num2);
+                  this.callbacks.onChange(def.id, num2);
                 } else if (value === "") {
                   this.changedValues.set(def.id, void 0);
                   this.callbacks.onChange(def.id, void 0);
@@ -81702,12 +81893,15 @@ function registerCrewShortcuts(pi) {
 }
 var CREW_SHORTCUT_KEYS = CREW_SHORTCUTS.map((s) => s.key);
 
+// src/extension/crew-vibes/index.ts
+init_pi_ui_compat();
+
 // src/extension/crew-vibes/config.ts
-import { existsSync as existsSync76, mkdirSync as mkdirSync45, readFileSync as readFileSync75, writeFileSync as writeFileSync33 } from "node:fs";
+import { existsSync as existsSync76, mkdirSync as mkdirSync45, readFileSync as readFileSync76, writeFileSync as writeFileSync33 } from "node:fs";
 import { dirname as dirname39, join as join76 } from "node:path";
 
 // src/extension/crew-vibes/font-detect.ts
-import { existsSync as existsSync75, readFileSync as readFileSync74 } from "node:fs";
+import { existsSync as existsSync75, readFileSync as readFileSync75 } from "node:fs";
 import { homedir as homedir11, platform } from "node:os";
 import { join as join75 } from "node:path";
 function fontPath() {
@@ -81734,10 +81928,10 @@ function isWebTerminal() {
   try {
     let pid = process.pid;
     for (let i2 = 0; i2 < 6 && pid > 1; i2++) {
-      const cgroup = readFileSync74(`/proc/${pid}/cgroup`, "utf8");
+      const cgroup = readFileSync75(`/proc/${pid}/cgroup`, "utf8");
       if (cgroup.includes("gotty") || cgroup.includes("wetty")) return true;
       const match = cgroup.match(/\d+:.*:(.*)/);
-      const status = readFileSync74(`/proc/${pid}/status`, "utf8");
+      const status = readFileSync75(`/proc/${pid}/status`, "utf8");
       const ppid = status.match(/^PPid:\s+(\d+)/m);
       pid = ppid ? Number.parseInt(ppid[1], 10) : 1;
     }
@@ -81869,7 +82063,7 @@ function loadConfig2() {
   try {
     const path81 = configPath2();
     if (!existsSync76(path81)) return normalizeConfig(void 0);
-    return normalizeConfig(JSON.parse(readFileSync75(path81, "utf8")));
+    return normalizeConfig(JSON.parse(readFileSync76(path81, "utf8")));
   } catch {
     return normalizeConfig(void 0);
   }
@@ -81881,8 +82075,379 @@ function saveConfig(config) {
 `);
 }
 
+// src/extension/crew-vibes/figures.ts
+var BRAILLE_FRAMES = [
+  "\u280B ",
+  // ⠋
+  "\u2819 ",
+  // ⠙
+  "\u2839 ",
+  // ⠹
+  "\u2838 ",
+  // ⠸
+  "\u283C ",
+  // ⠼
+  "\u2834 ",
+  // ⠴
+  "\u2826 ",
+  // ⠦
+  "\u2827 ",
+  // ⠧
+  "\u2807 ",
+  // ⠇
+  "\u280F "
+  // ⠏
+];
+var PUA_CREW_FRAMES = [
+  "\uE700 ",
+  "\uE701 ",
+  "\uE702 ",
+  "\uE703 ",
+  "\uE704 ",
+  "\uE705 ",
+  "\uE706 ",
+  "\uE707 ",
+  "\uE708 ",
+  "\uE709 ",
+  "\uE70A ",
+  "\uE70B ",
+  "\uE70C ",
+  "\uE70D ",
+  "\uE70E ",
+  "\uE70F "
+];
+function crewFrames(style = "pua") {
+  if (style === "pua" && isWebTerminal()) return BRAILLE_FRAMES;
+  return style === "pua" ? PUA_CREW_FRAMES : BRAILLE_FRAMES;
+}
+function intervalForSpeed(config, speed) {
+  if (speed === null || !Number.isFinite(speed) || speed <= 0) return config.defaultIntervalMs;
+  return Math.max(config.minIntervalMs, Math.min(config.maxIntervalMs, Math.round(config.scale / speed)));
+}
+function capacityIndex(percent, levels = 6) {
+  if (percent === null || percent === void 0 || !Number.isFinite(percent)) return 0;
+  return Math.max(0, Math.min(levels - 1, Math.floor(Math.max(0, Math.min(100, percent)) / 100 * levels)));
+}
+function isDangerStage(index, levels) {
+  return index >= Math.max(0, levels - 2);
+}
+
+// src/extension/crew-vibes/footer.ts
+init_pi_ui_compat();
+init_theme_adapter();
+init_visual();
+import { isAbsolute as isAbsolute10, relative as relative8, resolve as resolve20, sep as sep9 } from "node:path";
+
+// src/extension/crew-vibes/render.ts
+function formatCount(value) {
+  if (value < 1e3) return value.toString();
+  if (value < 1e4) return `${(value / 1e3).toFixed(1)}k`;
+  if (value < 1e6) return `${Math.round(value / 1e3)}k`;
+  if (value < 1e7) return `${(value / 1e6).toFixed(1)}M`;
+  return `${Math.round(value / 1e6)}M`;
+}
+function asCrewTheme2(theme) {
+  if (theme && typeof theme === "object" && typeof theme.fg === "function") {
+    return theme;
+  }
+  return void 0;
+}
+function getCapacityUsage(ctx) {
+  const fn = ctx.getContextUsage;
+  const usage = typeof fn === "function" ? fn.call(ctx) : null;
+  return {
+    tokens: typeof usage?.tokens === "number" && Number.isFinite(usage.tokens) ? usage.tokens : null,
+    percent: typeof usage?.percent === "number" && Number.isFinite(usage.percent) ? usage.percent : null
+  };
+}
+function formatSpeed(config, speed) {
+  return speed === null ? `-- ${config.label}` : `${speed.toFixed(1)} ${config.label}`;
+}
+function renderSpeedFooter(theme, config, speed) {
+  const value = speed === null ? "--" : speed.toFixed(1);
+  const valueTone = speed === null ? "dim" : "accent";
+  const styled = theme ? `${theme.fg(valueTone, value)} ${theme.fg("dim", config.label)}` : `${value} ${config.label}`;
+  return styled;
+}
+function renderWorkingMessage(theme, config, speed) {
+  const left = "Working";
+  const speedText = theme ? `${theme.fg(speed === null ? "dim" : "accent", speed === null ? "--" : speed.toFixed(1))} ${theme.fg("dim", config.label)}` : `${speed === null ? "--" : speed.toFixed(1)} ${config.label}`;
+  return theme ? `${theme.fg("muted", left)}  ${speedText}` : `${left}  ${speedText}`;
+}
+function crewIndicatorFrames(theme) {
+  const frames = crewFrames();
+  if (!theme) return [...frames];
+  return frames.map((frame) => theme.fg("accent", frame));
+}
+function formatCapacityPrefix(config, usage) {
+  const display = config.tokenDisplay;
+  if (display === "off") return "";
+  if (display === "percentage") {
+    return `${usage.percent === null ? "?" : Math.round(Math.max(0, Math.min(999, usage.percent)))}% `;
+  }
+  return `${usage.tokens === null ? "?" : formatCount(usage.tokens)} `;
+}
+function colorStage(theme, index, levels, text) {
+  if (!theme || text.length === 0) return text;
+  return theme.fg(isDangerStage(index, levels) ? "error" : "success", text);
+}
+function renderCapacity(theme, config, usage) {
+  const icons = capacityIcons();
+  const levels = icons.length;
+  const index = capacityIndex(usage.percent, levels);
+  const icon = icons[index] ?? icons[0];
+  const label = config.labels[index] ?? config.labels[0];
+  const prefix = theme ? theme.fg("muted", formatCapacityPrefix(config, usage)) : formatCapacityPrefix(config, usage);
+  const coloredIcon = colorStage(theme, index, levels, icon);
+  const afterIcon = config.showLabel ? `  ${colorStage(theme, index, levels, label)}` : " ";
+  return `${prefix}${coloredIcon}${afterIcon}`;
+}
+function setSpeedStatus(ctx, config, text) {
+  if (!ctx?.hasUI) return;
+  if (!config.enabled || !config.speed.enabled || !config.speed.footer) {
+    ctx.ui.setStatus(SPEED_STATUS_ID, void 0);
+    return;
+  }
+  ctx.ui.setStatus(SPEED_STATUS_ID, text);
+}
+function clearVibesStatus(ctx) {
+  if (!ctx?.hasUI) return;
+  ctx.ui.setStatus(SPEED_STATUS_ID, void 0);
+  ctx.ui.setStatus(CAPACITY_STATUS_ID, void 0);
+  ctx.ui.setStatus(PROVIDER_STATUS_ID, void 0);
+  if (ctx.ui.setWorkingIndicator) ctx.ui.setWorkingIndicator();
+  if (ctx.ui.setWorkingMessage) ctx.ui.setWorkingMessage();
+}
+function formatResetTimer(resetAt) {
+  if (!resetAt) return null;
+  const diffMs = new Date(resetAt).getTime() - Date.now();
+  if (diffMs < 0) return null;
+  const mins = Math.floor(diffMs / 6e4);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) {
+    const remMins = mins % 60;
+    return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d${remHours}h` : `${days}d`;
+}
+function renderBar(percent, width = 8) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  const filled = Math.round(clamped / 100 * width);
+  return `${"\u2501".repeat(filled)}${"\u2504".repeat(width - filled)}`;
+}
+function renderProviderUsage(theme, usage) {
+  if (!usage) return void 0;
+  const parts = [];
+  if (usage.providerName) {
+    const nameText = usage.providerName;
+    parts.push(theme ? theme.fg("muted", nameText) : nameText);
+  }
+  const fiveHourBar = renderBar(usage.fiveHourPercent);
+  const fiveHourRounded = Math.round(usage.fiveHourPercent);
+  const fiveHourReset = formatResetTimer(usage.fiveHourResetAt);
+  const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%${fiveHourReset ? " " + fiveHourReset : ""}`;
+  const fiveHourColor = usage.fiveHourPercent >= 80 ? "error" : "accent";
+  parts.push(theme ? theme.fg(fiveHourColor, fiveHourText) : fiveHourText);
+  const weeklyBar = renderBar(usage.weeklyPercent);
+  const weeklyRounded = Math.round(usage.weeklyPercent);
+  const weeklyReset = formatResetTimer(usage.weeklyResetAt);
+  const weeklyText = `Wk ${weeklyBar} ${weeklyRounded}%${weeklyReset ? " " + weeklyReset : ""}`;
+  parts.push(theme ? theme.fg("dim", weeklyText) : weeklyText);
+  if (typeof usage.copilotMonthlyPercent === "number" && Number.isFinite(usage.copilotMonthlyPercent)) {
+    const monthlyRounded = Math.round(usage.copilotMonthlyPercent);
+    const monthlyText = `Mo: ${monthlyRounded}%`;
+    parts.push(theme ? theme.fg("dim", monthlyText) : monthlyText);
+  }
+  return parts.join(" ");
+}
+
+// src/extension/crew-vibes/footer.ts
+function num(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+function formatCwdForFooter(cwd, home) {
+  if (!home) return cwd;
+  const resolvedCwd = resolve20(cwd);
+  const resolvedHome = resolve20(home);
+  const rel = relative8(resolvedHome, resolvedCwd);
+  const inside = rel === "" || rel !== ".." && !rel.startsWith(`..${sep9}`) && !isAbsolute10(rel);
+  if (!inside) return cwd;
+  return rel === "" ? "~" : `~${sep9}${rel}`;
+}
+function sanitizeStatusText(text) {
+  return text.replace(/[\r\n\t]/g, " ").replace(/ +/g, " ").trim();
+}
+function asFooterData(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const record = value;
+  if (typeof record.getGitBranch !== "function" || typeof record.getExtensionStatuses !== "function" || typeof record.getAvailableProviderCount !== "function" || typeof record.onBranchChange !== "function") {
+    return void 0;
+  }
+  return value;
+}
+function computeTotals(entries) {
+  const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+  for (const entry of entries) {
+    const rec = entry;
+    if (rec?.type !== "message" || rec.message?.role !== "assistant") continue;
+    const usage = rec.message.usage;
+    if (!usage) continue;
+    totals.input += num(usage.input);
+    totals.output += num(usage.output);
+    totals.cacheRead += num(usage.cacheRead);
+    totals.cacheWrite += num(usage.cacheWrite);
+    totals.cost += num(usage.cost?.total);
+  }
+  return totals;
+}
+var CrewVibesFooter = class {
+  theme;
+  footerData;
+  ctx;
+  source;
+  tui;
+  unsubscribeBranch;
+  constructor(deps) {
+    this.theme = asCrewTheme(deps.theme);
+    this.footerData = asFooterData(deps.footerData);
+    this.ctx = deps.ctx;
+    this.source = deps.source;
+    this.tui = deps.tui;
+    this.unsubscribeBranch = this.footerData ? this.footerData.onBranchChange(() => requestRenderTarget(this.tui)) : () => {
+    };
+  }
+  invalidate() {
+  }
+  dispose() {
+    this.unsubscribeBranch();
+  }
+  buildPwdLine(width) {
+    const sm = this.ctx.sessionManager;
+    let pwd = formatCwdForFooter(sm.getCwd(), process.env.HOME || process.env.USERPROFILE);
+    const branch = this.footerData?.getGitBranch();
+    if (branch) pwd = `${pwd} (${branch})`;
+    const sessionName = sm.getSessionName?.();
+    if (sessionName) pwd = `${pwd} \u2022 ${sessionName}`;
+    return truncateToWidth(this.theme.fg("dim", pwd), width, this.theme.fg("dim", "..."));
+  }
+  buildStatsLine(width) {
+    const theme = this.theme;
+    const model = this.ctx.model;
+    const totals = computeTotals(this.ctx.sessionManager.getEntries());
+    const contextUsage = this.ctx.getContextUsage?.();
+    const contextWindow2 = contextUsage?.contextWindow ?? model?.contextWindow ?? 0;
+    const percentValue = contextUsage?.percent ?? 0;
+    const percentKnown = contextUsage?.percent !== null && contextUsage?.percent !== void 0;
+    const statsParts = [];
+    if (totals.input) statsParts.push(`\u2191${formatCount(totals.input)}`);
+    if (totals.output) statsParts.push(`\u2193${formatCount(totals.output)}`);
+    if (totals.cacheRead) statsParts.push(`R${formatCount(totals.cacheRead)}`);
+    if (totals.cacheWrite) statsParts.push(`W${formatCount(totals.cacheWrite)}`);
+    const usingSubscription = !!(model && this.ctx.modelRegistry?.isUsingOAuth?.(this.ctx.model));
+    if (totals.cost || usingSubscription) {
+      statsParts.push(`$${totals.cost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`);
+    }
+    const autoIndicator = " (auto)";
+    const contextDisplay = percentKnown ? `${percentValue.toFixed(1)}%/${formatCount(contextWindow2)}${autoIndicator}` : `?/${formatCount(contextWindow2)}${autoIndicator}`;
+    const contextColored = percentValue > 90 ? theme.fg("error", contextDisplay) : percentValue > 70 ? theme.fg("warning", contextDisplay) : contextDisplay;
+    statsParts.push(contextColored);
+    let statsLeft = statsParts.join(" ");
+    let statsLeftWidth = visibleWidth(statsLeft);
+    if (statsLeftWidth > width) {
+      statsLeft = truncateToWidth(statsLeft, width, "...");
+      statsLeftWidth = visibleWidth(statsLeft);
+    }
+    const minPadding = 2;
+    const modelName = model?.id || "no-model";
+    let rightSideWithoutProvider = modelName;
+    if (model?.reasoning) {
+      let level = this.source.getThinkingLevel();
+      try {
+        const ctx = this.ctx.sessionManager;
+        if (typeof ctx.buildSessionContext === "function") {
+          const resolved = ctx.buildSessionContext()?.thinkingLevel;
+          if (resolved) level = resolved;
+        }
+      } catch {
+      }
+      const finalLevel = level || "off";
+      rightSideWithoutProvider = finalLevel === "off" ? `${modelName} \u2022 thinking off` : `${modelName} \u2022 ${finalLevel}`;
+    }
+    let rightSide = rightSideWithoutProvider;
+    const providerCount = this.footerData?.getAvailableProviderCount() ?? 0;
+    if (providerCount > 1 && model?.provider) {
+      rightSide = `(${model.provider}) ${rightSideWithoutProvider}`;
+      if (statsLeftWidth + minPadding + visibleWidth(rightSide) > width) rightSide = rightSideWithoutProvider;
+    }
+    const rightSideWidth = visibleWidth(rightSide);
+    let statsLine;
+    if (statsLeftWidth + minPadding + rightSideWidth <= width) {
+      statsLine = statsLeft + " ".repeat(width - statsLeftWidth - rightSideWidth) + rightSide;
+    } else {
+      const availableForRight = width - statsLeftWidth - minPadding;
+      if (availableForRight > 0) {
+        const truncatedRight = truncateToWidth(rightSide, availableForRight, "");
+        const padding = " ".repeat(Math.max(0, width - statsLeftWidth - visibleWidth(truncatedRight)));
+        statsLine = statsLeft + padding + truncatedRight;
+      } else {
+        statsLine = statsLeft;
+      }
+    }
+    const dimStatsLeft = theme.fg("dim", statsLeft);
+    const dimRemainder = theme.fg("dim", statsLine.slice(statsLeft.length));
+    return dimStatsLeft + dimRemainder;
+  }
+  buildStatusLine(width) {
+    if (!this.footerData) return void 0;
+    const statuses = this.footerData.getExtensionStatuses();
+    if (statuses.size === 0) return void 0;
+    const joined = Array.from(statuses.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([, text]) => sanitizeStatusText(text)).join(" ");
+    if (!joined) return void 0;
+    return truncateToWidth(joined, width, this.theme.fg("dim", "..."));
+  }
+  rightAlign(text, width) {
+    const w = visibleWidth(text);
+    if (w >= width) return truncateToWidth(text, width, "\u2026");
+    return " ".repeat(width - w) + text;
+  }
+  /** Capacity + provider quota. Uses the REAL render width, so the quota is
+   * never chopped. When both do not fit on one line, wrap to two lines
+   * (capacity above, quota right-aligned below) per the chosen behavior. */
+  buildMeterLines(width) {
+    const config = this.source.getConfig();
+    if (!config.enabled) return [];
+    const capText = config.capacity.enabled ? renderCapacity(this.theme, config.capacity, getCapacityUsage(this.ctx)) : void 0;
+    const quotaText = config.capacity.providerUsage ? renderProviderUsage(this.theme, this.source.getQuotaUsage()) : void 0;
+    if (!capText && !quotaText) return [];
+    if (capText && !quotaText) return [truncateToWidth(capText, width, "\u2026")];
+    if (!capText && quotaText) return [this.rightAlign(quotaText, width)];
+    const cap = capText;
+    const quota = quotaText;
+    const capWidth = visibleWidth(cap);
+    const quotaWidth = visibleWidth(quota);
+    if (capWidth + 1 + quotaWidth <= width) {
+      const pad2 = Math.max(1, width - capWidth - quotaWidth);
+      return [cap + " ".repeat(pad2) + quota];
+    }
+    return [truncateToWidth(cap, width, "\u2026"), this.rightAlign(quota, width)];
+  }
+  render(width) {
+    const lines = [this.buildPwdLine(width), this.buildStatsLine(width)];
+    const statusLine = this.buildStatusLine(width);
+    if (statusLine) lines.push(statusLine);
+    lines.push(...this.buildMeterLines(width));
+    return lines;
+  }
+};
+function createCrewVibesFooter(deps) {
+  return new CrewVibesFooter(deps);
+}
+
 // src/extension/crew-vibes/provider-usage.ts
-import { readFileSync as readFileSync76 } from "node:fs";
+import { readFileSync as readFileSync77 } from "node:fs";
 import { homedir as homedir12 } from "node:os";
 import { join as join77 } from "node:path";
 function withTimeout(ms, fn) {
@@ -81897,7 +82462,7 @@ function loadAnthropicToken() {
   const envToken = process.env.ANTHROPIC_OAUTH_TOKEN?.trim();
   if (envToken) return envToken;
   try {
-    const data2 = JSON.parse(readFileSync76(piAuthPath(), "utf8"));
+    const data2 = JSON.parse(readFileSync77(piAuthPath(), "utf8"));
     const token = data2.anthropic?.access;
     return typeof token === "string" && token.length > 0 ? token : void 0;
   } catch {
@@ -81908,7 +82473,7 @@ function loadZaiToken() {
   const envKey = process.env.ZAI_API_KEY?.trim() || process.env.Z_AI_API_KEY?.trim();
   if (envKey) return envKey;
   try {
-    const data2 = JSON.parse(readFileSync76(piAuthPath(), "utf8"));
+    const data2 = JSON.parse(readFileSync77(piAuthPath(), "utf8"));
     const key = data2["z-ai"]?.access || data2["z-ai"]?.key || data2.zai?.access || data2.zai?.key;
     return typeof key === "string" && key.length > 0 ? key : void 0;
   } catch {
@@ -81919,7 +82484,7 @@ function loadMinimaxToken() {
   const envKey = process.env.MINIMAX_API_KEY?.trim();
   if (envKey) return envKey;
   try {
-    const data2 = JSON.parse(readFileSync76(piAuthPath(), "utf8"));
+    const data2 = JSON.parse(readFileSync77(piAuthPath(), "utf8"));
     const key = data2.minimax?.key;
     return typeof key === "string" && key.length > 0 ? key : void 0;
   } catch {
@@ -81940,7 +82505,7 @@ function loadLegacyCopilotToken() {
   const candidates = [join77(configHome, "github-copilot", "hosts.json"), join77(homedir12(), ".github-copilot", "hosts.json")];
   for (const hostsPath of candidates) {
     try {
-      const data2 = JSON.parse(readFileSync76(hostsPath, "utf8"));
+      const data2 = JSON.parse(readFileSync77(hostsPath, "utf8"));
       if (!data2 || typeof data2 !== "object") continue;
       const normalized = {};
       for (const [host, entry] of Object.entries(data2)) {
@@ -81961,7 +82526,7 @@ function loadCopilotToken() {
   const envToken = (process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "").trim();
   if (envToken) return envToken;
   try {
-    const data2 = JSON.parse(readFileSync76(piAuthPath(), "utf8"));
+    const data2 = JSON.parse(readFileSync77(piAuthPath(), "utf8"));
     const piToken = data2["github-copilot"]?.refresh || data2["github-copilot"]?.access;
     if (typeof piToken === "string" && piToken.length > 0) return piToken;
   } catch {
@@ -82133,197 +82698,6 @@ async function fetchProviderUsage(maxAgeMs = 3e5, provider) {
   } catch {
     return null;
   }
-}
-
-// src/extension/crew-vibes/figures.ts
-var BRAILLE_FRAMES = [
-  "\u280B ",
-  // ⠋
-  "\u2819 ",
-  // ⠙
-  "\u2839 ",
-  // ⠹
-  "\u2838 ",
-  // ⠸
-  "\u283C ",
-  // ⠼
-  "\u2834 ",
-  // ⠴
-  "\u2826 ",
-  // ⠦
-  "\u2827 ",
-  // ⠧
-  "\u2807 ",
-  // ⠇
-  "\u280F "
-  // ⠏
-];
-var PUA_CREW_FRAMES = [
-  "\uE700 ",
-  "\uE701 ",
-  "\uE702 ",
-  "\uE703 ",
-  "\uE704 ",
-  "\uE705 ",
-  "\uE706 ",
-  "\uE707 ",
-  "\uE708 ",
-  "\uE709 ",
-  "\uE70A ",
-  "\uE70B ",
-  "\uE70C ",
-  "\uE70D ",
-  "\uE70E ",
-  "\uE70F "
-];
-function crewFrames(style = "pua") {
-  if (style === "pua" && isWebTerminal()) return BRAILLE_FRAMES;
-  return style === "pua" ? PUA_CREW_FRAMES : BRAILLE_FRAMES;
-}
-function intervalForSpeed(config, speed) {
-  if (speed === null || !Number.isFinite(speed) || speed <= 0) return config.defaultIntervalMs;
-  return Math.max(config.minIntervalMs, Math.min(config.maxIntervalMs, Math.round(config.scale / speed)));
-}
-function capacityIndex(percent, levels = 6) {
-  if (percent === null || percent === void 0 || !Number.isFinite(percent)) return 0;
-  return Math.max(0, Math.min(levels - 1, Math.floor(Math.max(0, Math.min(100, percent)) / 100 * levels)));
-}
-function isDangerStage(index, levels) {
-  return index >= Math.max(0, levels - 2);
-}
-
-// src/extension/crew-vibes/render.ts
-function formatCount(value) {
-  if (value < 1e3) return value.toString();
-  if (value < 1e4) return `${(value / 1e3).toFixed(1)}k`;
-  if (value < 1e6) return `${Math.round(value / 1e3)}k`;
-  if (value < 1e7) return `${(value / 1e6).toFixed(1)}M`;
-  return `${Math.round(value / 1e6)}M`;
-}
-function asCrewTheme2(theme) {
-  if (theme && typeof theme === "object" && typeof theme.fg === "function") {
-    return theme;
-  }
-  return void 0;
-}
-function getCapacityUsage(ctx) {
-  const fn = ctx.getContextUsage;
-  const usage = typeof fn === "function" ? fn.call(ctx) : null;
-  return {
-    tokens: typeof usage?.tokens === "number" && Number.isFinite(usage.tokens) ? usage.tokens : null,
-    percent: typeof usage?.percent === "number" && Number.isFinite(usage.percent) ? usage.percent : null
-  };
-}
-function formatSpeed(config, speed) {
-  return speed === null ? `-- ${config.label}` : `${speed.toFixed(1)} ${config.label}`;
-}
-function renderSpeedFooter(theme, config, speed) {
-  const value = speed === null ? "--" : speed.toFixed(1);
-  const valueTone = speed === null ? "dim" : "accent";
-  const styled = theme ? `${theme.fg(valueTone, value)} ${theme.fg("dim", config.label)}` : `${value} ${config.label}`;
-  return styled;
-}
-function renderWorkingMessage(theme, config, speed) {
-  const left = "Working";
-  const speedText = theme ? `${theme.fg(speed === null ? "dim" : "accent", speed === null ? "--" : speed.toFixed(1))} ${theme.fg("dim", config.label)}` : `${speed === null ? "--" : speed.toFixed(1)} ${config.label}`;
-  return theme ? `${theme.fg("muted", left)}  ${speedText}` : `${left}  ${speedText}`;
-}
-function crewIndicatorFrames(theme) {
-  const frames = crewFrames();
-  if (!theme) return [...frames];
-  return frames.map((frame) => theme.fg("accent", frame));
-}
-function formatCapacityPrefix(config, usage) {
-  const display = config.tokenDisplay;
-  if (display === "off") return "";
-  if (display === "percentage") {
-    return `${usage.percent === null ? "?" : Math.round(Math.max(0, Math.min(999, usage.percent)))}% `;
-  }
-  return `${usage.tokens === null ? "?" : formatCount(usage.tokens)} `;
-}
-function colorStage(theme, index, levels, text) {
-  if (!theme || text.length === 0) return text;
-  return theme.fg(isDangerStage(index, levels) ? "error" : "success", text);
-}
-function renderCapacity(theme, config, usage) {
-  const icons = capacityIcons();
-  const levels = icons.length;
-  const index = capacityIndex(usage.percent, levels);
-  const icon = icons[index] ?? icons[0];
-  const label = config.labels[index] ?? config.labels[0];
-  const prefix = theme ? theme.fg("muted", formatCapacityPrefix(config, usage)) : formatCapacityPrefix(config, usage);
-  const coloredIcon = colorStage(theme, index, levels, icon);
-  const afterIcon = config.showLabel ? `  ${colorStage(theme, index, levels, label)}` : " ";
-  return `${prefix}${coloredIcon}${afterIcon}`;
-}
-function setSpeedStatus(ctx, config, text) {
-  if (!ctx?.hasUI) return;
-  if (!config.enabled || !config.speed.enabled || !config.speed.footer) {
-    ctx.ui.setStatus(SPEED_STATUS_ID, void 0);
-    return;
-  }
-  ctx.ui.setStatus(SPEED_STATUS_ID, text);
-}
-function setCapacityStatus(ctx, config, text) {
-  if (!ctx?.hasUI) return;
-  if (!config.enabled || !config.capacity.enabled) {
-    ctx.ui.setStatus(CAPACITY_STATUS_ID, void 0);
-    return;
-  }
-  ctx.ui.setStatus(CAPACITY_STATUS_ID, text);
-}
-function clearVibesStatus(ctx) {
-  if (!ctx?.hasUI) return;
-  ctx.ui.setStatus(SPEED_STATUS_ID, void 0);
-  ctx.ui.setStatus(CAPACITY_STATUS_ID, void 0);
-  ctx.ui.setStatus(PROVIDER_STATUS_ID, void 0);
-  if (ctx.ui.setWorkingIndicator) ctx.ui.setWorkingIndicator();
-  if (ctx.ui.setWorkingMessage) ctx.ui.setWorkingMessage();
-}
-function formatResetTimer(resetAt) {
-  if (!resetAt) return null;
-  const diffMs = new Date(resetAt).getTime() - Date.now();
-  if (diffMs < 0) return null;
-  const mins = Math.floor(diffMs / 6e4);
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 48) {
-    const remMins = mins % 60;
-    return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
-  }
-  const days = Math.floor(hours / 24);
-  const remHours = hours % 24;
-  return remHours > 0 ? `${days}d${remHours}h` : `${days}d`;
-}
-function renderBar(percent, width = 8) {
-  const clamped = Math.max(0, Math.min(100, percent));
-  const filled = Math.round(clamped / 100 * width);
-  return `${"\u2501".repeat(filled)}${"\u2504".repeat(width - filled)}`;
-}
-function renderProviderUsage(theme, usage) {
-  if (!usage) return void 0;
-  const parts = [];
-  if (usage.providerName) {
-    const nameText = usage.providerName;
-    parts.push(theme ? theme.fg("muted", nameText) : nameText);
-  }
-  const fiveHourBar = renderBar(usage.fiveHourPercent);
-  const fiveHourRounded = Math.round(usage.fiveHourPercent);
-  const fiveHourReset = formatResetTimer(usage.fiveHourResetAt);
-  const fiveHourText = `5h ${fiveHourBar} ${fiveHourRounded}%${fiveHourReset ? " " + fiveHourReset : ""}`;
-  const fiveHourColor = usage.fiveHourPercent >= 80 ? "error" : "accent";
-  parts.push(theme ? theme.fg(fiveHourColor, fiveHourText) : fiveHourText);
-  const weeklyBar = renderBar(usage.weeklyPercent);
-  const weeklyRounded = Math.round(usage.weeklyPercent);
-  const weeklyReset = formatResetTimer(usage.weeklyResetAt);
-  const weeklyText = `Wk ${weeklyBar} ${weeklyRounded}%${weeklyReset ? " " + weeklyReset : ""}`;
-  parts.push(theme ? theme.fg("dim", weeklyText) : weeklyText);
-  if (typeof usage.copilotMonthlyPercent === "number" && Number.isFinite(usage.copilotMonthlyPercent)) {
-    const monthlyRounded = Math.round(usage.copilotMonthlyPercent);
-    const monthlyText = `Mo: ${monthlyRounded}%`;
-    parts.push(theme ? theme.fg("dim", monthlyText) : monthlyText);
-  }
-  return parts.join(" ");
 }
 
 // src/extension/crew-vibes/speed.ts
@@ -82564,28 +82938,31 @@ function registerCrewVibes(pi) {
   let footerTimer;
   let capacityTimer;
   let providerTimer;
-  let lastProviderText;
+  let lastProviderUsage = null;
   let currentProvider;
-  function visibleLen(text) {
-    return text.replace(/\x1b\[[0-9;]*m/g, "").length;
-  }
-  function spreadLine(left, right) {
-    const cols = process.stdout.columns || 120;
-    const padding = Math.max(2, cols - visibleLen(left) - visibleLen(right));
-    return left + "\xA0".repeat(padding) + right;
-  }
+  let currentThinkingLevel;
   function themeOf(ctx) {
     return asCrewTheme2(ctx.hasUI ? ctx.ui.theme : void 0);
   }
-  function publishCapacity(ctx) {
+  const footerSource = {
+    getConfig: () => config,
+    getQuotaUsage: () => lastProviderUsage,
+    getThinkingLevel: () => currentThinkingLevel
+  };
+  function metersActive() {
+    return config.enabled && (config.capacity.enabled || config.capacity.providerUsage);
+  }
+  function installFooter(ctx) {
     if (!ctx?.hasUI) return;
-    if (!config.enabled || !config.capacity.enabled) {
-      setCapacityStatus(ctx, config, void 0);
+    if (!metersActive()) {
+      setFooter(ctx, void 0);
       return;
     }
-    const capText = renderCapacity(themeOf(ctx), config.capacity, getCapacityUsage(ctx));
-    const combined = lastProviderText ? spreadLine(capText, lastProviderText) : capText;
-    setCapacityStatus(ctx, config, combined);
+    setFooter(ctx, (tui, theme, footerData) => createCrewVibesFooter({ tui, theme, footerData, ctx, source: footerSource }));
+    requestRender(ctx);
+  }
+  function refreshFooter(ctx) {
+    if (ctx?.hasUI) requestRender(ctx);
   }
   function publishSpeedFooter(ctx, speed = footerAnimator.value()) {
     if (!config.enabled || !config.speed.enabled || !config.speed.footer) {
@@ -82660,7 +83037,7 @@ function registerCrewVibes(pi) {
   function startCapacityTimer(ctx) {
     if (capacityTimer) return;
     const interval = Math.max(250, config.capacity.refreshIntervalMs);
-    capacityTimer = setInterval(() => publishCapacity(ctx), interval);
+    capacityTimer = setInterval(() => refreshFooter(ctx), interval);
     capacityTimer.unref?.();
   }
   function startProviderTimer(ctx) {
@@ -82673,13 +83050,11 @@ function registerCrewVibes(pi) {
         return;
       }
       try {
-        const usage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
-        lastProviderText = renderProviderUsage(themeOf(ctx), usage);
-        publishCapacity(ctx);
+        lastProviderUsage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
       } catch {
-        lastProviderText = void 0;
-        publishCapacity(ctx);
+        lastProviderUsage = null;
       }
+      refreshFooter(ctx);
     }
     tick();
     providerTimer = setInterval(tick, interval);
@@ -82698,11 +83073,13 @@ function registerCrewVibes(pi) {
       stopFooterTimer();
       stopCapacityTimer();
       stopProviderTimer();
+      setFooter(ctx, void 0);
       clearVibesStatus(ctx);
       return;
     }
-    publishCapacity(ctx);
+    installFooter(ctx);
     publishSpeedFooter(ctx);
+    startCapacityTimer(ctx);
     if (config.capacity.providerUsage) startProviderTimer(ctx);
   }
   pi.on("session_start", (_event, ctx) => {
@@ -82717,11 +83094,13 @@ function registerCrewVibes(pi) {
     footerAnimator.reset(null);
     clearProviderUsageCache();
     currentProvider = ctx.model?.provider;
+    currentThinkingLevel = void 0;
     if (!config.enabled) {
+      setFooter(ctx, void 0);
       clearVibesStatus(ctx);
       return;
     }
-    publishCapacity(ctx);
+    installFooter(ctx);
     publishSpeedFooter(ctx);
     startCapacityTimer(ctx);
     startProviderTimer(ctx);
@@ -82760,7 +83139,7 @@ function registerCrewVibes(pi) {
   });
   pi.on("message_end", (event, ctx) => {
     if (!isAssistantMessage(event.message)) return;
-    publishCapacity(ctx);
+    refreshFooter(ctx);
     if (!config.enabled || !config.speed.enabled || !speedTracker.isStreaming) return;
     const completed = speedTracker.finishMessage(assistantUsageOutput(event.message) ?? 0, assistantStopReason(event.message));
     if (!completed) return;
@@ -82784,15 +83163,20 @@ function registerCrewVibes(pi) {
   pi.on("model_select", (event, ctx) => {
     currentProvider = event.model?.provider;
     clearProviderUsageCache();
-    publishCapacity(ctx);
+    refreshFooter(ctx);
   });
-  pi.on("session_compact", (_event, ctx) => publishCapacity(ctx));
-  pi.on("session_tree", (_event, ctx) => publishCapacity(ctx));
+  pi.on("thinking_level_select", (event, ctx) => {
+    currentThinkingLevel = event.level;
+    refreshFooter(ctx);
+  });
+  pi.on("session_compact", (_event, ctx) => refreshFooter(ctx));
+  pi.on("session_tree", (_event, ctx) => refreshFooter(ctx));
   pi.on("session_shutdown", (_event, ctx) => {
     stopLiveTimer();
     stopFooterTimer();
     stopCapacityTimer();
     stopProviderTimer();
+    setFooter(ctx, void 0);
     clearVibesStatus(ctx);
   });
   async function handleCommand(args, ctx) {
@@ -83687,7 +84071,7 @@ function registerSubagentTools(pi, subagentManager, options = {}) {
               savePersistedSubagentRecord(ctx.cwd, current2);
               break;
             }
-            await new Promise((resolve21) => setTimeout(resolve21, 1e3));
+            await new Promise((resolve22) => setTimeout(resolve22, 1e3));
             current2 = refreshPersistedSubagentRecord(ctx, current2);
             if (!current2.runId) break;
           }
@@ -84329,7 +84713,7 @@ Subagent may need manual intervention.`
         if (!loaded) return true;
         return !loaded.tasks.some((t2) => t2.status === "running" || t2.status === "queued");
       };
-      while (!check()) await new Promise((resolve21) => setTimeout(resolve21, 500));
+      while (!check()) await new Promise((resolve22) => setTimeout(resolve22, 500));
     };
     validatedRegistry.hasRunning = async (runId) => {
       const manifest = manifestCacheForRegistry.get(runId);
