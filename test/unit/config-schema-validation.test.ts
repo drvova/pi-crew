@@ -47,6 +47,19 @@ test("parseConfig accepts valid values and drops invalid siblings using TypeBox 
 	assert.equal(parsed.telemetry?.enabled, false);
 });
 
+test("parseConfig parses worktree.seedPaths (C6 regression)", () => {
+	// seedPaths was declared in the type + schema but never parsed in
+	// parseWorktreeConfig, so it silently dropped to undefined.
+	const parsed = parseConfig({
+		worktree: { seedPaths: ["shared/a.txt", "shared/b.txt"], linkNodeModules: true },
+	});
+	assert.deepStrictEqual(parsed.worktree?.seedPaths, ["shared/a.txt", "shared/b.txt"]);
+	assert.equal(parsed.worktree?.linkNodeModules, true);
+
+	// Undefined when absent (does not force worktree to be defined).
+	assert.equal(parseConfig({}).worktree, undefined);
+});
+
 test("parseConfig enforces public UI schema ranges", () => {
 	const parsed = parseConfig({
 		ui: {

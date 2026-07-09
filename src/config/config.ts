@@ -741,6 +741,10 @@ function parseWorktreeConfig(value: unknown): CrewWorktreeConfig | undefined {
 		setupHook: setupHook ? setupHook : undefined,
 		setupHookTimeoutMs: parsePositiveInteger(obj.setupHookTimeoutMs, 300_000),
 		linkNodeModules: parseWithSchema(Type.Boolean(), obj.linkNodeModules),
+		// C6: seedPaths was declared in the type + schema but never parsed here, so
+		// loadedConfig.config.worktree?.seedPaths was always undefined -> the global
+		// worktree seed overlay (worktree-manager.ts) silently never applied.
+		seedPaths: parseStringList(obj.seedPaths),
 	};
 	return Object.values(worktree).some((entry) => entry !== undefined) ? worktree : undefined;
 }
