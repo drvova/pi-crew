@@ -5,7 +5,7 @@ export const PI_TEAMS_INHERIT_PROJECT_CONTEXT_ENV = "PI_TEAMS_INHERIT_PROJECT_CO
 export const PI_TEAMS_INHERIT_SKILLS_ENV = "PI_TEAMS_INHERIT_SKILLS";
 export const PI_CREW_INHERIT_PROJECT_CONTEXT_ENV = "PI_CREW_INHERIT_PROJECT_CONTEXT";
 export const PI_CREW_INHERIT_SKILLS_ENV = "PI_CREW_INHERIT_SKILLS";
-const PI_CREW_MAX_OUTPUT_TOKENS_ENV = "PI_CREW_MAX_OUTPUT_TOKENS";
+const PI_CREW_MAX_OUTPUT_ENV = "PI_CREW_MAX_OUTPUT";
 const PI_CREW_STEERING_FILE_ENV = "PI_CREW_STEERING_FILE";
 
 const PROJECT_CONTEXT_HEADER = "\n\n# Project Context\n\nProject-specific instructions and guidelines:\n\n";
@@ -64,7 +64,7 @@ export default function registerPiTeamsPromptRuntime(pi: ExtensionAPI): void {
 	// ── Feature 1: maxTokens cap ──────────────────────────────────────────
 	// Cap output tokens per API call for background workers. Reads
 	// PI_CREW_MAX_OUTPUT_TOKENS env (set by pi-args.ts from agent.maxTokens).
-	const maxTokensEnv = process.env[PI_CREW_MAX_OUTPUT_TOKENS_ENV];
+	const maxTokensEnv = process.env[PI_CREW_MAX_OUTPUT_ENV];
 	const maxTokensCap = maxTokensEnv ? Number.parseInt(maxTokensEnv, 10) : undefined;
 	if (maxTokensCap && maxTokensCap > 0) {
 		pi.on("before_provider_request", (event) => {

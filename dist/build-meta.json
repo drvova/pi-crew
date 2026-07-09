@@ -7088,7 +7088,7 @@
       "format": "esm"
     },
     "src/runtime/pi-args.ts": {
-      "bytes": 27501,
+      "bytes": 27494,
       "imports": [
         {
           "path": "node:fs",
@@ -7341,7 +7341,7 @@
       "format": "esm"
     },
     "src/runtime/child-pi.ts": {
-      "bytes": 65835,
+      "bytes": 65884,
       "imports": [
         {
           "path": "node:child_process",
@@ -8003,7 +8003,7 @@
       "format": "esm"
     },
     "src/agents/discover-agents.ts": {
-      "bytes": 25500,
+      "bytes": 25646,
       "imports": [
         {
           "path": "node:fs",
@@ -18334,7 +18334,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6599432
+      "bytes": 6599789
     },
     "dist/index.mjs": {
       "imports": [
@@ -20642,7 +20642,7 @@
           "bytesInOutput": 1291
         },
         "src/runtime/pi-args.ts": {
-          "bytesInOutput": 15102
+          "bytesInOutput": 15095
         },
         "src/runtime/runtime-warmup.ts": {
           "bytesInOutput": 1998
@@ -20705,7 +20705,7 @@
           "bytesInOutput": 1642
         },
         "src/runtime/child-pi.ts": {
-          "bytesInOutput": 45341
+          "bytesInOutput": 45400
         },
         "src/runtime/heartbeat-gradient.ts": {
           "bytesInOutput": 953
@@ -20783,7 +20783,7 @@
           "bytesInOutput": 5482
         },
         "src/agents/discover-agents.ts": {
-          "bytesInOutput": 15168
+          "bytesInOutput": 15325
         },
         "src/utils/git.ts": {
           "bytesInOutput": 5972
@@ -22028,7 +22028,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3146933
+      "bytes": 3147142
     }
   }
 }

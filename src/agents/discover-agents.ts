@@ -431,6 +431,10 @@ function parseAgentFile(filePath: string, source: ResourceSource): AgentConfig |
 				const n = Number.parseInt(frontmatter.maxTurns, 10);
 				return Number.isFinite(n) && n > 0 ? n : undefined;
 			})(),
+			maxTokens: (() => {
+				const n = Number.parseInt(frontmatter.maxTokens, 10);
+				return Number.isFinite(n) && n > 0 ? n : undefined;
+			})(),
 			effort:
 				frontmatter.effort === "low" || frontmatter.effort === "medium" || frontmatter.effort === "high"
 					? frontmatter.effort

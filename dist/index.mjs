@@ -16492,7 +16492,7 @@ function buildPiWorkerArgs(input) {
       PI_TEAMS_MAX_DEPTH: String(maxDepth),
       PI_TEAMS_ROLE: input.agent.name,
       // maxTokens cap for background workers — prompt-runtime reads this to cap API output
-      ...input.agent.maxTokens ? { PI_CREW_MAX_OUTPUT_TOKENS: String(input.agent.maxTokens) } : {}
+      ...input.agent.maxTokens ? { PI_CREW_MAX_OUTPUT: String(input.agent.maxTokens) } : {}
     },
     tempDir
   };
@@ -19351,7 +19351,9 @@ var init_child_pi = __esm({
       "PI_TEAMS_INHERIT_SKILLS",
       "PI_TEAMS_PI_BIN",
       "PI_TEAMS_MOCK_CHILD_PI",
-      "PI_CREW_ALLOW_MOCK"
+      "PI_CREW_ALLOW_MOCK",
+      "PI_CREW_MAX_OUTPUT",
+      "PI_CREW_STEERING_FILE"
     ];
     ChildPiLineObserver = class _ChildPiLineObserver {
       buffer = "";
@@ -22158,6 +22160,10 @@ function parseAgentFile(filePath, source) {
       contextMode,
       maxTurns: (() => {
         const n = Number.parseInt(frontmatter.maxTurns, 10);
+        return Number.isFinite(n) && n > 0 ? n : void 0;
+      })(),
+      maxTokens: (() => {
+        const n = Number.parseInt(frontmatter.maxTokens, 10);
         return Number.isFinite(n) && n > 0 ? n : void 0;
       })(),
       effort: frontmatter.effort === "low" || frontmatter.effort === "medium" || frontmatter.effort === "high" ? frontmatter.effort : void 0,

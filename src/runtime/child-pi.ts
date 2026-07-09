@@ -319,6 +319,8 @@ const BASE_ALLOWLIST: string[] = [
 	"PI_TEAMS_PI_BIN",
 	"PI_TEAMS_MOCK_CHILD_PI",
 	"PI_CREW_ALLOW_MOCK",
+	"PI_CREW_MAX_OUTPUT",
+	"PI_CREW_STEERING_FILE",
 ];
 
 export function buildChildPiSpawnOptions(cwd: string, env: NodeJS.ProcessEnv, model?: string): SpawnOptions {
