@@ -260,32 +260,43 @@ function renameWithLinkSync(tempPath: string, filePath: string, retries = 8): vo
 	let lastError: unknown;
 	for (let attempt = 0; attempt <= retries; attempt++) {
 		try {
-			// Windows: hard links fail with ENOENT when short-name and long-name
-			// path aliases are mixed (e.g. RUNNER~1 vs runneradmin). Use
-			// renameSync which handles this correctly via MoveFileEx.
 			if (process.platform === "win32") {
-				try {
-					fs.unlinkSync(filePath);
-				} catch {
-					/* destination may not exist */
-				}
+				// B9: MoveFileEx (Node's renameSync on Windows) replaces the destination atomically
+				// with MOVEFILE_REPLACE_EXISTING, so no prior unlink is needed. Unlinking first
+				// opened a window where concurrent readers saw ENOENT between the unlink and
+				// the rename. Try rename directly; only fall back to unlink-then-rename for
+				// edge cases (read-only dest / type mismatch / short-long-name alias).
 				try {
 					fs.renameSync(tempPath, filePath);
 					return;
 				} catch (renameError) {
 					lastError = renameError;
-					if (!isRetryableLinkError(renameError) || attempt === retries) break;
+					if (isRetryableLinkError(renameError) && attempt !== retries) {
+						// retryable — loop again after sleep
+					} else {
+						try {
+							fs.unlinkSync(filePath);
+						} catch {
+							/* destination may not exist */
+						}
+						try {
+							fs.renameSync(tempPath, filePath);
+							return;
+						} catch (renameError2) {
+							lastError = renameError2;
+							if (!isRetryableLinkError(renameError2) || attempt === retries) break;
+						}
+					}
 				}
 			} else {
-				// First try to unlink any existing file at destination (hard links don't follow symlinks)
 				try {
 					fs.unlinkSync(filePath);
 				} catch {
 					/* destination may not exist */
 				}
-				// Create hard link - does NOT follow symlinks at filePath
+				// Create hard link — does NOT follow symlinks at filePath
 				fs.linkSync(tempPath, filePath);
-				// Successfully linked - now unlink the temp file
+				// Successfully linked — now unlink the temp file
 				fs.unlinkSync(tempPath);
 				return;
 			}
@@ -305,17 +316,32 @@ async function renameWithLinkAsync(tempPath: string, filePath: string, retries =
 	for (let attempt = 0; attempt <= retries; attempt++) {
 		try {
 			if (process.platform === "win32") {
-				try {
-					await fs.promises.unlink(filePath);
-				} catch {
-					/* destination may not exist */
-				}
+				// B9: MoveFileEx (Node's rename on Windows) replaces the destination atomically
+				// with MOVEFILE_REPLACE_EXISTING, so no prior unlink is needed. Unlinking first
+				// opened a window where concurrent readers saw ENOENT between the unlink and
+				// the rename. Try rename directly; only fall back to unlink-then-rename for
+				// edge cases (read-only dest / type mismatch / short-long-name alias).
 				try {
 					await fs.promises.rename(tempPath, filePath);
 					return;
 				} catch (renameError) {
 					lastError = renameError;
-					if (!isRetryableLinkError(renameError) || attempt === retries) break;
+					if (isRetryableLinkError(renameError) && attempt !== retries) {
+						// retryable — loop again after sleep
+					} else {
+						try {
+							await fs.promises.unlink(filePath);
+						} catch {
+							/* destination may not exist */
+						}
+						try {
+							await fs.promises.rename(tempPath, filePath);
+							return;
+						} catch (renameError2) {
+							lastError = renameError2;
+							if (!isRetryableLinkError(renameError2) || attempt === retries) break;
+						}
+					}
 				}
 			} else {
 				try {
@@ -323,7 +349,9 @@ async function renameWithLinkAsync(tempPath: string, filePath: string, retries =
 				} catch {
 					/* destination may not exist */
 				}
+				// Create hard link — does NOT follow symlinks at filePath
 				await fs.promises.link(tempPath, filePath);
+				// Successfully linked — now unlink the temp file
 				await fs.promises.unlink(tempPath);
 				return;
 			}
@@ -337,7 +365,6 @@ async function renameWithLinkAsync(tempPath: string, filePath: string, retries =
 	}
 	throw lastError;
 }
-
 export function renameWithRetry(
 	tempPath: string,
 	filePath: string,
