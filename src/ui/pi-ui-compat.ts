@@ -50,7 +50,8 @@ type FooterFactory = (tui: unknown, theme: unknown, footerData: unknown) => unkn
 
 /** Install a custom footer component, or pass `undefined` to restore pi's built-in footer.
  * No-op when the host UI predates the `setFooter` API. */
-export function setFooter(ctx: UiContext, factory: FooterFactory | undefined): void {
+export function setFooter(ctx: UiContext | undefined, factory: FooterFactory | undefined): void {
+	if (!ctx) return;
 	const record = maybeRecord(ctx.ui);
 	const fn = record?.setFooter;
 	if (typeof fn === "function") fn.call(ctx.ui, factory as never);

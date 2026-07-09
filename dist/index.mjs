@@ -19624,6 +19624,7 @@ function setExtensionWidget(ctx, key, content, options) {
   ctx.ui.setWidget(key, content, widgetOptions);
 }
 function setFooter(ctx, factory) {
+  if (!ctx) return;
   const record = maybeRecord(ctx.ui);
   const fn = record?.setFooter;
   if (typeof fn === "function") fn.call(ctx.ui, factory);

@@ -7500,7 +7500,7 @@
       "format": "esm"
     },
     "src/ui/pi-ui-compat.ts": {
-      "bytes": 2664,
+      "bytes": 2695,
       "imports": [],
       "format": "esm"
     },
@@ -18390,7 +18390,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6636181
+      "bytes": 6636234
     },
     "dist/index.mjs": {
       "imports": [
@@ -20778,7 +20778,7 @@
           "bytesInOutput": 1800
         },
         "src/ui/pi-ui-compat.ts": {
-          "bytesInOutput": 1048
+          "bytesInOutput": 1068
         },
         "src/runtime/cancellation.ts": {
           "bytesInOutput": 2293
@@ -22095,7 +22095,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3161806
+      "bytes": 3161826
     }
   }
 }
