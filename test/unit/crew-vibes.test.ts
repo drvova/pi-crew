@@ -195,13 +195,13 @@ test("PROVIDER_STATUS_ID is the expected status id", () => {
 
 test("DEFAULT_CONFIG has providerUsage enabled with 5min refresh", () => {
 	assert.equal(DEFAULT_CONFIG.capacity.providerUsage, true);
-	assert.equal(DEFAULT_CONFIG.capacity.providerRefreshMs, 300000);
+	assert.equal(DEFAULT_CONFIG.capacity.providerRefreshMs, 120000);
 });
 
 test("normalizeConfig fills providerUsage defaults from empty input", () => {
 	const cfg = normalizeConfig({});
 	assert.equal(cfg.capacity.providerUsage, true);
-	assert.equal(cfg.capacity.providerRefreshMs, 300000);
+	assert.equal(cfg.capacity.providerRefreshMs, 120000);
 });
 
 test("normalizeConfig accepts custom providerUsage settings", () => {
@@ -212,9 +212,9 @@ test("normalizeConfig accepts custom providerUsage settings", () => {
 
 test("normalizeConfig clamps invalid providerRefreshMs to the default", () => {
 	const negative = normalizeConfig({ capacity: { providerRefreshMs: -5 } });
-	assert.equal(negative.capacity.providerRefreshMs, 300000);
+	assert.equal(negative.capacity.providerRefreshMs, 120000);
 	const nonNumeric = normalizeConfig({ capacity: { providerRefreshMs: "nope" } });
-	assert.equal(nonNumeric.capacity.providerRefreshMs, 300000);
+	assert.equal(nonNumeric.capacity.providerRefreshMs, 120000);
 });
 
 // ---------------------------------------------------------------------------
