@@ -1,5 +1,5 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export const PI_TEAMS_INHERIT_PROJECT_CONTEXT_ENV = "PI_TEAMS_INHERIT_PROJECT_CONTEXT";
 export const PI_TEAMS_INHERIT_SKILLS_ENV = "PI_TEAMS_INHERIT_SKILLS";

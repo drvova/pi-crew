@@ -71,9 +71,7 @@ function checkResultFile(manifest: TeamRunManifest, tasks: TeamTaskState[]): { f
 		// Derive the run status from task outcomes instead of blindly marking
 		// "completed": a run where every task failed/cancelled is NOT a success.
 		const hasFailed = tasks.some((t) => t.status === "failed");
-		const onlyCancelledOrSkipped = tasks.every(
-			(t) => t.status === "cancelled" || t.status === "skipped",
-		);
+		const onlyCancelledOrSkipped = tasks.every((t) => t.status === "cancelled" || t.status === "skipped");
 		manifest.status = hasFailed ? "failed" : onlyCancelledOrSkipped ? "cancelled" : "completed";
 		// Persist manifest status change immediately to make checkResultFile self-contained.
 		saveRunManifest(manifest);

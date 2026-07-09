@@ -558,12 +558,7 @@ export function overlaySeedPaths(repoRoot: string, worktreePath: string, seedPat
  * recovered via `git apply` / manual restore. Best-effort: a snapshot failure
  * only logs (it must not block the clean-slate reuse flow).
  */
-function snapshotDirtyWorktree(
-	manifest: TeamRunManifest,
-	task: TeamTaskState,
-	worktreePath: string,
-	dirtyStatus: string,
-): void {
+function snapshotDirtyWorktree(manifest: TeamRunManifest, task: TeamTaskState, worktreePath: string, dirtyStatus: string): void {
 	try {
 		const parts: string[] = [
 			`# Worktree recovery snapshot`,

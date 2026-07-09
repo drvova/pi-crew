@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
 	clearRpcSecret,
-	setRpcSecret,
 	createRpcSignature,
-	verifyRpcSignature,
-	signRpcRequest,
-	withHmacVerification,
 	extractSignaturePayload,
 	isHmacEnabled,
 	RPC_HMAC_VERSION,
+	setRpcSecret,
+	signRpcRequest,
+	verifyRpcSignature,
+	withHmacVerification,
 } from "../../src/extension/rpc-hmac.ts";
 
 describe("RPC HMAC authentication", () => {

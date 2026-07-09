@@ -5,8 +5,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import type { TeamRunManifest, TeamTaskState } from "../../src/state/types.ts";
-import { assertCleanLeader, findGitRoot, prepareTaskWorkspace } from "../../src/worktree/worktree-manager.ts";
 import { cleanupRunWorktrees } from "../../src/worktree/cleanup.ts";
+import { assertCleanLeader, findGitRoot, prepareTaskWorkspace } from "../../src/worktree/worktree-manager.ts";
 
 function makeRepoTemp(prefix: string): string {
 	let dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -159,32 +159,26 @@ test("setupHook never uses shell:true regardless of platform (C3 security fix)",
 	assert.ok(hookSection.includes("process.execPath"), "Node hook handling via process.execPath is preserved");
 });
 
-test(
-	"prepareTaskWorkspace cleans up worktree+branch when a post-creation step fails (C5 regression)",
-	() => {
-		const repo = makeRepoTemp("pi-crew-wt-c5-");
-		initGitRepo(repo);
-		const manifest = minimalManifest(repo, "run-c5");
-		const task = minimalTask("task-c5", repo);
-		// A seedPath that escapes repoRoot makes normalizeSeedPaths throw AFTER the
-		// worktree+branch were created. Without the fix this leaked an orphaned
-		// worktree dir + branch that blocked the next run with "already checked out".
-		assert.throws(
-			() => prepareTaskWorkspace(manifest, task, ["../../../etc/passwd"]),
-			/seedPaths entries must stay inside repoRoot/i,
-		);
-		// No orphaned branch should remain.
-		const branches = execFileSync("git", ["branch", "--list", "pi-crew/run-c5/task-c5"], {
-			cwd: repo,
-			encoding: "utf-8",
-		}).trim();
-		assert.equal(branches, "", "orphaned branch must be cleaned up after post-creation failure");
-		// No orphaned worktree entry should remain.
-		const worktrees = execFileSync("git", ["worktree", "list"], { cwd: repo, encoding: "utf-8" });
-		assert.ok(!worktrees.includes("task-c5"), "orphaned worktree must be cleaned up after post-creation failure");
-		fs.rmSync(repo, { recursive: true, force: true });
-	},
-);
+test("prepareTaskWorkspace cleans up worktree+branch when a post-creation step fails (C5 regression)", () => {
+	const repo = makeRepoTemp("pi-crew-wt-c5-");
+	initGitRepo(repo);
+	const manifest = minimalManifest(repo, "run-c5");
+	const task = minimalTask("task-c5", repo);
+	// A seedPath that escapes repoRoot makes normalizeSeedPaths throw AFTER the
+	// worktree+branch were created. Without the fix this leaked an orphaned
+	// worktree dir + branch that blocked the next run with "already checked out".
+	assert.throws(() => prepareTaskWorkspace(manifest, task, ["../../../etc/passwd"]), /seedPaths entries must stay inside repoRoot/i);
+	// No orphaned branch should remain.
+	const branches = execFileSync("git", ["branch", "--list", "pi-crew/run-c5/task-c5"], {
+		cwd: repo,
+		encoding: "utf-8",
+	}).trim();
+	assert.equal(branches, "", "orphaned branch must be cleaned up after post-creation failure");
+	// No orphaned worktree entry should remain.
+	const worktrees = execFileSync("git", ["worktree", "list"], { cwd: repo, encoding: "utf-8" });
+	assert.ok(!worktrees.includes("task-c5"), "orphaned worktree must be cleaned up after post-creation failure");
+	fs.rmSync(repo, { recursive: true, force: true });
+});
 
 test("cleanupRunWorktrees preserves a dirty worktree without force, commits+removes with force (C9)", () => {
 	const repo = makeRepoTemp("pi-crew-c9-");

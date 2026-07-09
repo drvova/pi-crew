@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type CrewVibesConfig, loadConfig, PROVIDER_STATUS_ID, saveConfig } from "./config.ts";
-import { fetchProviderUsage, clearProviderUsageCache, providerSupportsQuota } from "./provider-usage.ts";
 import { intervalForSpeed } from "./figures.ts";
+import { clearProviderUsageCache, fetchProviderUsage, providerSupportsQuota } from "./provider-usage.ts";
 import {
 	asCrewTheme,
 	clearVibesStatus,

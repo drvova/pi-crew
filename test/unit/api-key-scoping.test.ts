@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { buildChildPiSpawnOptions } from "../../src/runtime/child-pi.ts";
 
 // Per-task API key scoping: a worker assigned to a specific model only receives

@@ -92,11 +92,7 @@ function spawnTaskkillSafe(pid: number): void {
 		windowsHide: true,
 	});
 	taskkillChild.on("error", (err) => {
-		logInternalError(
-			"child-pi.taskkill-spawn-error",
-			err instanceof Error ? err : new Error(String(err)),
-			`pid=${pid}`,
-		);
+		logInternalError("child-pi.taskkill-spawn-error", err instanceof Error ? err : new Error(String(err)), `pid=${pid}`);
 	});
 }
 

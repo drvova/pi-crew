@@ -1,5 +1,5 @@
 import * as crypto from "node:crypto";
-import { isHmacEnabled, extractSignaturePayload, verifyRpcSignature } from "../extension/rpc-hmac.ts";
+import { extractSignaturePayload, isHmacEnabled, verifyRpcSignature } from "../extension/rpc-hmac.ts";
 
 export interface EventBus {
 	on(event: string, handler: (data: unknown) => void): () => void;

@@ -111,9 +111,7 @@ describe("H2: Event log sync/async coordination", () => {
 		// seqs. With correct compare-and-delete serialization, all seqs are unique.
 		const N = 60;
 		const results = await Promise.all(
-			Array.from({ length: N }, (_, i) =>
-				appendEventAsync(eventsPath, { type: `test.c7.${i}`, runId: "test-run" }),
-			),
+			Array.from({ length: N }, (_, i) => appendEventAsync(eventsPath, { type: `test.c7.${i}`, runId: "test-run" })),
 		);
 		const seqs = results.map((r) => r.metadata?.seq).filter((s): s is number => typeof s === "number");
 		const unique = new Set(seqs);
