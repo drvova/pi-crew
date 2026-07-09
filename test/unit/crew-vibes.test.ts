@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { DEFAULT_CONFIG, normalizeConfig, PROVIDER_STATUS_ID } from "../../src/extension/crew-vibes/config.ts";
 import { capacityIndex, intervalForSpeed, isDangerStage, RUN_CREW_FRAMES } from "../../src/extension/crew-vibes/figures.ts";
+import { createCrewVibesFooter } from "../../src/extension/crew-vibes/footer.ts";
 import { clearProviderUsageCache, fetchProviderUsage } from "../../src/extension/crew-vibes/provider-usage.ts";
 import {
 	asCrewTheme,
@@ -299,6 +300,71 @@ test("renderProviderUsage works without theme (plain text)", () => {
 	const out = renderProviderUsage(undefined, usage);
 	assert.match(out!, /^Test 5h [\u2501\u2504]+ 45% Wk [\u2501\u2504]+ 23%$/);
 	assert.doesNotMatch(out!, /</);
+});
+
+// ---------------------------------------------------------------------------
+// footer.ts: custom setFooter component (definitive quota-truncation fix)
+// ---------------------------------------------------------------------------
+
+// Plain no-op theme so visibleWidth math is exact (no ANSI/markup to count).
+const plainTheme = { fg: (_c: string, text: string) => text, bold: (text: string) => text };
+
+function footerCtx() {
+	return {
+		hasUI: true,
+		sessionManager: { getCwd: () => "/tmp/proj", getSessionName: () => undefined, getEntries: () => [] },
+		modelRegistry: { isUsingOAuth: () => false },
+		model: { id: "m", provider: "anthropic", reasoning: false, contextWindow: 200000 },
+		getContextUsage: () => ({ tokens: 1000, percent: 5, contextWindow: 200000 }),
+	};
+}
+
+function footerData(entries: [string, string][]) {
+	return {
+		getGitBranch: () => null,
+		getExtensionStatuses: () => new Map(entries),
+		getAvailableProviderCount: () => 1,
+		onBranchChange: () => () => {},
+	};
+}
+
+const footerQuota = { providerName: "Minimax", fiveHourPercent: 29, fiveHourResetAt: null, weeklyPercent: 19, weeklyResetAt: null };
+
+test("custom footer keeps provider quota intact when other statuses overflow and truncate", () => {
+	const bigStatus = `⚙ ${"x".repeat(200)}`; // exceeds width → forces pi-style right-truncation
+	const footer = createCrewVibesFooter({
+		tui: {},
+		theme: plainTheme,
+		footerData: footerData([["pi-crew", bigStatus]]),
+		ctx: footerCtx() as never,
+		source: { getConfig: () => DEFAULT_CONFIG, getQuotaUsage: () => footerQuota, getThinkingLevel: () => undefined },
+	});
+	const lines = footer.render(120);
+	const meter = lines[lines.length - 1];
+	// Quota (incl. the weekly bar that used to be chopped to "W...") is fully present.
+	assert.match(meter, /Wk/);
+	assert.match(meter, /19%/);
+	assert.match(meter, /1\.0k/); // capacity + quota share one line at width 120
+	// The joined extension-status line is what gets truncated, NOT the quota line.
+	assert.ok(
+		lines.some((line) => line.includes("...")),
+		"overflowing status line should be truncated",
+	);
+});
+
+test("custom footer wraps capacity + quota onto two lines when the terminal is narrow", () => {
+	const footer = createCrewVibesFooter({
+		tui: {},
+		theme: plainTheme,
+		footerData: footerData([]),
+		ctx: footerCtx() as never,
+		source: { getConfig: () => DEFAULT_CONFIG, getQuotaUsage: () => footerQuota, getThinkingLevel: () => undefined },
+	});
+	const lines = footer.render(45);
+	assert.equal(lines.length, 4); // pwd, stats, capacity, quota
+	assert.match(lines[3], /Minimax/);
+	assert.match(lines[3], /19%/);
+	assert.match(lines[2], /1\.0k/);
 });
 
 // ---------------------------------------------------------------------------

@@ -1,19 +1,17 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { requestRender, setFooter } from "../../ui/pi-ui-compat.ts";
 import { type CrewVibesConfig, loadConfig, PROVIDER_STATUS_ID, saveConfig } from "./config.ts";
 import { intervalForSpeed } from "./figures.ts";
-import { clearProviderUsageCache, fetchProviderUsage, providerSupportsQuota } from "./provider-usage.ts";
+import { type CrewVibesFooterSource, createCrewVibesFooter } from "./footer.ts";
+import { clearProviderUsageCache, fetchProviderUsage, type ProviderUsage } from "./provider-usage.ts";
 import {
 	asCrewTheme,
 	clearVibesStatus,
 	crewIndicatorFrames,
 	formatSpeed,
 	getCapacityUsage,
-	renderCapacity,
-	renderProviderUsage,
 	renderSpeedFooter,
 	renderWorkingMessage,
-	setCapacityStatus,
-	setProviderStatus,
 	setSpeedStatus,
 } from "./render.ts";
 import { SpeedAnimator, SpeedTracker } from "./speed.ts";
@@ -49,37 +47,41 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	let footerTimer: ReturnType<typeof setInterval> | undefined;
 	let capacityTimer: ReturnType<typeof setInterval> | undefined;
 	let providerTimer: ReturnType<typeof setInterval> | undefined;
-	let lastProviderText: string | undefined;
+	let lastProviderUsage: ProviderUsage | null = null;
 	let currentProvider: string | undefined;
-
-	/** Strip ANSI codes to measure visible width. */
-	function visibleLen(text: string): number {
-		return text.replace(/\x1b\[[0-9;]*m/g, "").length;
-	}
-
-	/** Left-align `left`, right-align `right` on the same line.
-	 * Uses non-breaking space (U+00A0) for padding because pi's
-	 * sanitizeStatusText collapses regular spaces: / +/g → " ". */
-	function spreadLine(left: string, right: string): string {
-		const cols = process.stdout.columns || 120;
-		const padding = Math.max(2, cols - visibleLen(left) - visibleLen(right));
-		return left + "\u00A0".repeat(padding) + right;
-	}
+	let currentThinkingLevel: string | undefined;
 
 	function themeOf(ctx: ExtensionContext) {
 		return asCrewTheme(ctx.hasUI ? ctx.ui.theme : undefined);
 	}
 
-	function publishCapacity(ctx: ExtensionContext): void {
+	const footerSource: CrewVibesFooterSource = {
+		getConfig: () => config,
+		getQuotaUsage: () => lastProviderUsage,
+		getThinkingLevel: () => currentThinkingLevel,
+	};
+
+	/** Whether the custom footer has crew-vibes meters to add on top of pi's stats. */
+	function metersActive(): boolean {
+		return config.enabled && (config.capacity.enabled || config.capacity.providerUsage);
+	}
+
+	/** Install our custom footer, or restore pi's built-in footer when idle.
+	 * Unlike setStatus (joined + right-truncated), the footer's render(width)
+	 * gets the real width and owns line layout, so the quota is never chopped. */
+	function installFooter(ctx: ExtensionContext): void {
 		if (!ctx?.hasUI) return;
-		if (!config.enabled || !config.capacity.enabled) {
-			setCapacityStatus(ctx, config, undefined);
+		if (!metersActive()) {
+			setFooter(ctx, undefined);
 			return;
 		}
-		const capText = renderCapacity(themeOf(ctx), config.capacity, getCapacityUsage(ctx));
-		// Combine capacity + provider on one line with spacing
-		const combined = lastProviderText ? spreadLine(capText, lastProviderText) : capText;
-		setCapacityStatus(ctx, config, combined);
+		setFooter(ctx, (tui, theme, footerData) => createCrewVibesFooter({ tui, theme, footerData, ctx, source: footerSource }));
+		requestRender(ctx);
+	}
+
+	/** Trigger a footer repaint; the footer recomputes capacity/quota on render. */
+	function refreshFooter(ctx: ExtensionContext): void {
+		if (ctx?.hasUI) requestRender(ctx);
 	}
 
 	function publishSpeedFooter(ctx: ExtensionContext, speed = footerAnimator.value()): void {
@@ -164,7 +166,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	function startCapacityTimer(ctx: ExtensionContext): void {
 		if (capacityTimer) return;
 		const interval = Math.max(250, config.capacity.refreshIntervalMs);
-		capacityTimer = setInterval(() => publishCapacity(ctx), interval);
+		capacityTimer = setInterval(() => refreshFooter(ctx), interval);
 		capacityTimer.unref?.();
 	}
 
@@ -179,15 +181,12 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 				return;
 			}
 			try {
-				const usage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
-				lastProviderText = renderProviderUsage(themeOf(ctx), usage);
-				// Re-render combined capacity + provider line
-				publishCapacity(ctx);
+				lastProviderUsage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
 			} catch {
 				// Never crash on provider fetch failure
-				lastProviderText = undefined;
-				publishCapacity(ctx);
+				lastProviderUsage = null;
 			}
+			refreshFooter(ctx);
 		}
 
 		tick(); // Fetch immediately on start
@@ -209,11 +208,13 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			stopFooterTimer();
 			stopCapacityTimer();
 			stopProviderTimer();
+			setFooter(ctx, undefined);
 			clearVibesStatus(ctx);
 			return;
 		}
-		publishCapacity(ctx);
+		installFooter(ctx);
 		publishSpeedFooter(ctx);
+		startCapacityTimer(ctx);
 		if (config.capacity.providerUsage) startProviderTimer(ctx);
 	}
 
@@ -230,11 +231,13 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		clearProviderUsageCache();
 		// Initialize provider from current model — model_select only fires on manual switch
 		currentProvider = (ctx.model as { provider?: string } | undefined)?.provider;
+		currentThinkingLevel = undefined;
 		if (!config.enabled) {
+			setFooter(ctx, undefined);
 			clearVibesStatus(ctx);
 			return;
 		}
-		publishCapacity(ctx);
+		installFooter(ctx);
 		publishSpeedFooter(ctx);
 		startCapacityTimer(ctx);
 		startProviderTimer(ctx);
@@ -285,7 +288,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 
 	pi.on("message_end", (event, ctx) => {
 		if (!isAssistantMessage(event.message)) return;
-		publishCapacity(ctx);
+		refreshFooter(ctx);
 		if (!config.enabled || !config.speed.enabled || !speedTracker.isStreaming) return;
 
 		const completed = speedTracker.finishMessage(assistantUsageOutput(event.message) ?? 0, assistantStopReason(event.message));
@@ -314,16 +317,21 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 	pi.on("model_select", (event, ctx) => {
 		currentProvider = (event as { model?: { provider?: string } }).model?.provider;
 		clearProviderUsageCache();
-		publishCapacity(ctx);
+		refreshFooter(ctx);
 	});
-	pi.on("session_compact", (_event, ctx) => publishCapacity(ctx));
-	pi.on("session_tree", (_event, ctx) => publishCapacity(ctx));
+	pi.on("thinking_level_select", (event, ctx) => {
+		currentThinkingLevel = (event as { level?: unknown }).level as string | undefined;
+		refreshFooter(ctx);
+	});
+	pi.on("session_compact", (_event, ctx) => refreshFooter(ctx));
+	pi.on("session_tree", (_event, ctx) => refreshFooter(ctx));
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		stopLiveTimer();
 		stopFooterTimer();
 		stopCapacityTimer();
 		stopProviderTimer();
+		setFooter(ctx, undefined);
 		clearVibesStatus(ctx);
 	});
 

@@ -1,9 +1,17 @@
 # Bug: Provider quota display truncated to "W..." during sub-agent runs
 
-**Status:** UNFIXABLE IN EXTENSION LAYER — needs upstream pi fix or workaround.
+**Status:** FIXED via custom footer (`ctx.ui.setFooter`). See "Resolution" below.
 **Severity:** Cosmetic
 **Affected:** `src/extension/crew-vibes/` (provider quota renderer)
 **Reporter:** user (live observation, 2026-07-09)
+
+> Correction: the earlier "UNFIXABLE IN EXTENSION LAYER / WONTFIX" verdict was
+> wrong on two counts. (1) The `spreadLine` U+00A0 full-width padding (from
+> commit `f0baee9`) was described as "reverted attempt 1" but was in fact still
+> ACTIVE and was the direct cause — it padded our row to the full terminal width
+> using `process.stdout.columns` (which differs from pi's real render width),
+> guaranteeing overflow and right-truncation of the quota. (2) Option A (custom
+> footer) was never actually attempted; it is viable and is what the fix uses.
 
 ---
 
@@ -144,15 +152,56 @@ usually.
 Cost: loses reset timers and weekly bar visualization. User originally
 wanted the bars.
 
-## Decision
+## Why the 5 prior attempts all failed (same root cause)
 
-After 5 reverted attempts (commits 81859e6, a74e453, a9eb30e, 900737c,
-5e56b63), the only fix that puts quota in the footer is option A
-(custom footer) which is too invasive for a cosmetic bug. The
-remaining options either change display location or lose info.
+All five fought the truncation from INSIDE `setStatus`, where an extension
+cannot see (a) the `pi-crew` widget status width that grows during sub-agent
+runs, (b) other extensions' widths, (c) pi's real render width, and where pi
+always right-truncates the joined line:
 
-**Status: WONTFIX (in current state).** If a future user reports this
-as a blocker, implement option A.
+- `81859e6` — split into `pi-crew-quota` key. pi joins all keys onto one line;
+  quota still rightmost → still chopped. (Misdiagnosed as slot-overwrite.)
+- `a74e453` — NBSP pad by `cols - quotaWidth - 1`. Ignores capacity + widget
+  widths → overflow → chop.
+- `a9eb30e` — NBSP pad by `cols - quotaWidth - capWidth - 1`. Still ignores the
+  widget width and other extensions → overflow.
+- `900737c` — `setWidget(belowEditor)` 2-line. Works (no truncation) but sits
+  below the editor, not in the footer. Rejected.
+- `5e56b63` — one status line + NBSP pad (`process.stdout.columns`). Same flaw
+  as #2/#3, plus a width source that disagrees with pi's actual render width.
+
+## Resolution (implemented)
+
+Definitive fix = option A, **custom footer via `ctx.ui.setFooter(factory)`** —
+the one approach none of the 5 attempts tried. It sidesteps every failure mode
+above because the footer `Component`'s `render(width)` receives pi's REAL render
+width and we own the line layout, so the meters get their own line(s) that the
+join can never truncate.
+
+- `src/extension/crew-vibes/footer.ts` — `CrewVibesFooter implements Component`.
+  Reproduces pi's built-in footer lines (pwd/branch/session; token stats + cost
+  + context% + model + thinking) from `ctx.sessionManager`/`ctx.model`/
+  `ctx.getContextUsage()`/`footerData`, keeps other extensions' statuses on the
+  joined line (still truncated, like pi), and renders **capacity + quota on a
+  dedicated line** using the real width. When the terminal is too narrow, the
+  meters wrap to two lines (capacity above, quota right-aligned below).
+- `src/extension/crew-vibes/index.ts` — installs the footer on `session_start`
+  (and re-install/remove in `applyConfig`), restores pi's built-in footer with
+  `setFooter(undefined)` on disable/`session_shutdown`, drops the `spreadLine`
+  padding, stores the raw provider-usage snapshot (rendered by the footer), and
+  tracks thinking level via the `thinking_level_select` event.
+- `src/ui/pi-ui-compat.ts` — added a guarded `setFooter()` wrapper (no-op on
+  hosts that predate the API).
+
+Accepted fidelity trade-offs (pi does not expose these to extensions):
+- The `(auto)` compaction indicator is always shown (matches pi's default);
+  the toggle state is not observable.
+- Thinking level comes from `thinking_level_select`; before the first switch it
+  shows the default ("off").
+
+Proof: `test/unit/crew-vibes.test.ts` adds two tests — quota stays fully visible
+while an overflowing status line is truncated, and the meters wrap to two lines
+on a narrow terminal.
 
 ## How to revert fully
 

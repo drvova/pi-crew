@@ -46,6 +46,16 @@ export function setExtensionWidget(
 	ctx.ui.setWidget(key, content as never, widgetOptions as WidgetOptions);
 }
 
+type FooterFactory = (tui: unknown, theme: unknown, footerData: unknown) => unknown;
+
+/** Install a custom footer component, or pass `undefined` to restore pi's built-in footer.
+ * No-op when the host UI predates the `setFooter` API. */
+export function setFooter(ctx: UiContext, factory: FooterFactory | undefined): void {
+	const record = maybeRecord(ctx.ui);
+	const fn = record?.setFooter;
+	if (typeof fn === "function") fn.call(ctx.ui, factory as never);
+}
+
 export function showCustom<T>(ctx: UiContext, factory: CustomFactory<T>, options?: CustomOptions): Promise<T> {
 	const custom = ctx.ui.custom as unknown as GenericCustom;
 	return custom<T>(factory, options);
