@@ -131,6 +131,25 @@ export function cleanupRunWorktrees(
 		const branchName = `pi-crew/${manifest.runId}/${sanitizeBranchPart(entry.name)}`;
 		const safeBranchName = sanitizeBranchPart(entry.name);
 		if (dirty) {
+			// C9: preserve dirty worktrees unless explicitly forced. Previously the
+			// dirty branch ALWAYS ran 'git add -A' + commit + remove, staging every
+			// untracked file (incl. potential secrets/build artifacts) into a
+			// recovery branch without consent. force=true keeps the old behavior.
+			if (!options.force) {
+				const safePreserveName = sanitizeFilename(entry.name);
+				const artifact = writeArtifact(manifest.artifactsRoot, {
+					kind: "diff",
+					relativePath: `cleanup/${safePreserveName}.diff`,
+					content: captureDiff(worktreePath),
+					producer: "worktree-cleanup",
+				});
+				result.artifactPaths.push(artifact.path);
+				result.preserved.push({
+					path: worktreePath,
+					reason: "dirty worktree preserved \u2014 pass force=true to auto-commit and remove",
+				});
+				continue;
+			}
 			// Issue 1 fix: check signal before git operations
 			if (options.signal?.aborted) break;
 			// Commit changes to a branch instead of just preserving the worktree
