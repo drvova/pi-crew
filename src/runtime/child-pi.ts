@@ -80,6 +80,26 @@ function clearHardKillTimer(pid: number | undefined): void {
 	childHardKillTimers.delete(pid);
 }
 
+/**
+ * B6: spawn taskkill and attach an 'error' listener. spawn() emits ENOENT/EACCES
+ * asynchronously via the 'error' event (not as a throw), so an unlistened spawn
+ * can crash the parent as an uncaught exception. taskkill is a standard Windows
+ * binary so this is defensive, but the listener keeps failures bounded.
+ */
+function spawnTaskkillSafe(pid: number): void {
+	const taskkillChild = spawn("taskkill", ["/pid", String(pid), "/t", "/f"], {
+		stdio: "ignore",
+		windowsHide: true,
+	});
+	taskkillChild.on("error", (err) => {
+		logInternalError(
+			"child-pi.taskkill-spawn-error",
+			err instanceof Error ? err : new Error(String(err)),
+			`pid=${pid}`,
+		);
+	});
+}
+
 export function killProcessPid(pid: number): void {
 	if (!Number.isInteger(pid) || pid <= 0) return;
 	try {
@@ -87,10 +107,7 @@ export function killProcessPid(pid: number): void {
 			// 3.8: Windows path uses taskkill /T /F (force kill the entire tree).
 			// taskkill itself can silently fail (PID gone, permission denied, etc.)
 			// so verify after 2s and log a warning if the process is still alive.
-			spawn("taskkill", ["/pid", String(pid), "/t", "/f"], {
-				stdio: "ignore",
-				windowsHide: true,
-			});
+			spawnTaskkillSafe(pid);
 			const verifyTimer = setTimeout(() => {
 				try {
 					process.kill(pid, 0); // throws ESRCH when dead
@@ -101,10 +118,7 @@ export function killProcessPid(pid: number): void {
 						`pid=${pid}`,
 					);
 					try {
-						spawn("taskkill", ["/pid", String(pid), "/t", "/f"], {
-							stdio: "ignore",
-							windowsHide: true,
-						});
+						spawnTaskkillSafe(pid);
 					} catch {
 						/* best-effort */
 					}
