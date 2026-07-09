@@ -76,6 +76,11 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		}
 	}
 
+	/** Strip ANSI codes to measure visible width. */
+	function visibleLen(text: string): number {
+		return text.replace(/\u001b\[[0-9;]*m/g, "").length;
+	}
+
 	function themeOf(ctx: ExtensionContext) {
 		return asCrewTheme(ctx.hasUI ? ctx.ui.theme : undefined);
 	}
@@ -90,15 +95,30 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		setCapacityStatus(ctx, config, capText);
 	}
 
-	/** Publish provider quota on its own status line (pi-crew-quota). */
+	/** Publish provider quota on its own status line (pi-crew-quota), padded
+	 * with non-breaking spaces on the left to push it to the right edge of
+	 * the terminal. Pi joins all extension statuses with a single ASCII space
+	 * (sorted by key alphabetically), so we can compute the gap between the
+	 * capacity text and the quota text from process.stdout.columns. The trailing
+	 * `\u00A0` is preserved through sanitizeStatusText because pi only collapses
+	 * runs of REGULAR spaces, not U+00A0. */
 	function publishProviderQuota(ctx: ExtensionContext): void {
 		if (!ctx?.hasUI) return;
-		if (!config.enabled || !config.capacity.providerUsage) {
+		if (!config.enabled || !config.capacity.providerUsage || !lastProviderText) {
 			setProviderStatus(ctx, config, undefined);
 			return;
 		}
-		setProviderStatus(ctx, config, lastProviderText);
+		const cols = process.stdout.columns || 120;
+		const quotaVisibleWidth = visibleLen(lastProviderText);
+		// Pi joins: capacity + " " + quotaPadded. We want the trailing visible
+		// column of `quotaPadded` to land at or near column `cols`. So the padding
+		// inside `quotaPadded` is cols - quotaVisibleWidth - 1 (for the joining space).
+		const pad = Math.max(0, cols - quotaVisibleWidth - 1);
+		const padded = "\u00A0".repeat(pad) + lastProviderText;
+		setProviderStatus(ctx, config, padded);
 	}
+
+	
 
 	function publishSpeedFooter(ctx: ExtensionContext, speed = footerAnimator.value()): void {
 		if (!config.enabled || !config.speed.enabled || !config.speed.footer) {
@@ -199,11 +219,12 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			try {
 				const usage = await fetchProviderUsage(config.capacity.providerRefreshMs, currentProvider);
 				lastProviderText = renderProviderUsage(themeOf(ctx), usage);
+				publishProviderQuota(ctx);
 			} catch {
 				// Never crash on provider fetch failure
 				lastProviderText = undefined;
+				publishProviderQuota(ctx);
 			}
-			publishProviderQuota(ctx);
 		}
 
 		tick(); // Fetch immediately on start
@@ -252,6 +273,7 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			return;
 		}
 		publishCapacity(ctx);
+		publishProviderQuota(ctx);
 		publishSpeedFooter(ctx);
 		startCapacityTimer(ctx);
 		startProviderTimer(ctx);
