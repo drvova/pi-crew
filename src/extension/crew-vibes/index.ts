@@ -12,7 +12,8 @@ import {
 	renderProviderUsage,
 	renderSpeedFooter,
 	renderWorkingMessage,
-	setCrewVibesWidget,
+	setCapacityStatus,
+	setProviderStatus,
 	setSpeedStatus,
 } from "./render.ts";
 import { SpeedAnimator, SpeedTracker } from "./speed.ts";
@@ -89,33 +90,40 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 		if (!ctx?.hasUI) return;
 		if (!config.enabled || !config.capacity.enabled) {
 			lastCapacityText = undefined;
-			publishBoth(ctx);
+			setCapacityStatus(ctx, config, undefined);
 			return;
 		}
 		lastCapacityText = renderCapacity(themeOf(ctx), config.capacity, getCapacityUsage(ctx));
-		publishBoth(ctx);
+		setCapacityStatus(ctx, config, lastCapacityText);
 	}
 
-	/** Publish provider quota. Currently a no-op since both lines are pushed
-	 * together in publishBoth() — kept as a hook so the provider timer can
-	 * trigger a refresh without waiting for the next capacity tick. */
+	/** Publish provider quota on its own status line (pi-crew-quota), padded
+	 * with non-breaking spaces on the left to push it to the right edge of
+	 * the terminal. Pi joins all extension statuses with a single ASCII space
+	 * (sorted by key alphabetically), so we can compute the gap between the
+	 * capacity text and the quota text from process.stdout.columns. The trailing
+	 * `\u00A0` is preserved through sanitizeStatusText because pi only collapses
+	 * runs of REGULAR spaces, not U+00A0. */
 	function publishProviderQuota(ctx: ExtensionContext): void {
-		publishBoth(ctx);
-	}
-
-	/** Push capacity + provider quota as a 2-line widget. setWidget uses
-	 * `wrapTextWithAnsi` per line (no truncate, no "..."), so each line
-	 * keeps its full content regardless of terminal width. */
-	function publishBoth(ctx: ExtensionContext): void {
 		if (!ctx?.hasUI) return;
-		if (!config.enabled) {
-			setCrewVibesWidget(ctx, config, undefined, undefined);
+		if (!config.enabled || !config.capacity.providerUsage || !lastProviderText) {
+			setProviderStatus(ctx, config, undefined);
 			return;
 		}
-		const capText = config.capacity.enabled ? lastCapacityText : undefined;
-		const quotaText = config.capacity.providerUsage ? lastProviderText : undefined;
-		setCrewVibesWidget(ctx, config, capText, quotaText);
+		const cols = process.stdout.columns || 120;
+		const quotaVisibleWidth = visibleLen(lastProviderText);
+		const capVisibleWidth = lastCapacityText ? visibleLen(lastCapacityText) : 0;
+		// Pi joins: capacity + " " + quotaPadded. Subtract BOTH capacity and
+		// quota widths from cols (plus 1 for the joining space) so the joined
+		// line always fits within terminal width — no truncation by pi.
+		// When capacity text grows (e.g. sub-agent appends info), pad shrinks
+		// dynamically, keeping quota fully visible.
+		const pad = Math.max(0, cols - quotaVisibleWidth - capVisibleWidth - 1);
+		const padded = "\u00A0".repeat(pad) + lastProviderText;
+		setProviderStatus(ctx, config, padded);
 	}
+
+	
 
 	function publishSpeedFooter(ctx: ExtensionContext, speed = footerAnimator.value()): void {
 		if (!config.enabled || !config.speed.enabled || !config.speed.footer) {
