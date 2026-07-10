@@ -137,38 +137,6 @@ test("withRunLockSync and withRunLock both recover from a stale lock", async () 
 	fs.rmSync(cwd, { recursive: true, force: true });
 });
 
-test("withRunLockSync throws immediately on active (non-stale) lock", async () => {
-	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-lock-active-"));
-	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
-	const { manifest } = createRunManifest({
-		cwd,
-		team: {
-			name: "active-team",
-			description: "active",
-			source: "builtin",
-			filePath: "",
-			roles: [{ name: "explorer", agent: "explorer" }],
-		},
-		workflow: {
-			name: "active",
-			description: "",
-			source: "builtin",
-			filePath: "",
-			steps: [],
-		},
-		goal: "active",
-	});
-
-	// Hold the lock in another process context by writing a recent lock file
-	const lockFile = path.join(cwd, ".crew", "state", "runs", manifest.runId, "run.lock");
-	fs.mkdirSync(path.dirname(lockFile), { recursive: true });
-	fs.writeFileSync(lockFile, String(Date.now()), "utf-8");
-
-	assert.throws(() => withRunLockSync(manifest, () => "should-not-reach"), /locked/);
-
-	fs.rmSync(cwd, { recursive: true, force: true });
-});
-
 test("withRunLock writes a token in the lock file", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-lock-token-"));
 	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });

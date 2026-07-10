@@ -29,13 +29,9 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
 	critic: ["read-only-explorer", "multi-perspective-review"],
 	executor: ["state-mutation-locking", "safe-bash", "verification-before-done"],
 	reviewer: ["read-only-explorer", "multi-perspective-review"],
-	// SECURITY NOTE: The following skill names are trusted package-level skills.
-	// If a project has a skills/ directory containing subdirectories with these names,
-	// those project-level SKILL.md files will be FOUND FIRST (readSkillMarkdown checks
-	// project dir before package dir) and their content injected verbatim into prompts.
-	// The "Applicable Skills" block will add an untrusted-content warning for project skills,
-	// but be aware this is a potential supply-chain risk in multi-contributor projects.
 	"security-reviewer": ["secure-agent-orchestration-review", "ownership-session-security"],
+	// SECURITY NOTE: Package skills are checked FIRST (SEC-003). Project-level
+	// skills with the same name will NOT override the trusted package version.
 	"test-engineer": ["verification-before-done", "safe-bash"],
 	verifier: ["verification-before-done", "runtime-state-reader"],
 	writer: ["context-artifact-hygiene", "verification-before-done"],

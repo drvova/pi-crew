@@ -6087,7 +6087,7 @@
       "format": "esm"
     },
     "src/utils/internal-error.ts": {
-      "bytes": 384,
+      "bytes": 554,
       "imports": [],
       "format": "esm"
     },
@@ -6129,7 +6129,7 @@
       "format": "esm"
     },
     "src/state/atomic-write.ts": {
-      "bytes": 34938,
+      "bytes": 34941,
       "imports": [
         {
           "path": "node:crypto",
@@ -6814,7 +6814,7 @@
       "format": "esm"
     },
     "src/runtime/crash-recovery.ts": {
-      "bytes": 22623,
+      "bytes": 22655,
       "imports": [
         {
           "path": "node:fs",
@@ -7356,7 +7356,7 @@
       "format": "esm"
     },
     "src/runtime/child-pi.ts": {
-      "bytes": 66015,
+      "bytes": 66030,
       "imports": [
         {
           "path": "node:child_process",
@@ -12301,7 +12301,7 @@
       "format": "esm"
     },
     "src/runtime/skill-instructions.ts": {
-      "bytes": 13808,
+      "bytes": 13449,
       "imports": [
         {
           "path": "node:fs",
@@ -12839,7 +12839,7 @@
       "format": "esm"
     },
     "src/runtime/async-runner.ts": {
-      "bytes": 14599,
+      "bytes": 14704,
       "imports": [
         {
           "path": "node:child_process",
@@ -14676,7 +14676,7 @@
       "format": "esm"
     },
     "src/runtime/task-runner/state-helpers.ts": {
-      "bytes": 5519,
+      "bytes": 5684,
       "imports": [
         {
           "path": "node:fs",
@@ -15139,7 +15139,7 @@
       "format": "esm"
     },
     "src/runtime/team-runner.ts": {
-      "bytes": 76143,
+      "bytes": 76156,
       "imports": [
         {
           "path": "node:fs",
@@ -18390,7 +18390,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6636234
+      "bytes": 6636624
     },
     "dist/index.mjs": {
       "imports": [
@@ -20589,7 +20589,7 @@
           "bytesInOutput": 12069
         },
         "src/utils/internal-error.ts": {
-          "bytesInOutput": 443
+          "bytesInOutput": 502
         },
         "src/utils/sleep.ts": {
           "bytesInOutput": 948
@@ -20598,7 +20598,7 @@
           "bytesInOutput": 5243
         },
         "src/state/atomic-write.ts": {
-          "bytesInOutput": 17427
+          "bytesInOutput": 17436
         },
         "src/config/defaults.ts": {
           "bytesInOutput": 4426
@@ -20685,7 +20685,7 @@
           "bytesInOutput": 580
         },
         "src/runtime/crash-recovery.ts": {
-          "bytesInOutput": 15270
+          "bytesInOutput": 15302
         },
         "src/runtime/deadletter.ts": {
           "bytesInOutput": 592
@@ -20769,7 +20769,7 @@
           "bytesInOutput": 1801
         },
         "src/runtime/child-pi.ts": {
-          "bytesInOutput": 45369
+          "bytesInOutput": 45390
         },
         "src/runtime/heartbeat-gradient.ts": {
           "bytesInOutput": 953
@@ -21447,7 +21447,7 @@
           "bytesInOutput": 8715
         },
         "src/runtime/skill-instructions.ts": {
-          "bytesInOutput": 11480
+          "bytesInOutput": 11101
         },
         "src/state/run-cache.ts": {
           "bytesInOutput": 2142
@@ -21507,7 +21507,7 @@
           "bytesInOutput": 2699
         },
         "src/runtime/async-runner.ts": {
-          "bytesInOutput": 8931
+          "bytesInOutput": 8942
         },
         "src/subagents/async-entry.ts": {
           "bytesInOutput": 119
@@ -21759,7 +21759,7 @@
           "bytesInOutput": 767
         },
         "src/runtime/task-runner/state-helpers.ts": {
-          "bytesInOutput": 2576
+          "bytesInOutput": 2756
         },
         "src/runtime/task-runner/tail-read.ts": {
           "bytesInOutput": 762
@@ -21792,7 +21792,7 @@
           "bytesInOutput": 3398
         },
         "src/runtime/team-runner.ts": {
-          "bytesInOutput": 57487
+          "bytesInOutput": 57504
         },
         "src/runtime/pipeline-runner.ts": {
           "bytesInOutput": 12070
@@ -22095,7 +22095,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3161826
+      "bytes": 3161776
     }
   }
 }

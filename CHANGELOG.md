@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.9.30] — observability hardening + steering injection guards (2026-07-10)
+
+Cold-verified review of 12 findings across security, code quality, and explorer passes yielded 11 confirmed bugs (1 NOT-A-BUG). This release ships 9 of those fixes; the remaining 2 are documented as deferred follow-ups.
+
+### Security (HIGH)
+- **Steering content sanitization** (`src/prompt/prompt-runtime.ts`): `sanitizeSteerMessage()` rejects messages > 4096 chars, with > 50 newlines, or containing C0 control characters before injection via `pi.sendMessage({ deliverAs: "steer" })`. Rejection logged via `logInternalError(..., "warn")`. Closes SEC-01 prompt-injection vector.
+- **Steering file path containment** (`src/prompt/prompt-runtime.ts`): `validateSteeringFile()` uses `resolveRealContainedPath` from `src/utils/safe-paths.ts` to verify `PI_CREW_STEERING_FILE` stays inside the session's artifacts root, plus `lstatSync` to reject symlinks at the path itself. Closes F-07 defense-in-depth gap.
+
+### Observability (HIGH)
+- **`logInternalError` severity tiers** (`src/utils/internal-error.ts`): added optional 4th `severity` parameter (`"error" | "warn" | "debug"`). `"error"` and `"warn"` always emit to `console.error` regardless of `PI_TEAMS_DEBUG`; `"debug"` (default) preserves the existing gated behavior. Backward-compatible — all 100+ existing callers default to `"debug"`. Closes F-01 root cause (silent internal-error suppression in production).
+- **Critical callers upgraded** to `severity="error"`:
+  - `task-runner/state-helpers.ts` — CAS convergence failure
+  - `child-pi.ts` — Windows taskkill zombie (after retry exhaustion)
+  - `team-runner.ts` — false-green goal-achievement downgrade
+  - `atomic-write.ts` — coalesced flush failure (potential data loss)
+  - `crash-recovery.ts` — orphan/PID-dead/reconcile termination failures upgraded to `"warn"`
+
+### Correctness (MED)
+- **CAS retry error message accuracy** (`src/runtime/task-runner/state-helpers.ts`): extracted `MAX_CAS_ATTEMPTS = 100` constant; loop bound and error message now both interpolate the constant. Previously the message said "50 attempts" while the loop ran 100 — misleading post-mortem debug. Closes F-03.
+- **Stale skill-instructions comment removed** (`src/runtime/skill-instructions.ts`): deleted the 6-line `SECURITY NOTE` block that claimed project-level skills were "FOUND FIRST" — superseded by SEC-003 fix which made package skills trusted-first. Closes F-06 (maintainability hazard).
+- **Symlink cache TTL 30s → 10s** (`src/state/atomic-write.ts`): reduced `SYMLINK_SAFE_TTL_MS` and replaced misleading "invalidated explicitly via `invalidateSymlinkSafeCache(dir)`" comment with accurate TTL-only trust-model documentation. `invalidateSymlinkSafeCache()` remains exported but is intentionally unused (the `.crew/` state directory is trusted — single-user, non-shared). Closes F-02.
+
+### Performance (MED — partial)
+- **`appendEvent` → `appendEventAsync` migration** (`src/runtime/async-runner.ts`): migrated the single hot-path call site in `spawnBackgroundTeamRun` from sync `appendEvent` (which routes through `withEventLogLockSync` → `sleepSync(10)`, blocking the event loop on contention) to async `appendEventAsync`. Remaining 23 call sites in `goal-loop-runner.ts` (12) and `team-tool/api.ts` (11) deferred to follow-up — each requires per-site ordering analysis.
+
+### Reverted
+- **FIX-07 withRunLockSync retry wrapper** (`src/state/locks.ts`): implementation reverted. The retry wrapper extended failure time from instant to 60s (`staleMs × 2`) on hard-fail lock contention, breaking the existing `api-locks.test.ts:37` expectation that mutating API operations fail fast when the lock file holds stale content. Original fast-fail behavior is correct: a fresh-alive lock is a hard-fail signal that the caller (not the lock library) should decide whether to retry.
+
+### Deferred
+- **FIX-09 verification-gates `sh -c` → `execFile` migration**: existing newline + `DANGEROUS_SHELL_PATTERNS` validation covers the known injection vectors. Migration deferred as defense-in-depth — commands are user-supplied, not worker-injected.
+
+### Tests added
+- `test/unit/internal-error.test.ts` — severity tier coverage (4 tests).
+- `test/unit/prompt-runtime-steering.test.ts` — FIX-02 + FIX-03 validation (6 tests covering length, newline, control char, path containment, symlink, valid-content passthrough).
+- `test/unit/state-helpers.test.ts` — FIX-01b + FIX-05 validation (2 tests).
+
+### Verification
+- 2995 unit tests passing, 0 failures (via `node scripts/test-runner.mjs`).
+- End-to-end smoke test: `fast-fix` and `research` workflows completed successfully against the fixed runtime, all state-persistence paths working.
+
+---
+
+## [0.9.29] — version bump only (2026-07-10)
+
+> Maintenance release — no source changes. Version bumped to 0.9.29 prior to v0.9.30 development. CHANGELOG entry retroactively added for completeness.
+
+---
+
 ## [0.9.28] — maxTokens cap + real-time steering + provider-per-model (2026-07-09)
 
 ### Features

@@ -1,5 +1,8 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { logInternalError } from "../utils/internal-error.ts";
+import { resolveRealContainedPath } from "../utils/safe-paths.ts";
 
 export const PI_TEAMS_INHERIT_PROJECT_CONTEXT_ENV = "PI_TEAMS_INHERIT_PROJECT_CONTEXT";
 export const PI_TEAMS_INHERIT_SKILLS_ENV = "PI_TEAMS_INHERIT_SKILLS";
@@ -11,6 +14,99 @@ const PI_CREW_STEERING_FILE_ENV = "PI_CREW_STEERING_FILE";
 const PROJECT_CONTEXT_HEADER = "\n\n# Project Context\n\nProject-specific instructions and guidelines:\n\n";
 const SKILLS_HEADER = "\n\nThe following skills provide specialized instructions for specific tasks.";
 const DATE_HEADER = "\nCurrent date:";
+
+// ── FIX-02: Steering content sanitization limits ──────────────────────────
+// Bounded to keep a malformed/malicious steer entry from blowing up the
+// worker's prompt budget or smuggling control sequences into the agent.
+const MAX_STEER_MESSAGE_LENGTH = 4096;
+const MAX_STEER_MESSAGE_NEWLINES = 50;
+// C0 control characters minus the printable whitespace (\t \n \r). These
+// are the bytes most useful for ANSI escapes, terminal-control tricks, and
+// NUL-injection attacks when steer content reaches the worker's UI.
+const STEER_CONTROL_CHAR_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+
+export interface SteerSanitizeResult {
+	valid: boolean;
+	reason?: string;
+	message?: string;
+}
+
+export interface SteerEntry {
+	type?: string;
+	message?: string;
+}
+
+/**
+ * Validate a single steering-file entry before forwarding it to
+ * `pi.sendMessage`. FIX-02: reject oversized payloads, excessive newlines,
+ * or control characters that could be used to confuse the worker UI.
+ */
+export function sanitizeSteerMessage(entry: SteerEntry): SteerSanitizeResult {
+	const message = entry.message;
+	if (typeof message !== "string" || message.length === 0) {
+		return { valid: false, reason: "missing-or-empty-message" };
+	}
+	if (message.length > MAX_STEER_MESSAGE_LENGTH) {
+		return { valid: false, reason: `message-too-long:${message.length}` };
+	}
+	const newlineCount = (message.match(/\n/g) ?? []).length;
+	if (newlineCount > MAX_STEER_MESSAGE_NEWLINES) {
+		return { valid: false, reason: `too-many-newlines:${newlineCount}` };
+	}
+	if (STEER_CONTROL_CHAR_PATTERN.test(message)) {
+		return { valid: false, reason: "contains-control-characters" };
+	}
+	return { valid: true, message };
+}
+
+// ── FIX-03: Steering file path containment validation ─────────────────────
+// The steering file path is inherited from the parent via env, so we
+// defensively re-validate it before the first read to catch symlink
+// redirection or paths that escape the session's artifacts root.
+export interface SteeringFileValidation {
+	valid: boolean;
+	reason?: string;
+	resolvedPath?: string;
+}
+
+/**
+ * Validate `PI_CREW_STEERING_FILE` before first read. FIX-03:
+ *   1. `lstatSync` rejects a symlink at the steering file itself.
+ *   2. `resolveRealContainedPath` walks the ancestor chain with O_NOFOLLOW
+ *      to reject any symlinked parent (e.g. a redirected `artifactsRoot`)
+ *      and to verify the resolved path stays inside the derived artifacts
+ *      root (`<artifactsRoot>/steering/<taskId>.jsonl` → `<artifactsRoot>`).
+ *
+ * Returns `{ valid: false }` with a reason on any violation. Callers must
+ * log + skip steering on failure rather than abort the worker.
+ */
+export function validateSteeringFile(steeringFile: string): SteeringFileValidation {
+	try {
+		const lst = fs.lstatSync(steeringFile);
+		if (lst.isSymbolicLink()) {
+			return { valid: false, reason: "steering-file-is-symlink" };
+		}
+	} catch (error) {
+		const errCode = (error as NodeJS.ErrnoException).code;
+		if (errCode && errCode !== "ENOENT") {
+			return { valid: false, reason: `lstat-failed:${errCode}` };
+		}
+	}
+	// Layout invariant from task-runner.ts: `steeringFile` is built as
+	// `<artifactsRoot>/steering/<taskId>.jsonl`. We don't trust the caller
+	// to pass `artifactsRoot`, so derive it as 2 levels up. `resolveRealContainedPath`
+	// then enforces both containment AND ancestor-symlink safety in one shot.
+	const artifactsRoot = path.resolve(steeringFile, "..", "..");
+	try {
+		const resolved = resolveRealContainedPath(artifactsRoot, steeringFile);
+		return { valid: true, resolvedPath: resolved };
+	} catch (error) {
+		return {
+			valid: false,
+			reason: `path-validation-failed:${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
+}
 
 function readBooleanEnv(name: string): boolean | undefined {
 	const value = process.env[name];
@@ -83,43 +179,67 @@ export default function registerPiTeamsPromptRuntime(pi: ExtensionAPI): void {
 	// the active session via pi.sendMessage with deliverAs:"steer".
 	const steeringFile = process.env[PI_CREW_STEERING_FILE_ENV];
 	if (steeringFile) {
-		let lastOffset = 0;
-		const pollSteering = (): void => {
-			try {
-				const stat = fs.statSync(steeringFile, { throwIfNoEntry: false });
-				if (!stat || stat.size <= lastOffset) return;
-				const fd = fs.openSync(steeringFile, "r");
+		// FIX-03: validate the steering file path once before first read.
+		const validation = validateSteeringFile(steeringFile);
+		if (!validation.valid) {
+			logInternalError(
+				"prompt-runtime.steering-file-rejected",
+				new Error(validation.reason ?? "steering-file-validation-failed"),
+				`path=${steeringFile}`,
+				"warn",
+			);
+		} else {
+			const safeSteeringFile = validation.resolvedPath ?? steeringFile;
+			let lastOffset = 0;
+			const pollSteering = (): void => {
 				try {
-					const buf = Buffer.alloc(stat.size - lastOffset);
-					fs.readSync(fd, buf, 0, buf.length, lastOffset);
-					lastOffset = stat.size;
-					const lines = buf.toString("utf8").split("\n").filter(Boolean);
-					for (const line of lines) {
-						try {
-							const entry = JSON.parse(line) as { type?: string; message?: string };
-							if (entry.type === "steer" && entry.message) {
+					const stat = fs.statSync(safeSteeringFile, { throwIfNoEntry: false });
+					if (!stat || stat.size <= lastOffset) return;
+					const fd = fs.openSync(safeSteeringFile, "r");
+					try {
+						const buf = Buffer.alloc(stat.size - lastOffset);
+						fs.readSync(fd, buf, 0, buf.length, lastOffset);
+						lastOffset = stat.size;
+						const lines = buf.toString("utf8").split("\n").filter(Boolean);
+						for (const line of lines) {
+							try {
+								const entry = JSON.parse(line) as SteerEntry;
+								if (entry.type !== "steer") continue;
+								// FIX-02: sanitize each steer entry before forwarding
+								// to pi.sendMessage. Reject oversized payloads,
+								// excessive newlines, and control characters.
+								const sanitized = sanitizeSteerMessage(entry);
+								if (!sanitized.valid || sanitized.message === undefined) {
+									logInternalError(
+										"prompt-runtime.steer-rejected",
+										new Error(sanitized.reason ?? "steer-sanitization-failed"),
+										`line-preview=${line.slice(0, 64)}`,
+										"warn",
+									);
+									continue;
+								}
 								pi.sendMessage(
-									{ customType: "crew-steer", content: entry.message, display: false },
+									{ customType: "crew-steer", content: sanitized.message, display: false },
 									{ deliverAs: "steer" },
 								);
+							} catch {
+								// Malformed line — skip
 							}
+						}
+					} finally {
+						try {
+							fs.closeSync(fd);
 						} catch {
-							// Malformed line — skip
+							/* already closed */
 						}
 					}
-				} finally {
-					try {
-						fs.closeSync(fd);
-					} catch {
-						/* already closed */
-					}
+				} catch {
+					// File doesn't exist yet or read error — will retry next tick
 				}
-			} catch {
-				// File doesn't exist yet or read error — will retry next tick
-			}
-		};
-		const timer = setInterval(pollSteering, 500);
-		timer.unref?.();
+			};
+			const timer = setInterval(pollSteering, 500);
+			timer.unref?.();
+		}
 	}
 
 	// ── Prompt rewriting (existing) ────────────────────────────────────────

@@ -704,6 +704,7 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 				"team-runner.goalAchievement.falseGreen",
 				new Error(gaApplied.manifest.goalAchievementNote ?? "false-green detected"),
 				`runId=${manifest.runId}`,
+				"error",
 			);
 		stopTeamHeartbeat();
 		resolveRunPromise(manifest.runId, result);

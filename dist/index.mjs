@@ -8493,8 +8493,10 @@ var init_config_schema = __esm({
 });
 
 // src/utils/internal-error.ts
-function logInternalError(scope, error, details) {
-  if (!process.env.PI_TEAMS_DEBUG) return;
+function logInternalError(scope, error, details, severity) {
+  if (!severity || severity === "debug") {
+    if (!process.env.PI_TEAMS_DEBUG) return;
+  }
   const message = error instanceof Error ? error.message : typeof error === "object" && error !== null ? JSON.stringify(error) : String(error);
   const suffix = details ? `: ${details}` : "";
   console.error(`[pi-crew:${scope}] ${message}${suffix}`);
@@ -9096,7 +9098,7 @@ function flushOnePendingAtomicWrite(filePath) {
       pendingAtomicWrites.delete(filePath);
     }
   } catch (error) {
-    logInternalError("atomic-write.coalesced-flush", error, filePath);
+    logInternalError("atomic-write.coalesced-flush", error, filePath, "error");
     const current2 = pendingAtomicWrites.get(filePath);
     if (current2?.generation === savedGeneration) {
       current2.retryCount++;
@@ -9145,7 +9147,7 @@ var init_atomic_write = __esm({
     init_worker_atomic_writer();
     RETRYABLE_RENAME_CODES = /* @__PURE__ */ new Set(["EPERM", "EBUSY", "EACCES"]);
     RETRYABLE_LINK_CODES = /* @__PURE__ */ new Set(["EPERM", "EBUSY", "EACCES", "ENOENT"]);
-    SYMLINK_SAFE_TTL_MS = 3e4;
+    SYMLINK_SAFE_TTL_MS = 1e4;
     SYMLINK_SAFE_MAX_ENTRIES = 128;
     symlinkSafeCache = /* @__PURE__ */ new Map();
     __test__renameWithRetry = renameWithRetry;
@@ -15399,7 +15401,7 @@ function cancelOrphanedRuns(cwd, manifestCache2, currentSessionId, staleThreshol
     });
     if (cancelledRun)
       void terminateLiveAgentsForRun(manifest.runId, "cancelled", appendEvent, loaded.manifest.eventsPath).catch(
-        (error) => logInternalError("crash-recovery.orphan.terminate", error, `runId=${manifest.runId}`)
+        (error) => logInternalError("crash-recovery.orphan.terminate", error, `runId=${manifest.runId}`, "warn")
       );
   }
   return { cancelled, skipped };
@@ -15494,7 +15496,7 @@ function purgeStaleActiveRunIndex(staleThresholdMs = 3e5, now = Date.now()) {
               appendEvent,
               fullLoaded.manifest.eventsPath
             ).catch(
-              (error) => logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`)
+              (error) => logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`, "warn")
             );
           }
         } catch {
@@ -15539,7 +15541,7 @@ function purgeStaleActiveRunIndex(staleThresholdMs = 3e5, now = Date.now()) {
               appendEvent,
               fullLoaded.manifest.eventsPath
             ).catch(
-              (error) => logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`)
+              (error) => logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`, "warn")
             );
           }
         } catch {
@@ -15586,7 +15588,7 @@ function reconcileAllStaleRuns(cwd, manifestCache2, now = Date.now()) {
         }
         updateRunStatus(fresh.manifest, "failed", `Stale run reconciled: ${result4.detail}`);
         void terminateLiveAgentsForRun(fresh.manifest.runId, "failed", appendEvent, fresh.manifest.eventsPath).catch(
-          (error) => logInternalError("crash-recovery.reconcile.terminate", error, `runId=${fresh.manifest.runId}`)
+          (error) => logInternalError("crash-recovery.reconcile.terminate", error, `runId=${fresh.manifest.runId}`, "warn")
         );
         appendEvent(fresh.manifest.eventsPath, {
           type: "crew.run.reconciled_stale",
@@ -18376,7 +18378,8 @@ function killProcessPid(pid) {
           logInternalError(
             "child-pi.taskkill-stuck",
             new Error(`process ${pid} still alive 2s after taskkill /T /F; retrying`),
-            `pid=${pid}`
+            `pid=${pid}`,
+            "error"
           );
           try {
             spawnTaskkillSafe(pid);
@@ -44860,13 +44863,9 @@ var init_skill_instructions = __esm({
       critic: ["read-only-explorer", "multi-perspective-review"],
       executor: ["state-mutation-locking", "safe-bash", "verification-before-done"],
       reviewer: ["read-only-explorer", "multi-perspective-review"],
-      // SECURITY NOTE: The following skill names are trusted package-level skills.
-      // If a project has a skills/ directory containing subdirectories with these names,
-      // those project-level SKILL.md files will be FOUND FIRST (readSkillMarkdown checks
-      // project dir before package dir) and their content injected verbatim into prompts.
-      // The "Applicable Skills" block will add an untrusted-content warning for project skills,
-      // but be aware this is a potential supply-chain risk in multi-contributor projects.
       "security-reviewer": ["secure-agent-orchestration-review", "ownership-session-security"],
+      // SECURITY NOTE: Package skills are checked FIRST (SEC-003). Project-level
+      // skills with the same name will NOT override the trusted package version.
       "test-engineer": ["verification-before-done", "safe-bash"],
       verifier: ["verification-before-done", "runtime-state-reader"],
       writer: ["context-artifact-hygiene", "verification-before-done"]
@@ -47999,7 +47998,7 @@ async function spawnBackgroundTeamRun(manifest) {
   const loader = resolveTypeScriptLoader();
   if (!loader) {
     const message = buildLoaderUnavailableMessage(packageRootFromRuntime());
-    appendEvent(manifest.eventsPath, {
+    await appendEventAsync(manifest.eventsPath, {
       type: "async.failed",
       runId: manifest.runId,
       message
@@ -57483,6 +57482,7 @@ function updateTask(tasks, updated) {
   return tasks.map((task) => task.id === updated.id ? updated : task);
 }
 function persistSingleTaskUpdate(manifest, fallbackTasks, updated, checkpointPhase) {
+  const MAX_CAS_ATTEMPTS = 100;
   let baseMtime = 0;
   try {
     baseMtime = fs80.statSync(manifest.tasksPath).mtimeMs;
@@ -57499,7 +57499,7 @@ function persistSingleTaskUpdate(manifest, fallbackTasks, updated, checkpointPha
   } : updated;
   try {
     return withRunLockSync(manifest, () => {
-      for (let attempt = 0; attempt < 100; attempt++) {
+      for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
         flushPendingAtomicWrites();
         const latest = loadRunManifestById(manifest.cwd, manifest.runId)?.tasks ?? fallbackTasks;
         merged = updateTask(latest, taskWithCheckpoint);
@@ -57516,20 +57516,25 @@ function persistSingleTaskUpdate(manifest, fallbackTasks, updated, checkpointPha
         break;
       }
       if (merged === void 0) {
-        logInternalError("persistSingleTaskUpdate", new Error("failed to converge after 50 attempts"));
-        throw new Error("persistSingleTaskUpdate: failed to converge after 50 attempts");
+        logInternalError(
+          "persistSingleTaskUpdate",
+          new Error(`failed to converge after ${MAX_CAS_ATTEMPTS} attempts`),
+          void 0,
+          "error"
+        );
+        throw new Error(`persistSingleTaskUpdate: failed to converge after ${MAX_CAS_ATTEMPTS} attempts`);
       }
       try {
         saveRunTasksCoalesced(manifest, merged);
       } catch (err2) {
-        logInternalError("persistSingleTaskUpdate", err2);
+        logInternalError("persistSingleTaskUpdate", err2, void 0, "error");
         throw err2;
       }
       return merged;
     });
   } catch (err2) {
     if (merged === void 0) {
-      logInternalError("persistSingleTaskUpdate", err2);
+      logInternalError("persistSingleTaskUpdate", err2, void 0, "error");
     }
     throw err2;
   }
@@ -60356,7 +60361,8 @@ async function executeTeamRun(input) {
       logInternalError(
         "team-runner.goalAchievement.falseGreen",
         new Error(gaApplied.manifest.goalAchievementNote ?? "false-green detected"),
-        `runId=${manifest.runId}`
+        `runId=${manifest.runId}`,
+        "error"
       );
     stopTeamHeartbeat();
     resolveRunPromise(manifest.runId, result4);

@@ -112,6 +112,7 @@ export function killProcessPid(pid: number): void {
 						"child-pi.taskkill-stuck",
 						new Error(`process ${pid} still alive 2s after taskkill /T /F; retrying`),
 						`pid=${pid}`,
+						"error",
 					);
 					try {
 						spawnTaskkillSafe(pid);

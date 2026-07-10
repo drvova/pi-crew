@@ -32,6 +32,7 @@ export function persistSingleTaskUpdate(
 	updated: TeamTaskState,
 	checkpointPhase?: TaskCheckpointState["phase"],
 ): TeamTaskState[] {
+	const MAX_CAS_ATTEMPTS = 100;
 	let baseMtime = 0;
 	try {
 		baseMtime = fs.statSync(manifest.tasksPath).mtimeMs;
@@ -55,7 +56,7 @@ export function persistSingleTaskUpdate(
 
 	try {
 		return withRunLockSync(manifest, () => {
-			for (let attempt = 0; attempt < 100; attempt++) {
+			for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
 				// F4: persistSingleTaskUpdate now uses saveRunTasksCoalesced below
 				// (50ms debounce window). Read-modify-write loops are unsafe under
 				// coalescing — a parallel writer's buffered write is invisible to
@@ -93,8 +94,13 @@ export function persistSingleTaskUpdate(
 			}
 
 			if (merged === undefined) {
-				logInternalError("persistSingleTaskUpdate", new Error("failed to converge after 50 attempts"));
-				throw new Error("persistSingleTaskUpdate: failed to converge after 50 attempts");
+				logInternalError(
+					"persistSingleTaskUpdate",
+					new Error(`failed to converge after ${MAX_CAS_ATTEMPTS} attempts`),
+					undefined,
+					"error",
+				);
+				throw new Error(`persistSingleTaskUpdate: failed to converge after ${MAX_CAS_ATTEMPTS} attempts`);
 			}
 
 			try {
@@ -105,14 +111,14 @@ export function persistSingleTaskUpdate(
 				// writer's flushed-before-this-call state.
 				saveRunTasksCoalesced(manifest, merged);
 			} catch (err) {
-				logInternalError("persistSingleTaskUpdate", err);
+				logInternalError("persistSingleTaskUpdate", err, undefined, "error");
 				throw err;
 			}
 			return merged;
 		});
 	} catch (err) {
 		if (merged === undefined) {
-			logInternalError("persistSingleTaskUpdate", err);
+			logInternalError("persistSingleTaskUpdate", err, undefined, "error");
 		}
 		throw err;
 	}

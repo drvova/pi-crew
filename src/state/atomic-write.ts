@@ -166,12 +166,12 @@ export function isSymlinkSafePath(filePath: string): boolean {
 // parent dirs of `.crew/state/runs/{runId}/` are stable within a run, so we
 // cache the ancestor-walk verdict keyed by `dirname(filePath)`.
 //
-// SECURITY: the *target file* itself is still checked every call (no cache).
-// Caching is per-dir at a short TTL. If a dir is mutated mid-window, the cache
-// is invalidated explicitly via `invalidateSymlinkSafeCache(dir)` from any
-// file-create / rename hook, plus a TTL failsafe. The cache is best-effort
-// speed-up — when in doubt the next call's statSync re-verifies.
-const SYMLINK_SAFE_TTL_MS = 30_000;
+// SECURITY: TTL-only invalidation. The `.crew/` state directory is trusted
+// (single-user, non-shared). Symlink attacks require write access to the state
+// dir, which would already compromise the system. The short TTL provides
+// defense-in-depth. The target file itself is still checked every call (no
+// cache) — when in doubt the next call's statSync re-verifies.
+const SYMLINK_SAFE_TTL_MS = 10_000;
 const SYMLINK_SAFE_MAX_ENTRIES = 128;
 // NOTE: This cache is process-local and assumes single-threaded access.
 // If worker-thread usage expands (e.g., worker-atomic-writer.ts), this cache
@@ -731,7 +731,7 @@ function flushOnePendingAtomicWrite(filePath: string): void {
 			pendingAtomicWrites.delete(filePath);
 		}
 	} catch (error) {
-		logInternalError("atomic-write.coalesced-flush", error, filePath);
+		logInternalError("atomic-write.coalesced-flush", error, filePath, "error");
 		// Issue 1 fix: set a fresh timer for failed entries before returning.
 		// This ensures failed entries are retried without waiting for another
 		// write to arrive. Only set timer if this entry is still current

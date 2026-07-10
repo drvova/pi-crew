@@ -244,7 +244,7 @@ export function cancelOrphanedRuns(
 		});
 		if (cancelledRun)
 			void terminateLiveAgentsForRun(manifest.runId, "cancelled", appendEvent, loaded.manifest.eventsPath).catch((error) =>
-				logInternalError("crash-recovery.orphan.terminate", error, `runId=${manifest.runId}`),
+				logInternalError("crash-recovery.orphan.terminate", error, `runId=${manifest.runId}`, "warn"),
 			);
 	}
 
@@ -428,7 +428,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 							appendEvent,
 							fullLoaded.manifest.eventsPath,
 						).catch((error) =>
-							logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`),
+							logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`, "warn"),
 						);
 					}
 				} catch {
@@ -482,7 +482,7 @@ export function purgeStaleActiveRunIndex(staleThresholdMs = 300_000, now = Date.
 							appendEvent,
 							fullLoaded.manifest.eventsPath,
 						).catch((error) =>
-							logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`),
+							logInternalError("crash-recovery.pid-dead.terminate", error, `runId=${fullLoaded.manifest.runId}`, "warn"),
 						);
 					}
 				} catch {
@@ -543,7 +543,7 @@ export function reconcileAllStaleRuns(cwd: string, manifestCache: ManifestCache,
 				}
 				updateRunStatus(fresh.manifest, "failed", `Stale run reconciled: ${result.detail}`);
 				void terminateLiveAgentsForRun(fresh.manifest.runId, "failed", appendEvent, fresh.manifest.eventsPath).catch((error) =>
-					logInternalError("crash-recovery.reconcile.terminate", error, `runId=${fresh.manifest.runId}`),
+					logInternalError("crash-recovery.reconcile.terminate", error, `runId=${fresh.manifest.runId}`, "warn"),
 				);
 				appendEvent(fresh.manifest.eventsPath, {
 					type: "crew.run.reconciled_stale",

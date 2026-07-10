@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { appendEvent } from "../state/event-log.ts";
+import { appendEvent, appendEventAsync } from "../state/event-log.ts";
 import type { TeamRunManifest } from "../state/types.ts";
 import { WINDOWS_ESSENTIAL_ENV_VARS } from "../utils/env-allowlist.ts";
 import { sanitizeEnvSecrets } from "../utils/env-filter.ts";
@@ -257,7 +257,8 @@ export async function spawnBackgroundTeamRun(manifest: TeamRunManifest): Promise
 	const loader = resolveTypeScriptLoader();
 	if (!loader) {
 		const message = buildLoaderUnavailableMessage(packageRootFromRuntime());
-		appendEvent(manifest.eventsPath, {
+		// FIX-08: use async event append to avoid sleepSync event-loop blocking.
+		await appendEventAsync(manifest.eventsPath, {
 			type: "async.failed",
 			runId: manifest.runId,
 			message,
