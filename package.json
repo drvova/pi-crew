@@ -117,9 +117,10 @@
     "@earendil-works/pi-ai": "^0.77.0",
     "@earendil-works/pi-coding-agent": "^0.77.0",
     "@earendil-works/pi-tui": "^0.77.0",
+    "@types/node": "^25.9.5",
     "esbuild": "^0.28.1",
     "tsx": "^4.23.0",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   },
   "peerDependenciesMeta": {
     "@earendil-works/pi-agent-core": {

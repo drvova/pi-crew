@@ -54,6 +54,11 @@ function runTsc(samplePath: string): {
 		[
 			tscBin,
 			"--noEmit",
+			// TS 7.0+: when a file path is passed on the command line and a tsconfig.json
+			// exists in the cwd, tsc errors with TS5112 unless --ignoreConfig is passed.
+			// This compile check supplies its own flags and intentionally ignores the
+			// repo tsconfig.json (the sample lives in a temp dir under the repo root).
+			"--ignoreConfig",
 			"--moduleResolution",
 			"NodeNext",
 			"--module",
