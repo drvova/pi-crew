@@ -8,13 +8,14 @@ import type { MetricRegistry } from "../observability/metric-registry.ts";
 import { PluginRegistry } from "../plugins/plugin-registry.ts";
 import { NextJsPlugin, VitePlugin, VitestPlugin } from "../plugins/plugins/index.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
-import { appendEvent, appendEventAsync, appendEventBuffered, flushEventLogBuffer } from "../state/event-log.ts";
+import { appendEvent, appendEventAsync, appendEventBuffered, appendEventFireAndForget, flushEventLogBuffer } from "../state/event-log.ts";
 import { HealthStore } from "../state/health-store.ts";
 import { withRunLock } from "../state/locks.ts";
 import { loadRunManifestById, saveRunManifest, saveRunManifestAsync, saveRunTasksAsync, updateRunStatus } from "../state/state-store.ts";
 import type { ArtifactDescriptor, PolicyDecision, TaskAttemptState, TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { aggregateUsage, formatTokens, formatUsage } from "../state/usage.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
+import { CrewError, ErrorCode } from "../errors.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { checkBranchFreshness } from "../worktree/branch-freshness.ts";
@@ -190,13 +191,13 @@ export function checkPerTaskBudget(
 
 function findStep(workflow: WorkflowConfig, task: TeamTaskState): WorkflowStep {
 	const step = workflow.steps.find((candidate) => candidate.id === task.stepId);
-	if (!step) throw new Error(`Workflow step '${task.stepId}' not found for task '${task.id}'.`);
+	if (!step) throw new CrewError(ErrorCode.ResourceNotFound, `Workflow step '${task.stepId}' not found for task '${task.id}'.`).withContext(`workflow step lookup (task=${task.id})`);
 	return step;
 }
 
 function findAgent(agents: AgentConfig[], task: TeamTaskState): AgentConfig {
 	const agent = agents.find((candidate) => candidate.name === task.agent);
-	if (!agent) throw new Error(`Agent '${task.agent}' not found for task '${task.id}'.`);
+	if (!agent) throw new CrewError(ErrorCode.ResourceNotFound, `Agent '${task.agent}' not found for task '${task.id}'.`).withContext(`agent lookup (task=${task.id})`);
 	return agent;
 }
 
@@ -1301,7 +1302,7 @@ async function executeTeamRunCore(
 						};
 						if (failed) {
 							lastFailed = enriched;
-							throw new Error(failed.error ?? `Task ${task.id} failed.`);
+							throw new CrewError(ErrorCode.TaskNotFound, failed.error ?? `Task ${task.id} failed.`).withContext(`retry evaluation (run=${manifest.runId})`);
 						}
 						input.metricRegistry?.histogram("crew.task.retry_count", "Retries per task", [0, 1, 2, 3, 5, 10]).observe(
 							{
@@ -1652,6 +1653,24 @@ async function executeTeamRunCore(
 	const waiting = tasks.find((task) => task.status === "waiting");
 	const running = tasks.find((task) => task.status === "running");
 	manifest = applyPolicy(manifest, tasks, input.limits);
+
+	// S02: Verify workflow-declared output files exist before marking completed
+	if (input.workflow?.steps) {
+		const missingOutputs: string[] = [];
+		for (const step of input.workflow.steps) {
+			if (step.output && typeof step.output === 'string') {
+				const outputPath = path.join(manifest.artifactsRoot, step.output);
+				if (!fs.existsSync(outputPath)) {
+					missingOutputs.push(step.output);
+				}
+			}
+		}
+		if (missingOutputs.length > 0) {
+			// Emit warning event — run still completes normally to avoid hanging
+			appendEventFireAndForget(manifest.eventsPath, { type: "run.deliverable_warning", runId: manifest.runId, message: `Missing workflow output files: ${missingOutputs.join(', ')}`, data: { missingFiles: missingOutputs } });
+		}
+	}
+
 	const effectiveness = evaluateRunEffectiveness({
 		manifest,
 		tasks,

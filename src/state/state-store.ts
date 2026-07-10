@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { DEFAULT_CACHE, DEFAULT_PATHS } from "../config/defaults.ts";
 import { errors } from "../errors.ts";
@@ -83,7 +84,7 @@ function genOf(stateRoot: string): number {
 	return manifestCacheGeneration.get(stateRoot) ?? 0;
 }
 
-const MANIFEST_CACHE_TTL_MS = 15 * 1000; // 15 seconds (FIX: increased from 5s for read-heavy workloads; 5s was too short causing unnecessary cache invalidation)
+const MANIFEST_CACHE_TTL_MS = 60 * 1000; // 60 seconds (FIX: increased from 15s for read-heavy workloads; render tick 160ms caused frequent misses)
 const LOAD_MANIFEST_RETRY_LIMIT = 5; // Configurable retry limit for mtime/size stability checks under contention
 const manifestCache = new Map<string, ManifestCacheEntry>();
 
@@ -475,7 +476,7 @@ export async function saveRunTasksAsync(manifest: TeamRunManifest, tasks: TeamTa
 	// FIX: Invalidate cache BEFORE atomic write to prevent stale cache serving.
 	invalidateRunCache(manifest.stateRoot);
 	try {
-		fs.statSync(manifest.stateRoot);
+		await fsp.access(manifest.stateRoot);
 	} catch {
 		return;
 	}
@@ -800,7 +801,7 @@ export async function loadRunManifestByIdAsync(
 		} else if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
 			manifestCache.delete(stateRoot);
 			return undefined;
-		} else if (!fs.existsSync(tasksPath)) {
+		} else if (!(await fsp.access(tasksPath).then(() => true, () => false))) {
 			// Tasks file was deleted after cache was populated — do not serve stale cache.
 			manifestCache.delete(stateRoot);
 			return undefined;

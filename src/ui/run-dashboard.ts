@@ -28,6 +28,17 @@ import { applyStatusColor, colorizeStatusGlyphs, iconForStatus, type RunStatus }
 import type { CrewTheme } from "./theme-adapter.ts";
 import { asCrewTheme, subscribeThemeChange } from "./theme-adapter.ts";
 
+/** S05 — wrap a pane render in try/catch so a single pane crash does not bring down the whole dashboard. */
+function safeRenderPane(name: string, fn: () => string[]): string[] {
+	try {
+		return fn();
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		logInternalError("run-dashboard", new Error(`Dashboard pane '${name}' render failed: ${message}`));
+		return [`<error: ${name}>`];
+	}
+}
+
 interface DashboardComponent {
 	invalidate(): void;
 	render(width: number): string[];
@@ -615,20 +626,20 @@ export class RunDashboard implements DashboardComponent {
 						// Pane content (max 8 lines) — F-2: colorize embedded status glyphs.
 						const paneLines = snap
 							? this.activePane === "agents"
-								? renderAgentsPane(snap, this.options)
+								? safeRenderPane("agents", () => renderAgentsPane(snap, this.options))
 								: this.activePane === "progress"
-									? renderProgressPane(snap)
+									? safeRenderPane("progress", () => renderProgressPane(snap))
 									: this.activePane === "mailbox"
-										? renderMailboxPane(snap)
+										? safeRenderPane("mailbox", () => renderMailboxPane(snap))
 										: this.activePane === "health"
-											? renderHealthPane(snap, {
+											? safeRenderPane("health", () => renderHealthPane(snap, {
 													isForeground: !r.async,
-												})
+												}))
 											: this.activePane === "metrics"
-												? renderMetricsPane(snap, {
+												? safeRenderPane("metrics", () => renderMetricsPane(snap, {
 														registry: this.options.registry,
-													})
-												: renderTranscriptPane(snap)
+													}))
+												: safeRenderPane("transcript", () => renderTranscriptPane(snap))
 							: [...readAgentPreview(r, 4, this.options), ...readProgressPreview(r, 2)];
 						const filteredPane = paneLines.filter((l) => l && !l.includes("(none)") && l.trim() !== "");
 						if (filteredPane.length > 0) {

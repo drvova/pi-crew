@@ -77,7 +77,7 @@ test("setManifestCache keeps entries within the TTL", () => {
 	}
 });
 
-test("MANIFEST_CACHE_TTL_MS is a sane positive value (15s)", () => {
+test("MANIFEST_CACHE_TTL_MS is a sane positive value (60s)", () => {
 	assert.ok(MANIFEST_CACHE_TTL_MS_VALUE > 0);
-	assert.equal(MANIFEST_CACHE_TTL_MS_VALUE, 15_000);
+	assert.equal(MANIFEST_CACHE_TTL_MS_VALUE, 60_000);
 });

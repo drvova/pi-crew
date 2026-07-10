@@ -18,6 +18,16 @@ export function validateWorkflowForTeam(workflow: WorkflowConfig, team: TeamConf
 		}
 	}
 
+	// Validate output field types
+	for (const step of workflow.steps) {
+		if (step.output !== undefined && step.output !== false && typeof step.output !== "string") {
+			errors.push(`Step '${step.id}' has invalid 'output' field: expected string or false, got ${typeof step.output}.`);
+		}
+		if (typeof step.output === "string" && step.output.trim() === "") {
+			errors.push(`Step '${step.id}' has empty 'output' string.`);
+		}
+	}
+
 	const visiting = new Set<string>();
 	const visited = new Set<string>();
 	const byId = new Map(workflow.steps.map((step) => [step.id, step]));
