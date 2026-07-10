@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.9.32] — typescript 7 upgrade (2026-07-10)
+
+Upgraded the TypeScript toolchain from 5.9.3 to **7.0.2** (the native Go port, a.k.a. Project Corsa / `typescript-go`). This is a dev-toolchain-only change: pi-crew ships source `.ts` loaded at runtime via Node `--experimental-strip-types`, so end users see zero behavioral change. The upgrade affects only `npm run typecheck` and editor type-checking.
+
+### Performance
+- **`tsc --noEmit` is ~3x faster on pi-crew**: 40.0s → 13.1s (1112 `.ts` files). TS 7.0's native port reports 8–12x on larger codebases; pi-crew is below that curve due to its smaller file count.
+
+### Changed
+- **`typescript`**: `^5.9.3` → `^7.0.2` (native Go port; programmatic API removed in 7.0 — pi-crew has zero programmatic TS consumers, so no impact).
+- **`@types/node`**: promoted from transitive (via `@anthropic-ai/sdk` peer) to direct `devDependency` (`^25.9.5`) so an upstream peer bump can no longer blackhole pi-crew's types.
+- **`tsconfig.json`**: pinned two flags explicitly that became TS 6.0 defaults (inherited by 7.0):
+  - `"verbatimModuleSyntax": true`
+  - `"noUncheckedSideEffectImports": true`
+
+### Fixed (test accompaniments to the TS 7 breaking changes)
+- **`test/unit/export-adapters.test.ts`**: replaced the bare side-effect import `import "../../src/adapters/index.ts";` with a bound import `import { adapterRegistry } from "../../src/adapters/index.ts";`. Required by `noUncheckedSideEffectImports: true` (the import is intentional — it triggers `adapterRegistry.register()` at module load — so the binding is unused but the side effect still runs).
+- **`test/unit/dwf-authoring-types.test.ts`**: added `--ignoreConfig` to the spawned `tsc` invocation. TS 7.0 introduced a breaking change (TS5112): command-line builds that pass a file path now error when a `tsconfig.json` exists in the cwd, unless `--ignoreConfig` is passed. This compile-check test supplies its own flags and intentionally ignores the repo's tsconfig.
+
+### Notes
+- **TS 6.0 was skipped** (released 2026-03-23; pi-crew jumped 5.9.3 → 7.0.2). TS 7.0 is typecheck-compatible with TS 6.0; the breaking-change matrix was audited in `research-typescript-v7-upgrade.md` and pi-crew was already compliant on every inherited default.
+- **`dist/` staleness** (pre-existing on `main`, unrelated to this upgrade) was left untouched in this PR. GitHub CI excludes the mtime-based `check:bundle-staleness` check.
+
+### Verification
+- `tsc --noEmit`: 0 errors (independently re-verified).
+- `biome lint` + `format:check`: clean (1123 files).
+- Unit tests: passing, including the two TS-7-affected tests (`dwf-authoring-types`, `event-log-async`).
+- Full risk analysis + decision matrix: `research-typescript-v7-upgrade.md`.
+
 ## [0.9.30] — observability hardening + steering injection guards (2026-07-10)
 
 Cold-verified review of 12 findings across security, code quality, and explorer passes yielded 11 confirmed bugs (1 NOT-A-BUG). This release ships 9 of those fixes; the remaining 2 are documented as deferred follow-ups.
