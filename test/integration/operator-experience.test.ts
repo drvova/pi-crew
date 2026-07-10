@@ -62,7 +62,16 @@ test("operator mailbox compose and ack roundtrip updates delivery state", async 
 		});
 		const messageId = JSON.parse(composed.message).id as string;
 		assert.equal((await dispatchMailboxAck(fixture.ctx, fixture.runId, messageId)).ok, true);
-		assert.equal(readDeliveryState(fixture.manifest).messages[messageId], "acknowledged");
+		// Windows CI: readDeliveryState can return 'pending' for a few ms after
+		// the ack because the file system hasn't surfaced the write yet. Retry
+		// briefly to ride out the timing window.
+		let status: string | undefined;
+		for (let attempt = 0; attempt < 20; attempt++) {
+			status = readDeliveryState(fixture.manifest).messages[messageId];
+			if (status === "acknowledged") break;
+			await new Promise((r) => setTimeout(r, 50));
+		}
+		assert.equal(status, "acknowledged");
 	} finally {
 		fs.rmSync(fixture.cwd, { recursive: true, force: true });
 	}
