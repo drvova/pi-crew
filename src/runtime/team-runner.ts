@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentConfig } from "../agents/agent-config.ts";
 import type { CrewLimitsConfig, CrewReliabilityConfig, CrewRuntimeConfig } from "../config/config.ts";
+import { CrewError, ErrorCode } from "../errors.ts";
 import { appendHookEvent, executeHook } from "../hooks/registry.ts";
 import { childCorrelation, withCorrelation } from "../observability/correlation.ts";
 import type { MetricRegistry } from "../observability/metric-registry.ts";
@@ -15,7 +16,6 @@ import { loadRunManifestById, saveRunManifest, saveRunManifestAsync, saveRunTask
 import type { ArtifactDescriptor, PolicyDecision, TaskAttemptState, TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { aggregateUsage, formatTokens, formatUsage } from "../state/usage.ts";
 import type { TeamConfig } from "../teams/team-config.ts";
-import { CrewError, ErrorCode } from "../errors.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { checkBranchFreshness } from "../worktree/branch-freshness.ts";
@@ -191,13 +191,19 @@ export function checkPerTaskBudget(
 
 function findStep(workflow: WorkflowConfig, task: TeamTaskState): WorkflowStep {
 	const step = workflow.steps.find((candidate) => candidate.id === task.stepId);
-	if (!step) throw new CrewError(ErrorCode.ResourceNotFound, `Workflow step '${task.stepId}' not found for task '${task.id}'.`).withContext(`workflow step lookup (task=${task.id})`);
+	if (!step)
+		throw new CrewError(ErrorCode.ResourceNotFound, `Workflow step '${task.stepId}' not found for task '${task.id}'.`).withContext(
+			`workflow step lookup (task=${task.id})`,
+		);
 	return step;
 }
 
 function findAgent(agents: AgentConfig[], task: TeamTaskState): AgentConfig {
 	const agent = agents.find((candidate) => candidate.name === task.agent);
-	if (!agent) throw new CrewError(ErrorCode.ResourceNotFound, `Agent '${task.agent}' not found for task '${task.id}'.`).withContext(`agent lookup (task=${task.id})`);
+	if (!agent)
+		throw new CrewError(ErrorCode.ResourceNotFound, `Agent '${task.agent}' not found for task '${task.id}'.`).withContext(
+			`agent lookup (task=${task.id})`,
+		);
 	return agent;
 }
 
@@ -1302,7 +1308,9 @@ async function executeTeamRunCore(
 						};
 						if (failed) {
 							lastFailed = enriched;
-							throw new CrewError(ErrorCode.TaskNotFound, failed.error ?? `Task ${task.id} failed.`).withContext(`retry evaluation (run=${manifest.runId})`);
+							throw new CrewError(ErrorCode.TaskNotFound, failed.error ?? `Task ${task.id} failed.`).withContext(
+								`retry evaluation (run=${manifest.runId})`,
+							);
 						}
 						input.metricRegistry?.histogram("crew.task.retry_count", "Retries per task", [0, 1, 2, 3, 5, 10]).observe(
 							{
@@ -1658,7 +1666,7 @@ async function executeTeamRunCore(
 	if (input.workflow?.steps) {
 		const missingOutputs: string[] = [];
 		for (const step of input.workflow.steps) {
-			if (step.output && typeof step.output === 'string') {
+			if (step.output && typeof step.output === "string") {
 				const outputPath = path.join(manifest.artifactsRoot, step.output);
 				if (!fs.existsSync(outputPath)) {
 					missingOutputs.push(step.output);
@@ -1667,7 +1675,12 @@ async function executeTeamRunCore(
 		}
 		if (missingOutputs.length > 0) {
 			// Emit warning event — run still completes normally to avoid hanging
-			appendEventFireAndForget(manifest.eventsPath, { type: "run.deliverable_warning", runId: manifest.runId, message: `Missing workflow output files: ${missingOutputs.join(', ')}`, data: { missingFiles: missingOutputs } });
+			appendEventFireAndForget(manifest.eventsPath, {
+				type: "run.deliverable_warning",
+				runId: manifest.runId,
+				message: `Missing workflow output files: ${missingOutputs.join(", ")}`,
+				data: { missingFiles: missingOutputs },
+			});
 		}
 	}
 

@@ -632,13 +632,17 @@ export class RunDashboard implements DashboardComponent {
 									: this.activePane === "mailbox"
 										? safeRenderPane("mailbox", () => renderMailboxPane(snap))
 										: this.activePane === "health"
-											? safeRenderPane("health", () => renderHealthPane(snap, {
-													isForeground: !r.async,
-												}))
+											? safeRenderPane("health", () =>
+													renderHealthPane(snap, {
+														isForeground: !r.async,
+													}),
+												)
 											: this.activePane === "metrics"
-												? safeRenderPane("metrics", () => renderMetricsPane(snap, {
-														registry: this.options.registry,
-													}))
+												? safeRenderPane("metrics", () =>
+														renderMetricsPane(snap, {
+															registry: this.options.registry,
+														}),
+													)
 												: safeRenderPane("transcript", () => renderTranscriptPane(snap))
 							: [...readAgentPreview(r, 4, this.options), ...readProgressPreview(r, 2)];
 						const filteredPane = paneLines.filter((l) => l && !l.includes("(none)") && l.trim() !== "");

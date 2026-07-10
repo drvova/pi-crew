@@ -801,7 +801,12 @@ export async function loadRunManifestByIdAsync(
 		} else if (!validateRunManifestPaths(cwd, runId, cached.manifest, stateRoot, tasksPath)) {
 			manifestCache.delete(stateRoot);
 			return undefined;
-		} else if (!(await fsp.access(tasksPath).then(() => true, () => false))) {
+		} else if (
+			!(await fsp.access(tasksPath).then(
+				() => true,
+				() => false,
+			))
+		) {
 			// Tasks file was deleted after cache was populated — do not serve stale cache.
 			manifestCache.delete(stateRoot);
 			return undefined;

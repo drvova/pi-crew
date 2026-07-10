@@ -140,8 +140,8 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 	const disposeI18n = initI18n(pi);
 	resetTimings();
 	// S06: Verbose/debug flags for pi-crew diagnostics
-	const verbose = process.env.PI_CREW_VERBOSE === '1' || process.argv.includes('--verbose');
-	const debug = process.env.PI_CREW_DEBUG === '1' || process.argv.includes('--debug');
+	const verbose = process.env.PI_CREW_VERBOSE === "1" || process.argv.includes("--verbose");
+	const debug = process.env.PI_CREW_DEBUG === "1" || process.argv.includes("--debug");
 	time("register:start");
 	// Cold-start race fix (general): pre-warm the hot module graph NOW, during
 	// single-threaded registration, before any concurrent subagent can spawn.
