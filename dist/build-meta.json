@@ -6508,9 +6508,9 @@
           "original": "../config/defaults.ts"
         },
         {
-          "path": "../utils/internal-error.ts",
+          "path": "src/utils/internal-error.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../utils/internal-error.ts"
         },
         {
           "path": "src/utils/paths.ts",
@@ -6571,11 +6571,42 @@
       "imports": [],
       "format": "esm"
     },
-    "src/state/state-store.ts": {
-      "bytes": 36081,
+    "src/runtime/task-health.ts": {
+      "bytes": 1933,
+      "imports": [],
+      "format": "esm"
+    },
+    "src/state/health-store.ts": {
+      "bytes": 2348,
       "imports": [
         {
           "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/runtime/task-health.ts",
+          "kind": "import-statement",
+          "original": "../runtime/task-health.ts"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/state/state-store.ts": {
+      "bytes": 36169,
+      "imports": [
+        {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:fs/promises",
           "kind": "import-statement",
           "external": true
         },
@@ -6640,9 +6671,9 @@
           "original": "./event-log.ts"
         },
         {
-          "path": "./health-store.ts",
+          "path": "src/state/health-store.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "./health-store.ts"
         },
         {
           "path": "src/state/locks.ts",
@@ -7776,6 +7807,22 @@
       ],
       "format": "esm"
     },
+    "src/ui/terminal-status.ts": {
+      "bytes": 8724,
+      "imports": [
+        {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/runtime/live-agent-manager.ts",
+          "kind": "import-statement",
+          "original": "../runtime/live-agent-manager.ts"
+        }
+      ],
+      "format": "esm"
+    },
     "src/ui/spinner.ts": {
       "bytes": 757,
       "imports": [],
@@ -7817,6 +7864,11 @@
       ],
       "format": "esm"
     },
+    "src/runtime/phase-progress.ts": {
+      "bytes": 6672,
+      "imports": [],
+      "format": "esm"
+    },
     "src/ui/layout-primitives.ts": {
       "bytes": 2497,
       "imports": [
@@ -7842,9 +7894,9 @@
           "original": "../../runtime/live-agent-manager.ts"
         },
         {
-          "path": "../../runtime/phase-progress.ts",
+          "path": "src/runtime/phase-progress.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../../runtime/phase-progress.ts"
         },
         {
           "path": "src/runtime/process-status.ts",
@@ -7852,9 +7904,9 @@
           "original": "../../runtime/process-status.ts"
         },
         {
-          "path": "../../runtime/usage-tracker.ts",
+          "path": "src/runtime/usage-tracker.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../../runtime/usage-tracker.ts"
         },
         {
           "path": "src/utils/visual.ts",
@@ -7867,9 +7919,9 @@
           "original": "../layout-primitives.ts"
         },
         {
-          "path": "../live-duration.ts",
+          "path": "src/ui/live-duration.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../live-duration.ts"
         },
         {
           "path": "src/ui/spinner.ts",
@@ -8310,9 +8362,9 @@
           "original": "../utils/redaction.ts"
         },
         {
-          "path": "../utils/safe-paths.ts",
+          "path": "src/utils/safe-paths.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../utils/safe-paths.ts"
         },
         {
           "path": "src/state/atomic-write.ts",
@@ -8561,7 +8613,7 @@
       "format": "esm"
     },
     "src/workflows/validate-workflow.ts": {
-      "bytes": 1397,
+      "bytes": 1826,
       "imports": [],
       "format": "esm"
     },
@@ -13832,11 +13884,6 @@
       ],
       "format": "esm"
     },
-    "src/runtime/phase-progress.ts": {
-      "bytes": 6672,
-      "imports": [],
-      "format": "esm"
-    },
     "src/runtime/task-display.ts": {
       "bytes": 1868,
       "imports": [
@@ -14051,32 +14098,6 @@
           "path": "src/plugins/plugins/vitest.ts",
           "kind": "import-statement",
           "original": "./vitest.ts"
-        }
-      ],
-      "format": "esm"
-    },
-    "src/runtime/task-health.ts": {
-      "bytes": 1933,
-      "imports": [],
-      "format": "esm"
-    },
-    "src/state/health-store.ts": {
-      "bytes": 2348,
-      "imports": [
-        {
-          "path": "node:fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:path",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "src/runtime/task-health.ts",
-          "kind": "import-statement",
-          "original": "../runtime/task-health.ts"
         }
       ],
       "format": "esm"
@@ -15139,7 +15160,7 @@
       "format": "esm"
     },
     "src/runtime/team-runner.ts": {
-      "bytes": 76156,
+      "bytes": 77294,
       "imports": [
         {
           "path": "node:fs",
@@ -15150,6 +15171,11 @@
           "path": "node:path",
           "kind": "import-statement",
           "external": true
+        },
+        {
+          "path": "src/errors.ts",
+          "kind": "import-statement",
+          "original": "../errors.ts"
         },
         {
           "path": "src/hooks/registry.ts",
@@ -15385,6 +15411,22 @@
       ],
       "format": "esm"
     },
+    "src/runtime/parallel-research.ts": {
+      "bytes": 2458,
+      "imports": [
+        {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
     "src/state/run-metrics.ts": {
       "bytes": 4516,
       "imports": [
@@ -15588,22 +15630,6 @@
           "path": "src/extension/team-tool/context.ts",
           "kind": "import-statement",
           "original": "./context.ts"
-        }
-      ],
-      "format": "esm"
-    },
-    "src/runtime/parallel-research.ts": {
-      "bytes": 2458,
-      "imports": [
-        {
-          "path": "node:fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:path",
-          "kind": "import-statement",
-          "external": true
         }
       ],
       "format": "esm"
@@ -15857,9 +15883,9 @@
           "original": "../../workflows/discover-workflows.ts"
         },
         {
-          "path": "../../workflows/validate-workflow.ts",
+          "path": "src/workflows/validate-workflow.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../../workflows/validate-workflow.ts"
         },
         {
           "path": "src/worktree/worktree-manager.ts",
@@ -15877,9 +15903,9 @@
           "original": "../../utils/safe-paths.ts"
         },
         {
-          "path": "../../runtime/parallel-research.ts",
+          "path": "src/runtime/parallel-research.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../../runtime/parallel-research.ts"
         },
         {
           "path": "src/runtime/runtime-resolver.ts",
@@ -15887,9 +15913,9 @@
           "original": "../../runtime/runtime-resolver.ts"
         },
         {
-          "path": "../../runtime/skill-instructions.ts",
+          "path": "src/runtime/skill-instructions.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../../runtime/skill-instructions.ts"
         },
         {
           "path": "src/state/event-log.ts",
@@ -16663,7 +16689,7 @@
       "format": "esm"
     },
     "src/ui/run-dashboard.ts": {
-      "bytes": 32937,
+      "bytes": 33632,
       "imports": [
         {
           "path": "node:fs",
@@ -17771,48 +17797,6 @@
       ],
       "format": "esm"
     },
-    "src/extension/session-summary.ts": {
-      "bytes": 876,
-      "imports": [
-        {
-          "path": "src/runtime/crew-agent-records.ts",
-          "kind": "import-statement",
-          "original": "../runtime/crew-agent-records.ts"
-        },
-        {
-          "path": "src/runtime/process-status.ts",
-          "kind": "import-statement",
-          "original": "../runtime/process-status.ts"
-        },
-        {
-          "path": "src/extension/run-index.ts",
-          "kind": "import-statement",
-          "original": "./run-index.ts"
-        }
-      ],
-      "format": "esm"
-    },
-    "src/extension/team-tool/destructive-gate.ts": {
-      "bytes": 2211,
-      "imports": [],
-      "format": "esm"
-    },
-    "src/runtime/session-resources.ts": {
-      "bytes": 1021,
-      "imports": [
-        {
-          "path": "src/utils/internal-error.ts",
-          "kind": "import-statement",
-          "original": "../utils/internal-error.ts"
-        }
-      ],
-      "format": "esm"
-    },
-    "src/runtime/session-snapshot.ts": {
-      "bytes": 1991,
-      "imports": [],
-      "format": "esm"
-    },
     "src/ui/live-run-sidebar.ts": {
       "bytes": 10866,
       "imports": [
@@ -17925,6 +17909,48 @@
       ],
       "format": "esm"
     },
+    "src/extension/session-summary.ts": {
+      "bytes": 876,
+      "imports": [
+        {
+          "path": "src/runtime/crew-agent-records.ts",
+          "kind": "import-statement",
+          "original": "../runtime/crew-agent-records.ts"
+        },
+        {
+          "path": "src/runtime/process-status.ts",
+          "kind": "import-statement",
+          "original": "../runtime/process-status.ts"
+        },
+        {
+          "path": "src/extension/run-index.ts",
+          "kind": "import-statement",
+          "original": "./run-index.ts"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/extension/team-tool/destructive-gate.ts": {
+      "bytes": 2211,
+      "imports": [],
+      "format": "esm"
+    },
+    "src/runtime/session-resources.ts": {
+      "bytes": 1021,
+      "imports": [
+        {
+          "path": "src/utils/internal-error.ts",
+          "kind": "import-statement",
+          "original": "../utils/internal-error.ts"
+        }
+      ],
+      "format": "esm"
+    },
+    "src/runtime/session-snapshot.ts": {
+      "bytes": 1991,
+      "imports": [],
+      "format": "esm"
+    },
     "src/runtime/foreground-watchdog.ts": {
       "bytes": 4524,
       "imports": [
@@ -17968,7 +17994,7 @@
       "format": "esm"
     },
     "src/extension/register.ts": {
-      "bytes": 67832,
+      "bytes": 68063,
       "imports": [
         {
           "path": "node:fs",
@@ -18116,9 +18142,9 @@
           "original": "../ui/run-snapshot-cache.ts"
         },
         {
-          "path": "../ui/terminal-status.ts",
+          "path": "src/ui/terminal-status.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../ui/terminal-status.ts"
         },
         {
           "path": "src/ui/widget/index.ts",
@@ -18126,9 +18152,9 @@
           "original": "../ui/widget/index.ts"
         },
         {
-          "path": "../utils/fs-watch.ts",
+          "path": "src/utils/fs-watch.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "../utils/fs-watch.ts"
         },
         {
           "path": "src/utils/internal-error.ts",
@@ -18256,9 +18282,9 @@
           "original": "./registration/team-tool.ts"
         },
         {
-          "path": "./registration/ui.ts",
+          "path": "src/extension/registration/ui.ts",
           "kind": "import-statement",
-          "external": true
+          "original": "./registration/ui.ts"
         },
         {
           "path": "src/extension/session-summary.ts",
@@ -18390,7 +18416,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6636624
+      "bytes": 6650440
     },
     "dist/index.mjs": {
       "imports": [
@@ -18556,6 +18582,21 @@
         },
         {
           "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:fs/promises",
           "kind": "import-statement",
           "external": true
         },
@@ -19370,16 +19411,6 @@
           "external": true
         },
         {
-          "path": "node:fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:path",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
           "path": "node:child_process",
           "kind": "import-statement",
           "external": true
@@ -19560,12 +19591,12 @@
           "external": true
         },
         {
-          "path": "node:fs",
+          "path": "node:path",
           "kind": "import-statement",
           "external": true
         },
         {
-          "path": "node:path",
+          "path": "node:fs",
           "kind": "import-statement",
           "external": true
         },
@@ -20643,7 +20674,7 @@
           "bytesInOutput": 3769
         },
         "src/state/active-run-registry.ts": {
-          "bytesInOutput": 11470
+          "bytesInOutput": 11497
         },
         "src/utils/task-name-generator.ts": {
           "bytesInOutput": 106
@@ -20657,8 +20688,14 @@
         "src/state/contracts.ts": {
           "bytesInOutput": 1785
         },
+        "src/runtime/task-health.ts": {
+          "bytesInOutput": 1469
+        },
+        "src/state/health-store.ts": {
+          "bytesInOutput": 1803
+        },
         "src/state/state-store.ts": {
-          "bytesInOutput": 18950
+          "bytesInOutput": 19068
         },
         "src/utils/file-coalescer.ts": {
           "bytesInOutput": 1204
@@ -20828,6 +20865,9 @@
         "src/ui/widget/widget-model.ts": {
           "bytesInOutput": 2279
         },
+        "src/runtime/phase-progress.ts": {
+          "bytesInOutput": 3938
+        },
         "src/ui/layout-primitives.ts": {
           "bytesInOutput": 2238
         },
@@ -20835,7 +20875,7 @@
           "bytesInOutput": 1809
         },
         "src/ui/widget/widget-renderer.ts": {
-          "bytesInOutput": 6269
+          "bytesInOutput": 6348
         },
         "src/ui/widget/index.ts": {
           "bytesInOutput": 9599
@@ -20874,7 +20914,7 @@
           "bytesInOutput": 4392
         },
         "src/state/mailbox.ts": {
-          "bytesInOutput": 18402
+          "bytesInOutput": 18425
         },
         "src/extension/help.ts": {
           "bytesInOutput": 2863
@@ -20916,7 +20956,7 @@
           "bytesInOutput": 16052
         },
         "src/workflows/validate-workflow.ts": {
-          "bytesInOutput": 1516
+          "bytesInOutput": 1927
         },
         "src/extension/validate-resources.ts": {
           "bytesInOutput": 3006
@@ -21608,9 +21648,6 @@
         "src/runtime/effectiveness.ts": {
           "bytesInOutput": 3156
         },
-        "src/runtime/phase-progress.ts": {
-          "bytesInOutput": 3938
-        },
         "src/runtime/task-display.ts": {
           "bytesInOutput": 1490
         },
@@ -21640,12 +21677,6 @@
         },
         "src/plugins/plugins/index.ts": {
           "bytesInOutput": 145
-        },
-        "src/runtime/task-health.ts": {
-          "bytesInOutput": 1469
-        },
-        "src/state/health-store.ts": {
-          "bytesInOutput": 1803
         },
         "src/worktree/branch-freshness.ts": {
           "bytesInOutput": 2373
@@ -21792,10 +21823,13 @@
           "bytesInOutput": 3398
         },
         "src/runtime/team-runner.ts": {
-          "bytesInOutput": 57504
+          "bytesInOutput": 58504
         },
         "src/runtime/pipeline-runner.ts": {
           "bytesInOutput": 12070
+        },
+        "src/runtime/parallel-research.ts": {
+          "bytesInOutput": 2683
         },
         "src/state/run-metrics.ts": {
           "bytesInOutput": 1508
@@ -21824,9 +21858,6 @@
         "src/extension/team-tool/chain-dispatch.ts": {
           "bytesInOutput": 2189
         },
-        "src/runtime/parallel-research.ts": {
-          "bytesInOutput": 2683
-        },
         "node_modules/acorn/dist/acorn.mjs": {
           "bytesInOutput": 224912
         },
@@ -21849,7 +21880,7 @@
           "bytesInOutput": 6259
         },
         "src/extension/team-tool/run.ts": {
-          "bytesInOutput": 34875
+          "bytesInOutput": 34966
         },
         "src/extension/team-tool.ts": {
           "bytesInOutput": 35616
@@ -21912,7 +21943,7 @@
           "bytesInOutput": 4158
         },
         "src/ui/run-dashboard.ts": {
-          "bytesInOutput": 27552
+          "bytesInOutput": 28168
         },
         "src/ui/overlays/confirm-overlay.ts": {
           "bytesInOutput": 2247
@@ -21993,7 +22024,7 @@
           "bytesInOutput": 3150
         },
         "src/extension/register.ts": {
-          "bytesInOutput": 45364
+          "bytesInOutput": 45555
         },
         "src/runtime/batch-barrier.ts": {
           "bytesInOutput": 3060
@@ -22018,6 +22049,9 @@
         },
         "src/ui/run-snapshot-cache.ts": {
           "bytesInOutput": 29673
+        },
+        "src/ui/terminal-status.ts": {
+          "bytesInOutput": 27
         },
         "src/utils/run-watcher-registry.ts": {
           "bytesInOutput": 3309
@@ -22095,7 +22129,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3161776
+      "bytes": 3164389
     }
   }
 }
