@@ -134,8 +134,8 @@ test("SpeedTracker excludes error/aborted messages from the session average", ()
 	assert.equal(tracker.sessionAvgTokS(), null);
 });
 
-test("formatSpeed renders label and value", () => {
-	assert.equal(formatSpeed(DEFAULT_CONFIG.speed, null), "-- tok/s");
+test("formatSpeed renders label and value, empty when no data", () => {
+	assert.equal(formatSpeed(DEFAULT_CONFIG.speed, null), "");
 	assert.match(formatSpeed(DEFAULT_CONFIG.speed, 12.345), /^12\.3 tok\/s$/);
 });
 
@@ -146,9 +146,9 @@ test("formatCount scales compactly", () => {
 	assert.equal(formatCount(1_500_000), "1.5M");
 });
 
-test("renderSpeedFooter uses accent for live value and dim when unknown", () => {
+test("renderSpeedFooter uses accent for live value, empty when unknown", () => {
 	assert.match(renderSpeedFooter(theme, DEFAULT_CONFIG.speed, 42), /<accent>42\.0<\/accent> <dim>tok\/s<\/dim>/);
-	assert.match(renderSpeedFooter(theme, DEFAULT_CONFIG.speed, null), /<dim>--<\/dim> <dim>tok\/s<\/dim>/);
+	assert.equal(renderSpeedFooter(theme, DEFAULT_CONFIG.speed, null), "");
 });
 
 test("renderWorkingMessage includes working prefix and speed", () => {

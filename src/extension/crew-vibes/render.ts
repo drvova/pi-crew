@@ -42,21 +42,21 @@ export function getCapacityUsage(ctx: ExtensionContext): CapacityUsage {
 }
 
 export function formatSpeed(config: SpeedConfig, speed: number | null): string {
-	return speed === null ? `-- ${config.label}` : `${speed.toFixed(1)} ${config.label}`;
+	return speed === null ? "" : `${speed.toFixed(1)} ${config.label}`;
 }
 
 export function renderSpeedFooter(theme: CrewTheme | undefined, config: SpeedConfig, speed: number | null): string {
-	const value = speed === null ? "--" : speed.toFixed(1);
-	const valueTone = speed === null ? "dim" : "accent";
-	const styled = theme ? `${theme.fg(valueTone, value)} ${theme.fg("dim", config.label)}` : `${value} ${config.label}`;
-	return styled;
+	if (speed === null) return "";
+	const value = speed.toFixed(1);
+	return theme ? `${theme.fg("accent", value)} ${theme.fg("dim", config.label)}` : `${value} ${config.label}`;
 }
 
 export function renderWorkingMessage(theme: CrewTheme | undefined, config: SpeedConfig, speed: number | null): string {
 	const left = "Working";
+	if (speed === null) return theme ? theme.fg("muted", left) : left;
 	const speedText = theme
-		? `${theme.fg(speed === null ? "dim" : "accent", speed === null ? "--" : speed.toFixed(1))} ${theme.fg("dim", config.label)}`
-		: `${speed === null ? "--" : speed.toFixed(1)} ${config.label}`;
+		? `${theme.fg("accent", speed.toFixed(1))} ${theme.fg("dim", config.label)}`
+		: `${speed.toFixed(1)} ${config.label}`;
 	return theme ? `${theme.fg("muted", left)}  ${speedText}` : `${left}  ${speedText}`;
 }
 

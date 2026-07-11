@@ -89,7 +89,8 @@ export function registerCrewVibes(pi: ExtensionAPI): void {
 			setSpeedStatus(ctx, config, undefined);
 			return;
 		}
-		setSpeedStatus(ctx, config, renderSpeedFooter(themeOf(ctx), config.speed, speed));
+		const text = renderSpeedFooter(themeOf(ctx), config.speed, speed);
+		setSpeedStatus(ctx, config, text || undefined);
 	}
 
 	function applyIndicator(ctx: ExtensionContext, speed: number | null, force = false): void {

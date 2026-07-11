@@ -82481,17 +82481,17 @@ function getCapacityUsage(ctx) {
   };
 }
 function formatSpeed(config, speed) {
-  return speed === null ? `-- ${config.label}` : `${speed.toFixed(1)} ${config.label}`;
+  return speed === null ? "" : `${speed.toFixed(1)} ${config.label}`;
 }
 function renderSpeedFooter(theme, config, speed) {
-  const value = speed === null ? "--" : speed.toFixed(1);
-  const valueTone = speed === null ? "dim" : "accent";
-  const styled = theme ? `${theme.fg(valueTone, value)} ${theme.fg("dim", config.label)}` : `${value} ${config.label}`;
-  return styled;
+  if (speed === null) return "";
+  const value = speed.toFixed(1);
+  return theme ? `${theme.fg("accent", value)} ${theme.fg("dim", config.label)}` : `${value} ${config.label}`;
 }
 function renderWorkingMessage(theme, config, speed) {
   const left = "Working";
-  const speedText = theme ? `${theme.fg(speed === null ? "dim" : "accent", speed === null ? "--" : speed.toFixed(1))} ${theme.fg("dim", config.label)}` : `${speed === null ? "--" : speed.toFixed(1)} ${config.label}`;
+  if (speed === null) return theme ? theme.fg("muted", left) : left;
+  const speedText = theme ? `${theme.fg("accent", speed.toFixed(1))} ${theme.fg("dim", config.label)}` : `${speed.toFixed(1)} ${config.label}`;
   return theme ? `${theme.fg("muted", left)}  ${speedText}` : `${left}  ${speedText}`;
 }
 function crewIndicatorFrames(theme) {
@@ -83289,7 +83289,8 @@ function registerCrewVibes(pi) {
       setSpeedStatus(ctx, config, void 0);
       return;
     }
-    setSpeedStatus(ctx, config, renderSpeedFooter(themeOf(ctx), config.speed, speed));
+    const text = renderSpeedFooter(themeOf(ctx), config.speed, speed);
+    setSpeedStatus(ctx, config, text || void 0);
   }
   function applyIndicator(ctx, speed, force = false) {
     if (!ctx.hasUI || !ctx.ui.setWorkingIndicator) return;
