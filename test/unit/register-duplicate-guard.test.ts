@@ -37,47 +37,65 @@ test("registerPiTeams no-ops when another copy already registered from a differe
 
 // ── self-heal: remove the losing copy's package entry (2026-07-11) ──
 
-test("removeDuplicatePackageEntry removes only the entry containing the losing copy", () => {
+function writeSettings(agentDir: string, packages: string[]): void {
+	fs.writeFileSync(path.join(agentDir, "settings.json"), `${JSON.stringify({ theme: "dark", packages }, null, 2)}\n`, "utf-8");
+}
+
+function makeAgentDir(): { agentDir: string; cloneMjs: string; devMjs: string } {
 	const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-selfheal-"));
+	const cloneDir = path.join(agentDir, "git", "github.com", "drvova", "pi-crew");
+	const devDir = `${agentDir}-dev`; // sibling of agentDir in tmp
+	// dev checkout addressed via a RELATIVE entry from agentDir
+	const relDev = path.relative(agentDir, devDir);
+	fs.mkdirSync(path.join(cloneDir, "dist"), { recursive: true });
+	fs.mkdirSync(path.join(devDir, "dist"), { recursive: true });
+	writeSettings(agentDir, ["npm:context-mode", relDev, "git:https://github.com/drvova/pi-crew"]);
+	return { agentDir, cloneMjs: path.join(cloneDir, "dist", "index.mjs"), devMjs: path.join(devDir, "dist", "index.mjs") };
+}
+
+test("self-heal: clone loses race -> git entry removed, dev preserved", () => {
+	const { agentDir, cloneMjs, devMjs } = makeAgentDir();
 	try {
-		const cloneDir = path.join(agentDir, "git", "github.com", "drvova", "pi-crew");
-		fs.mkdirSync(path.join(cloneDir, "dist"), { recursive: true });
-		fs.writeFileSync(
-			path.join(agentDir, "settings.json"),
-			`${JSON.stringify(
-				{
-					theme: "dark",
-					packages: ["npm:context-mode", "../../pi-crew", "git:https://github.com/drvova/pi-crew"],
-				},
-				null,
-				2,
-			)}\n`,
-			"utf-8",
-		);
-		const removed = removeDuplicatePackageEntry(path.join(cloneDir, "dist", "index.mjs"), agentDir);
+		const removed = removeDuplicatePackageEntry(cloneMjs, devMjs, agentDir);
 		assert.equal(removed, "git:https://github.com/drvova/pi-crew");
 		const after = JSON.parse(fs.readFileSync(path.join(agentDir, "settings.json"), "utf-8"));
-		assert.deepEqual(after.packages, ["npm:context-mode", "../../pi-crew"], "other entries must be preserved");
+		assert.equal(after.packages.length, 2);
+		assert.ok(!after.packages.includes("git:https://github.com/drvova/pi-crew"));
 		assert.equal(after.theme, "dark", "unrelated settings must survive the rewrite");
 	} finally {
 		fs.rmSync(agentDir, { recursive: true, force: true });
 	}
 });
 
-test("removeDuplicatePackageEntry is a no-op when no entry matches the losing copy", () => {
-	const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-selfheal-nomatch-"));
+test("self-heal: dev loses race -> git entry STILL removed (observed live 2026-07-11)", () => {
+	// The exact incident: clone won the registration race, old policy removed
+	// the dev path entry. The deterministic policy must keep the path entry
+	// regardless of which copy lost.
+	const { agentDir, cloneMjs, devMjs } = makeAgentDir();
 	try {
-		const before = { packages: ["npm:context-mode", "../../pi-crew"] };
-		fs.writeFileSync(path.join(agentDir, "settings.json"), `${JSON.stringify(before, null, 2)}\n`, "utf-8");
-		const removed = removeDuplicatePackageEntry("/somewhere/else/dist/index.mjs", agentDir);
-		assert.equal(removed, undefined);
+		const removed = removeDuplicatePackageEntry(devMjs, cloneMjs, agentDir);
+		assert.equal(removed, "git:https://github.com/drvova/pi-crew", "path entry must be kept even when it lost the race");
 		const after = JSON.parse(fs.readFileSync(path.join(agentDir, "settings.json"), "utf-8"));
-		assert.deepEqual(after.packages, before.packages);
+		assert.ok(!after.packages.includes("git:https://github.com/drvova/pi-crew"));
+		assert.equal(after.packages.length, 2, "dev path entry and unrelated npm entry preserved");
 	} finally {
 		fs.rmSync(agentDir, { recursive: true, force: true });
 	}
 });
 
-test("removeDuplicatePackageEntry fails open on missing/corrupt settings", () => {
-	assert.equal(removeDuplicatePackageEntry("/x/dist/index.mjs", "/nonexistent-agent-dir"), undefined);
+test("self-heal: no-op when only one side resolves to a package entry", () => {
+	const { agentDir, cloneMjs } = makeAgentDir();
+	try {
+		const removed = removeDuplicatePackageEntry(cloneMjs, "/loaded/from/elsewhere/index.mjs", agentDir);
+		assert.equal(removed, undefined, "must never remove the sole matching entry");
+		const after = JSON.parse(fs.readFileSync(path.join(agentDir, "settings.json"), "utf-8"));
+		assert.equal(after.packages.length, 3, "settings untouched");
+	} finally {
+		fs.rmSync(agentDir, { recursive: true, force: true });
+		fs.rmSync(`${agentDir}-dev`, { recursive: true, force: true });
+	}
+});
+
+test("self-heal: fails open on missing/corrupt settings", () => {
+	assert.equal(removeDuplicatePackageEntry("/x/dist/index.mjs", "/y/dist/index.mjs", "/nonexistent-agent-dir"), undefined);
 });

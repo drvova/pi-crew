@@ -187,34 +187,52 @@ function realpathOrSelf(p: string): string {
 }
 
 /**
- * Self-heal: remove the settings.json `packages` entry that installed THIS
- * (losing) copy, so the next startup loads a single copy without any notice.
- * Only entries whose resolved install dir contains `selfPath` are removed —
- * the winning copy's entry can never match. Best-effort: any failure returns
- * undefined and the caller falls back to the plain notice.
+ * Self-heal: remove the REDUNDANT pi-crew `packages` entry so the next
+ * startup loads a single copy with no notice.
+ *
+ * Policy is DETERMINISTIC, independent of load order (which copy wins the
+ * registration race varies between startups — observed live 2026-07-11):
+ *   - Find the entries that installed the losing copy (`selfPath`) and the
+ *     winning copy (`winnerPath`).
+ *   - If both exist and differ: keep the plain-PATH entry when the pair is
+ *     path-vs-(git:|npm:) — a path package is a deliberate dev-checkout
+ *     choice, while git:/npm: entries are trivially re-addable (and in this
+ *     environment ARE re-added by automation). Otherwise remove the losing
+ *     copy's entry.
+ *   - If only one side resolves to an entry, do nothing — removing the sole
+	*     entry could uninstall pi-crew entirely.
+ *
+ * Best-effort: any failure returns undefined and the caller falls back to
+ * the plain notice.
  *
  * @internal — exported for unit tests.
  */
-export function removeDuplicatePackageEntry(selfPath: string, agentDir: string): string | undefined {
+export function removeDuplicatePackageEntry(selfPath: string, winnerPath: string, agentDir: string): string | undefined {
 	try {
 		const settingsPath = path.join(agentDir, "settings.json");
 		const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as { packages?: unknown };
 		if (!Array.isArray(settings.packages)) return undefined;
 		const selfReal = realpathOrSelf(selfPath);
-		const removed: string[] = [];
-		const kept = settings.packages.filter((entry) => {
-			if (typeof entry !== "string") return true;
-			const dir = resolvePackageEntryDir(entry, agentDir);
-			if (!dir) return true;
-			const dirReal = realpathOrSelf(dir);
-			const containsSelf = selfReal === dirReal || selfReal.startsWith(dirReal + path.sep);
-			if (containsSelf) removed.push(entry);
-			return !containsSelf;
-		});
-		if (removed.length === 0) return undefined;
-		settings.packages = kept;
+		const winnerReal = realpathOrSelf(winnerPath);
+		const entryContaining = (target: string): string | undefined => {
+			for (const entry of settings.packages as unknown[]) {
+				if (typeof entry !== "string") continue;
+				const dir = resolvePackageEntryDir(entry, agentDir);
+				if (!dir) continue;
+				const dirReal = realpathOrSelf(dir);
+				if (target === dirReal || target.startsWith(dirReal + path.sep)) return entry;
+			}
+			return undefined;
+		};
+		const selfEntry = entryContaining(selfReal);
+		const winnerEntry = entryContaining(winnerReal);
+		if (!selfEntry || !winnerEntry || selfEntry === winnerEntry) return undefined;
+		const isPlainPath = (entry: string): boolean => !entry.startsWith("git:") && !entry.startsWith("npm:");
+		// Keep the deliberate path entry; otherwise the loser's entry goes.
+		const toRemove = isPlainPath(selfEntry) && !isPlainPath(winnerEntry) ? winnerEntry : selfEntry;
+		settings.packages = (settings.packages as unknown[]).filter((entry) => entry !== toRemove);
 		fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
-		return removed.join(", ");
+		return toRemove;
 	} catch {
 		return undefined;
 	}
@@ -228,7 +246,7 @@ export function registerPiTeams(pi: ExtensionAPI): void {
 		// PI_CREW_AUTO_REMOVE_DUPLICATE=0). LAZY import avoided: getAgentDir is
 		// already a cheap sync helper from the peer-dep module in this graph.
 		const autoRemove = process.env.PI_CREW_AUTO_REMOVE_DUPLICATE !== "0";
-		const removedEntry = autoRemove ? removeDuplicatePackageEntry(self, getAgentDir()) : undefined;
+		const removedEntry = autoRemove ? removeDuplicatePackageEntry(self, firstCopy, getAgentDir()) : undefined;
 		console.error(
 			removedEntry
 				? `[pi-crew] duplicate install detected — already registered from ${firstCopy}. Auto-removed package entry '${removedEntry}' from settings.json; next startup loads a single copy.`

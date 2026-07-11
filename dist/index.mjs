@@ -84520,27 +84520,32 @@ function realpathOrSelf(p) {
     return p;
   }
 }
-function removeDuplicatePackageEntry(selfPath, agentDir) {
+function removeDuplicatePackageEntry(selfPath, winnerPath, agentDir) {
   try {
     const settingsPath2 = path80.join(agentDir, "settings.json");
     const settings = JSON.parse(fs101.readFileSync(settingsPath2, "utf-8"));
     if (!Array.isArray(settings.packages)) return void 0;
     const selfReal = realpathOrSelf(selfPath);
-    const removed = [];
-    const kept = settings.packages.filter((entry) => {
-      if (typeof entry !== "string") return true;
-      const dir = resolvePackageEntryDir(entry, agentDir);
-      if (!dir) return true;
-      const dirReal = realpathOrSelf(dir);
-      const containsSelf = selfReal === dirReal || selfReal.startsWith(dirReal + path80.sep);
-      if (containsSelf) removed.push(entry);
-      return !containsSelf;
-    });
-    if (removed.length === 0) return void 0;
-    settings.packages = kept;
+    const winnerReal = realpathOrSelf(winnerPath);
+    const entryContaining = (target) => {
+      for (const entry of settings.packages) {
+        if (typeof entry !== "string") continue;
+        const dir = resolvePackageEntryDir(entry, agentDir);
+        if (!dir) continue;
+        const dirReal = realpathOrSelf(dir);
+        if (target === dirReal || target.startsWith(dirReal + path80.sep)) return entry;
+      }
+      return void 0;
+    };
+    const selfEntry = entryContaining(selfReal);
+    const winnerEntry = entryContaining(winnerReal);
+    if (!selfEntry || !winnerEntry || selfEntry === winnerEntry) return void 0;
+    const isPlainPath = (entry) => !entry.startsWith("git:") && !entry.startsWith("npm:");
+    const toRemove = isPlainPath(selfEntry) && !isPlainPath(winnerEntry) ? winnerEntry : selfEntry;
+    settings.packages = settings.packages.filter((entry) => entry !== toRemove);
     fs101.writeFileSync(settingsPath2, `${JSON.stringify(settings, null, 2)}
 `, "utf-8");
-    return removed.join(", ");
+    return toRemove;
   } catch {
     return void 0;
   }
@@ -84550,7 +84555,7 @@ function registerPiTeams(pi) {
   if (firstCopy) {
     const self = fileURLToPath7(import.meta.url);
     const autoRemove = process.env.PI_CREW_AUTO_REMOVE_DUPLICATE !== "0";
-    const removedEntry = autoRemove ? removeDuplicatePackageEntry(self, getAgentDir()) : void 0;
+    const removedEntry = autoRemove ? removeDuplicatePackageEntry(self, firstCopy, getAgentDir()) : void 0;
     console.error(
       removedEntry ? `[pi-crew] duplicate install detected \u2014 already registered from ${firstCopy}. Auto-removed package entry '${removedEntry}' from settings.json; next startup loads a single copy.` : `[pi-crew] duplicate install detected \u2014 already registered from ${firstCopy}; skipping this copy (${self}). Remove one of the pi-crew package entries in ~/.pi/agent/settings.json to silence this notice.`
     );
