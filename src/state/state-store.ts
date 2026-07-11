@@ -732,10 +732,13 @@ export function loadRunManifestById(cwd: string, runId: string): { manifest: Tea
 	// instability. A concurrent writer can still complete a full write cycle
 	// between the final stat and the read. Callers needing strict consistency
 	// MUST use withRunLock() around load+modify+save.
-	if (attempts > 0) {
-		// Round 19: downgrade to debug — retry-loop instability is expected under
-		// concurrent writes (live team runs constantly append to tasks.json).
-		// This is best-effort by design; strict consistency requires withRunLock().
+	if (attempts > 0 && process.env.PI_CREW_DEBUG === "1") {
+		// Round 19 + 2026-07-11: retry-loop instability is EXPECTED under
+		// concurrent writes (live team runs constantly append to tasks.json), and
+		// console.debug writes to stdout — spamming and garbling the host TUI
+		// during multi-agent runs. Diagnostic only: emit solely under
+		// PI_CREW_DEBUG=1. Best-effort by design; strict consistency requires
+		// withRunLock().
 		console.debug(
 			`[state-store] loadRunManifestById: retry loop detected instability for run ${runId} after ${attempts} attempt(s) — best-effort only, use withRunLock() for strict consistency`,
 		);
@@ -845,10 +848,9 @@ export async function loadRunManifestByIdAsync(
 	// instability. A concurrent writer can still complete a full write cycle
 	// between the final stat and the read. Callers needing strict consistency
 	// MUST use withRunLock() around load+modify+save.
-	if (attempts > 0) {
-		// Round 19: downgrade to debug — retry-loop instability is expected under
-		// concurrent writes (live team runs constantly append to tasks.json).
-		// This is best-effort by design; strict consistency requires withRunLock().
+	if (attempts > 0 && process.env.PI_CREW_DEBUG === "1") {
+		// Round 19 + 2026-07-11: see the sync twin above — expected under
+		// concurrent writes; diagnostic only under PI_CREW_DEBUG=1.
 		console.debug(
 			`[state-store] loadRunManifestByIdAsync: retry loop detected instability for run ${runId} after ${attempts} attempt(s) — best-effort only, use withRunLock() for strict consistency`,
 		);

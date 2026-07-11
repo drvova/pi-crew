@@ -13754,7 +13754,7 @@ function loadRunManifestById(cwd, runId) {
     manifestStat = freshStat;
     tasksStat = freshTasksStat;
   }
-  if (attempts > 0) {
+  if (attempts > 0 && process.env.PI_CREW_DEBUG === "1") {
     console.debug(
       `[state-store] loadRunManifestById: retry loop detected instability for run ${runId} after ${attempts} attempt(s) \u2014 best-effort only, use withRunLock() for strict consistency`
     );
@@ -13820,7 +13820,7 @@ async function loadRunManifestByIdAsync(cwd, runId) {
     manifestStat = freshStat;
     tasksStat = freshTasksStat;
   }
-  if (attempts > 0) {
+  if (attempts > 0 && process.env.PI_CREW_DEBUG === "1") {
     console.debug(
       `[state-store] loadRunManifestByIdAsync: retry loop detected instability for run ${runId} after ${attempts} attempt(s) \u2014 best-effort only, use withRunLock() for strict consistency`
     );

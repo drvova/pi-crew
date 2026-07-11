@@ -6598,7 +6598,7 @@
       "format": "esm"
     },
     "src/state/state-store.ts": {
-      "bytes": 36354,
+      "bytes": 36479,
       "imports": [
         {
           "path": "node:fs",
@@ -18420,7 +18420,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6669528
+      "bytes": 6669707
     },
     "dist/index.mjs": {
       "imports": [
@@ -20699,7 +20699,7 @@
           "bytesInOutput": 1803
         },
         "src/state/state-store.ts": {
-          "bytesInOutput": 19138
+          "bytesInOutput": 19212
         },
         "src/utils/file-coalescer.ts": {
           "bytesInOutput": 1204
@@ -22130,7 +22130,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3173431
+      "bytes": 3173505
     }
   }
 }
