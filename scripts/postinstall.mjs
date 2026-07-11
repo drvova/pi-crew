@@ -27,20 +27,28 @@ function run(scriptRel) {
 
 function main() {
 	try {
-		// Dev clones ship scripts/build-bundle.mjs and devDeps (esbuild) so the
-		// bundle rebuilds. Git/production installs ship the script WITHOUT
-		// devDeps: esbuild is guaranteed-missing, so skip quietly instead of
-		// letting node dump an ERR_MODULE_NOT_FOUND stack trace (stdio:inherit)
-		// for a fully expected condition — committed dist/index.mjs is used.
-		if (!existsSync(join(root, "node_modules", "esbuild"))) {
-			console.log("[pi-crew] postinstall: esbuild not installed (production install) — using committed dist/ bundle.");
-		} else {
+		// Dev clones ship devDeps (esbuild) and always rebuild — dist/ may be
+		// stale vs src during development. Git/production installs ship NO
+		// devDeps: their committed dist/index.mjs is by construction in sync
+		// with the checkout, so we use it as-is. Rebuilding it (even with the
+		// `bun build` fallback) would dirty the git-tracked dist/ and block the
+		// next `pi update` pull. The bun fallback therefore fires ONLY when no
+		// bundle shipped at all (e.g. install from a commit without dist/).
+		// Never dump an ERR_MODULE_NOT_FOUND stack for these expected states.
+		const hasEsbuild = existsSync(join(root, "node_modules", "esbuild"));
+		const hasCommittedBundle = existsSync(join(root, "dist", "index.mjs"));
+		const hasBun = () => spawnSync("bun", ["--version"], { stdio: "ignore" }).status === 0;
+		if (hasEsbuild || (!hasCommittedBundle && hasBun())) {
 			const bundleStatus = run("scripts/build-bundle.mjs");
 			if (bundleStatus !== 0) {
 				console.warn(
 					"[pi-crew] postinstall: bundle build skipped or failed; using committed dist/ (or strip-types fallback). Run npm run build:bundle to retry.",
 				);
 			}
+		} else if (hasCommittedBundle) {
+			console.log("[pi-crew] postinstall: using committed dist/ bundle.");
+		} else {
+			console.log("[pi-crew] postinstall: no bundler and no committed bundle — Pi will strip-types load index.ts.");
 		}
 		// Font install is best-effort and must never fail the install.
 		run("scripts/install-crew-vibes-font.mjs");
