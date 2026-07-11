@@ -7937,7 +7937,7 @@
       "format": "esm"
     },
     "src/ui/widget/widget-renderer.ts": {
-      "bytes": 12152,
+      "bytes": 11551,
       "imports": [
         {
           "path": "src/runtime/live-agent-manager.ts",
@@ -18460,7 +18460,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6683887
+      "bytes": 6682810
     },
     "dist/index.mjs": {
       "imports": [
@@ -20925,7 +20925,7 @@
           "bytesInOutput": 1809
         },
         "src/ui/widget/widget-renderer.ts": {
-          "bytesInOutput": 7552
+          "bytesInOutput": 7036
         },
         "src/ui/widget/index.ts": {
           "bytesInOutput": 9599
@@ -22170,7 +22170,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3178303
+      "bytes": 3177787
     }
   }
 }

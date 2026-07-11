@@ -21974,7 +21974,6 @@ function buildWidgetLines(cwd, frame = 0, maxLines = 8, providedRuns, notificati
   if (!runs.length) return [];
   const runningGlyph = spinnerFrame("widget-header");
   const lines = [widgetHeader(runs, runningGlyph, maxLines, notificationCount)];
-  const groupStarts = [0];
   for (const [runIdx, { run, agents, snapshot }] of runs.entries()) {
     const isLastRun = runIdx === runs.length - 1;
     const runBranch = isLastRun ? "\u2514\u2500" : "\u251C\u2500";
@@ -21997,7 +21996,6 @@ function buildWidgetLines(cwd, frame = 0, maxLines = 8, providedRuns, notificati
     const runElapsedText = fmtDuration(runElapsedMs);
     const statusLabel = isTerminal ? ` \xB7 ${run.status}` : "";
     const progressPart = `${agentCountText} \xB7 ${runElapsedText}${statusLabel}`;
-    groupStarts.push(lines.length);
     lines.push(truncate(`${runBranch} ${runGlyph} ${shortRunLabel(run)} \xB7 ${progressPart} \xB7 ${run.runId.slice(-8)}`, width));
     const liveForRun = listLiveAgents().filter((a) => a.runId === run.runId);
     const ACTIVE_PRIORITY = {
@@ -22016,42 +22014,32 @@ function buildWidgetLines(cwd, frame = 0, maxLines = 8, providedRuns, notificati
       childIdx++;
       const isLastChild = childIdx === childRows;
       const branch = isLastChild ? "\u2514\u2500" : "\u251C\u2500";
-      const activityRail = isLastChild ? "   " : "\u2502  ";
-      const agentGlyph = iconForStatus(agent.status, { runningGlyph });
+      const agentSpinner = agent.status === "running" ? spinnerFrame(agent.taskId) : iconForStatus(agent.status);
       const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
       const stats = agentStats(agent, liveHandle);
+      const activity = agentActivity(agent, liveHandle);
       const name = liveHandle?.agent ?? agent.agent;
-      const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
-      groupStarts.push(lines.length);
-      lines.push(truncate(`${rail}${branch} ${agentGlyph} ${name}${desc ? ` \xB7 ${desc}` : ` \xB7 ${agent.role}`}`, width));
-      lines.push(truncate(`${rail}${activityRail}  \u2192 ${agentActivity(agent, liveHandle)}${stats ? ` \xB7 ${stats}` : ""}`, width));
+      const desc = truncate(liveHandle?.description ?? agent.role ?? "", 40);
+      const allStats = [stats, activity].filter(Boolean).join(" \xB7 ");
+      lines.push(truncate(`${rail}${branch} ${agentSpinner} ${name} \xB7 ${allStats}`, width));
     }
     if (overflowCount > 0) {
       childIdx++;
-      groupStarts.push(lines.length);
       lines.push(truncate(`${rail}${childIdx === childRows ? "\u2514\u2500" : "\u251C\u2500"} \u2026 +${overflowCount} more agents`, width));
     }
     for (const agent of shownFinished) {
       childIdx++;
       const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
       const name = liveHandle?.agent ?? agent.agent;
-      const icon = agent.status === "completed" ? "\u2713" : agent.status === "failed" ? "\u2717" : agent.status === "needs_attention" ? "\u26A0" : "\u25AA";
+      const icon = agent.status === "completed" ? "\u2713" : agent.status === "failed" ? "\u2717" : agent.status === "needs_attention" ? "\u26A0" : "\xB7";
       const stats = agentStats(agent, liveHandle);
-      const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
+      const desc = truncate(liveHandle?.description ?? agent.role ?? "", 40);
       const branch = childIdx === childRows ? "\u2514\u2500" : "\u251C\u2500";
-      groupStarts.push(lines.length);
       lines.push(truncate(`${rail}${branch} ${icon} ${name} \xB7 ${desc}${stats ? ` \xB7 ${stats}` : ""}`, width));
     }
     if (lines.length >= maxLines) break;
   }
-  if (lines.length <= maxLines) return lines;
-  let cut = 0;
-  for (let i2 = 0; i2 < groupStarts.length; i2++) {
-    const end = i2 + 1 < groupStarts.length ? groupStarts[i2 + 1] : lines.length;
-    if (end <= maxLines) cut = end;
-    else break;
-  }
-  return lines.slice(0, Math.max(1, cut));
+  return lines.slice(0, maxLines);
 }
 function colorWidgetLine(line4, index, theme) {
   let result4 = line4;
