@@ -7205,8 +7205,44 @@
       ],
       "format": "esm"
     },
+    "src/runtime/run-tracker.ts": {
+      "bytes": 5853,
+      "imports": [
+        {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "src/state/state-store.ts",
+          "kind": "import-statement",
+          "original": "../state/state-store.ts"
+        },
+        {
+          "path": "src/utils/fs-watch.ts",
+          "kind": "import-statement",
+          "original": "../utils/fs-watch.ts"
+        },
+        {
+          "path": "src/utils/paths.ts",
+          "kind": "import-statement",
+          "original": "../utils/paths.ts"
+        },
+        {
+          "path": "src/runtime/process-status.ts",
+          "kind": "import-statement",
+          "original": "./process-status.ts"
+        }
+      ],
+      "format": "esm"
+    },
     "src/runtime/subagent-manager.ts": {
-      "bytes": 19701,
+      "bytes": 19743,
       "imports": [
         {
           "path": "node:fs",
@@ -7227,6 +7263,11 @@
           "path": "src/state/state-store.ts",
           "kind": "import-statement",
           "original": "../state/state-store.ts"
+        },
+        {
+          "path": "src/runtime/run-tracker.ts",
+          "kind": "import-statement",
+          "original": "./run-tracker.ts"
         },
         {
           "path": "src/utils/internal-error.ts",
@@ -12280,37 +12321,6 @@
           "path": "src/utils/safe-paths.ts",
           "kind": "import-statement",
           "original": "../utils/safe-paths.ts"
-        }
-      ],
-      "format": "esm"
-    },
-    "src/runtime/run-tracker.ts": {
-      "bytes": 4289,
-      "imports": [
-        {
-          "path": "node:fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:path",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "src/state/state-store.ts",
-          "kind": "import-statement",
-          "original": "../state/state-store.ts"
-        },
-        {
-          "path": "src/utils/paths.ts",
-          "kind": "import-statement",
-          "original": "../utils/paths.ts"
-        },
-        {
-          "path": "src/runtime/process-status.ts",
-          "kind": "import-statement",
-          "original": "./process-status.ts"
         }
       ],
       "format": "esm"
@@ -18416,7 +18426,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6650440
+      "bytes": 6652506
     },
     "dist/index.mjs": {
       "imports": [
@@ -18666,6 +18676,11 @@
           "external": true
         },
         {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
           "path": "node:child_process",
           "kind": "import-statement",
           "external": true
@@ -18747,6 +18762,16 @@
         },
         {
           "path": "node:os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:fs",
           "kind": "import-statement",
           "external": true
         },
@@ -19062,16 +19087,6 @@
         },
         {
           "path": "node:fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:path",
           "kind": "import-statement",
           "external": true
         },
@@ -19762,11 +19777,6 @@
         },
         {
           "path": "node:path",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:fs",
           "kind": "import-statement",
           "external": true
         },
@@ -20727,6 +20737,9 @@
         "src/runtime/deadletter.ts": {
           "bytesInOutput": 592
         },
+        "src/utils/fs-watch.ts": {
+          "bytesInOutput": 466
+        },
         "src/runtime/orphan-worker-registry.ts": {
           "bytesInOutput": 7463
         },
@@ -20754,8 +20767,11 @@
         "src/runtime/settings-store.ts": {
           "bytesInOutput": 3438
         },
+        "src/runtime/run-tracker.ts": {
+          "bytesInOutput": 2795
+        },
         "src/runtime/subagent-manager.ts": {
-          "bytesInOutput": 16162
+          "bytesInOutput": 16164
         },
         "src/subagents/manager.ts": {
           "bytesInOutput": 115
@@ -21477,9 +21493,6 @@
         "src/runtime/checkpoint.ts": {
           "bytesInOutput": 2970
         },
-        "src/runtime/run-tracker.ts": {
-          "bytesInOutput": 2254
-        },
         "src/runtime/crew-hooks.ts": {
           "bytesInOutput": 4057
         },
@@ -22024,16 +22037,13 @@
           "bytesInOutput": 3150
         },
         "src/extension/register.ts": {
-          "bytesInOutput": 45555
+          "bytesInOutput": 45572
         },
         "src/runtime/batch-barrier.ts": {
           "bytesInOutput": 3060
         },
         "src/runtime/manifest-cache.ts": {
-          "bytesInOutput": 7460
-        },
-        "src/utils/fs-watch.ts": {
-          "bytesInOutput": 382
+          "bytesInOutput": 7477
         },
         "src/runtime/per-write-validator.ts": {
           "bytesInOutput": 2205
@@ -22054,7 +22064,7 @@
           "bytesInOutput": 27
         },
         "src/utils/run-watcher-registry.ts": {
-          "bytesInOutput": 3309
+          "bytesInOutput": 3326
         },
         "src/extension/context-status-injection.ts": {
           "bytesInOutput": 2827
@@ -22129,7 +22139,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3164389
+      "bytes": 3165033
     }
   }
 }

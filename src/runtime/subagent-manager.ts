@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { DEFAULT_PATHS, DEFAULT_SUBAGENT } from "../config/defaults.ts";
 import type { PiTeamsToolResult } from "../extension/tool-result.ts";
 import { loadRunManifestById } from "../state/state-store.ts";
+import { sleepUntilRunChange } from "./run-tracker.ts";
 import { logInternalError } from "../utils/internal-error.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
 import { redactSecrets } from "../utils/redaction.ts";
@@ -448,7 +449,7 @@ export class SubagentManager {
 		while (record.runId && (record.status === "running" || record.status === "blocked")) {
 			const loaded = loadRunManifestById(cwd, record.runId); // NOTE: no withRunLock - best-effort only; concurrent writes may cause inconsistency
 			if (!loaded) {
-				await new Promise((resolve) => setTimeout(resolve, this.pollIntervalMs));
+				await sleepUntilRunChange(cwd, record.runId, this.pollIntervalMs);
 				continue;
 			}
 			if (loaded.manifest.status === "completed") {
@@ -481,7 +482,7 @@ export class SubagentManager {
 				savePersistedSubagentRecord(cwd, record);
 				return;
 			}
-			await new Promise((resolve) => setTimeout(resolve, this.pollIntervalMs));
+			await sleepUntilRunChange(cwd, record.runId, this.pollIntervalMs);
 		}
 	}
 

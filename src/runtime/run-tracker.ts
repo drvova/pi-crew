@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadRunManifestById } from "../state/state-store.ts";
+import { closeWatcher, watchWithErrorHandler } from "../utils/fs-watch.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { projectCrewRoot } from "../utils/paths.ts";
 import { isFinishedRunStatus } from "./process-status.ts";
@@ -97,11 +98,45 @@ export async function waitForRun(
 			return fresh;
 		}
 		const delay = Math.min(pollIntervalMs, 50 * 2 ** Math.min(attempt, 6)); // max ~3.2s
-		await new Promise((r) => setTimeout(r, delay));
+		await sleepUntilRunChange(cwd, runId, delay);
 		attempt++;
 	}
 
 	throw new Error(`waitForRun timed out after ${timeoutMs}ms`);
+}
+
+/**
+ * Sleep until the run's state directory changes or `maxMs` elapses,
+ * whichever comes first.
+ *
+ * Manifest/task-state updates are atomic renames INTO the run directory, so a
+ * non-recursive `fs.watch` on that directory observes every status transition.
+ * The watcher is purely an accelerator: callers re-read the manifest after
+ * every wake, and when `fs.watch` is unavailable (or the dir does not exist
+ * yet) this degrades to a plain `setTimeout(maxMs)` — exactly the old poll.
+ *
+ * Spurious wakes (task-state or event writes in the same dir) only cause an
+ * earlier re-check by the caller's loop; correctness is unaffected.
+ */
+export function sleepUntilRunChange(cwd: string, runId: string, maxMs: number): Promise<void> {
+	return new Promise((resolve) => {
+		const runDir = path.join(projectCrewRoot(cwd), "state", "runs", runId);
+		let settled = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let watcher: ReturnType<typeof watchWithErrorHandler> = null;
+		const done = (): void => {
+			if (settled) return;
+			settled = true;
+			if (timer) clearTimeout(timer);
+			closeWatcher(watcher);
+			resolve();
+		};
+		timer = setTimeout(done, maxMs);
+		// Watch failure (dir missing, inotify exhausted, error mid-wait) must NOT
+		// wake early — that would hot-spin the caller's loop. The timer alone
+		// completes the sleep, reproducing the legacy poll cadence exactly.
+		watcher = watchWithErrorHandler(runDir, done, () => closeWatcher(watcher));
+	});
 }
 
 export function hasActiveRunPromise(runId: string): boolean {
