@@ -7,7 +7,9 @@ import type { createManifestCache } from "../../runtime/manifest-cache.ts";
 import { TeamToolParams, type TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 import { updatePiCrewPowerbar } from "../../ui/powerbar-publisher.ts";
 import type { createRunSnapshotCache } from "../../ui/run-snapshot-cache.ts";
-import { statusIcon, teamToolRenderer } from "../../ui/tool-renderers/index.ts";
+import { statusIcon, teamToolRenderer, type Component } from "../../ui/tool-renderers/index.ts";
+import type { CrewTheme } from "../../ui/theme-adapter.ts";
+import type { ToolRenderContext } from "../../ui/tool-renderers/index.ts";
 import type { CrewWidgetState } from "../../ui/widget/index.ts";
 import { updateCrewWidget } from "../../ui/widget/index.ts";
 import { resolveRealContainedPath } from "../../utils/safe-paths.ts";
@@ -143,16 +145,14 @@ export function registerTeamTool(pi: ExtensionAPI, deps: RegisterTeamToolDeps): 
 				stopProgress.stop();
 			}
 		},
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		renderCall(args: any, theme: any, context: any): any {
-			return teamToolRenderer.renderCall(args, theme, context);
+		renderCall(args: unknown, theme: unknown, context: unknown): Component {
+			return teamToolRenderer.renderCall(args as Record<string, unknown>, theme as CrewTheme, context as ToolRenderContext);
 		},
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		renderResult(result: any, options: any, theme: any, context: any): any {
+		renderResult(result: unknown, options: unknown, theme: unknown, context: unknown): Component {
 			try {
-				return teamToolRenderer.renderResult(result, options, theme, context);
-			} catch {
-				return new Text(statusIcon("completed", theme) + " done", 0, 0);
+				return teamToolRenderer.renderResult(result as Record<string, unknown>, options, theme as CrewTheme, context as ToolRenderContext);
+			} catch (e: unknown) {
+				return new Text(statusIcon("completed", theme as CrewTheme) + " done", 0, 0);
 			}
 		},
 	};

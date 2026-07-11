@@ -33,7 +33,7 @@ async function executeTeamRun(...args: Parameters<typeof ExecuteTeamRunFn>): Pro
 import { expandParallelResearchWorkflow } from "../../runtime/parallel-research.ts";
 import { resolveCrewRuntime, runtimeResolutionState } from "../../runtime/runtime-resolver.ts";
 import { normalizeSkillOverride } from "../../runtime/skill-instructions.ts";
-import { appendEventAsync, readEvents } from "../../state/event-log.ts";
+import { appendEventAsync, flushEventLogBuffer, readEvents } from "../../state/event-log.ts";
 import { spawnBackgroundTeamRun } from "../../subagents/async-entry.ts";
 
 /**
@@ -374,46 +374,6 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		}
 	}
 
-	// Check if this is a pipeline workflow - special handling for multi-stage execution
-	const isPipelineWorkflow = workflowName === "pipeline" && !directAgent;
-	if (isPipelineWorkflow) {
-		// For pipeline workflows, use PipelineRunner for execution
-		const pipelineRunner = new PipelineRunner();
-		const pipelineWorkflow: PipelineWorkflow = {
-			name: workflow.name,
-			description: workflow.description,
-			goal,
-			stages: workflow.steps.map((step) => ({
-				name: step.id,
-				team: step.role,
-				inputs: step.task,
-				usePreviousResults: step.dependsOn && step.dependsOn.length > 0,
-			})),
-			stopOnError: true,
-			defaultMaxConcurrency: workflow.maxConcurrency ?? 5,
-		};
-
-		// For now, show pipeline workflow info - full integration would require
-		// connecting PipelineRunner to the actual team execution system
-		const stageInfo = pipelineWorkflow.stages.map((s) => `- ${s.name} (${s.team})`).join("\n");
-		return result(
-			[
-				`Pipeline workflow '${workflow.name}' is not yet wired into the team execution system.`,
-				`Goal: ${goal}`,
-				`Defined stages (${pipelineWorkflow.stages.length}):`,
-				stageInfo,
-				"",
-				"To actually run work right now, use a supported workflow instead:",
-				"  - action='run' workflow='default'  (explore → plan → execute → verify)",
-				"  - action='run' workflow='implementation'  (adaptive, parallel specialists)",
-				"  - action='run' workflow='research'  (explore → analyze → write)",
-				"",
-				"Run action='list' resource='workflow' to see all available workflows.",
-			].join("\n"),
-			{ action: "run", status: "ok" },
-			false,
-		);
-	}
 
 	// LAZY: dodge the jiti ESM/CJS interop TDZ race on the static `import { validateWorkflowForTeam }` above (issue #28, RFC 17).
 	const { validateWorkflowForTeam: validateWorkflow } = await import("../../workflows/validate-workflow.ts");
@@ -468,6 +428,151 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 	};
 	atomicWriteJson(paths.manifestPath, updatedManifest);
 	registerActiveRun(updatedManifest);
+
+	// Pipeline workflow: multi-stage execution with automatic fan-out and result chaining.
+	// Each stage runs as a separate executeTeamRun call with a single-step workflow,
+	// and previous stage results are injected as parent context.
+	const isPipelineWorkflow = workflowName === "pipeline" && !directAgent;
+	if (isPipelineWorkflow) {
+		const pipelineRunner = new PipelineRunner({
+			stopOnError: true,
+			defaultMaxConcurrency: workflow.maxConcurrency ?? 5,
+		});
+		const pipelineWorkflow: PipelineWorkflow = {
+			name: workflow.name,
+			description: workflow.description,
+			goal,
+			stages: workflow.steps.map((step) => ({
+				name: step.id,
+				team: step.role,
+				inputs: step.task,
+				usePreviousResults: step.dependsOn && step.dependsOn.length > 0,
+			})),
+			stopOnError: true,
+			defaultMaxConcurrency: workflow.maxConcurrency ?? 5,
+		};
+
+		const stageInfo = pipelineWorkflow.stages.map((s) => `- ${s.name} (${s.team})`).join("\n");
+		void appendEventAsync(updatedManifest.eventsPath, {
+			type: "pipeline:configured",
+			runId: updatedManifest.runId,
+			message: `Pipeline '${workflow.name}' configured with ${pipelineWorkflow.stages.length} stages`,
+			data: { stages: pipelineWorkflow.stages.map((s) => s.name) },
+		});
+
+		const pipelineResult = await pipelineRunner.run(
+			pipelineWorkflow,
+			{ goal, cwd: resolvedCtx.cwd },
+			async (stage, stageInputs, stageContext) => {
+				const stageTeam = teams.find((t) => t.name === stage.team);
+				if (!stageTeam) {
+					throw new Error(`Pipeline stage '${stage.name}' references unknown team '${stage.team}'. Available: ${teams.map((t) => t.name).join(", ")}`);
+				}
+
+				const stageWorkflow: import("../../workflows/workflow-config.ts").WorkflowConfig = {
+					name: `pipeline-${stage.name}`,
+					description: `Pipeline stage ${stageContext.stageIndex + 1}/${stageContext.totalStages}: ${stage.name}`,
+					source: "builtin",
+					filePath: "<generated>",
+					steps: [{
+						id: stage.name,
+						role: stage.team,
+						task: typeof stageInputs === "string" ? stageInputs : String(stageInputs ?? stage.name),
+					}],
+					maxConcurrency: 1,
+				};
+
+				const { manifest: stageManifest, tasks: stageTasks, paths: stagePaths } = createRunManifest({
+					cwd: resolvedCtx.cwd,
+					team: stageTeam,
+					workflow: stageWorkflow,
+					goal: `${goal} \u2014 Stage ${stage.name}`,
+					workspaceMode: params.workspaceMode,
+					ownerSessionId: ctx.sessionId,
+					runKind: "team-run",
+					args: params.args,
+				});
+				atomicWriteJson(stagePaths.manifestPath, stageManifest);
+				registerActiveRun(stageManifest);
+
+				try {
+					const prevContext = stageContext.previousResults.length > 0
+						? `\n\n## Previous Stage Results\n${stageContext.previousResults.map((r, i) => `### Result ${i + 1}\n${typeof r === "string" ? r : JSON.stringify(r)}`).join("\n\n")}`
+						: "";
+
+					const { manifest: completedManifest, tasks: completedTasks } = await executeTeamRun({
+						manifest: stageManifest,
+						tasks: stageTasks,
+						team: stageTeam,
+						workflow: stageWorkflow,
+						agents,
+						executeWorkers: true,
+						parentContext: `${buildParentContext(ctx)}${prevContext}`,
+						parentModel: ctx.model,
+						modelRegistry: ctx.modelRegistry,
+						modelOverride: params.model,
+						signal: ctx.signal ?? AbortSignal.timeout(3_600_000),
+						skillOverride,
+						workspaceId: ctx.sessionId ?? ctx.cwd,
+						budgetTotal: params.budgetTotal,
+						budgetWarning: params.budgetWarning,
+						budgetAbort: params.budgetAbort,
+						budgetUnlimited: params.budgetUnlimited,
+					});
+
+					const stageResults = completedTasks
+						.filter((t) => t.status === "completed")
+						.map((t) => {
+							if (t.resultArtifact?.path) {
+								try {
+									return fs.readFileSync(
+										resolveRealContainedPath(completedManifest.artifactsRoot, t.resultArtifact.path),
+										"utf-8",
+									).trim();
+								} catch {
+									return t.error ?? "(result unavailable)";
+								}
+							}
+							return t.error ?? "(no result artifact)";
+						});
+
+					return stageResults.length > 0 ? stageResults : ["(stage completed with no results)"];
+				} finally {
+					unregisterActiveRun(stageManifest.runId);
+				}
+			},
+			updatedManifest.runId,
+			updatedManifest.eventsPath,
+		);
+
+		await flushEventLogBuffer();
+
+		const failedStages = pipelineResult.stages.filter((s) => s.status === "failed");
+		const lines: string[] = [
+			`Pipeline '${workflow.name}' ${pipelineResult.status}: ${updatedManifest.runId}`,
+			`Goal: ${goal.slice(0, 100)}`,
+			"",
+			`Stages (${pipelineResult.stages.length}):`,
+			...pipelineResult.stages.map((s) =>
+				`- ${s.status === "completed" ? "\u2713" : s.status === "failed" ? "\u2717" : "\u2298"} ${s.name} (${s.duration}ms${s.fanOutItems ? `, ${s.fanOutItems} items` : ""})${s.error ? ` \u2014 ${s.error.slice(0, 200)}` : ""}`
+			),
+		];
+		if (failedStages.length > 0) {
+			lines.push("", `${failedStages.length} stage(s) failed: ${failedStages.map((s) => s.name).join(", ")}`);
+		}
+		lines.push("", `Final results: ${pipelineResult.finalResults.length} item(s)`);
+
+		return result(
+			lines.join("\n"),
+			{
+				action: "run",
+				status: pipelineResult.status === "failed" ? "error" : "ok",
+				runId: updatedManifest.runId,
+				artifactsRoot: updatedManifest.artifactsRoot,
+			},
+			pipelineResult.status === "failed",
+		);
+	}
 
 	// P2: dynamic-workflow dispatch — when the resolved workflow is a .dwf.ts (runtime:"dynamic"),
 	// run it via runDynamicWorkflow instead of the static executeTeamRun path. The script

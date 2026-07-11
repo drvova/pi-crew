@@ -17,8 +17,8 @@ const DEFAULT_MAX_JSONL_BYTES = 50 * 1024 * 1024;
 // FIX (Round 21, per-line cap): A single huge line could exhaust memory during
 // redactJsonLine if an upstream caller constructs an enormous string. Cap each
 // line at 1MB by default — large enough for any legitimate event payload, small
-// enough to prevent memory blow-up. Mirrors the upstream oh-my-pi pattern of
-// bounding chunk boundaries in Bun.file().writer().
+// enough to prevent memory blow-up. Mirrors the upstream pattern of bounding
+// chunk boundaries in streaming JSONL writers.
 const DEFAULT_MAX_LINE_BYTES = 1 * 1024 * 1024;
 
 export interface JsonlWriterDeps {

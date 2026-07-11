@@ -120,8 +120,8 @@ const securityEventLog: SecurityEvent[] = [];
 
 /**
  * Log a security event for audit purposes.
- * TODO: In production, integrate with project's logging infrastructure
- *       (e.g., send to SIEM, log aggregator, or security webhook).
+ * Events are stored in-memory (capped at MAX_SECURITY_LOG_ENTRIES) and also
+ * forwarded to the structured logger via logInternalError.
  */
 function logSecurityEvent(event: SecurityEvent): void {
 	securityEventLog.push(event);

@@ -84,11 +84,11 @@ export async function openLiveConversation(
 	const handle = liveAgents.find((h) => h.runId === selected.runId && (selected.taskId ? h.taskId === selected.taskId : true));
 	if (!handle) return false;
 	const theme = asCrewTheme({});
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	await ctx.ui.custom<undefined>(
-		(tui: any, _theme: any, _keybindings: any, done: (result: undefined) => void) => {
-			const columns = tui?.terminal?.columns ?? 80;
-			const rows = tui?.terminal?.rows ?? 24;
+		(tui: unknown, _theme: unknown, _keybindings: unknown, done: (result: undefined) => void) => {
+			const tuiObj = tui as { terminal?: { columns?: number; rows?: number } };
+			const columns = tuiObj?.terminal?.columns ?? 80;
+			const rows = tuiObj?.terminal?.rows ?? 24;
 			const overlay = new LiveConversationOverlay(handle, theme, columns, rows);
 			return {
 				render(width: number) {

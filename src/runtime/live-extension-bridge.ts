@@ -25,7 +25,7 @@
  *   - shutdown()
  *
  * ExtensionContext actions (via registerTool):
- *   - sendMessage / sendUserMessage / appendEntry / setLabel
+ *   - sendMessage / sendUserMessage
  *   - setActiveTools / getActiveTools / getAllTools
  */
 
@@ -34,8 +34,6 @@ import type { YieldResult } from "./yield-handler.ts";
 export interface ExtensionBridgeApis {
 	sendMessage: (message: unknown, options?: Record<string, unknown>) => void;
 	sendUserMessage: (content: unknown, options?: Record<string, unknown>) => void;
-	appendEntry: (customType: string, data: unknown) => void;
-	setLabel: (targetId: string, label: string) => void;
 	getActiveTools: () => string[];
 	getAllTools: () => string[];
 	setActiveTools: (toolNames: string[]) => void;
@@ -97,13 +95,6 @@ export function buildExtensionBridge(session: PiSdkSession): { apis: ExtensionBr
 				} catch {
 					/* non-blocking */
 				}
-			},
-			appendEntry: () => {
-				// appendEntry requires sessionManager access which isn't directly on session
-				// This is a no-op placeholder; extensions that rely on it will gracefully degrade
-			},
-			setLabel: () => {
-				// setLabel requires sessionManager access — no-op placeholder
 			},
 			getActiveTools: () => {
 				try {

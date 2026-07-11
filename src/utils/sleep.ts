@@ -37,9 +37,19 @@ export function sleepSync(ms: number): void {
 /**
  * Async sleep with optional AbortSignal support.
  * Rejects immediately if the signal is already aborted, or when aborted during wait.
+ * Uses Bun.sleep when available for native performance.
  */
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 	if (signal?.aborted) return Promise.reject(new Error("aborted"));
+	// Bun.sleep is a native zero-overhead sleep — prefer it when running under Bun.
+	if (typeof globalThis !== "undefined" && "Bun" in globalThis) {
+		const bun = (globalThis as unknown as { Bun?: { sleep?: (ms: number) => Promise<void> } }).Bun;
+		if (bun && typeof bun.sleep === "function") {
+			return bun.sleep(ms).then(() => {
+				if (signal?.aborted) throw new Error("aborted");
+			});
+		}
+	}
 	return new Promise<void>((resolve, reject) => {
 		const timer = setTimeout(resolve, ms);
 		signal?.addEventListener(

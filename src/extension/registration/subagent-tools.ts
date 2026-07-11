@@ -32,7 +32,9 @@ import {
 	savePersistedSubagentRecord,
 } from "../../subagents/manager.ts";
 import { formatCompactToolProgress } from "../../ui/tool-progress-formatter.ts";
-import { agentToolRenderer } from "../../ui/tool-renderers/index.ts";
+import { agentToolRenderer, type Component } from "../../ui/tool-renderers/index.ts";
+import type { ToolRenderContext } from "../../ui/tool-renderers/index.ts";
+import type { CrewTheme } from "../../ui/theme-adapter.ts";
 import { logInternalError } from "../../utils/internal-error.ts";
 import {
 	__test__subagentSpawnParams,
@@ -225,16 +227,14 @@ export function registerSubagentTools(
 			}
 			return foregroundResult;
 		},
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		renderCall(args: any, theme: any, context: any): any {
-			return agentToolRenderer.renderCall(args, theme, context);
+		renderCall(args: unknown, theme: unknown, context: unknown): Component {
+			return agentToolRenderer.renderCall(args as Record<string, unknown>, theme as CrewTheme, context as ToolRenderContext);
 		},
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		renderResult(result: any, options: any, theme: any, context: any): any {
+		renderResult(result: unknown, options: unknown, theme: unknown, context: unknown): Component {
 			try {
-				return agentToolRenderer.renderResult(result, options, theme, context);
-			} catch (e: any) {
-				return new Text("agent-err: " + (e?.message ?? "unknown"), 0, 0);
+				return agentToolRenderer.renderResult(result as Record<string, unknown>, options, theme as CrewTheme, context as ToolRenderContext);
+			} catch (e: unknown) {
+				return new Text("agent-err: " + (e instanceof Error ? e.message : "unknown"), 0, 0);
 			}
 		},
 	};

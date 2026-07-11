@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@e
 import { loadConfig } from "../../config/config.ts";
 // Lazy-loaded: team-tool.ts pulls in entire runtime chain (1.4s+).
 import type { handleTeamTool as HandleTeamToolFn } from "../team-tool.ts";
+import type { TeamToolParamsValue } from "../../schema/team-tool-schema.ts";
 
 let _cachedHandleTeamTool: typeof HandleTeamToolFn | undefined;
 let _handleTeamToolPromise: Promise<typeof HandleTeamToolFn> | undefined;
@@ -530,7 +531,7 @@ export async function openTeamDashboard(ctx: ExtensionContext): Promise<void> {
 									: // eslint-disable-next-line @typescript-eslint/no-explicit-any
 										await handleTeamTool(
 											{
-												action: selection.action as any,
+												action: selection.action as TeamToolParamsValue["action"],
 												runId: selection.runId,
 											},
 											teamCommandContext(cmdCtx),

@@ -29,9 +29,8 @@ interface ToolLike {
 	name: string;
 	description: string;
 	parameters: unknown;
-	execute: (toolCallId: string, params: any, signal: any, onUpdate: any) => Promise<unknown>;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	[key: string]: any;
+	execute: (toolCallId: string, params: unknown, signal: unknown, onUpdate: unknown) => Promise<unknown>;
+	[key: string]: unknown;
 }
 
 interface EditParams {
@@ -62,9 +61,8 @@ function isNotFoundResult(result: unknown): boolean {
 /** Detect whether pi-diff is loaded (to avoid double-wrapping edit). */
 function isPiDiffLoaded(pi: ExtensionAPI): boolean {
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const piAny = pi as any;
-		const extensions = piAny?.extensions ?? piAny?._extensions ?? [];
+		const piExtensions = (pi as unknown as { extensions?: unknown[] | Record<string, unknown>; _extensions?: unknown[] });
+		const extensions = piExtensions?.extensions ?? piExtensions?._extensions ?? [];
 		const names = Array.isArray(extensions)
 			? extensions.map((e: unknown) => (typeof e === "string" ? e : ((e as { name?: string })?.name ?? "")))
 			: Object.keys(extensions);
@@ -94,7 +92,7 @@ export function wrapEditWithResilientReplace(pi: ExtensionAPI, tools?: { edit: T
 	const nativeExecute = t.edit.execute.bind(t.edit);
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	t.edit.execute = async function resilientExecute(toolCallId: string, params: any, signal: any, onUpdate: any): Promise<unknown> {
+	t.edit.execute = async function resilientExecute(toolCallId: string, params: unknown, signal: unknown, onUpdate: unknown): Promise<unknown> {
 		try {
 			const result = await nativeExecute(toolCallId, params, signal, onUpdate);
 			if (!isNotFoundResult(result)) return result;
@@ -111,11 +109,12 @@ export function wrapEditWithResilientReplace(pi: ExtensionAPI, tools?: { edit: T
 
 	return true;
 
-	async function retryWithReplace(params: EditParams, toolCallId: string, signal: any, onUpdate: any): Promise<unknown> {
-		const filePath = params.path ?? params.filePath;
-		const oldStr = params.oldString ?? params.old_string;
-		const newStr = params.newString ?? params.new_string;
-		const replaceAll = params.replaceAll ?? params.replace_all ?? false;
+	async function retryWithReplace(params: unknown, toolCallId: string, signal: unknown, onUpdate: unknown): Promise<unknown> {
+		const p = params as EditParams;
+		const filePath = p.path ?? p.filePath;
+		const oldStr = p.oldString ?? p.old_string;
+		const newStr = p.newString ?? p.new_string;
+		const replaceAll = p.replaceAll ?? p.replace_all ?? false;
 
 		if (!filePath || typeof oldStr !== "string" || typeof newStr !== "string") {
 			// Can't retry — rethrow a not-found style error.

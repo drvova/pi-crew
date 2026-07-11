@@ -33,8 +33,7 @@ import { buildConfiguredModelRouting } from "./model-fallback.ts";
 import { readEnabledModelsPatterns } from "./model-scope.ts";
 import { isLiveSessionRuntimeAvailable } from "./runtime-resolver.ts";
 import { awaitRuntimeWarmup } from "./runtime-warmup.ts";
-// prose-compressor imported for custom tool descriptions below;
-// tool description compression for SDK-managed tools awaits SDK support.
+// prose-compressor imported for custom tool descriptions in system prompt construction;
 import { buildSensitivePathConstraint } from "./sensitive-paths.ts";
 import { eventToSidechainType, sidechainOutputPath, writeSidechainEntry } from "./sidechain-output.ts";
 // NOTE: buildMemoryBlock is intentionally NOT imported here. The agent memory
@@ -383,22 +382,6 @@ function buildOutputContract(role: string): string {
 	return ""; // planner, critic, analyst, test-engineer: no strict format
 }
 
-/**
- * Phase 3 (caveman): Compress tool descriptions in a live session to reduce
- * input token cost per tool call. MCP tools often have verbose descriptions
- * (e.g. "This tool allows you to search for files in the filesystem..." → "Search files in filesystem.").
- * Compresses only description text, never modifies tool names or parameters.
- */
-function compressSessionToolDescriptions(session: LiveSessionLike): void {
-	if (typeof session.getActiveToolNames !== "function") return;
-	// The Pi SDK doesn't expose a setDescription API, but we can attempt
-	// to compress via setActiveToolsByName if the session supports it.
-	// For now, this is a no-op that documents the intent for future SDK support.
-	// When Pi SDK adds tool description mutation, this function will compress.
-	// Side benefit: the import of compressToolDescription ensures the module
-	// is loaded and tree-shakeable, so adding the actual logic later is trivial.
-}
-
 export function liveSystemPrompt(input: LiveSessionSpawnInput): string {
 	// Agent MEMORY is intentionally omitted here — it is already injected via
 	// renderTaskPrompt().full (the user prompt, shared with the child-pi path).
@@ -707,9 +690,6 @@ export async function runLiveSessionTask(input: LiveSessionSpawnInput): Promise<
 			});
 			// Continue without extensions — they should not block the session
 		}
-
-		// Phase 3 (caveman): Compress tool descriptions to reduce input token cost
-		compressSessionToolDescriptions(session);
 
 		// Phase 5: Initialize extension runner bridge if available
 		// The bridge provides extension-like APIs (sendMessage, setActiveTools, etc.)

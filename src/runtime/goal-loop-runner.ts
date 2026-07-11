@@ -55,9 +55,9 @@ export interface RunGoalLoopResult {
 }
 
 /**
- * The placeholder evaluator for P0: always returns {achieved:false}.
- * Kept for unit tests of the loop's max_turns exit path. The production loop
- * uses `realGoalEvaluator` (P1) which calls the LLM judge.
+ * Test-only evaluator: always returns {achieved:false}.
+ * Used by integration tests for the loop's max_turns exit path. The production loop
+ * uses `realGoalEvaluator` which calls the LLM judge.
  */
 export const stubGoalEvaluator = async (
 	goal: GoalLoopState,

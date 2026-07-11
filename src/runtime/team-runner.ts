@@ -1076,8 +1076,8 @@ async function executeTeamRunCore(
 		// (with write-path safety). In v0.9.17 first ship, we ONLY log the
 		// coalesced group count to the event stream (informational). Actual
 		// dispatching of one-multi-task worker instead of N workers is deferred
-		// to a follow-up — it's a non-trivial prompt-construction change that
-		// deserves its own PR. For now, every coalesced group => one info event.
+		// to a follow-up PR — it's a non-trivial prompt-construction change.
+		// v0.9.17 limitation: coalesced groups log info events only.
 		const coalesceEnabled = workflow.coalesceMicroTasks === true;
 		if (coalesceEnabled) {
 			const coalescedGroups = planCoalescedGroups(serializedReady, tasks, workflow, true);
