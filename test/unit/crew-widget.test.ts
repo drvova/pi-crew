@@ -46,7 +46,9 @@ test("crew widget renders installed-style run and agent summary lines", async ()
 		]);
 		const lines = buildCrewWidgetLines(cwd, 1);
 		assert.match(lines[0]!, /Crew agents/);
-		assert.match(lines.join("\n"), /fast-fix\/fast-fix/);
+		// Deduped label: `fast-fix/fast-fix` collapses to `fast-fix` (UI polish 2026-07-11).
+		assert.match(lines.join("\n"), /fast-fix/);
+		assert.doesNotMatch(lines.join("\n"), /fast-fix\/fast-fix/, "identical team/workflow must not repeat");
 		// Check for agent status - may be "running command" or "spawning" depending on timing
 		assert.ok(lines.join("\n").match(/(?:executor|verifier)/), "Should show agent status");
 		const calls: Array<{ key: string; content: string[] | undefined }> = [];

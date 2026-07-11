@@ -21611,7 +21611,10 @@ function statusSummary(runs) {
   return parts.join(" \xB7 ");
 }
 function shortRunLabel(run) {
-  return `${run.team}/${run.workflow ?? "none"}`;
+  const workflow = run.workflow ?? "none";
+  if (workflow === run.team) return run.team;
+  if (run.team.startsWith("direct-") && workflow === "direct-agent") return run.team;
+  return `${run.team}/${workflow}`;
 }
 var lastStaleReconcileAt, STALE_RECONCILE_INTERVAL_MS;
 var init_widget_model = __esm({
@@ -21916,6 +21919,17 @@ var init_status_colors = __esm({
 });
 
 // src/ui/widget/widget-renderer.ts
+function fmtDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1e3));
+  if (total < 60) return `${total}s`;
+  if (total < 3600) return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
+  return `${Math.floor(total / 3600)}h${String(Math.floor(total % 3600 / 60)).padStart(2, "0")}m`;
+}
+function progressBar(completed, total, cells = 5) {
+  if (total <= 0) return "";
+  const filled = Math.max(0, Math.min(cells, Math.round(completed / total * cells)));
+  return "\u25B0".repeat(filled) + "\u25B1".repeat(cells - filled);
+}
 function widgetHeader(runs, runningGlyph, maxLines = 20, notificationCount = 0) {
   const agents = runs.flatMap((item) => item.agents);
   const runningAgents = agents.filter((a) => a.status === "running").length;
@@ -21926,14 +21940,19 @@ function widgetHeader(runs, runningGlyph, maxLines = 20, notificationCount = 0) 
   if (queuedAgents) parts.push(`${queuedAgents} queued`);
   if (waitingAgents) parts.push(`${waitingAgents} waiting`);
   if (completedAgents) parts.push(`${completedAgents}/${agents.length} done`);
-  return `${runningGlyph} Crew agents${notificationBadge(notificationCount)} \xB7 ${parts.join(" \xB7 ")} \xB7 /team-dashboard`;
+  const bar = progressBar(completedAgents, agents.length);
+  return `${runningGlyph} Crew agents${notificationBadge(notificationCount)}${bar ? ` ${bar}` : ""} \xB7 ${parts.join(" \xB7 ")} \xB7 /team-dashboard`;
 }
 function buildWidgetLines(cwd, frame = 0, maxLines = 8, providedRuns, notificationCount = 0, width = DEFAULT_WIDGET_WIDTH) {
   const runs = providedRuns ?? activeWidgetRuns(cwd);
   if (!runs.length) return [];
   const runningGlyph = spinnerFrame("widget-header");
   const lines = [widgetHeader(runs, runningGlyph, maxLines, notificationCount)];
-  for (const { run, agents, snapshot } of runs) {
+  const groupStarts = [0];
+  for (const [runIdx, { run, agents, snapshot }] of runs.entries()) {
+    const isLastRun = runIdx === runs.length - 1;
+    const runBranch = isLastRun ? "\u2514\u2500" : "\u251C\u2500";
+    const rail = isLastRun ? "   " : "\u2502  ";
     const activeAgents = agents.filter((a) => a.status === "running" || a.status === "queued" || a.status === "waiting");
     const now = Date.now();
     const finishedAgents = agents.filter((item) => {
@@ -21949,10 +21968,11 @@ function buildWidgetLines(cwd, frame = 0, maxLines = 8, providedRuns, notificati
     const agentCountText = `${completed}/${agents.length} agents`;
     const runEndMs = isTerminal ? new Date(run.updatedAt).getTime() : Date.now();
     const runElapsedMs = Math.max(0, Number.isFinite(runEndMs) ? runEndMs - new Date(run.createdAt).getTime() : 0);
-    const runElapsedText = `${Math.floor(runElapsedMs / 1e3)}s`;
+    const runElapsedText = fmtDuration(runElapsedMs);
     const statusLabel = isTerminal ? ` \xB7 ${run.status}` : "";
     const progressPart = `${agentCountText} \xB7 ${runElapsedText}${statusLabel}`;
-    lines.push(truncate(`\u251C\u2500 ${runGlyph} ${shortRunLabel(run)} \xB7 ${progressPart} \xB7 ${run.runId.slice(-8)}`, width));
+    groupStarts.push(lines.length);
+    lines.push(truncate(`${runBranch} ${runGlyph} ${shortRunLabel(run)} \xB7 ${progressPart} \xB7 ${run.runId.slice(-8)}`, width));
     const liveForRun = listLiveAgents().filter((a) => a.runId === run.runId);
     const ACTIVE_PRIORITY = {
       running: 0,
@@ -21962,42 +21982,58 @@ function buildWidgetLines(cwd, frame = 0, maxLines = 8, providedRuns, notificati
     const prioritizedActive = [...activeAgents].sort((a, b) => (ACTIVE_PRIORITY[a.status] ?? 9) - (ACTIVE_PRIORITY[b.status] ?? 9));
     const finishedSlots = Math.max(0, Math.min(2, MAX_AGENTS_DISPLAY - activeAgents.length));
     const visibleAgents = prioritizedActive.slice(0, MAX_AGENTS_DISPLAY);
-    for (const [index, agent] of visibleAgents.entries()) {
-      const last = index === visibleAgents.length - 1 && activeAgents.length <= MAX_AGENTS_DISPLAY && finishedSlots === 0;
-      const branch = last ? "\u2514\u2500" : "\u251C\u2500";
+    const shownFinished = finishedAgents.slice(0, finishedSlots);
+    const overflowCount = Math.max(0, activeAgents.length - MAX_AGENTS_DISPLAY);
+    const childRows = visibleAgents.length + (overflowCount > 0 ? 1 : 0) + shownFinished.length;
+    let childIdx = 0;
+    for (const agent of visibleAgents) {
+      childIdx++;
+      const isLastChild = childIdx === childRows;
+      const branch = isLastChild ? "\u2514\u2500" : "\u251C\u2500";
+      const activityRail = isLastChild ? "   " : "\u2502  ";
       const agentGlyph = iconForStatus(agent.status, { runningGlyph });
       const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
       const stats = agentStats(agent, liveHandle);
       const name = liveHandle?.agent ?? agent.agent;
       const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
-      const _activeMain = truncate(`\u2502  ${branch} ${agentGlyph} ${name}${desc ? ` \xB7 ${desc}` : ` \xB7 ${agent.role}`}`, width);
-      lines.push(_activeMain);
-      const _activity = truncate(`\u2502     \u22B6 ${agentActivity(agent, liveHandle)}${stats ? ` \xB7 ${stats}` : ""}`, width);
-      lines.push(_activity);
+      groupStarts.push(lines.length);
+      lines.push(truncate(`${rail}${branch} ${agentGlyph} ${name}${desc ? ` \xB7 ${desc}` : ` \xB7 ${agent.role}`}`, width));
+      lines.push(truncate(`${rail}${activityRail}  \u22B6 ${agentActivity(agent, liveHandle)}${stats ? ` \xB7 ${stats}` : ""}`, width));
     }
-    if (activeAgents.length > MAX_AGENTS_DISPLAY) {
-      lines.push(truncate(`\u2502  \u2514\u2500 \u2026 +${activeAgents.length - MAX_AGENTS_DISPLAY} more agents`, width));
+    if (overflowCount > 0) {
+      childIdx++;
+      groupStarts.push(lines.length);
+      lines.push(truncate(`${rail}${childIdx === childRows ? "\u2514\u2500" : "\u251C\u2500"} \u2026 +${overflowCount} more agents`, width));
     }
-    for (const [index, agent] of finishedAgents.slice(0, finishedSlots).entries()) {
+    for (const agent of shownFinished) {
+      childIdx++;
       const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
       const name = liveHandle?.agent ?? agent.agent;
       const icon = agent.status === "completed" ? "\u2713" : agent.status === "failed" ? "\u2717" : agent.status === "needs_attention" ? "\u26A0" : "\u25AA";
       const stats = agentStats(agent, liveHandle);
       const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
-      const isLastFinished = index === Math.min(finishedAgents.length, finishedSlots) - 1;
-      const branch = isLastFinished ? "\u2514\u2500" : "\u251C\u2500";
-      const _finished = truncate(`\u2502  ${branch} ${icon} ${name} \xB7 ${desc}${stats ? ` \xB7 ${stats}` : ""}`, width);
-      lines.push(_finished);
+      const branch = childIdx === childRows ? "\u2514\u2500" : "\u251C\u2500";
+      groupStarts.push(lines.length);
+      lines.push(truncate(`${rail}${branch} ${icon} ${name} \xB7 ${desc}${stats ? ` \xB7 ${stats}` : ""}`, width));
     }
     if (lines.length >= maxLines) break;
   }
-  return lines.slice(0, maxLines);
+  if (lines.length <= maxLines) return lines;
+  let cut = 0;
+  for (let i2 = 0; i2 < groupStarts.length; i2++) {
+    const end = i2 + 1 < groupStarts.length ? groupStarts[i2 + 1] : lines.length;
+    if (end <= maxLines) cut = end;
+    else break;
+  }
+  return lines.slice(0, Math.max(1, cut));
 }
 function colorWidgetLine(line4, index, theme) {
   let result4 = line4;
   if (index === 0) {
     result4 = result4.replace("Crew agents", theme.bold(theme.fg("accent", "Crew agents")));
+    result4 = result4.replace("/team-dashboard", theme.fg("dim", "/team-dashboard"));
   }
+  result4 = result4.replace(/ · ([a-f0-9]{8})$/, (_m, id) => ` \xB7 ${theme.fg("dim", id)}`);
   result4 = colorizeStatusGlyphs(result4, theme);
   if (index === 0) {
     result4 = theme.fg("accent", result4);
@@ -51687,7 +51723,7 @@ function borderColorForStatus(status) {
       return "border";
   }
 }
-function progressBar(ratio, barWidth, theme) {
+function progressBar2(ratio, barWidth, theme) {
   const clamped = Math.max(0, Math.min(1, ratio));
   const filled = Math.round(clamped * barWidth);
   const empty2 = barWidth - filled;
@@ -51749,7 +51785,7 @@ function renderTeamResult(result4, options, theme, ctx) {
       if (parsed.completed != null && parsed.total != null && parsed.total > 0) {
         const ratio = parsed.completed / parsed.total;
         const barW = Math.min(innerW - 22, 30);
-        const bar = progressBar(ratio, barW, theme);
+        const bar = progressBar2(ratio, barW, theme);
         const count2 = theme.fg("muted", ` ${parsed.completed}/${parsed.total}`);
         contentLines.push(
           padVisual(` ${spinner} ${theme.fg("toolTitle", theme.bold("crew run"))}  ${theme.fg("dim", elapsed3)}`, innerW)
@@ -51919,7 +51955,7 @@ function appendExpandedRun(lines, records, status, runId, theme, w, innerW) {
   lines.push(padVisual(` ${theme.fg("toolTitle", theme.bold("CREW RUN RESULT"))}  ${theme.fg("dim", shortId(runId))}`, innerW));
   lines.push(padVisual(theme.fg("borderMuted", "\u2500".repeat(innerW - 2)), innerW));
   const barW = Math.min(innerW - 22, 40);
-  const bar = progressBar(ratio, barW, theme);
+  const bar = progressBar2(ratio, barW, theme);
   const count2 = theme.fg("muted", ` ${completed}/${total}`);
   lines.push(padVisual(` ${theme.fg("muted", "Progress")} ${bar}${count2}`, innerW));
   const metricLine = [theme.fg("muted", formatDuration2(duration)), theme.fg("muted", `${formatTokens2(tokens)} tok`)].join(
@@ -51948,7 +51984,7 @@ function appendExpandedMetrics(lines, m, status, runId, theme, w, innerW) {
   if (m) {
     const ratio = m.taskCount ? (m.completedCount ?? 0) / m.taskCount : 0;
     const barW = Math.min(innerW - 22, 40);
-    const bar = progressBar(ratio, barW, theme);
+    const bar = progressBar2(ratio, barW, theme);
     const count2 = theme.fg("muted", ` ${m.completedCount ?? 0}/${m.taskCount ?? 0}`);
     lines.push(padVisual(` ${bar}${count2}`, innerW));
     const parts = [];

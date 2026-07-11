@@ -7875,7 +7875,7 @@
       "format": "esm"
     },
     "src/ui/widget/widget-model.ts": {
-      "bytes": 3145,
+      "bytes": 3566,
       "imports": [
         {
           "path": "src/extension/run-index.ts",
@@ -7927,7 +7927,7 @@
       "format": "esm"
     },
     "src/ui/widget/widget-renderer.ts": {
-      "bytes": 9990,
+      "bytes": 12592,
       "imports": [
         {
           "path": "src/runtime/live-agent-manager.ts",
@@ -18430,7 +18430,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6675354
+      "bytes": 6680013
     },
     "dist/index.mjs": {
       "imports": [
@@ -20883,7 +20883,7 @@
           "bytesInOutput": 6261
         },
         "src/ui/widget/widget-model.ts": {
-          "bytesInOutput": 2279
+          "bytesInOutput": 2440
         },
         "src/runtime/phase-progress.ts": {
           "bytesInOutput": 3938
@@ -20895,7 +20895,7 @@
           "bytesInOutput": 1809
         },
         "src/ui/widget/widget-renderer.ts": {
-          "bytesInOutput": 6348
+          "bytesInOutput": 7839
         },
         "src/ui/widget/index.ts": {
           "bytesInOutput": 9599
@@ -21630,7 +21630,7 @@
           "bytesInOutput": 1873
         },
         "src/ui/tool-renderers/index.ts": {
-          "bytesInOutput": 20722
+          "bytesInOutput": 20726
         },
         "src/ui/tool-progress-formatter.ts": {
           "bytesInOutput": 2691
@@ -22140,7 +22140,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3175528
+      "bytes": 3177184
     }
   }
 }

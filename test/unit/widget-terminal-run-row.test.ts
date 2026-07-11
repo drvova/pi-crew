@@ -63,16 +63,23 @@ function findRunRow(lines: string[]): string {
 	return row;
 }
 
+/** Parse the human duration format (`45s` | `2m34s` | `1h12m`) to seconds. */
+function parseDurationSeconds(row: string): number {
+	const hm = row.match(/(\d+)h(\d+)m/);
+	if (hm) return Number(hm[1]) * 3600 + Number(hm[2]) * 60;
+	const ms = row.match(/(\d+)m(\d+)s/);
+	if (ms) return Number(ms[1]) * 60 + Number(ms[2]);
+	const s = row.match(/(\d+)s/);
+	return s ? Number(s[1]) : Number.NaN;
+}
+
 test("Bug 022: FAILED run timer FREEZES at updatedAt (not climbing forever)", () => {
 	// Run created 30min ago, FAILED 7min ago (still in F-5 grace → visible).
 	// createdAt..updatedAt gap = 23min → elapsed should be ~1380s, NOT 1800s.
 	const run = makeRun("failed", 30 * 60_000, 7 * 60_000);
 	const lines = buildWidgetLines(FAKE_CWD, 0, 20, [run], 0, 200);
 	const row = findRunRow(lines);
-	// Extract the seconds field from the row.
-	const m = row.match(/(\d+)s/);
-	assert.ok(m, `elapsed field not found in row: ${row}`);
-	const elapsed = Number(m[1]);
+	const elapsed = parseDurationSeconds(row);
 	// ~23min = 1380s. Allow a tiny skew (createdAt/updatedAt rounding) but the
 	// key assertion: it must NOT be ~1800s (30min from createdAt) and it must
 	// NOT grow on re-render.
@@ -101,8 +108,7 @@ test("Bug 022: COMPLETED run timer also freezes (consistent terminal handling)",
 	const lines = buildWidgetLines(FAKE_CWD, 0, 20, [run], 0, 200);
 	const row = findRunRow(lines);
 	assert.match(row, /completed/, `completed run must surface its status: ${row}`);
-	const m = row.match(/(\d+)s/);
-	const elapsed = Number(m![1]);
+	const elapsed = parseDurationSeconds(row);
 	assert.ok(elapsed >= 1300 && elapsed <= 1400, `completed elapsed frozen ~1380s, got ${elapsed}s`);
 });
 
@@ -111,8 +117,7 @@ test("Bug 022: RUNNING run timer still ticks (no regression — only terminal fr
 	const run = makeRun("running", 5 * 60_000, 1_000); // created 5min ago, updated 1s ago
 	const a = buildWidgetLines(FAKE_CWD, 0, 20, [run], 0, 200);
 	const rowA = findRunRow(a);
-	const m = rowA.match(/(\d+)s/);
-	const elapsed = Number(m![1]);
+	const elapsed = parseDurationSeconds(rowA);
 	assert.ok(elapsed >= 290 && elapsed <= 310, `running run elapsed ~300s (from createdAt, live), got ${elapsed}s`);
 	assert.doesNotMatch(rowA, /\bcompleted\b|\bfailed\b|\bcancelled\b/, `running run has no terminal status label: ${rowA}`);
 });

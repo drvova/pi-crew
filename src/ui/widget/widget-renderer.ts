@@ -32,6 +32,24 @@ const ERROR_STATUSES = new Set(["failed", "cancelled", "stopped", "needs_attenti
 
 // ── Header ────────────────────────────────────────────────────────────
 
+/**
+ * Human-readable duration: `45s`, `2m34s`, `1h12m`. Replaces raw second
+ * counters (a long run used to show `2028s` and climbing — unreadable).
+ */
+export function fmtDuration(ms: number): string {
+	const total = Math.max(0, Math.floor(ms / 1000));
+	if (total < 60) return `${total}s`;
+	if (total < 3600) return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
+	return `${Math.floor(total / 3600)}h${String(Math.floor((total % 3600) / 60)).padStart(2, "0")}m`;
+}
+
+/** Compact 5-cell progress bar (`▰▰▰▱▱`) — instant read of completion. */
+export function progressBar(completed: number, total: number, cells = 5): string {
+	if (total <= 0) return "";
+	const filled = Math.max(0, Math.min(cells, Math.round((completed / total) * cells)));
+	return "▰".repeat(filled) + "▱".repeat(cells - filled);
+}
+
 export function widgetHeader(runs: WidgetRun[], runningGlyph: string, maxLines = 20, notificationCount = 0): string {
 	const agents = runs.flatMap((item) => item.agents);
 	const runningAgents = agents.filter((a) => a.status === "running").length;
@@ -42,7 +60,8 @@ export function widgetHeader(runs: WidgetRun[], runningGlyph: string, maxLines =
 	if (queuedAgents) parts.push(`${queuedAgents} queued`);
 	if (waitingAgents) parts.push(`${waitingAgents} waiting`);
 	if (completedAgents) parts.push(`${completedAgents}/${agents.length} done`);
-	return `${runningGlyph} Crew agents${notificationBadge(notificationCount)} · ${parts.join(" · ")} · /team-dashboard`;
+	const bar = progressBar(completedAgents, agents.length);
+	return `${runningGlyph} Crew agents${notificationBadge(notificationCount)}${bar ? ` ${bar}` : ""} · ${parts.join(" · ")} · /team-dashboard`;
 }
 
 // ── Line builder ──────────────────────────────────────────────────────
@@ -64,8 +83,18 @@ export function buildWidgetLines(
 
 	const runningGlyph = spinnerFrame("widget-header");
 	const lines: string[] = [widgetHeader(runs, runningGlyph, maxLines, notificationCount)];
+	// Pair-safe truncation: `groupStarts` records indices where a cut is safe
+	// (run rows, agent main rows) so slicing never orphans an activity line
+	// (`⎿ …`) from the agent row above it.
+	const groupStarts: number[] = [0];
 
-	for (const { run, agents, snapshot } of runs) {
+	for (const [runIdx, { run, agents, snapshot }] of runs.entries()) {
+		// Tree correctness: the LAST run closes the tree (`└─`) and its children
+		// drop the `│` continuation rail — previously every run rendered `├─`,
+		// leaving the tree visually dangling forever.
+		const isLastRun = runIdx === runs.length - 1;
+		const runBranch = isLastRun ? "└─" : "├─";
+		const rail = isLastRun ? "   " : "│  ";
 		const activeAgents = agents.filter((a) => a.status === "running" || a.status === "queued" || a.status === "waiting");
 		const now = Date.now();
 		const finishedAgents = agents.filter((item) => {
@@ -100,10 +129,11 @@ export function buildWidgetLines(
 		const agentCountText = `${completed}/${agents.length} agents`;
 		const runEndMs = isTerminal ? new Date(run.updatedAt).getTime() : Date.now();
 		const runElapsedMs = Math.max(0, Number.isFinite(runEndMs) ? runEndMs - new Date(run.createdAt).getTime() : 0);
-		const runElapsedText = `${Math.floor(runElapsedMs / 1000)}s`;
+		const runElapsedText = fmtDuration(runElapsedMs);
 		const statusLabel = isTerminal ? ` · ${run.status}` : "";
 		const progressPart = `${agentCountText} · ${runElapsedText}${statusLabel}`;
-		lines.push(truncate(`├─ ${runGlyph} ${shortRunLabel(run)} · ${progressPart} · ${run.runId.slice(-8)}`, width));
+		groupStarts.push(lines.length);
+		lines.push(truncate(`${runBranch} ${runGlyph} ${shortRunLabel(run)} · ${progressPart} · ${run.runId.slice(-8)}`, width));
 
 		const liveForRun = listLiveAgents().filter((a) => a.runId === run.runId);
 
@@ -122,41 +152,59 @@ export function buildWidgetLines(
 		const finishedSlots = Math.max(0, Math.min(2, MAX_AGENTS_DISPLAY - activeAgents.length));
 
 		const visibleAgents = prioritizedActive.slice(0, MAX_AGENTS_DISPLAY);
-		for (const [index, agent] of visibleAgents.entries()) {
-			const last = index === visibleAgents.length - 1 && activeAgents.length <= MAX_AGENTS_DISPLAY && finishedSlots === 0;
-			const branch = last ? "└─" : "├─";
+		const shownFinished = finishedAgents.slice(0, finishedSlots);
+		const overflowCount = Math.max(0, activeAgents.length - MAX_AGENTS_DISPLAY);
+		// Total child rows below the run line, to place `└─` on the true last row.
+		const childRows = visibleAgents.length + (overflowCount > 0 ? 1 : 0) + shownFinished.length;
+		let childIdx = 0;
+		for (const agent of visibleAgents) {
+			childIdx++;
+			const isLastChild = childIdx === childRows;
+			const branch = isLastChild ? "└─" : "├─";
+			// The activity row under the LAST child hangs without a rail.
+			const activityRail = isLastChild ? "   " : "│  ";
 			const agentGlyph = iconForStatus(agent.status, { runningGlyph });
 			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
 			const stats = agentStats(agent, liveHandle);
 			const name = liveHandle?.agent ?? agent.agent;
 			const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
-			const _activeMain = truncate(`│  ${branch} ${agentGlyph} ${name}${desc ? ` · ${desc}` : ` · ${agent.role}`}`, width);
-			lines.push(_activeMain);
-			const _activity = truncate(`│     ⊶ ${agentActivity(agent, liveHandle)}${stats ? ` · ${stats}` : ""}`, width);
-			lines.push(_activity);
+			groupStarts.push(lines.length);
+			lines.push(truncate(`${rail}${branch} ${agentGlyph} ${name}${desc ? ` · ${desc}` : ` · ${agent.role}`}`, width));
+			lines.push(truncate(`${rail}${activityRail}  ⊶ ${agentActivity(agent, liveHandle)}${stats ? ` · ${stats}` : ""}`, width));
 		}
 
-		if (activeAgents.length > MAX_AGENTS_DISPLAY) {
-			lines.push(truncate(`│  └─ … +${activeAgents.length - MAX_AGENTS_DISPLAY} more agents`, width));
+		if (overflowCount > 0) {
+			childIdx++;
+			groupStarts.push(lines.length);
+			lines.push(truncate(`${rail}${childIdx === childRows ? "└─" : "├─"} … +${overflowCount} more agents`, width));
 		}
 
-		for (const [index, agent] of finishedAgents.slice(0, finishedSlots).entries()) {
+		for (const agent of shownFinished) {
+			childIdx++;
 			const liveHandle = liveForRun.find((h) => h.taskId === agent.taskId);
 			const name = liveHandle?.agent ?? agent.agent;
 			const icon =
 				agent.status === "completed" ? "✓" : agent.status === "failed" ? "✗" : agent.status === "needs_attention" ? "⚠" : "▪";
 			const stats = agentStats(agent, liveHandle);
 			const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
-			const isLastFinished = index === Math.min(finishedAgents.length, finishedSlots) - 1;
-			const branch = isLastFinished ? "└─" : "├─";
-			const _finished = truncate(`│  ${branch} ${icon} ${name} · ${desc}${stats ? ` · ${stats}` : ""}`, width);
-			lines.push(_finished);
+			const branch = childIdx === childRows ? "└─" : "├─";
+			groupStarts.push(lines.length);
+			lines.push(truncate(`${rail}${branch} ${icon} ${name} · ${desc}${stats ? ` · ${stats}` : ""}`, width));
 		}
 
 		if (lines.length >= maxLines) break;
 	}
 
-	return lines.slice(0, maxLines);
+	if (lines.length <= maxLines) return lines;
+	// Keep whole groups while they fit — never cut mid-pair (an activity row
+	// must never render without its agent row).
+	let cut = 0;
+	for (let i = 0; i < groupStarts.length; i++) {
+		const end = i + 1 < groupStarts.length ? groupStarts[i + 1]! : lines.length;
+		if (end <= maxLines) cut = end;
+		else break;
+	}
+	return lines.slice(0, Math.max(1, cut));
 }
 
 // ── Colorization ──────────────────────────────────────────────────────
@@ -165,7 +213,12 @@ export function colorWidgetLine(line: string, index: number, theme: CrewTheme): 
 	let result = line;
 	if (index === 0) {
 		result = result.replace("Crew agents", theme.bold(theme.fg("accent", "Crew agents")));
+		// De-emphasize the navigation hint — it is chrome, not data.
+		result = result.replace("/team-dashboard", theme.fg("dim", "/team-dashboard"));
 	}
+	// Dim trailing run-id suffixes (` · 3a636ea9`) on run rows — reference
+	// metadata, not something to read every tick.
+	result = result.replace(/ · ([a-f0-9]{8})$/, (_m, id) => ` · ${theme.fg("dim", id)}`);
 	// Shared glyph colorizer covers ALL status glyphs — including ⏳ (waiting),
 	// ⚠ (needs_attention), and the braille spinner range ⠁-⣿ (running) — which the
 	// previous local statusGlyphColor map + regex omitted (F-1, V-3).

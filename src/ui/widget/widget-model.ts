@@ -94,8 +94,15 @@ export function statusSummary(runs: WidgetRun[]): string {
 }
 
 /**
- * Build the short run label (team/workflow).
+ * Build the short run label. `team/workflow`, deduped when identical
+ * (`implementation/implementation` → `implementation`) and collapsed for the
+ * direct-agent synthetic pair (`direct-executor/direct-agent` →
+ * `direct-executor`) — the duplication carried zero information and ate
+ * widget width.
  */
 export function shortRunLabel(run: TeamRunManifest): string {
-	return `${run.team}/${run.workflow ?? "none"}`;
+	const workflow = run.workflow ?? "none";
+	if (workflow === run.team) return run.team;
+	if (run.team.startsWith("direct-") && workflow === "direct-agent") return run.team;
+	return `${run.team}/${workflow}`;
 }
