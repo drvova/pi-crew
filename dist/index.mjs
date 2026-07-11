@@ -20997,7 +20997,10 @@ function agentStats(agent, liveHandle) {
     } catch {
     }
     const ms = computeLiveDurationMs(act);
+    const outputTokens = usage.output ?? 0;
+    const tps = ms > 1e3 && outputTokens > 0 ? Math.round(outputTokens / (ms / 1e3)) : 0;
     parts.push(alignMetric(`${(ms / 1e3).toFixed(1)}s`, DURATION_METRIC_WIDTH));
+    if (tps > 0) parts.push(alignMetric(`${tps} tok/s`, 8));
   } else {
     if (agent.toolUses) parts.push(alignMetric(`${agent.toolUses} tools`, TOOLS_METRIC_WIDTH));
     if (agent.progress?.tokens) parts.push(alignMetric(formatTokensCompact(agent.progress.tokens), TOKENS_METRIC_WIDTH));
@@ -21377,7 +21380,7 @@ var init_spinner = __esm({
   "src/ui/spinner.ts"() {
     "use strict";
     SUBAGENT_SPINNER_FRAMES = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
-    SUBAGENT_SPINNER_FRAME_MS = 160;
+    SUBAGENT_SPINNER_FRAME_MS = 80;
   }
 });
 

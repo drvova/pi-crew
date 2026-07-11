@@ -171,7 +171,12 @@ export function agentStats(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle)
 			/* ignore */
 		}
 		const ms = computeLiveDurationMs(act);
+		// Real-time throughput: output tokens / elapsed seconds. The most useful
+		// single metric for gauging agent speed — "is this model fast or stalled?"
+		const outputTokens = usage.output ?? 0;
+		const tps = ms > 1000 && outputTokens > 0 ? Math.round(outputTokens / (ms / 1000)) : 0;
 		parts.push(alignMetric(`${(ms / 1000).toFixed(1)}s`, DURATION_METRIC_WIDTH));
+		if (tps > 0) parts.push(alignMetric(`${tps} tok/s`, 8));
 	} else {
 		if (agent.toolUses) parts.push(alignMetric(`${agent.toolUses} tools`, TOOLS_METRIC_WIDTH));
 		if (agent.progress?.tokens) parts.push(alignMetric(formatTokensCompact(agent.progress.tokens), TOKENS_METRIC_WIDTH));

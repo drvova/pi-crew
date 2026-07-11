@@ -1,5 +1,10 @@
+/**
+ * Braille-dots spinner frames — the classic dot-cycle used by ora/clack.
+ * 10 frames at 80ms = a smooth ~12.5fps animation. Previously 160ms which
+ * felt sluggish (half-speed vs what users expect from modern CLIs).
+ */
 export const SUBAGENT_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
-export const SUBAGENT_SPINNER_FRAME_MS = 160;
+export const SUBAGENT_SPINNER_FRAME_MS = 80;
 
 export function spinnerBucket(now = Date.now(), frameMs = SUBAGENT_SPINNER_FRAME_MS): number {
 	return Math.floor(now / Math.max(1, frameMs));

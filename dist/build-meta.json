@@ -7700,7 +7700,7 @@
       "format": "esm"
     },
     "src/ui/widget/widget-formatters.ts": {
-      "bytes": 8957,
+      "bytes": 9304,
       "imports": [
         {
           "path": "src/runtime/usage-tracker.ts",
@@ -7865,7 +7865,7 @@
       "format": "esm"
     },
     "src/ui/spinner.ts": {
-      "bytes": 757,
+      "bytes": 984,
       "imports": [],
       "format": "esm"
     },
@@ -18450,7 +18450,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6682014
+      "bytes": 6682771
     },
     "dist/index.mjs": {
       "imports": [
@@ -20888,7 +20888,7 @@
           "bytesInOutput": 1106
         },
         "src/ui/widget/widget-formatters.ts": {
-          "bytesInOutput": 5652
+          "bytesInOutput": 5847
         },
         "src/ui/powerbar-publisher.ts": {
           "bytesInOutput": 9964
@@ -20897,7 +20897,7 @@
           "bytesInOutput": 2361
         },
         "src/ui/spinner.ts": {
-          "bytesInOutput": 852
+          "bytesInOutput": 851
         },
         "src/ui/theme-adapter.ts": {
           "bytesInOutput": 6261
@@ -22160,7 +22160,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3177603
+      "bytes": 3177797
     }
   }
 }
