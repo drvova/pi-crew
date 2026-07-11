@@ -327,7 +327,26 @@ test("buildConfiguredModelCandidates keeps inherited parent builtin model when r
 // inside them. Extension-registered providers (e.g. windsurf oauth) must not
 // receive IMPLICIT routing; explicit choices stay pinned and fail loud.
 
-test("workerProviders drops implicit inherited parent model on unavailable provider", () => {
+test("inherited session model ALWAYS leads the chain; fallback pool is capability-filtered (policy 2026-07-11)", () => {
+	const modelRegistry = {
+		getAvailable: () => [
+			{ provider: "windsurf", id: "glm-5-2" },
+			{ provider: "freebuff", id: "other-ext-model" },
+			{ provider: "qwen", id: "qwen3.7-max" },
+		],
+	};
+	const result = buildConfiguredModelCandidates({
+		agentModel: undefined,
+		parentModel: { provider: "windsurf", id: "glm-5-2" }, // live session model — inherited
+		modelRegistry,
+		workerProviders: new Set(["qwen", "anthropic"]),
+	});
+	assert.equal(result[0], "windsurf/glm-5-2", "session model must lead even when its provider is worker-unavailable");
+	assert.ok(result.includes("qwen/qwen3.7-max"), "worker-available fallbacks follow");
+	assert.ok(!result.includes("freebuff/other-ext-model"), "other extension-provider models are pruned from the fallback pool");
+});
+
+test("explicit override outranks the inherited session model", () => {
 	const modelRegistry = {
 		getAvailable: () => [
 			{ provider: "windsurf", id: "glm-5-2" },
@@ -335,12 +354,12 @@ test("workerProviders drops implicit inherited parent model on unavailable provi
 		],
 	};
 	const result = buildConfiguredModelCandidates({
-		agentModel: undefined,
-		parentModel: { provider: "windsurf", id: "glm-5-2" }, // host session model — implicit
+		overrideModel: "anthropic/claude-opus-4-8",
+		parentModel: { provider: "windsurf", id: "glm-5-2" },
 		modelRegistry,
 		workerProviders: new Set(["qwen", "anthropic"]),
 	});
-	assert.deepEqual(result, ["qwen/qwen3.7-max"], "extension provider must be filtered from implicit candidates");
+	assert.equal(result[0], "anthropic/claude-opus-4-8", "explicit user choice wins over inheritance");
 });
 
 test("workerProviders keeps EXPLICIT override on unavailable provider (fails loud at spawn instead)", () => {

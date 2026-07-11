@@ -256,6 +256,8 @@ export function createRunManifest(params: {
 	goal: string;
 	workspaceMode?: "single" | "worktree";
 	ownerSessionId?: string;
+	/** Host pi session model ("provider/id") — inherited by workers (policy 2026-07-11). */
+	parentModel?: string;
 	runKind?: "team-run" | "goal-loop" | "dynamic-workflow";
 	/** round-14 P1-5: typed workflow arguments for .dwf.ts scripts (ctx.args<T>()). */
 	args?: unknown;
@@ -271,6 +273,7 @@ export function createRunManifest(params: {
 		workflow: params.workflow?.name,
 		goal: params.goal,
 		status: "queued",
+		...(params.parentModel ? { parentModel: params.parentModel } : {}),
 		workspaceMode: params.workspaceMode ?? params.team.workspaceMode ?? "single",
 		createdAt: now,
 		updatedAt: now,

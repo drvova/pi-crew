@@ -1,5 +1,6 @@
 import { allAgents, discoverAgents } from "../../agents/discover-agents.ts";
 import { loadConfig } from "../../config/config.ts";
+import { modelStringFromUnknown } from "../../runtime/model-fallback.ts";
 import { PipelineRunner, type PipelineWorkflow } from "../../runtime/pipeline-runner.ts";
 import { sanitizeTaskText } from "../../runtime/task-packet.ts";
 // Heavy runtime — lazy-loaded to avoid 1.4s import cost at extension registration.
@@ -398,6 +399,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		goal,
 		workspaceMode: params.workspaceMode,
 		ownerSessionId: ctx.sessionId,
+		parentModel: modelStringFromUnknown(ctx.model),
 		runKind: params.runKind,
 		args: params.args,
 	});
@@ -489,6 +491,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 					goal: `${goal} \u2014 Stage ${stage.name}`,
 					workspaceMode: params.workspaceMode,
 					ownerSessionId: ctx.sessionId,
+					parentModel: modelStringFromUnknown(ctx.model),
 					runKind: "team-run",
 					args: params.args,
 				});

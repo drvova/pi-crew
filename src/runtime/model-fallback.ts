@@ -43,6 +43,19 @@ interface PiProviderConfigLike {
 }
 
 function modelInfoFromUnknown(value: unknown): AvailableModelInfo | undefined {
+	// "provider/id" strings — e.g. manifest.parentModel persisted for detached
+	// async runners (policy 2026-07-11). Split on the FIRST slash only: model
+	// ids may themselves contain slashes (huggingface/zai-org/GLM-5.2).
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		const slash = trimmed.indexOf("/");
+		if (slash <= 0 || slash === trimmed.length - 1) return undefined;
+		return {
+			provider: trimmed.slice(0, slash),
+			id: trimmed.slice(slash + 1),
+			fullId: trimmed,
+		};
+	}
 	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
 	const record = value as ModelLike;
 	if (typeof record.provider !== "string" || typeof record.id !== "string") return undefined;
@@ -457,10 +470,17 @@ export function buildConfiguredModelRouting(input: {
 	// only knows about models from models.json / registry, NOT builtin Pi models.
 	// Pin the inherited parentModel at index 0 regardless of availability.
 	const parentModelRaw = effectiveAgentModel?.trim() || undefined;
-	// Explicit model choices (caller/step/team-role/frontmatter — NOT the
-	// parentModel inheritance) bypass the workerProviders capability filter.
+	// Models exempt from the workerProviders capability filter:
+	//  - explicit choices (caller override / step / team-role / frontmatter)
+	//  - the INHERITED session model (effectiveAgentModel ← parentModel).
+	//    Policy (user directive 2026-07-11): workers always inherit the live
+	//    pi session's model unless explicitly told otherwise; fallbacks come
+	//    from pi's model set. If the inherited provider cannot exist in a
+	//    child worker it fails fast (`Unknown provider`, advanceable) and the
+	//    chain moves to the pi-based fallbacks — the filter below only prunes
+	//    that implicit fallback pool, never the inherited/explicit head.
 	const explicitModels = new Set(
-		[input.overrideModel, input.stepModel, input.teamRoleModel, input.agentModel]
+		[input.overrideModel, input.stepModel, input.teamRoleModel, input.agentModel, effectiveAgentModel]
 			.filter((model): model is string => Boolean(model?.trim()))
 			.map((model) => model.trim()),
 	);

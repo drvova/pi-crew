@@ -13488,6 +13488,7 @@ function createRunManifest(params) {
     workflow: params.workflow?.name,
     goal: params.goal,
     status: "queued",
+    ...params.parentModel ? { parentModel: params.parentModel } : {},
     workspaceMode: params.workspaceMode ?? params.team.workspaceMode ?? "single",
     createdAt: now,
     updatedAt: now,
@@ -35362,6 +35363,16 @@ import * as fs47 from "node:fs";
 import * as os11 from "node:os";
 import * as path40 from "node:path";
 function modelInfoFromUnknown(value) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    const slash = trimmed.indexOf("/");
+    if (slash <= 0 || slash === trimmed.length - 1) return void 0;
+    return {
+      provider: trimmed.slice(0, slash),
+      id: trimmed.slice(slash + 1),
+      fullId: trimmed
+    };
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) return void 0;
   const record = value;
   if (typeof record.provider !== "string" || typeof record.id !== "string") return void 0;
@@ -35552,7 +35563,7 @@ function buildConfiguredModelRouting(input) {
   ] : [input.overrideModel, input.stepModel, input.teamRoleModel, effectiveAgentModel, ...input.fallbackModels ?? [], parentModel];
   const parentModelRaw = effectiveAgentModel?.trim() || void 0;
   const explicitModels = new Set(
-    [input.overrideModel, input.stepModel, input.teamRoleModel, input.agentModel].filter((model) => Boolean(model?.trim())).map((model) => model.trim())
+    [input.overrideModel, input.stepModel, input.teamRoleModel, input.agentModel, effectiveAgentModel].filter((model) => Boolean(model?.trim())).map((model) => model.trim())
   );
   const configuredModels = rawModels.filter((model) => Boolean(model?.trim())).filter((model) => {
     if (!input.workerProviders) return true;
@@ -70483,6 +70494,7 @@ Commit or stash changes before using worktree mode, or use workspaceMode: 'singl
     goal,
     workspaceMode: params.workspaceMode,
     ownerSessionId: ctx.sessionId,
+    parentModel: modelStringFromUnknown(ctx.model),
     runKind: params.runKind,
     args: params.args
   });
@@ -70563,6 +70575,7 @@ Commit or stash changes before using worktree mode, or use workspaceMode: 'singl
           goal: `${goal} \u2014 Stage ${stage.name}`,
           workspaceMode: params.workspaceMode,
           ownerSessionId: ctx.sessionId,
+          parentModel: modelStringFromUnknown(ctx.model),
           runKind: "team-run",
           args: params.args
         });
@@ -71183,6 +71196,7 @@ var init_run = __esm({
     "use strict";
     init_discover_agents();
     init_config();
+    init_model_fallback();
     init_pipeline_runner();
     init_task_packet();
     init_active_run_registry();

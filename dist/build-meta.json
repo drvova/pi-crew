@@ -6598,7 +6598,7 @@
       "format": "esm"
     },
     "src/state/state-store.ts": {
-      "bytes": 36169,
+      "bytes": 36354,
       "imports": [
         {
           "path": "node:fs",
@@ -10578,7 +10578,7 @@
       "format": "esm"
     },
     "src/runtime/model-fallback.ts": {
-      "bytes": 21257,
+      "bytes": 22294,
       "imports": [
         {
           "path": "node:fs",
@@ -15829,7 +15829,7 @@
       "format": "esm"
     },
     "src/extension/team-tool/run.ts": {
-      "bytes": 48005,
+      "bytes": 48182,
       "imports": [
         {
           "path": "src/agents/discover-agents.ts",
@@ -15840,6 +15840,11 @@
           "path": "src/config/config.ts",
           "kind": "import-statement",
           "original": "../../config/config.ts"
+        },
+        {
+          "path": "src/runtime/model-fallback.ts",
+          "kind": "import-statement",
+          "original": "../../runtime/model-fallback.ts"
         },
         {
           "path": "src/runtime/pipeline-runner.ts",
@@ -18415,7 +18420,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6667661
+      "bytes": 6669528
     },
     "dist/index.mjs": {
       "imports": [
@@ -20694,7 +20699,7 @@
           "bytesInOutput": 1803
         },
         "src/state/state-store.ts": {
-          "bytesInOutput": 19068
+          "bytesInOutput": 19138
         },
         "src/utils/file-coalescer.ts": {
           "bytesInOutput": 1204
@@ -21246,7 +21251,7 @@
           "bytesInOutput": 1806
         },
         "src/runtime/model-fallback.ts": {
-          "bytesInOutput": 13490
+          "bytesInOutput": 13810
         },
         "src/runtime/sensitive-paths.ts": {
           "bytesInOutput": 583
@@ -21879,7 +21884,7 @@
           "bytesInOutput": 6259
         },
         "src/extension/team-tool/run.ts": {
-          "bytesInOutput": 39037
+          "bytesInOutput": 39174
         },
         "src/extension/team-tool.ts": {
           "bytesInOutput": 35616
@@ -22125,7 +22130,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3172904
+      "bytes": 3173431
     }
   }
 }

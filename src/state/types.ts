@@ -198,6 +198,11 @@ export interface TeamRunManifest {
 	planApproval?: PlanApprovalState;
 	/** Pi session that created the run, when available. Used to prevent cross-session destructive actions. */
 	ownerSessionId?: string;
+	/** Host pi session model ("provider/id") at run creation. Workers inherit it
+	 * as the primary candidate unless a model is explicitly specified (policy
+	 * 2026-07-11). Persisted so detached async background runners — which rebuild
+	 * inputs from this manifest — inherit exactly like foreground runs. */
+	parentModel?: string;
 	/** pi-crew skill override selected when the run was created. false disables injected skill instructions. */
 	skillOverride?: string[] | false;
 	/** Resolved runtime/safety mode used for execution. Optional for backward compatibility with older manifests. */

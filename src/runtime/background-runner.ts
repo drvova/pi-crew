@@ -729,6 +729,9 @@ async function main(): Promise<void> {
 							runtimeConfig: runConfig.runtime,
 							skillOverride: manifest.skillOverride,
 							reliability: runConfig.reliability,
+							// Policy 2026-07-11: detached runners inherit the host session
+							// model persisted at run creation, exactly like foreground runs.
+							parentModel: manifest.parentModel,
 							workspaceId: manifest.ownerSessionId ?? manifest.cwd,
 							signal: abortController.signal,
 							...(manifest.budgetTotal !== undefined ? { budgetTotal: manifest.budgetTotal } : {}),
