@@ -28,13 +28,19 @@ function run(scriptRel) {
 function main() {
 	try {
 		// Dev clones ship scripts/build-bundle.mjs and devDeps (esbuild) so the
-		// bundle rebuilds; published packages omit both and rely on committed
-		// dist/index.mjs, so this best-effort build simply no-ops.
-		const bundleStatus = run("scripts/build-bundle.mjs");
-		if (bundleStatus !== 0) {
-			console.warn(
-				"[pi-crew] postinstall: bundle build skipped or failed; using committed dist/ (or strip-types fallback). Run npm run build:bundle to retry.",
-			);
+		// bundle rebuilds. Git/production installs ship the script WITHOUT
+		// devDeps: esbuild is guaranteed-missing, so skip quietly instead of
+		// letting node dump an ERR_MODULE_NOT_FOUND stack trace (stdio:inherit)
+		// for a fully expected condition — committed dist/index.mjs is used.
+		if (!existsSync(join(root, "node_modules", "esbuild"))) {
+			console.log("[pi-crew] postinstall: esbuild not installed (production install) — using committed dist/ bundle.");
+		} else {
+			const bundleStatus = run("scripts/build-bundle.mjs");
+			if (bundleStatus !== 0) {
+				console.warn(
+					"[pi-crew] postinstall: bundle build skipped or failed; using committed dist/ (or strip-types fallback). Run npm run build:bundle to retry.",
+				);
+			}
 		}
 		// Font install is best-effort and must never fail the install.
 		run("scripts/install-crew-vibes-font.mjs");
