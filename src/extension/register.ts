@@ -20,7 +20,7 @@ import { appendDeadletter } from "../runtime/deadletter.ts";
 import { listLiveAgents } from "../runtime/live-agent-manager.ts";
 import { createManifestCache } from "../runtime/manifest-cache.ts";
 import { cleanupOrphanWorkers } from "../runtime/orphan-worker-registry.ts";
-import { primePeerDep } from "../runtime/peer-dep.ts";
+import { getAgentDir, primePeerDep } from "../runtime/peer-dep.ts";
 import { buildValidationBlocker, extractPathFromInput, validateWrittenFile } from "../runtime/per-write-validator.ts";
 import { cleanupLegacyOrphanTempDirs, cleanupOrphanTempDirs } from "../runtime/pi-args.ts";
 import { startRuntimeWarmup } from "../runtime/runtime-warmup.ts";
@@ -161,12 +161,79 @@ function duplicateInstallSourcePath(): string | undefined {
 	return undefined;
 }
 
+/** Resolve a settings.json `packages` entry to its install directory. */
+function resolvePackageEntryDir(entry: string, agentDir: string): string | undefined {
+	if (entry.startsWith("git:")) {
+		// git:https://github.com/owner/repo → <agentDir>/git/github.com/owner/repo
+		const segments = entry
+			.slice(4)
+			.replace(/^https?:\/\//, "")
+			.replace(/\.git$/, "")
+			.split("/")
+			.filter(Boolean);
+		if (segments.length < 2) return undefined;
+		return path.join(agentDir, "git", ...segments);
+	}
+	if (entry.startsWith("npm:")) return path.join(agentDir, "npm", "node_modules", ...entry.slice(4).split("/"));
+	return path.resolve(agentDir, entry);
+}
+
+function realpathOrSelf(p: string): string {
+	try {
+		return fs.realpathSync(p);
+	} catch {
+		return p;
+	}
+}
+
+/**
+ * Self-heal: remove the settings.json `packages` entry that installed THIS
+ * (losing) copy, so the next startup loads a single copy without any notice.
+ * Only entries whose resolved install dir contains `selfPath` are removed —
+ * the winning copy's entry can never match. Best-effort: any failure returns
+ * undefined and the caller falls back to the plain notice.
+ *
+ * @internal — exported for unit tests.
+ */
+export function removeDuplicatePackageEntry(selfPath: string, agentDir: string): string | undefined {
+	try {
+		const settingsPath = path.join(agentDir, "settings.json");
+		const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as { packages?: unknown };
+		if (!Array.isArray(settings.packages)) return undefined;
+		const selfReal = realpathOrSelf(selfPath);
+		const removed: string[] = [];
+		const kept = settings.packages.filter((entry) => {
+			if (typeof entry !== "string") return true;
+			const dir = resolvePackageEntryDir(entry, agentDir);
+			if (!dir) return true;
+			const dirReal = realpathOrSelf(dir);
+			const containsSelf = selfReal === dirReal || selfReal.startsWith(dirReal + path.sep);
+			if (containsSelf) removed.push(entry);
+			return !containsSelf;
+		});
+		if (removed.length === 0) return undefined;
+		settings.packages = kept;
+		fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
+		return removed.join(", ");
+	} catch {
+		return undefined;
+	}
+}
+
 export function registerPiTeams(pi: ExtensionAPI): void {
 	const firstCopy = duplicateInstallSourcePath();
 	if (firstCopy) {
+		const self = fileURLToPath(import.meta.url);
+		// Auto-remove the losing copy's package entry (opt out with
+		// PI_CREW_AUTO_REMOVE_DUPLICATE=0). LAZY import avoided: getAgentDir is
+		// already a cheap sync helper from the peer-dep module in this graph.
+		const autoRemove = process.env.PI_CREW_AUTO_REMOVE_DUPLICATE !== "0";
+		const removedEntry = autoRemove ? removeDuplicatePackageEntry(self, getAgentDir()) : undefined;
 		console.error(
-			`[pi-crew] duplicate install detected — already registered from ${firstCopy}; skipping this copy (${fileURLToPath(import.meta.url)}). ` +
-				"Remove one of the pi-crew package entries in ~/.pi/agent/settings.json to silence this notice.",
+			removedEntry
+				? `[pi-crew] duplicate install detected — already registered from ${firstCopy}. Auto-removed package entry '${removedEntry}' from settings.json; next startup loads a single copy.`
+				: `[pi-crew] duplicate install detected — already registered from ${firstCopy}; skipping this copy (${self}). ` +
+						"Remove one of the pi-crew package entries in ~/.pi/agent/settings.json to silence this notice.",
 		);
 		return;
 	}

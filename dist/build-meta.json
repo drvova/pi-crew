@@ -17993,7 +17993,7 @@
       "format": "esm"
     },
     "src/extension/register.ts": {
-      "bytes": 69502,
+      "bytes": 72328,
       "imports": [
         {
           "path": "node:fs",
@@ -18415,7 +18415,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6661981
+      "bytes": 6666304
     },
     "dist/index.mjs": {
       "imports": [
@@ -22023,7 +22023,7 @@
           "bytesInOutput": 3153
         },
         "src/extension/register.ts": {
-          "bytesInOutput": 46296
+          "bytesInOutput": 48236
         },
         "src/runtime/batch-barrier.ts": {
           "bytesInOutput": 3060
@@ -22125,7 +22125,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3170559
+      "bytes": 3172499
     }
   }
 }
