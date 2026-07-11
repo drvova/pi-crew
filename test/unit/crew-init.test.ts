@@ -179,15 +179,19 @@ test("updateGitignore preserves existing content", async () => {
 	}
 });
 
-test("ensureCrewDirectory updates .gitignore in project root", async () => {
+test("ensureCrewDirectory writes ignore entries to .git/info/exclude (no working-tree dirt)", async () => {
+	// 2026-07-11: appending to the tracked .gitignore dirtied the leader on
+	// first run, defeating worktree mode. When .git is a directory, entries go
+	// to .git/info/exclude — identical ignore semantics, zero dirt.
 	const dir = makeTempProject();
 	try {
 		await ensureCrewDirectory(dir);
-		const gitignorePath = path.join(dir, ".gitignore");
-		assert.ok(fs.existsSync(gitignorePath), ".gitignore should be created");
-		const content = fs.readFileSync(gitignorePath, "utf-8");
+		const excludePath = path.join(dir, ".git", "info", "exclude");
+		assert.ok(fs.existsSync(excludePath), ".git/info/exclude should be created");
+		const content = fs.readFileSync(excludePath, "utf-8");
 		assert.ok(content.includes("/.crew/"));
 		assert.ok(content.includes("!.crew/artifacts/"));
+		assert.ok(!fs.existsSync(path.join(dir, ".gitignore")), "project .gitignore must NOT be touched when .git is a directory");
 	} finally {
 		cleanup(dir);
 	}

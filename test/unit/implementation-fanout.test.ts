@@ -77,6 +77,6 @@ test("implementation run injects planner-selected multi-agent ready batches", as
 		if (runId) unregisterActiveRun(runId);
 		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
 		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
-		fs.rmSync(cwd, { recursive: true, force: true });
+		try { fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* late post-terminal writers (fire-and-forget agent teardown) may race the delete; /tmp is OS-reaped 2014 see single-truth refactor plan */ }
 	}
 });

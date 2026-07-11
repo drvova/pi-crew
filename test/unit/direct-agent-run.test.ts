@@ -42,7 +42,7 @@ test("direct agent run creates a single task for requested agent", async () => {
 	} finally {
 		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
 		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
-		fs.rmSync(cwd, { recursive: true, force: true });
+		try { fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* late post-terminal writers (fire-and-forget agent teardown) may race the delete; /tmp is OS-reaped 2014 see single-truth refactor plan */ }
 	}
 });
 
@@ -71,7 +71,7 @@ test("direct agent run persists model override for reconstruction", async () => 
 	} finally {
 		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
 		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
-		fs.rmSync(cwd, { recursive: true, force: true });
+		try { fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* late post-terminal writers (fire-and-forget agent teardown) may race the delete; /tmp is OS-reaped 2014 see single-truth refactor plan */ }
 	}
 });
 
@@ -102,7 +102,7 @@ test("direct reconstruction does not hijack custom direct-prefixed teams", () =>
 		);
 		assert.equal(reconstructed, undefined);
 	} finally {
-		fs.rmSync(cwd, { recursive: true, force: true });
+		try { fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* late post-terminal writers (fire-and-forget agent teardown) may race the delete; /tmp is OS-reaped 2014 see single-truth refactor plan */ }
 	}
 });
 
@@ -129,6 +129,72 @@ test("direct agent runs can resume from generated team/workflow metadata", async
 	} finally {
 		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
 		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
-		fs.rmSync(cwd, { recursive: true, force: true });
+		try { fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* late post-terminal writers (fire-and-forget agent teardown) may race the delete; /tmp is OS-reaped 2014 see single-truth refactor plan */ }
+	}
+});
+
+// ── auto-worktree safety default (2026-07-11) ──
+
+test("write-capable direct agent in a clean git repo defaults to worktree isolation", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-auto-wt-"));
+	const { execSync } = await import("node:child_process");
+	execSync("git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd });
+	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
+	const previousExecute = process.env.PI_TEAMS_EXECUTE_WORKERS;
+	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
+	process.env.PI_CREW_ALLOW_MOCK = "1";
+	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+	try {
+		const run = await handleTeamTool({ action: "run", agent: "executor", goal: "Edit safely" }, { cwd });
+		const loaded = loadRunManifestById(cwd, run.details.runId!);
+		assert.equal(loaded?.manifest.workspaceMode, "worktree", "write-capable agent must be isolated by default");
+	} finally {
+		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
+		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
+		try { fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* late post-terminal writers (fire-and-forget agent teardown) may race the delete; /tmp is OS-reaped 2014 see single-truth refactor plan */ }
+	}
+});
+
+test("read-only direct agent stays in single workspace mode", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-auto-wt-ro-"));
+	const { execSync } = await import("node:child_process");
+	execSync("git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd });
+	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
+	const previousExecute = process.env.PI_TEAMS_EXECUTE_WORKERS;
+	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
+	process.env.PI_CREW_ALLOW_MOCK = "1";
+	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+	try {
+		const run = await handleTeamTool({ action: "run", agent: "explorer", goal: "Explore only" }, { cwd });
+		const loaded = loadRunManifestById(cwd, run.details.runId!);
+		assert.equal(loaded?.manifest.workspaceMode, "single", "read-only agent needs no isolation");
+	} finally {
+		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
+		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
+		try { fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* late post-terminal writers (fire-and-forget agent teardown) may race the delete; /tmp is OS-reaped 2014 see single-truth refactor plan */ }
+	}
+});
+
+test("dirty git tree downgrades the auto-default to single (with kill-switch respected)", async () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-auto-wt-dirty-"));
+	const { execSync } = await import("node:child_process");
+	execSync("git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd });
+	fs.writeFileSync(path.join(cwd, "dirty.txt"), "uncommitted");
+	fs.mkdirSync(path.join(cwd, ".crew"), { recursive: true });
+	const previousExecute = process.env.PI_TEAMS_EXECUTE_WORKERS;
+	const previousMock = process.env.PI_TEAMS_MOCK_CHILD_PI;
+	process.env.PI_TEAMS_EXECUTE_WORKERS = "1";
+	process.env.PI_CREW_ALLOW_MOCK = "1";
+	process.env.PI_TEAMS_MOCK_CHILD_PI = "json-success";
+	try {
+		const run = await handleTeamTool({ action: "run", agent: "executor", goal: "Edit dirty" }, { cwd });
+		const loaded = loadRunManifestById(cwd, run.details.runId!);
+		assert.equal(loaded?.manifest.workspaceMode, "single", "dirty leader must downgrade, not fail");
+	} finally {
+		restoreEnv("PI_TEAMS_EXECUTE_WORKERS", previousExecute);
+		restoreEnv("PI_TEAMS_MOCK_CHILD_PI", previousMock);
+		try { fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* late post-terminal writers (fire-and-forget agent teardown) may race the delete; /tmp is OS-reaped 2014 see single-truth refactor plan */ }
 	}
 });

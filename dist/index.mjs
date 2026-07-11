@@ -16469,6 +16469,14 @@ var init_role_tools = __esm({
 });
 
 // src/agents/agent-config.ts
+function agentIsWriteCapable(agent) {
+  if (agent.disableTools === true) return false;
+  const excluded = new Set((agent.excludeTools ?? []).map((tool) => tool.toLowerCase()));
+  const effective = (agent.tools?.length ? agent.tools : BUILTIN_TOOL_NAMES).filter(
+    (tool) => !excluded.has(tool.toLowerCase())
+  );
+  return effective.some((tool) => WRITE_TOOL_NAMES.has(tool.toLowerCase()));
+}
 function parseToolsField(raw) {
   if (raw === void 0 || raw === null) return void 0;
   const s = typeof raw === "string" ? raw.trim() : String(raw).trim();
@@ -16490,12 +16498,13 @@ function resolveToolPolicy(agent, role) {
   const excludeTools = uniqueToolMerge(roleConfig.excludeTools, agent.disallowedTools);
   return { tools, excludeTools };
 }
-var BUILTIN_TOOL_NAMES;
+var BUILTIN_TOOL_NAMES, WRITE_TOOL_NAMES;
 var init_agent_config = __esm({
   "src/agents/agent-config.ts"() {
     "use strict";
     init_role_tools();
     BUILTIN_TOOL_NAMES = ["read", "edit", "write", "bash", "grep", "find", "ls"];
+    WRITE_TOOL_NAMES = /* @__PURE__ */ new Set(["edit", "write", "bash"]);
   }
 });
 
@@ -60449,6 +60458,7 @@ async function executeTeamRun(input) {
         "error"
       );
     stopTeamHeartbeat();
+    flushPendingAtomicWrites();
     resolveRunPromise(manifest.runId, result4);
     cleanupUsage();
     void terminateLiveAgentsForRun(manifest.runId, "completed", appendEvent, manifest.eventsPath).catch(
@@ -60520,6 +60530,7 @@ async function executeTeamRun(input) {
       data: { status: manifest.status, error: message }
     });
     cleanupUsage();
+    flushPendingAtomicWrites();
     await flushEventLogBuffer();
     return result4;
   } finally {
@@ -61350,6 +61361,7 @@ var init_team_runner = __esm({
     init_plugin_registry();
     init_plugins();
     init_artifact_store();
+    init_atomic_write();
     init_event_log();
     init_health_store();
     init_locks();
@@ -62250,9 +62262,18 @@ async function ensureCrewDirectory(cwd) {
   fs89.writeFileSync(safeJoin(crewRoot, "README.md"), buildCrewReadme(), "utf-8");
   const repoRoot = findProjectRoot(cwd);
   if (repoRoot) {
-    const gitignorePath = safeJoin(repoRoot, ".gitignore");
+    let ignoreTarget = safeJoin(repoRoot, ".gitignore");
+    try {
+      const gitDir = safeJoin(repoRoot, ".git");
+      if (fs89.statSync(gitDir).isDirectory()) {
+        const infoDir = safeJoin(gitDir, "info");
+        fs89.mkdirSync(infoDir, { recursive: true });
+        ignoreTarget = safeJoin(infoDir, "exclude");
+      }
+    } catch {
+    }
     const { updateGitignore: updateGitignoreFn } = await Promise.resolve().then(() => (init_gitignore_manager(), gitignore_manager_exports));
-    await updateGitignoreFn(gitignorePath);
+    await updateGitignoreFn(ignoreTarget);
   }
 }
 var __test__internals;
@@ -70372,7 +70393,34 @@ async function handleRun(params, ctx) {
     } catch {
     }
   }
-  if (params.workspaceMode === "worktree") {
+  const teams = allTeams(discoverTeams(resolvedCtx.cwd));
+  const workflows = allWorkflows(discoverWorkflows(resolvedCtx.cwd));
+  const agents = allAgents(discoverAgents(resolvedCtx.cwd));
+  const directAgent = params.agent ? agents.find((item) => item.name === params.agent) : void 0;
+  if (params.agent && !directAgent) return result(`Agent '${params.agent}' not found.`, { action: "run", status: "error" }, true);
+  let effectiveWorkspaceMode = params.workspaceMode;
+  let workspaceModeValidated = false;
+  if (!effectiveWorkspaceMode && directAgent && process.env.PI_CREW_AUTO_WORKTREE !== "0" && agentIsWriteCapable(directAgent)) {
+    const gitRoot = await findGitRootAsync(resolvedCtx.cwd).catch(() => void 0);
+    if (gitRoot) {
+      if (loadConfig(resolvedCtx.cwd).config.requireCleanWorktreeLeader !== false) {
+        try {
+          await assertCleanLeaderAsync(gitRoot);
+          effectiveWorkspaceMode = "worktree";
+          workspaceModeValidated = true;
+        } catch {
+          const note2 = `[pi-crew] agent '${directAgent.name}' is write-capable but the git tree is dirty \u2014 running in the SHARED workspace (worktree isolation skipped). Commit/stash first, or set requireCleanWorktreeLeader:false to isolate from HEAD anyway.`;
+          const uiCtx = ctx;
+          if (uiCtx.ui?.notify) uiCtx.ui.notify(note2, "warning");
+          else console.error(note2);
+        }
+      } else {
+        effectiveWorkspaceMode = "worktree";
+        workspaceModeValidated = true;
+      }
+    }
+  }
+  if (effectiveWorkspaceMode === "worktree" && !workspaceModeValidated) {
     let gitRoot;
     try {
       gitRoot = await findGitRootAsync(resolvedCtx.cwd);
@@ -70401,11 +70449,6 @@ Commit or stash changes before using worktree mode, or use workspaceMode: 'singl
       }
     }
   }
-  const teams = allTeams(discoverTeams(resolvedCtx.cwd));
-  const workflows = allWorkflows(discoverWorkflows(resolvedCtx.cwd));
-  const agents = allAgents(discoverAgents(resolvedCtx.cwd));
-  const directAgent = params.agent ? agents.find((item) => item.name === params.agent) : void 0;
-  if (params.agent && !directAgent) return result(`Agent '${params.agent}' not found.`, { action: "run", status: "error" }, true);
   const teamName = params.team ?? "default";
   const team = directAgent ? {
     name: `direct-${directAgent.name}`,
@@ -70420,7 +70463,7 @@ Commit or stash changes before using worktree mode, or use workspaceMode: 'singl
       }
     ],
     defaultWorkflow: "direct-agent",
-    workspaceMode: params.workspaceMode
+    workspaceMode: effectiveWorkspaceMode
   } : teams.find((item) => item.name === teamName);
   if (!team) return result(`Team '${teamName}' not found.`, { action: "run", status: "error" }, true);
   const workflowName = directAgent ? "direct-agent" : params.workflow ?? team.defaultWorkflow ?? "default";
@@ -70492,7 +70535,7 @@ Commit or stash changes before using worktree mode, or use workspaceMode: 'singl
     team,
     workflow,
     goal,
-    workspaceMode: params.workspaceMode,
+    workspaceMode: effectiveWorkspaceMode,
     ownerSessionId: ctx.sessionId,
     parentModel: modelStringFromUnknown(ctx.model),
     runKind: params.runKind,
@@ -71194,6 +71237,7 @@ var _cachedExecuteTeamRun, crewInitPromise, MAX_ANALYSIS_BYTES;
 var init_run = __esm({
   "src/extension/team-tool/run.ts"() {
     "use strict";
+    init_agent_config();
     init_discover_agents();
     init_config();
     init_model_fallback();

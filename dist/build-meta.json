@@ -7123,7 +7123,7 @@
       "format": "esm"
     },
     "src/agents/agent-config.ts": {
-      "bytes": 8365,
+      "bytes": 9317,
       "imports": [
         {
           "path": "src/config/role-tools.ts",
@@ -15159,7 +15159,7 @@
       "format": "esm"
     },
     "src/runtime/team-runner.ts": {
-      "bytes": 77281,
+      "bytes": 77820,
       "imports": [
         {
           "path": "node:fs",
@@ -15200,6 +15200,11 @@
           "path": "src/state/artifact-store.ts",
           "kind": "import-statement",
           "original": "../state/artifact-store.ts"
+        },
+        {
+          "path": "src/state/atomic-write.ts",
+          "kind": "import-statement",
+          "original": "../state/atomic-write.ts"
         },
         {
           "path": "src/state/event-log.ts",
@@ -15525,7 +15530,7 @@
       "format": "esm"
     },
     "src/state/crew-init.ts": {
-      "bytes": 11015,
+      "bytes": 11886,
       "imports": [
         {
           "path": "node:fs",
@@ -15829,8 +15834,13 @@
       "format": "esm"
     },
     "src/extension/team-tool/run.ts": {
-      "bytes": 48182,
+      "bytes": 50032,
       "imports": [
+        {
+          "path": "src/agents/agent-config.ts",
+          "kind": "import-statement",
+          "original": "../../agents/agent-config.ts"
+        },
         {
           "path": "src/agents/discover-agents.ts",
           "kind": "import-statement",
@@ -18420,7 +18430,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6669707
+      "bytes": 6675354
     },
     "dist/index.mjs": {
       "imports": [
@@ -20747,7 +20757,7 @@
           "bytesInOutput": 3222
         },
         "src/agents/agent-config.ts": {
-          "bytesInOutput": 1291
+          "bytesInOutput": 1778
         },
         "src/runtime/pi-args.ts": {
           "bytesInOutput": 15095
@@ -21827,7 +21837,7 @@
           "bytesInOutput": 3398
         },
         "src/runtime/team-runner.ts": {
-          "bytesInOutput": 58504
+          "bytesInOutput": 58593
         },
         "src/runtime/pipeline-runner.ts": {
           "bytesInOutput": 12070
@@ -21845,7 +21855,7 @@
           "bytesInOutput": 1051
         },
         "src/state/crew-init.ts": {
-          "bytesInOutput": 5207
+          "bytesInOutput": 5496
         },
         "src/runtime/chain-parser.ts": {
           "bytesInOutput": 4978
@@ -21884,7 +21894,7 @@
           "bytesInOutput": 6259
         },
         "src/extension/team-tool/run.ts": {
-          "bytesInOutput": 39174
+          "bytesInOutput": 40332
         },
         "src/extension/team-tool.ts": {
           "bytesInOutput": 35616
@@ -22130,7 +22140,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3173505
+      "bytes": 3175528
     }
   }
 }

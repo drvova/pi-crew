@@ -9,6 +9,7 @@ import type { MetricRegistry } from "../observability/metric-registry.ts";
 import { PluginRegistry } from "../plugins/plugin-registry.ts";
 import { NextJsPlugin, VitePlugin, VitestPlugin } from "../plugins/plugins/index.ts";
 import { writeArtifact } from "../state/artifact-store.ts";
+import { flushPendingAtomicWrites } from "../state/atomic-write.ts";
 import { appendEvent, appendEventAsync, appendEventBuffered, appendEventFireAndForget, flushEventLogBuffer } from "../state/event-log.ts";
 import { HealthStore } from "../state/health-store.ts";
 import { withRunLock } from "../state/locks.ts";
@@ -714,6 +715,11 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 				"error",
 			);
 		stopTeamHeartbeat();
+		// 2026-07-11: flush queued coalesced writes (agent records/status, tasks)
+		// NOW — their delayed timers otherwise fire AFTER the run is terminal,
+		// recreating files inside the run dir while callers (tests, cleanup,
+		// pruning) are deleting it → ENOTEMPTY races.
+		flushPendingAtomicWrites();
 		resolveRunPromise(manifest.runId, result);
 		cleanupUsage();
 		// Terminate live agents for this run — agents are done when the run ends.
@@ -818,6 +824,9 @@ export async function executeTeamRun(input: ExecuteTeamRunInput): Promise<{ mani
 			data: { status: manifest.status, error: message },
 		});
 		cleanupUsage();
+		// 2026-07-11: same terminal flush as the success path — no coalescer
+		// timers may outlive the run (ENOTEMPTY teardown races).
+		flushPendingAtomicWrites();
 		// M7: flush buffered events before returning on the error path so the
 		// final buffered progress events are durable alongside the failure state.
 		await flushEventLogBuffer();

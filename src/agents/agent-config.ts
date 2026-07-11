@@ -11,6 +11,28 @@ import { getToolConfig } from "../config/role-tools.ts";
  */
 export const BUILTIN_TOOL_NAMES: readonly string[] = ["read", "edit", "write", "bash", "grep", "find", "ls"];
 
+/** Tools that can mutate the workspace (files or arbitrary shell). */
+const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(["edit", "write", "bash"]);
+
+/**
+ * Whether an agent's EFFECTIVE toolset can mutate the workspace — the input
+ * to the auto-worktree safety default (2026-07-11): write-capable agents get
+ * git-worktree isolation by default so they cannot stash/reset/edit the
+ * user's live checkout. No declared tools = pi's full toolset = write-capable.
+ */
+export function agentIsWriteCapable(agent: {
+	tools?: string[];
+	excludeTools?: string[];
+	disableTools?: boolean;
+}): boolean {
+	if (agent.disableTools === true) return false;
+	const excluded = new Set((agent.excludeTools ?? []).map((tool) => tool.toLowerCase()));
+	const effective = (agent.tools?.length ? agent.tools : BUILTIN_TOOL_NAMES).filter(
+		(tool) => !excluded.has(tool.toLowerCase()),
+	);
+	return effective.some((tool) => WRITE_TOOL_NAMES.has(tool.toLowerCase()));
+}
+
 /**
  * F1 (v0.7.9): normalize the raw `tools:` frontmatter CSV into a `string[]`.
  * Semantics (matching pi-subagents' `parseToolsField`):

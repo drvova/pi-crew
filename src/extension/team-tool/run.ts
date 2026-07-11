@@ -1,3 +1,4 @@
+import { agentIsWriteCapable } from "../../agents/agent-config.ts";
 import { allAgents, discoverAgents } from "../../agents/discover-agents.ts";
 import { loadConfig } from "../../config/config.ts";
 import { modelStringFromUnknown } from "../../runtime/model-fallback.ts";
@@ -236,10 +237,50 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		}
 	}
 
+	const teams = allTeams(discoverTeams(resolvedCtx.cwd));
+	const workflows = allWorkflows(discoverWorkflows(resolvedCtx.cwd));
+	const agents = allAgents(discoverAgents(resolvedCtx.cwd));
+	const directAgent = params.agent ? agents.find((item) => item.name === params.agent) : undefined;
+	if (params.agent && !directAgent) return result(`Agent '${params.agent}' not found.`, { action: "run", status: "error" }, true);
+
+	// AUTO-WORKTREE SAFETY DEFAULT (2026-07-11): a write-capable direct agent
+	// running in a live git checkout shares the user's working tree — observed
+	// twice this session running `git stash`/`reset` under concurrent human
+	// work (near data loss). When the caller did not choose a mode, default
+	// such runs to worktree isolation. Respect requireCleanWorktreeLeader: a
+	// dirty leader downgrades back to single with a visible notice (a worktree
+	// forks from HEAD and would silently miss uncommitted changes). Kill-switch:
+	// PI_CREW_AUTO_WORKTREE=0.
+	let effectiveWorkspaceMode = params.workspaceMode;
+	let workspaceModeValidated = false;
+	if (!effectiveWorkspaceMode && directAgent && process.env.PI_CREW_AUTO_WORKTREE !== "0" && agentIsWriteCapable(directAgent)) {
+		const gitRoot = await findGitRootAsync(resolvedCtx.cwd).catch(() => undefined);
+		if (gitRoot) {
+			if (loadConfig(resolvedCtx.cwd).config.requireCleanWorktreeLeader !== false) {
+				try {
+					await assertCleanLeaderAsync(gitRoot);
+					effectiveWorkspaceMode = "worktree";
+					workspaceModeValidated = true;
+				} catch {
+					const note =
+						`[pi-crew] agent '${directAgent.name}' is write-capable but the git tree is dirty — running in the SHARED workspace (worktree isolation skipped). ` +
+						"Commit/stash first, or set requireCleanWorktreeLeader:false to isolate from HEAD anyway.";
+					const uiCtx = ctx as { ui?: { notify?: (message: string, level: string) => void } };
+					if (uiCtx.ui?.notify) uiCtx.ui.notify(note, "warning");
+					else console.error(note);
+				}
+			} else {
+				effectiveWorkspaceMode = "worktree";
+				workspaceModeValidated = true;
+			}
+		}
+	}
+
 	// WORKTREE PRECONDITION CHECK: validate git repo exists and is clean
 	// BEFORE creating the run manifest, so we return a friendly error
-	// instead of crashing mid-execution in prepareTaskWorkspace.
-	if (params.workspaceMode === "worktree") {
+	// instead of crashing mid-execution in prepareTaskWorkspace. Skipped when
+	// the auto-default above already validated the same conditions.
+	if (effectiveWorkspaceMode === "worktree" && !workspaceModeValidated) {
 		let gitRoot: string | undefined;
 		try {
 			gitRoot = await findGitRootAsync(resolvedCtx.cwd);
@@ -268,12 +309,6 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 			}
 		}
 	}
-
-	const teams = allTeams(discoverTeams(resolvedCtx.cwd));
-	const workflows = allWorkflows(discoverWorkflows(resolvedCtx.cwd));
-	const agents = allAgents(discoverAgents(resolvedCtx.cwd));
-	const directAgent = params.agent ? agents.find((item) => item.name === params.agent) : undefined;
-	if (params.agent && !directAgent) return result(`Agent '${params.agent}' not found.`, { action: "run", status: "error" }, true);
 	const teamName = params.team ?? "default";
 	const team = directAgent
 		? {
@@ -289,7 +324,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 					},
 				],
 				defaultWorkflow: "direct-agent",
-				workspaceMode: params.workspaceMode,
+				workspaceMode: effectiveWorkspaceMode,
 			}
 		: teams.find((item) => item.name === teamName);
 	if (!team) return result(`Team '${teamName}' not found.`, { action: "run", status: "error" }, true);
@@ -397,7 +432,7 @@ export async function handleRun(params: TeamToolParamsValue, ctx: TeamContext): 
 		team,
 		workflow,
 		goal,
-		workspaceMode: params.workspaceMode,
+		workspaceMode: effectiveWorkspaceMode,
 		ownerSessionId: ctx.sessionId,
 		parentModel: modelStringFromUnknown(ctx.model),
 		runKind: params.runKind,

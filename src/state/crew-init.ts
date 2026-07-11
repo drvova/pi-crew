@@ -245,13 +245,30 @@ export async function ensureCrewDirectory(cwd: string): Promise<void> {
 	// 3. Write README.md (always overwrite to keep it current)
 	fs.writeFileSync(safeJoin(crewRoot, "README.md"), buildCrewReadme(), "utf-8");
 
-	// 4. Update .gitignore at project root
+	// 4. Ensure .crew is git-ignored. Target `.git/info/exclude` when available
+	// (2026-07-11): appending to the project `.gitignore` MODIFIES a tracked
+	// file, dirtying the leader on the very first crew run — which then makes
+	// worktree mode (auto-default AND explicit) refuse to run until the user
+	// commits pi-crew's own edit. info/exclude has identical ignore semantics
+	// with zero working-tree dirt, and runtime state is per-machine anyway.
+	// Fallback to `.gitignore` when `.git` is not a directory (worktree/bare
+	// layouts) — never worse than the previous behavior.
 	const repoRoot = findProjectRoot(cwd);
 	if (repoRoot) {
-		const gitignorePath = safeJoin(repoRoot, ".gitignore");
+		let ignoreTarget = safeJoin(repoRoot, ".gitignore");
+		try {
+			const gitDir = safeJoin(repoRoot, ".git");
+			if (fs.statSync(gitDir).isDirectory()) {
+				const infoDir = safeJoin(gitDir, "info");
+				fs.mkdirSync(infoDir, { recursive: true });
+				ignoreTarget = safeJoin(infoDir, "exclude");
+			}
+		} catch {
+			// .git missing/inaccessible — keep the .gitignore fallback.
+		}
 		// LAZY: dodge the jiti ESM/CJS interop TDZ race on the static `import { updateGitignore }` above (issue #28, RFC 17). At this point the module body has fully evaluated, so the dynamic import resolves to a live binding.
 		const { updateGitignore: updateGitignoreFn } = await import("./gitignore-manager.ts");
-		await updateGitignoreFn(gitignorePath);
+		await updateGitignoreFn(ignoreTarget);
 	}
 }
 
