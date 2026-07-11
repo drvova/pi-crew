@@ -8,7 +8,7 @@ import type { CrewAgentRecord } from "../../runtime/crew-agent-runtime.ts";
 import type { LiveAgentHandle } from "../../runtime/live-agent-manager.ts";
 import { getTaskUsage } from "../../runtime/usage-tracker.ts";
 import { visibleWidth } from "../../utils/visual.ts";
-import { computeLiveDurationMs } from "../live-duration.ts";
+import { computeLiveDurationMs, fmtDuration } from "../live-duration.ts";
 
 // ── Token formatting ──────────────────────────────────────────────────
 
@@ -56,15 +56,17 @@ const TOOL_LABELS: Record<string, string> = {
 	ls: "listing",
 };
 
+// Text-only tool indicators (AMENDMENT IX: no emojis in code). Each icon is a
+// single-width glyph that renders consistently across terminals.
 const TOOL_ICONS: Record<string, string> = {
-	read: "📖",
-	bash: ">",
-	edit: "✏",
-	write: "📝",
-	grep: "🔍",
-	find: "📁",
-	ls: "📋",
-	agent: "🤖",
+	read: "R",
+	bash: "$",
+	edit: "E",
+	write: "W",
+	grep: "G",
+	find: "F",
+	ls: "L",
+	agent: "A",
 };
 
 export function describeLiveActivity(handle: LiveAgentHandle): string {
@@ -76,12 +78,11 @@ export function describeLiveActivity(handle: LiveAgentHandle): string {
 		}
 		const parts: string[] = [];
 		for (const [toolName, count] of groups) {
-			const icon = TOOL_ICONS[toolName] ?? "?";
 			const label = TOOL_LABELS[toolName] ?? toolName;
 			if (count > 1) {
-				parts.push(`${icon}${count} ${label}s`);
+				parts.push(`${label} x${count}`);
 			} else {
-				parts.push(`${icon} ${label}`);
+				parts.push(label);
 			}
 		}
 		return parts.join(", ") + "…";
@@ -115,6 +116,8 @@ export function agentActivity(agent: CrewAgentRecord, liveHandle?: LiveAgentHand
 	if (agent.status === "running") {
 		const age = agent.startedAt ? Date.now() - new Date(agent.startedAt).getTime() : Infinity;
 		if (age < 5000 && !agent.progress?.currentTool) return "spawning…";
+		// Show how long the agent has been thinking if no active tools/output.
+		if (age >= 5000) return `thinking ${fmtDuration(age)}…`;
 		return "thinking…";
 	}
 	if (agent.status === "failed") return agent.error ?? "failed";
@@ -123,8 +126,37 @@ export function agentActivity(agent: CrewAgentRecord, liveHandle?: LiveAgentHand
 
 // ── Agent stats line ──────────────────────────────────────────────────
 
+/**
+ * Extract a short, human-readable model label from the various sources:
+ * - liveHandle.modelName (live-session runtime)
+ * - agent.model (persisted record, e.g. "anthropic/claude-3.5-sonnet")
+ * - agent.modelAttempts (last successful attempt's model)
+ * Returns undefined when no model info is available.
+ */
+function resolveModelLabel(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): string | undefined {
+	const raw = liveHandle?.modelName ?? agent.model;
+	if (raw) return shortModelName(raw);
+	const attempts = (agent as CrewAgentRecord & { modelAttempts?: { model: string; success: boolean }[] }).modelAttempts;
+	if (attempts && attempts.length > 0) {
+		const success = [...attempts].reverse().find((a) => a.success);
+		const last = success ?? attempts[attempts.length - 1];
+		if (last?.model) return shortModelName(last.model);
+	}
+	return undefined;
+}
+
+/** Collapse a full model id ("anthropic/claude-3.5-sonnet") to a short label. */
+function shortModelName(model: string): string {
+	const slash = model.indexOf("/");
+	const base = slash >= 0 ? model.slice(slash + 1) : model;
+	// Strip common suffixes that add noise without distinction.
+	return base.replace(/[::].*$/, "").replace(/-\d{8}$/, "");
+}
+
 export function agentStats(agent: CrewAgentRecord, liveHandle?: LiveAgentHandle): string {
 	const parts: string[] = [];
+	const modelLabel = resolveModelLabel(agent, liveHandle);
+	if (modelLabel) parts.push(modelLabel);
 	if (liveHandle) {
 		const act = liveHandle.activity;
 		if (act.toolUses > 0) parts.push(alignMetric(`${act.toolUses} tools`, TOOLS_METRIC_WIDTH));

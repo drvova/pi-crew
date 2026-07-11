@@ -161,7 +161,7 @@ export function buildWidgetLines(
 			const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
 			groupStarts.push(lines.length);
 			lines.push(truncate(`${rail}${branch} ${agentGlyph} ${name}${desc ? ` · ${desc}` : ` · ${agent.role}`}`, width));
-			lines.push(truncate(`${rail}${activityRail}  ⊶ ${agentActivity(agent, liveHandle)}${stats ? ` · ${stats}` : ""}`, width));
+			lines.push(truncate(`${rail}${activityRail}  → ${agentActivity(agent, liveHandle)}${stats ? ` · ${stats}` : ""}`, width));
 		}
 
 		if (overflowCount > 0) {

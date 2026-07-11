@@ -7700,7 +7700,7 @@
       "format": "esm"
     },
     "src/ui/widget/widget-formatters.ts": {
-      "bytes": 7431,
+      "bytes": 8957,
       "imports": [
         {
           "path": "src/runtime/usage-tracker.ts",
@@ -18450,7 +18450,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6680096
+      "bytes": 6682014
     },
     "dist/index.mjs": {
       "imports": [
@@ -20888,7 +20888,7 @@
           "bytesInOutput": 1106
         },
         "src/ui/widget/widget-formatters.ts": {
-          "bytesInOutput": 5162
+          "bytesInOutput": 5652
         },
         "src/ui/powerbar-publisher.ts": {
           "bytesInOutput": 9964
@@ -22160,7 +22160,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3177113
+      "bytes": 3177603
     }
   }
 }

@@ -20925,12 +20925,11 @@ function describeLiveActivity(handle) {
     }
     const parts = [];
     for (const [toolName, count2] of groups) {
-      const icon = TOOL_ICONS[toolName] ?? "?";
       const label = TOOL_LABELS[toolName] ?? toolName;
       if (count2 > 1) {
-        parts.push(`${icon}${count2} ${label}s`);
+        parts.push(`${label} x${count2}`);
       } else {
-        parts.push(`${icon} ${label}`);
+        parts.push(label);
       }
     }
     return parts.join(", ") + "\u2026";
@@ -20959,13 +20958,32 @@ function agentActivity(agent, liveHandle) {
   if (agent.status === "running") {
     const age = agent.startedAt ? Date.now() - new Date(agent.startedAt).getTime() : Infinity;
     if (age < 5e3 && !agent.progress?.currentTool) return "spawning\u2026";
+    if (age >= 5e3) return `thinking ${fmtDuration(age)}\u2026`;
     return "thinking\u2026";
   }
   if (agent.status === "failed") return agent.error ?? "failed";
   return "done";
 }
+function resolveModelLabel(agent, liveHandle) {
+  const raw = liveHandle?.modelName ?? agent.model;
+  if (raw) return shortModelName(raw);
+  const attempts = agent.modelAttempts;
+  if (attempts && attempts.length > 0) {
+    const success = [...attempts].reverse().find((a) => a.success);
+    const last = success ?? attempts[attempts.length - 1];
+    if (last?.model) return shortModelName(last.model);
+  }
+  return void 0;
+}
+function shortModelName(model) {
+  const slash = model.indexOf("/");
+  const base = slash >= 0 ? model.slice(slash + 1) : model;
+  return base.replace(/[::].*$/, "").replace(/-\d{8}$/, "");
+}
 function agentStats(agent, liveHandle) {
   const parts = [];
+  const modelLabel = resolveModelLabel(agent, liveHandle);
+  if (modelLabel) parts.push(modelLabel);
   if (liveHandle) {
     const act = liveHandle.activity;
     if (act.toolUses > 0) parts.push(alignMetric(`${act.toolUses} tools`, TOOLS_METRIC_WIDTH));
@@ -20995,7 +21013,7 @@ function notificationBadge(count2, env = process.env) {
   const label = count2 > NOTIFICATION_BADGE_CAP ? `${NOTIFICATION_BADGE_CAP}+ alerts` : `${count2} alerts`;
   return supportsEmoji ? ` \xB7 ${label}` : ` [${label}]`;
 }
-var TOOLS_METRIC_WIDTH, TOKENS_METRIC_WIDTH, CTX_METRIC_WIDTH, DURATION_METRIC_WIDTH, TOOL_LABELS, TOOL_ICONS, NOTIFICATION_BADGE_CAP;
+var TOOLS_METRIC_WIDTH, TOKENS_METRIC_WIDTH, CTX_METRIC_WIDTH, DURATION_METRIC_WIDTH, TOOL_LABELS, NOTIFICATION_BADGE_CAP;
 var init_widget_formatters = __esm({
   "src/ui/widget/widget-formatters.ts"() {
     "use strict";
@@ -21014,16 +21032,6 @@ var init_widget_formatters = __esm({
       grep: "searching",
       find: "finding files",
       ls: "listing"
-    };
-    TOOL_ICONS = {
-      read: "\u{1F4D6}",
-      bash: ">",
-      edit: "\u270F",
-      write: "\u{1F4DD}",
-      grep: "\u{1F50D}",
-      find: "\u{1F4C1}",
-      ls: "\u{1F4CB}",
-      agent: "\u{1F916}"
     };
     NOTIFICATION_BADGE_CAP = 99;
   }
@@ -21998,7 +22006,7 @@ function buildWidgetLines(cwd, frame = 0, maxLines = 8, providedRuns, notificati
       const desc = truncate(liveHandle?.description ?? agent.role ?? "", TASK_DESC_MAX);
       groupStarts.push(lines.length);
       lines.push(truncate(`${rail}${branch} ${agentGlyph} ${name}${desc ? ` \xB7 ${desc}` : ` \xB7 ${agent.role}`}`, width));
-      lines.push(truncate(`${rail}${activityRail}  \u22B6 ${agentActivity(agent, liveHandle)}${stats ? ` \xB7 ${stats}` : ""}`, width));
+      lines.push(truncate(`${rail}${activityRail}  \u2192 ${agentActivity(agent, liveHandle)}${stats ? ` \xB7 ${stats}` : ""}`, width));
     }
     if (overflowCount > 0) {
       childIdx++;
