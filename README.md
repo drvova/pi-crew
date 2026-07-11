@@ -615,6 +615,7 @@ Your system prompt here.
 | `PI_TEAMS_EXECUTE_WORKERS=0` | Legacy disable flag |
 | `PI_TEAMS_MOCK_CHILD_PI=success` | Mock child worker for testing |
 | `PI_TEAMS_PI_BIN=<path>` | Explicit Pi CLI path |
+| `PI_CREW_WORKER_RUNTIME=node` | Force child workers onto the host Node runtime. Default: `bun` — workers run pi's CLI under Bun when installed (~10% faster cold start), falling back to Node when Bun is absent. |
 | `PI_TEAMS_HOME=<path>` | Override home for tests |
 
 ---

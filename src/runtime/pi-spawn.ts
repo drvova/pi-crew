@@ -240,6 +240,60 @@ function validateExplicitBin(explicit: string): string | undefined {
 	return resolved;
 }
 
+// ── worker JS runtime ──
+
+/** Memoized bun binary resolution. `false` = resolved-absent. */
+let bunBinaryMemo: string | false | null = null;
+
+/** @internal — test hook: override the bun-binary memo (`null` resets). */
+export function __setBunBinaryForTest(value: string | false | null): void {
+	bunBinaryMemo = value;
+}
+
+function resolveBunBinary(env: NodeJS.ProcessEnv): string | undefined {
+	const exe = process.platform === "win32" ? "bun.exe" : "bun";
+	const candidates = [
+		...(env.PATH ?? "")
+			.split(path.delimiter)
+			.filter(Boolean)
+			.map((dir) => path.join(dir, exe)),
+		// Default bun install location — covers detached processes with minimal PATH.
+		path.join(os.homedir(), ".bun", "bin", exe),
+	];
+	for (const candidate of candidates) {
+		try {
+			fs.accessSync(candidate, fs.constants.X_OK);
+			return candidate;
+		} catch {
+			// keep scanning
+		}
+	}
+	return undefined;
+}
+
+/**
+ * JS runtime used to execute pi's CLI script in child workers.
+ *
+ * Default is bun when installed: every worker is a fresh cold start, and bun
+ * starts the same cli.js ~10% faster than node (measured 0.605s vs 0.673s)
+ * with faster ESM parsing. The worker code paths are runtime-agnostic — bun
+ * implements the node APIs pi uses (fetch, child_process, fs, streams).
+ *
+ * Kill-switch: `PI_CREW_WORKER_RUNTIME=node` (or `inherit`) forces the host
+ * runtime (process.execPath). `PI_CREW_WORKER_RUNTIME=bun` is the default;
+ * when bun is not installed it falls back to the host runtime.
+ *
+ * NOTE: this governs ONLY pi worker spawns. async-runner keeps
+ * process.execPath — it depends on node-specific flags (V8 report-directory,
+ * module loaders) that bun does not implement.
+ */
+export function workerRuntimeCommand(env: NodeJS.ProcessEnv = process.env): string {
+	const pref = (env.PI_CREW_WORKER_RUNTIME ?? "bun").trim().toLowerCase();
+	if (pref !== "bun") return process.execPath;
+	if (bunBinaryMemo === null) bunBinaryMemo = resolveBunBinary(env) ?? false;
+	return bunBinaryMemo === false ? process.execPath : bunBinaryMemo;
+}
+
 export function getPiSpawnCommand(args: string[]): PiSpawnCommand {
 	const explicit = process.env.PI_TEAMS_PI_BIN?.trim();
 	if (explicit) {
@@ -247,7 +301,7 @@ export function getPiSpawnCommand(args: string[]): PiSpawnCommand {
 		if (validated) {
 			if (isRunnableNodeScript(validated))
 				return {
-					command: process.execPath,
+					command: workerRuntimeCommand(),
 					args: [validated, ...args],
 				};
 			return { command: validated, args };
@@ -256,12 +310,12 @@ export function getPiSpawnCommand(args: string[]): PiSpawnCommand {
 	if (process.platform === "win32") {
 		// Windows: resolve via resolvePiCliScript to find the bundled .js entry point
 		const script = resolvePiCliScript();
-		if (script) return { command: process.execPath, args: [script, ...args] };
+		if (script) return { command: workerRuntimeCommand(), args: [script, ...args] };
 	}
 	// Linux/macOS: also resolve the full path so child processes can find 'pi' even if
 	// PATH is minimal (e.g. in detached background-runner processes). Fall back to "pi"
 	// only if resolution fails.
 	const script = resolvePiCliScript();
-	if (script) return { command: process.execPath, args: [script, ...args] };
+	if (script) return { command: workerRuntimeCommand(), args: [script, ...args] };
 	return { command: "pi", args };
 }

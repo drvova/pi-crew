@@ -20,6 +20,7 @@ import * as path from "node:path";
 import test from "node:test";
 import {
 	__setNpmGlobalRootForTest,
+	workerRuntimeCommand,
 	buildNpmGlobalPackageDirs,
 	getPiSpawnCommand,
 	resolveNpmGlobalRoot,
@@ -92,8 +93,8 @@ test("Issue #33: pi found under a custom npm global root (nvm/Volta/fnm layout),
 	__setNpmGlobalRootForTest(fakeRoot);
 	try {
 		const spec = getPiSpawnCommand(["--print", "--no-extensions"]);
-		// Resolved to node + the discovered cli.js (NOT a bare "pi").
-		assert.equal(spec.command, process.execPath);
+		// Resolved to the worker JS runtime + the discovered cli.js (NOT a bare "pi").
+		assert.equal(spec.command, workerRuntimeCommand());
 		assert.equal(spec.args[0], cliJs, "expected the custom-root cli.js to be resolved");
 		assert.deepEqual(spec.args.slice(1), ["--print", "--no-extensions"]);
 	} finally {
@@ -125,7 +126,7 @@ test("Issue #33: @mariozechner legacy scope also resolves via the global root", 
 	__setNpmGlobalRootForTest(fakeRoot);
 	try {
 		const spec = getPiSpawnCommand(["--version"]);
-		assert.equal(spec.command, process.execPath);
+		assert.equal(spec.command, workerRuntimeCommand());
 		assert.equal(spec.args[0], cliJs);
 		assert.deepEqual(spec.args.slice(1), ["--version"]);
 	} finally {
