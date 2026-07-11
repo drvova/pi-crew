@@ -41,8 +41,11 @@ import { createVerificationEvidence } from "./green-contract.ts";
 import {
 	buildConfiguredModelRouting,
 	formatModelAttemptNote,
+	isModelAdvanceableFailure,
 	isRetryableModelFailure,
 	type ModelAttemptSummary,
+	resolveWorkerAvailableProviders,
+	ZERO_OUTPUT_FAILURE_PREFIX,
 } from "./model-fallback.ts";
 import { readEnabledModelsPatterns } from "./model-scope.ts";
 import { type OutputValidationResult, validateWorkerOutput } from "./output-validator.ts";
@@ -325,6 +328,10 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 			producer: task.id,
 		});
 		if (runtimeKind === "child-process") {
+			// 2026-07-11: child workers can only use pi-ai builtin + models.json
+			// providers — extension-registered providers (e.g. windsurf oauth) exist
+			// only in the host process. Filter implicit candidates accordingly.
+			const workerProviders = await resolveWorkerAvailableProviders();
 			const modelRoutingPlan = buildConfiguredModelRouting({
 				overrideModel: input.modelOverride,
 				stepModel: input.step.model,
@@ -335,6 +342,7 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 				modelRegistry: input.modelRegistry,
 				cwd: task.cwd,
 				scopeModelsPatterns: await resolveTaskScopeModelsPatterns(task.cwd),
+				workerProviders,
 			});
 			const candidates = modelRoutingPlan.candidates;
 			const attemptModels = candidates.length > 0 ? candidates : [undefined];
@@ -684,7 +692,7 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 				// after the precompute, or the precompute ran before the parent
 				// model was known). If a different candidate is found, use it as
 				// nextModel; otherwise fall through to the existing break.
-				if (!nextModel && isRetryableModelFailure(error)) {
+				if (!nextModel && isModelAdvanceableFailure(error)) {
 					const reResolved = buildConfiguredModelRouting({
 						overrideModel: undefined,
 						stepModel: undefined,
@@ -695,11 +703,12 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 						modelRegistry: input.modelRegistry,
 						cwd: task.cwd,
 						scopeModelsPatterns: await resolveTaskScopeModelsPatterns(task.cwd),
+						workerProviders,
 					});
 					const alt = reResolved.candidates.find((c) => c !== attempt.model);
 					if (alt) nextModel = alt;
 				}
-				if (!nextModel || !isRetryableModelFailure(error)) break;
+				if (!nextModel || !isModelAdvanceableFailure(error)) break;
 				logs.push(formatModelAttemptNote(attempt, nextModel), "");
 			}
 			// E2 (Round 15): when the fallback chain was used and STILL failed, surface
@@ -1292,7 +1301,7 @@ export function detectModelFailureFromOutput(parsed: ParsedPiJsonOutput): string
 				parsed.textEvents.some((t) => t.trim().length > 0) ||
 				(parsed.patches?.length ?? 0) > 0;
 			if (hasRealOutput) return undefined;
-			return `Model returned only errors and no output: ${failure}`;
+			return `${ZERO_OUTPUT_FAILURE_PREFIX} ${failure}`;
 		}
 	}
 	// Secondary signal (FIX 3, task packet 01_01-agent): inspect a raw
@@ -1326,7 +1335,7 @@ export function detectModelFailureFromOutput(parsed: ParsedPiJsonOutput): string
 			parsed.textEvents.some((t) => t.trim().length > 0) ||
 			(parsed.patches?.length ?? 0) > 0;
 		if (hasRealOutput) return undefined;
-		return `Model returned only errors and no output: ${event.errorMessage}`;
+		return `${ZERO_OUTPUT_FAILURE_PREFIX} ${event.errorMessage}`;
 	}
 	return undefined;
 }

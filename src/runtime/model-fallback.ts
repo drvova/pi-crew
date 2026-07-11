@@ -143,6 +143,58 @@ export function configuredModelInfosFromPiConfig(cwd?: string): AvailableModelIn
 	]);
 }
 
+// ── worker-available providers (2026-07-11) ──
+//
+// Child workers run bare pi (`--no-extensions` + prompt-runtime only), so the
+// only providers that exist inside them are pi-ai BUILTINS and models.json
+// CUSTOM providers. Providers registered at runtime by host extensions (e.g.
+// a windsurf oauth provider) exist ONLY in the host process; routing a child
+// worker onto one guarantees `Unknown provider` failures.
+//
+// The builtin list comes from pi-ai's getProviders() via lazy dynamic import
+// (pi-ai is an optional ESM peer dep — same constraint as peer-dep.ts).
+// FAIL-OPEN: when pi-ai cannot be loaded we return undefined and callers skip
+// filtering entirely — wrongly excluding a valid builtin would be worse than
+// today's behavior.
+let builtinProvidersPromise: Promise<Set<string> | undefined> | undefined;
+
+/** @internal — test hook: reset/override the builtin-providers memo. */
+export function __setBuiltinProvidersForTest(value: Set<string> | undefined | null): void {
+	builtinProvidersPromise = value === null ? undefined : Promise.resolve(value);
+}
+
+async function loadBuiltinProviders(): Promise<Set<string> | undefined> {
+	try {
+		// LAZY: optional ESM peer dep — dynamic import is the only working load
+		// mechanism (see peer-dep.ts header for the full rationale).
+		const mod = (await import("@earendil-works/pi-ai")) as { getProviders?: () => readonly string[] };
+		const providers = mod.getProviders?.();
+		if (!Array.isArray(providers) || providers.length === 0) return undefined;
+		return new Set(providers.map((p) => String(p)));
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Resolve the set of provider ids a CHILD WORKER can actually use: pi-ai
+ * builtins + models.json custom providers. Returns undefined (= do not
+ * filter) when the builtin list is unavailable.
+ */
+export async function resolveWorkerAvailableProviders(): Promise<Set<string> | undefined> {
+	if (!builtinProvidersPromise) builtinProvidersPromise = loadBuiltinProviders();
+	const builtin = await builtinProvidersPromise;
+	if (!builtin) return undefined;
+	const result = new Set(builtin);
+	// models.json custom providers are plain config — bare pi loads them fine.
+	// NOTE: deliberately NOT the settings defaultModel — its provider may be
+	// extension-registered (the exact leak this fixes).
+	for (const info of modelsJsonInfos(readJsonObject(path.join(piAgentDir(), "models.json")) as PiModelsJsonLike | undefined)) {
+		if (info.provider) result.add(info.provider);
+	}
+	return result;
+}
+
 export function splitThinkingSuffix(model: string): {
 	baseModel: string;
 	thinkingSuffix: string;
@@ -268,6 +320,26 @@ export function isRetryableModelFailure(error: string | undefined): boolean {
 	return RETRYABLE_MODEL_FAILURE_PATTERNS.some((pattern) => pattern.test(error));
 }
 
+/**
+ * Marker prefix for "the worker produced ONLY error turns and zero output"
+ * failures surfaced by detectModelFailureFromOutput (task-runner). Kept here
+ * so the producer and the chain-advance decision share one source of truth.
+ */
+export const ZERO_OUTPUT_FAILURE_PREFIX = "Model returned only errors and no output:";
+
+/**
+ * Should the fallback chain ADVANCE to the next candidate after this failure?
+ * True for transient failures (429/5xx/overloaded) AND for zero-output model
+ * failures — even permanent ones like `400 developer is not one of [...]` or
+ * auth 401s are MODEL/PROVIDER-specific: the next candidate is a different
+ * model, often a different provider with different auth and API compat.
+ * Advancing is bounded by the candidate list, so there is no retry-storm risk.
+ */
+export function isModelAdvanceableFailure(error: string | undefined): boolean {
+	if (!error) return false;
+	return isRetryableModelFailure(error) || error.startsWith(ZERO_OUTPUT_FAILURE_PREFIX);
+}
+
 export function formatModelAttemptNote(attempt: ModelAttemptSummary, nextModel?: string): string {
 	const failure = attempt.error?.trim() || `exit ${attempt.exitCode ?? 1}`;
 	return nextModel
@@ -339,6 +411,17 @@ export function buildConfiguredModelRouting(input: {
 	 * authoritative source.
 	 */
 	isFrontmatterOverride?: boolean;
+	/**
+	 * 2026-07-11: providers a CHILD WORKER can actually use (pi-ai builtins +
+	 * models.json). When set, implicit candidates (inherited parent/session
+	 * model, settings default, registry entries) whose provider is not in the
+	 * set are dropped — extension-registered providers exist only in the host
+	 * process. EXPLICIT models (override/step/teamRole/agent frontmatter) are
+	 * exempt: explicit intent fails loud at spawn with an actionable error
+	 * instead of being silently rerouted. Omit (undefined) to skip filtering
+	 * (live-session runtime, or when the builtin list is unavailable).
+	 */
+	workerProviders?: ReadonlySet<string>;
 }): ConfiguredModelRouting {
 	const registryModels = availableModelInfosFromRegistry(input.modelRegistry);
 	const configModels = configuredModelInfosFromPiConfig(input.cwd);
@@ -374,8 +457,21 @@ export function buildConfiguredModelRouting(input: {
 	// only knows about models from models.json / registry, NOT builtin Pi models.
 	// Pin the inherited parentModel at index 0 regardless of availability.
 	const parentModelRaw = effectiveAgentModel?.trim() || undefined;
+	// Explicit model choices (caller/step/team-role/frontmatter — NOT the
+	// parentModel inheritance) bypass the workerProviders capability filter.
+	const explicitModels = new Set(
+		[input.overrideModel, input.stepModel, input.teamRoleModel, input.agentModel]
+			.filter((model): model is string => Boolean(model?.trim()))
+			.map((model) => model.trim()),
+	);
 	const configuredModels = rawModels
 		.filter((model): model is string => Boolean(model?.trim()))
+		.filter((model) => {
+			if (!input.workerProviders) return true;
+			if (explicitModels.has(model.trim())) return true;
+			const provider = model.trim().split("/")[0];
+			return provider ? input.workerProviders.has(provider) : true;
+		})
 		.filter((model, idx) => {
 			// Fix (2026-07-11): the explicitly REQUESTED model (caller override /
 			// step / team-role / agent) is pinned for the same reason as the

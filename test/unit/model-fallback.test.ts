@@ -4,8 +4,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import {
+	__setBuiltinProvidersForTest,
 	buildConfiguredModelCandidates,
 	buildConfiguredModelRouting,
+	resolveWorkerAvailableProviders,
 	buildModelCandidates,
 	configuredModelInfosFromPiConfig,
 	isRetryableModelFailure,
@@ -317,4 +319,82 @@ test("buildConfiguredModelCandidates keeps inherited parent builtin model when r
 		modelRegistry,
 	});
 	assert.deepEqual(result, ["minimax/MiniMax-M3", "zaic/glm-5.2", "zai/glm-5.2"]);
+});
+
+// ── workerProviders capability filter (2026-07-11) ──
+//
+// Child workers run bare pi: only pi-ai builtin + models.json providers exist
+// inside them. Extension-registered providers (e.g. windsurf oauth) must not
+// receive IMPLICIT routing; explicit choices stay pinned and fail loud.
+
+test("workerProviders drops implicit inherited parent model on unavailable provider", () => {
+	const modelRegistry = {
+		getAvailable: () => [
+			{ provider: "windsurf", id: "glm-5-2" },
+			{ provider: "qwen", id: "qwen3.7-max" },
+		],
+	};
+	const result = buildConfiguredModelCandidates({
+		agentModel: undefined,
+		parentModel: { provider: "windsurf", id: "glm-5-2" }, // host session model — implicit
+		modelRegistry,
+		workerProviders: new Set(["qwen", "anthropic"]),
+	});
+	assert.deepEqual(result, ["qwen/qwen3.7-max"], "extension provider must be filtered from implicit candidates");
+});
+
+test("workerProviders keeps EXPLICIT override on unavailable provider (fails loud at spawn instead)", () => {
+	const modelRegistry = {
+		getAvailable: () => [{ provider: "qwen", id: "qwen3.7-max" }],
+	};
+	const result = buildConfiguredModelCandidates({
+		overrideModel: "windsurf/glm-5-2", // explicit caller intent
+		modelRegistry,
+		workerProviders: new Set(["qwen"]),
+	});
+	assert.equal(result[0], "windsurf/glm-5-2", "explicit override must stay pinned");
+});
+
+test("workerProviders undefined skips filtering entirely (fail-open / live-session)", () => {
+	const modelRegistry = {
+		getAvailable: () => [{ provider: "windsurf", id: "glm-5-2" }],
+	};
+	const result = buildConfiguredModelCandidates({
+		parentModel: { provider: "windsurf", id: "glm-5-2" },
+		modelRegistry,
+		workerProviders: undefined,
+	});
+	assert.ok(result.includes("windsurf/glm-5-2"), "no filter when workerProviders is undefined");
+});
+
+test("workerProviders keeps explicit agent frontmatter model", () => {
+	const modelRegistry = {
+		getAvailable: () => [{ provider: "qwen", id: "qwen3.7-max" }],
+	};
+	const result = buildConfiguredModelCandidates({
+		agentModel: "windsurf/glm-5-2", // frontmatter — explicit
+		modelRegistry,
+		workerProviders: new Set(["qwen"]),
+	});
+	assert.equal(result[0], "windsurf/glm-5-2");
+});
+
+test("resolveWorkerAvailableProviders returns builtins plus models.json providers (fail-open on missing peer)", async () => {
+	__setBuiltinProvidersForTest(new Set(["anthropic", "openai"]));
+	try {
+		const providers = await resolveWorkerAvailableProviders();
+		assert.ok(providers, "must resolve when builtin list is injected");
+		assert.ok(providers!.has("anthropic"));
+	} finally {
+		__setBuiltinProvidersForTest(null);
+	}
+});
+
+test("resolveWorkerAvailableProviders fails open when builtin list unavailable", async () => {
+	__setBuiltinProvidersForTest(undefined);
+	try {
+		assert.equal(await resolveWorkerAvailableProviders(), undefined, "must fail open");
+	} finally {
+		__setBuiltinProvidersForTest(null);
+	}
 });
