@@ -8531,6 +8531,14 @@ function sleepSync(ms) {
 }
 function sleep(ms, signal) {
   if (signal?.aborted) return Promise.reject(new Error("aborted"));
+  if (typeof globalThis !== "undefined" && "Bun" in globalThis) {
+    const bun = globalThis.Bun;
+    if (bun && typeof bun.sleep === "function") {
+      return bun.sleep(ms).then(() => {
+        if (signal?.aborted) throw new Error("aborted");
+      });
+    }
+  }
   return new Promise((resolve22, reject) => {
     const timer = setTimeout(resolve22, ms);
     signal?.addEventListener(
@@ -16179,6 +16187,28 @@ function validateExplicitBin(explicit) {
   }
   return resolved;
 }
+function resolveBunBinary(env) {
+  const exe = process.platform === "win32" ? "bun.exe" : "bun";
+  const candidates = [
+    ...(env.PATH ?? "").split(path19.delimiter).filter(Boolean).map((dir) => path19.join(dir, exe)),
+    // Default bun install location — covers detached processes with minimal PATH.
+    path19.join(os5.homedir(), ".bun", "bin", exe)
+  ];
+  for (const candidate of candidates) {
+    try {
+      fs23.accessSync(candidate, fs23.constants.X_OK);
+      return candidate;
+    } catch {
+    }
+  }
+  return void 0;
+}
+function workerRuntimeCommand(env = process.env) {
+  const pref = (env.PI_CREW_WORKER_RUNTIME ?? "bun").trim().toLowerCase();
+  if (pref !== "bun") return process.execPath;
+  if (bunBinaryMemo === null) bunBinaryMemo = resolveBunBinary(env) ?? false;
+  return bunBinaryMemo === false ? process.execPath : bunBinaryMemo;
+}
 function getPiSpawnCommand(args) {
   const explicit = process.env.PI_TEAMS_PI_BIN?.trim();
   if (explicit) {
@@ -16186,7 +16216,7 @@ function getPiSpawnCommand(args) {
     if (validated) {
       if (isRunnableNodeScript(validated))
         return {
-          command: process.execPath,
+          command: workerRuntimeCommand(),
           args: [validated, ...args]
         };
       return { command: validated, args };
@@ -16194,18 +16224,19 @@ function getPiSpawnCommand(args) {
   }
   if (process.platform === "win32") {
     const script2 = resolvePiCliScript();
-    if (script2) return { command: process.execPath, args: [script2, ...args] };
+    if (script2) return { command: workerRuntimeCommand(), args: [script2, ...args] };
   }
   const script = resolvePiCliScript();
-  if (script) return { command: process.execPath, args: [script, ...args] };
+  if (script) return { command: workerRuntimeCommand(), args: [script, ...args] };
   return { command: "pi", args };
 }
-var PI_PACKAGE_NAMES, cachedNpmGlobalRoot;
+var PI_PACKAGE_NAMES, cachedNpmGlobalRoot, bunBinaryMemo;
 var init_pi_spawn = __esm({
   "src/runtime/pi-spawn.ts"() {
     "use strict";
     PI_PACKAGE_NAMES = ["@earendil-works/pi-coding-agent", "@mariozechner/pi-coding-agent"];
     cachedNpmGlobalRoot = null;
+    bunBinaryMemo = null;
   }
 });
 
@@ -19359,7 +19390,7 @@ ${JSON.stringify({ type: "message_end", usage: { input: 10, output: 5, cost: 1e-
               killed: hardKilled,
               // Phase-0 diagnostic (HB-003a): surface the final-drain race state.
               // finalDrainArmed lets Phase 1 decide whether a signal-death (exitCode=null)
-              // should be treated as a forced final drain. READ-ONLY for now.
+              // should be treated as a forced final drain. READ-ONLY diagnostic field.
               ...finalDrainArmed || forcedFinalDrain ? {
                 finalDrainArmed,
                 forcedFinalDrain,
@@ -35099,10 +35130,6 @@ function buildExtensionBridge(session) {
         } catch {
         }
       },
-      appendEntry: () => {
-      },
-      setLabel: () => {
-      },
       getActiveTools: () => {
         try {
           return session.getActiveToolNames();
@@ -35210,21 +35237,7 @@ function buildMcpProxyConfig(options) {
     return { enableMcp: true, proxyTools: [], proxyToolNames: [] };
   }
   const parentTools = options.parentMcpTools ?? [];
-  if (parentTools.length === 0) {
-    return { enableMcp: true, proxyTools: [], proxyToolNames: [] };
-  }
-  const proxyTools = createMcpProxyTools(parentTools);
-  if (proxyTools.length === 0) {
-    return { enableMcp: true, proxyTools: [], proxyToolNames: parentTools };
-  }
-  return {
-    enableMcp: false,
-    proxyTools,
-    proxyToolNames: parentTools
-  };
-}
-function createMcpProxyTools(toolNames) {
-  return [];
+  return { enableMcp: true, proxyTools: [], proxyToolNames: parentTools };
 }
 function discoverMcpToolNames(activeToolNames) {
   return activeToolNames.filter(
@@ -35435,6 +35448,26 @@ function configuredModelInfosFromPiConfig(cwd) {
     ...modelsJsonInfos(readJsonObject(path40.join(agentDir, "models.json")))
   ]);
 }
+async function loadBuiltinProviders() {
+  try {
+    const mod = await import("@earendil-works/pi-ai");
+    const providers = mod.getProviders?.();
+    if (!Array.isArray(providers) || providers.length === 0) return void 0;
+    return new Set(providers.map((p) => String(p)));
+  } catch {
+    return void 0;
+  }
+}
+async function resolveWorkerAvailableProviders() {
+  if (!builtinProvidersPromise) builtinProvidersPromise = loadBuiltinProviders();
+  const builtin = await builtinProvidersPromise;
+  if (!builtin) return void 0;
+  const result4 = new Set(builtin);
+  for (const info2 of modelsJsonInfos(readJsonObject(path40.join(piAgentDir(), "models.json")))) {
+    if (info2.provider) result4.add(info2.provider);
+  }
+  return result4;
+}
 function splitThinkingSuffix(model) {
   const colonIdx = model.lastIndexOf(":");
   if (colonIdx === -1) return { baseModel: model, thinkingSuffix: "" };
@@ -35464,6 +35497,10 @@ function isRetryableModelFailure(error) {
   if (!error) return false;
   if (NON_RETRYABLE_MODEL_FAILURE_PATTERNS.some((pattern) => pattern.test(error))) return false;
   return RETRYABLE_MODEL_FAILURE_PATTERNS.some((pattern) => pattern.test(error));
+}
+function isModelAdvanceableFailure(error) {
+  if (!error) return false;
+  return isRetryableModelFailure(error) || error.startsWith(ZERO_OUTPUT_FAILURE_PREFIX);
 }
 function formatModelAttemptNote(attempt, nextModel) {
   const failure = attempt.error?.trim() || `exit ${attempt.exitCode ?? 1}`;
@@ -35514,7 +35551,16 @@ function buildConfiguredModelRouting(input) {
     ...availableModels.map((model) => model.fullId)
   ] : [input.overrideModel, input.stepModel, input.teamRoleModel, effectiveAgentModel, ...input.fallbackModels ?? [], parentModel];
   const parentModelRaw = effectiveAgentModel?.trim() || void 0;
-  const configuredModels = rawModels.filter((model) => Boolean(model?.trim())).filter((model, idx) => {
+  const explicitModels = new Set(
+    [input.overrideModel, input.stepModel, input.teamRoleModel, input.agentModel].filter((model) => Boolean(model?.trim())).map((model) => model.trim())
+  );
+  const configuredModels = rawModels.filter((model) => Boolean(model?.trim())).filter((model) => {
+    if (!input.workerProviders) return true;
+    if (explicitModels.has(model.trim())) return true;
+    const provider = model.trim().split("/")[0];
+    return provider ? input.workerProviders.has(provider) : true;
+  }).filter((model, idx) => {
+    if (requested && model.trim() === requested.trim()) return true;
     if (parentModelRaw && idx === 0 && model.trim() === parentModelRaw) return true;
     return isAvailableModel(model.trim(), availableModels);
   });
@@ -35531,7 +35577,7 @@ function buildConfiguredModelRouting(input) {
   }
   return { requested, candidates, reason, scopeVerdict };
 }
-var RETRYABLE_MODEL_FAILURE_PATTERNS, NON_RETRYABLE_MODEL_FAILURE_PATTERNS;
+var builtinProvidersPromise, RETRYABLE_MODEL_FAILURE_PATTERNS, NON_RETRYABLE_MODEL_FAILURE_PATTERNS, ZERO_OUTPUT_FAILURE_PREFIX;
 var init_model_fallback = __esm({
   "src/runtime/model-fallback.ts"() {
     "use strict";
@@ -35615,6 +35661,7 @@ var init_model_fallback = __esm({
       /billing/i,
       /credit/i
     ];
+    ZERO_OUTPUT_FAILURE_PREFIX = "Model returned only errors and no output:";
   }
 });
 
@@ -36120,11 +36167,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants7) {
+      optimizeNames(names, constants8) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants7);
+          this.rhs = optimizeExpr(this.rhs, names, constants8);
         return this;
       }
       get names() {
@@ -36141,10 +36188,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants7) {
+      optimizeNames(names, constants8) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants7);
+        this.rhs = optimizeExpr(this.rhs, names, constants8);
         return this;
       }
       get names() {
@@ -36205,8 +36252,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants7) {
-        this.code = optimizeExpr(this.code, names, constants7);
+      optimizeNames(names, constants8) {
+        this.code = optimizeExpr(this.code, names, constants8);
         return this;
       }
       get names() {
@@ -36235,12 +36282,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants7) {
+      optimizeNames(names, constants8) {
         const { nodes } = this;
         let i2 = nodes.length;
         while (i2--) {
           const n = nodes[i2];
-          if (n.optimizeNames(names, constants7))
+          if (n.optimizeNames(names, constants8))
             continue;
           subtractNames(names, n.names);
           nodes.splice(i2, 1);
@@ -36293,12 +36340,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants7) {
+      optimizeNames(names, constants8) {
         var _a;
-        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants7);
-        if (!(super.optimizeNames(names, constants7) || this.else))
+        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants8);
+        if (!(super.optimizeNames(names, constants8) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants7);
+        this.condition = optimizeExpr(this.condition, names, constants8);
         return this;
       }
       get names() {
@@ -36321,10 +36368,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants7) {
-        if (!super.optimizeNames(names, constants7))
+      optimizeNames(names, constants8) {
+        if (!super.optimizeNames(names, constants8))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants7);
+        this.iteration = optimizeExpr(this.iteration, names, constants8);
         return this;
       }
       get names() {
@@ -36360,10 +36407,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants7) {
-        if (!super.optimizeNames(names, constants7))
+      optimizeNames(names, constants8) {
+        if (!super.optimizeNames(names, constants8))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants7);
+        this.iterable = optimizeExpr(this.iterable, names, constants8);
         return this;
       }
       get names() {
@@ -36405,11 +36452,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants7) {
+      optimizeNames(names, constants8) {
         var _a, _b;
-        super.optimizeNames(names, constants7);
-        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants7);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants7);
+        super.optimizeNames(names, constants8);
+        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants8);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants8);
         return this;
       }
       get names() {
@@ -36710,7 +36757,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants7) {
+    function optimizeExpr(expr, names, constants8) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -36725,14 +36772,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n) {
-        const c = constants7[n.str];
+        const c = constants8[n.str];
         if (c === void 0 || names[n.str] !== 1)
           return n;
         delete names[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants7[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants8[c.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -42603,9 +42650,6 @@ function buildOutputContract(role) {
   if (role === "writer") return "## Output Contract\nWrite clear documentation. Full sentences. No compression.";
   return "";
 }
-function compressSessionToolDescriptions(session) {
-  if (typeof session.getActiveToolNames !== "function") return;
-}
 function liveSystemPrompt(input) {
   const role = input.task.role;
   const styleBlock = buildCommunicationStyle(role);
@@ -42861,7 +42905,6 @@ async function runLiveSessionTask(input) {
         }
       });
     }
-    compressSessionToolDescriptions(session);
     const extensionBridge = buildExtensionBridge(session);
     if (extensionBridge) {
       const extRunner = session.extensionRunner;
@@ -52213,15 +52256,13 @@ function registerTeamTool(pi, deps) {
         stopProgress.stop();
       }
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderCall(args, theme, context) {
       return teamToolRenderer.renderCall(args, theme, context);
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderResult(result4, options, theme, context) {
       try {
         return teamToolRenderer.renderResult(result4, options, theme, context);
-      } catch {
+      } catch (e) {
         return new Text4(statusIcon("completed", theme) + " done", 0, 0);
       }
     }
@@ -56451,47 +56492,6 @@ var init_supervisor_contact = __esm({
   }
 });
 
-// src/runtime/task-id.ts
-import { createHash as createHash10 } from "node:crypto";
-function hashToBase36(content, length) {
-  const hash = createHash10("sha256").update(content).digest();
-  let result4 = "";
-  for (let i2 = 0; i2 < hash.length && result4.length < length; i2++) {
-    const byte = hash[i2];
-    result4 += BASE36_CHARS[byte % 36];
-  }
-  return result4.padEnd(length, "0").slice(0, length);
-}
-function calculateAdaptiveLength(existingCount, config = DEFAULT_CONFIG) {
-  for (let length = config.minLength; length <= config.maxLength; length++) {
-    const totalPossibilities = 36 ** length;
-    const probability = 1 - Math.exp(-(existingCount * existingCount) / (2 * totalPossibilities));
-    if (probability <= config.maxCollisionProbability) {
-      return length;
-    }
-  }
-  return config.maxLength;
-}
-function generateTaskHashId(parts, prefix = DEFAULT_PREFIX, existingCount = 0) {
-  const content = parts.join("|");
-  const length = calculateAdaptiveLength(existingCount);
-  const hash = hashToBase36(content, length);
-  return `${prefix}-${hash}`;
-}
-var DEFAULT_PREFIX, BASE36_CHARS, DEFAULT_CONFIG;
-var init_task_id = __esm({
-  "src/runtime/task-id.ts"() {
-    "use strict";
-    DEFAULT_PREFIX = "pc";
-    BASE36_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz";
-    DEFAULT_CONFIG = {
-      maxCollisionProbability: 0.25,
-      minLength: 3,
-      maxLength: 8
-    };
-  }
-});
-
 // src/runtime/task-packet.ts
 import * as path64 from "node:path";
 function sanitizeTaskText(task) {
@@ -56525,7 +56525,6 @@ function buildTaskPacket(input) {
   const scopePath = reads.length === 1 ? reads[0] : reads.length > 1 ? reads.join(", ") : void 0;
   const sanitizedTask = sanitizeTaskText(input.step.task);
   const sanitizedGoal = sanitizeTaskText(input.manifest.goal);
-  const _taskHashId = generateTaskHashId([input.manifest.goal, input.step.id, input.manifest.runId]);
   return {
     objective: sanitizedTask.replaceAll("{goal}", sanitizedGoal),
     scope,
@@ -56554,7 +56553,6 @@ var HANDOFF_TEMPLATE;
 var init_task_packet = __esm({
   "src/runtime/task-packet.ts"() {
     "use strict";
-    init_task_id();
     HANDOFF_TEMPLATE = [
       "## Handoff",
       "",
@@ -58297,6 +58295,7 @@ async function runTeamTask(input) {
       producer: task.id
     });
     if (runtimeKind === "child-process") {
+      const workerProviders = await resolveWorkerAvailableProviders();
       const modelRoutingPlan = buildConfiguredModelRouting({
         overrideModel: input.modelOverride,
         stepModel: input.step.model,
@@ -58306,7 +58305,8 @@ async function runTeamTask(input) {
         parentModel: input.parentModel,
         modelRegistry: input.modelRegistry,
         cwd: task.cwd,
-        scopeModelsPatterns: await resolveTaskScopeModelsPatterns(task.cwd)
+        scopeModelsPatterns: await resolveTaskScopeModelsPatterns(task.cwd),
+        workerProviders
       });
       const candidates = modelRoutingPlan.candidates;
       const attemptModels = candidates.length > 0 ? candidates : [void 0];
@@ -58559,8 +58559,11 @@ async function runTeamTask(input) {
           }).message;
         }
         if (!error && parsedOutput) {
-          const rateLimitErr = detectRetryableModelFailureFromOutput(parsedOutput);
+          const rateLimitErr = detectModelFailureFromOutput(parsedOutput);
           if (rateLimitErr) error = rateLimitErr;
+        }
+        if (error && /unknown provider/i.test(error)) {
+          error = `${error.trim()} \u2014 this provider is likely registered by a Pi extension, and child workers run with --no-extensions. Fix: add the provider extension to the agent's 'extensions' allowlist, or set the task/agent model to a built-in provider.`;
         }
         persistHeartbeat(true);
         persistChildProgress({ type: "attempt_finished" }, true);
@@ -58582,7 +58585,7 @@ async function runTeamTask(input) {
         );
         if (!error) break;
         let nextModel = attemptModels[i2 + 1];
-        if (!nextModel && isRetryableModelFailure(error)) {
+        if (!nextModel && isModelAdvanceableFailure(error)) {
           const reResolved = buildConfiguredModelRouting({
             overrideModel: void 0,
             stepModel: void 0,
@@ -58592,12 +58595,13 @@ async function runTeamTask(input) {
             parentModel: attempt.model,
             modelRegistry: input.modelRegistry,
             cwd: task.cwd,
-            scopeModelsPatterns: await resolveTaskScopeModelsPatterns(task.cwd)
+            scopeModelsPatterns: await resolveTaskScopeModelsPatterns(task.cwd),
+            workerProviders
           });
           const alt = reResolved.candidates.find((c) => c !== attempt.model);
           if (alt) nextModel = alt;
         }
-        if (!nextModel || !isRetryableModelFailure(error)) break;
+        if (!nextModel || !isModelAdvanceableFailure(error)) break;
         logs.push(formatModelAttemptNote(attempt, nextModel), "");
       }
       if (error && modelAttempts.length > 1) {
@@ -59052,14 +59056,14 @@ async function resolveTaskScopeModelsPatterns(cwd) {
   if (!scopeModels) return [];
   return readEnabledModelsPatterns(cwd);
 }
-function detectRetryableModelFailureFromOutput(parsed) {
+function detectModelFailureFromOutput(parsed) {
   const messages = parsed.errorMessages;
   if (messages && messages.length > 0) {
-    const retryable = messages.find((m) => isRetryableModelFailure(m));
-    if (retryable) {
+    const failure = messages.find((m) => isRetryableModelFailure(m)) ?? messages[0];
+    if (failure) {
       const hasRealOutput = (parsed.finalText?.trim().length ?? 0) > 0 || parsed.textEvents.some((t2) => t2.trim().length > 0) || (parsed.patches?.length ?? 0) > 0;
       if (hasRealOutput) return void 0;
-      return `Model returned only retryable errors and no output: ${retryable}`;
+      return `${ZERO_OUTPUT_FAILURE_PREFIX} ${failure}`;
     }
   }
   const raw = parsed;
@@ -59070,10 +59074,9 @@ function detectRetryableModelFailureFromOutput(parsed) {
     const event = candidate;
     if (event.stopReason !== "error") continue;
     if (typeof event.errorMessage !== "string" || event.errorMessage.length === 0) continue;
-    if (!isRetryableModelFailure(event.errorMessage)) continue;
     const hasRealOutput = (parsed.finalText?.trim().length ?? 0) > 0 || parsed.textEvents.some((t2) => t2.trim().length > 0) || (parsed.patches?.length ?? 0) > 0;
     if (hasRealOutput) return void 0;
-    return `Model returned only retryable errors and no output: ${event.errorMessage}`;
+    return `${ZERO_OUTPUT_FAILURE_PREFIX} ${event.errorMessage}`;
   }
   return void 0;
 }
@@ -70460,41 +70463,6 @@ Commit or stash changes before using worktree mode, or use workspaceMode: 'singl
       );
     }
   }
-  const isPipelineWorkflow = workflowName === "pipeline" && !directAgent;
-  if (isPipelineWorkflow) {
-    const pipelineRunner = new PipelineRunner();
-    const pipelineWorkflow = {
-      name: workflow.name,
-      description: workflow.description,
-      goal,
-      stages: workflow.steps.map((step) => ({
-        name: step.id,
-        team: step.role,
-        inputs: step.task,
-        usePreviousResults: step.dependsOn && step.dependsOn.length > 0
-      })),
-      stopOnError: true,
-      defaultMaxConcurrency: workflow.maxConcurrency ?? 5
-    };
-    const stageInfo = pipelineWorkflow.stages.map((s) => `- ${s.name} (${s.team})`).join("\n");
-    return result(
-      [
-        `Pipeline workflow '${workflow.name}' is not yet wired into the team execution system.`,
-        `Goal: ${goal}`,
-        `Defined stages (${pipelineWorkflow.stages.length}):`,
-        stageInfo,
-        "",
-        "To actually run work right now, use a supported workflow instead:",
-        "  - action='run' workflow='default'  (explore \u2192 plan \u2192 execute \u2192 verify)",
-        "  - action='run' workflow='implementation'  (adaptive, parallel specialists)",
-        "  - action='run' workflow='research'  (explore \u2192 analyze \u2192 write)",
-        "",
-        "Run action='list' resource='workflow' to see all available workflows."
-      ].join("\n"),
-      { action: "run", status: "ok" },
-      false
-    );
-  }
   const { validateWorkflowForTeam: validateWorkflow } = await Promise.resolve().then(() => (init_validate_workflow(), validate_workflow_exports));
   const validationErrors = validateWorkflow(workflow, team);
   if (validationErrors.length > 0) {
@@ -70542,6 +70510,136 @@ Commit or stash changes before using worktree mode, or use workspaceMode: 'singl
   };
   atomicWriteJson(paths.manifestPath, updatedManifest);
   registerActiveRun(updatedManifest);
+  const isPipelineWorkflow = workflowName === "pipeline" && !directAgent;
+  if (isPipelineWorkflow) {
+    const pipelineRunner = new PipelineRunner({
+      stopOnError: true,
+      defaultMaxConcurrency: workflow.maxConcurrency ?? 5
+    });
+    const pipelineWorkflow = {
+      name: workflow.name,
+      description: workflow.description,
+      goal,
+      stages: workflow.steps.map((step) => ({
+        name: step.id,
+        team: step.role,
+        inputs: step.task,
+        usePreviousResults: step.dependsOn && step.dependsOn.length > 0
+      })),
+      stopOnError: true,
+      defaultMaxConcurrency: workflow.maxConcurrency ?? 5
+    };
+    const stageInfo = pipelineWorkflow.stages.map((s) => `- ${s.name} (${s.team})`).join("\n");
+    void appendEventAsync(updatedManifest.eventsPath, {
+      type: "pipeline:configured",
+      runId: updatedManifest.runId,
+      message: `Pipeline '${workflow.name}' configured with ${pipelineWorkflow.stages.length} stages`,
+      data: { stages: pipelineWorkflow.stages.map((s) => s.name) }
+    });
+    const pipelineResult = await pipelineRunner.run(
+      pipelineWorkflow,
+      { goal, cwd: resolvedCtx.cwd },
+      async (stage, stageInputs, stageContext) => {
+        const stageTeam = teams.find((t2) => t2.name === stage.team);
+        if (!stageTeam) {
+          throw new Error(`Pipeline stage '${stage.name}' references unknown team '${stage.team}'. Available: ${teams.map((t2) => t2.name).join(", ")}`);
+        }
+        const stageWorkflow = {
+          name: `pipeline-${stage.name}`,
+          description: `Pipeline stage ${stageContext.stageIndex + 1}/${stageContext.totalStages}: ${stage.name}`,
+          source: "builtin",
+          filePath: "<generated>",
+          steps: [{
+            id: stage.name,
+            role: stage.team,
+            task: typeof stageInputs === "string" ? stageInputs : String(stageInputs ?? stage.name)
+          }],
+          maxConcurrency: 1
+        };
+        const { manifest: stageManifest, tasks: stageTasks, paths: stagePaths } = createRunManifest({
+          cwd: resolvedCtx.cwd,
+          team: stageTeam,
+          workflow: stageWorkflow,
+          goal: `${goal} \u2014 Stage ${stage.name}`,
+          workspaceMode: params.workspaceMode,
+          ownerSessionId: ctx.sessionId,
+          runKind: "team-run",
+          args: params.args
+        });
+        atomicWriteJson(stagePaths.manifestPath, stageManifest);
+        registerActiveRun(stageManifest);
+        try {
+          const prevContext = stageContext.previousResults.length > 0 ? `
+
+## Previous Stage Results
+${stageContext.previousResults.map((r, i2) => `### Result ${i2 + 1}
+${typeof r === "string" ? r : JSON.stringify(r)}`).join("\n\n")}` : "";
+          const { manifest: completedManifest, tasks: completedTasks } = await executeTeamRun2({
+            manifest: stageManifest,
+            tasks: stageTasks,
+            team: stageTeam,
+            workflow: stageWorkflow,
+            agents,
+            executeWorkers: true,
+            parentContext: `${buildParentContext(ctx)}${prevContext}`,
+            parentModel: ctx.model,
+            modelRegistry: ctx.modelRegistry,
+            modelOverride: params.model,
+            signal: ctx.signal ?? AbortSignal.timeout(36e5),
+            skillOverride,
+            workspaceId: ctx.sessionId ?? ctx.cwd,
+            budgetTotal: params.budgetTotal,
+            budgetWarning: params.budgetWarning,
+            budgetAbort: params.budgetAbort,
+            budgetUnlimited: params.budgetUnlimited
+          });
+          const stageResults = completedTasks.filter((t2) => t2.status === "completed").map((t2) => {
+            if (t2.resultArtifact?.path) {
+              try {
+                return fs90.readFileSync(
+                  resolveRealContainedPath(completedManifest.artifactsRoot, t2.resultArtifact.path),
+                  "utf-8"
+                ).trim();
+              } catch {
+                return t2.error ?? "(result unavailable)";
+              }
+            }
+            return t2.error ?? "(no result artifact)";
+          });
+          return stageResults.length > 0 ? stageResults : ["(stage completed with no results)"];
+        } finally {
+          unregisterActiveRun(stageManifest.runId);
+        }
+      },
+      updatedManifest.runId,
+      updatedManifest.eventsPath
+    );
+    await flushEventLogBuffer();
+    const failedStages = pipelineResult.stages.filter((s) => s.status === "failed");
+    const lines = [
+      `Pipeline '${workflow.name}' ${pipelineResult.status}: ${updatedManifest.runId}`,
+      `Goal: ${goal.slice(0, 100)}`,
+      "",
+      `Stages (${pipelineResult.stages.length}):`,
+      ...pipelineResult.stages.map(
+        (s) => `- ${s.status === "completed" ? "\u2713" : s.status === "failed" ? "\u2717" : "\u2298"} ${s.name} (${s.duration}ms${s.fanOutItems ? `, ${s.fanOutItems} items` : ""})${s.error ? ` \u2014 ${s.error.slice(0, 200)}` : ""}`
+      )
+    ];
+    if (failedStages.length > 0) {
+      lines.push("", `${failedStages.length} stage(s) failed: ${failedStages.map((s) => s.name).join(", ")}`);
+    }
+    lines.push("", `Final results: ${pipelineResult.finalResults.length} item(s)`);
+    return result(
+      lines.join("\n"),
+      {
+        action: "run",
+        status: pipelineResult.status === "failed" ? "error" : "ok",
+        runId: updatedManifest.runId,
+        artifactsRoot: updatedManifest.artifactsRoot
+      },
+      pipelineResult.status === "failed"
+    );
+  }
   if (!directAgent && workflow.runtime === "dynamic") {
     const { runDynamicWorkflow: runDynamicWorkflow2 } = await Promise.resolve().then(() => (init_dynamic_workflow_runner(), dynamic_workflow_runner_exports));
     const dwfTeam = {
@@ -73152,8 +73250,9 @@ async function openLiveConversation(ctx, initialRunId, initialTaskId) {
   const theme = asCrewTheme({});
   await ctx.ui.custom(
     (tui, _theme, _keybindings, done) => {
-      const columns = tui?.terminal?.columns ?? 80;
-      const rows = tui?.terminal?.rows ?? 24;
+      const tuiObj = tui;
+      const columns = tuiObj?.terminal?.columns ?? 80;
+      const rows = tuiObj?.terminal?.rows ?? 24;
       const overlay = new LiveConversationOverlay(handle, theme, columns, rows);
       return {
         render(width) {
@@ -79880,8 +79979,8 @@ function isNotFoundResult(result4) {
 }
 function isPiDiffLoaded(pi) {
   try {
-    const piAny = pi;
-    const extensions = piAny?.extensions ?? piAny?._extensions ?? [];
+    const piExtensions = pi;
+    const extensions = piExtensions?.extensions ?? piExtensions?._extensions ?? [];
     const names = Array.isArray(extensions) ? extensions.map((e) => typeof e === "string" ? e : e?.name ?? "") : Object.keys(extensions);
     return names.some((n) => typeof n === "string" && n.includes("pi-diff"));
   } catch {
@@ -79910,10 +80009,11 @@ function wrapEditWithResilientReplace(pi, tools) {
   };
   return true;
   async function retryWithReplace(params, toolCallId, signal, onUpdate) {
-    const filePath = params.path ?? params.filePath;
-    const oldStr = params.oldString ?? params.old_string;
-    const newStr = params.newString ?? params.new_string;
-    const replaceAll = params.replaceAll ?? params.replace_all ?? false;
+    const p = params;
+    const filePath = p.path ?? p.filePath;
+    const oldStr = p.oldString ?? p.old_string;
+    const newStr = p.newString ?? p.new_string;
+    const replaceAll = p.replaceAll ?? p.replace_all ?? false;
     if (!filePath || typeof oldStr !== "string" || typeof newStr !== "string") {
       throw new Error("old_string not found (and resilient retry skipped: missing path/old/new)");
     }
@@ -82049,7 +82149,7 @@ function resolveHome() {
 function configPath2() {
   return join76(resolveHome(), ".pi", "agent", "pi-crew-vibes.json");
 }
-var DEFAULT_CONFIG2 = {
+var DEFAULT_CONFIG = {
   enabled: true,
   speed: {
     enabled: true,
@@ -82092,7 +82192,7 @@ var FALLBACK_CAPACITY_ICONS = [
 ];
 function capacityIcons() {
   if (isWebTerminal()) return FALLBACK_CAPACITY_ICONS;
-  return hasCrewFontFile() ? DEFAULT_CONFIG2.capacity.icons : FALLBACK_CAPACITY_ICONS;
+  return hasCrewFontFile() ? DEFAULT_CONFIG.capacity.icons : FALLBACK_CAPACITY_ICONS;
 }
 function asRecord10(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -82118,42 +82218,42 @@ function tokenDisplayFrom(raw, fallback2) {
 function normalizeSpeed(raw) {
   const input = asRecord10(raw);
   const speed = {
-    enabled: boolFrom(input.enabled, DEFAULT_CONFIG2.speed.enabled),
-    footer: boolFrom(input.footer, DEFAULT_CONFIG2.speed.footer),
-    indicator: boolFrom(input.indicator, DEFAULT_CONFIG2.speed.indicator),
-    label: stringFrom(input.label, DEFAULT_CONFIG2.speed.label),
-    renderIntervalMs: positiveFrom(input.renderIntervalMs, DEFAULT_CONFIG2.speed.renderIntervalMs),
-    slidingWindowMs: positiveFrom(input.slidingWindowMs, DEFAULT_CONFIG2.speed.slidingWindowMs),
-    minReliableDurationMs: positiveFrom(input.minReliableDurationMs, DEFAULT_CONFIG2.speed.minReliableDurationMs),
-    maxDisplayTokS: positiveFrom(input.maxDisplayTokS, DEFAULT_CONFIG2.speed.maxDisplayTokS),
-    defaultIntervalMs: positiveFrom(input.defaultIntervalMs, DEFAULT_CONFIG2.speed.defaultIntervalMs),
-    minIntervalMs: positiveFrom(input.minIntervalMs, DEFAULT_CONFIG2.speed.minIntervalMs),
-    maxIntervalMs: positiveFrom(input.maxIntervalMs, DEFAULT_CONFIG2.speed.maxIntervalMs),
-    scale: positiveFrom(input.scale, DEFAULT_CONFIG2.speed.scale)
+    enabled: boolFrom(input.enabled, DEFAULT_CONFIG.speed.enabled),
+    footer: boolFrom(input.footer, DEFAULT_CONFIG.speed.footer),
+    indicator: boolFrom(input.indicator, DEFAULT_CONFIG.speed.indicator),
+    label: stringFrom(input.label, DEFAULT_CONFIG.speed.label),
+    renderIntervalMs: positiveFrom(input.renderIntervalMs, DEFAULT_CONFIG.speed.renderIntervalMs),
+    slidingWindowMs: positiveFrom(input.slidingWindowMs, DEFAULT_CONFIG.speed.slidingWindowMs),
+    minReliableDurationMs: positiveFrom(input.minReliableDurationMs, DEFAULT_CONFIG.speed.minReliableDurationMs),
+    maxDisplayTokS: positiveFrom(input.maxDisplayTokS, DEFAULT_CONFIG.speed.maxDisplayTokS),
+    defaultIntervalMs: positiveFrom(input.defaultIntervalMs, DEFAULT_CONFIG.speed.defaultIntervalMs),
+    minIntervalMs: positiveFrom(input.minIntervalMs, DEFAULT_CONFIG.speed.minIntervalMs),
+    maxIntervalMs: positiveFrom(input.maxIntervalMs, DEFAULT_CONFIG.speed.maxIntervalMs),
+    scale: positiveFrom(input.scale, DEFAULT_CONFIG.speed.scale)
   };
   if (speed.minIntervalMs > speed.maxIntervalMs) {
-    speed.minIntervalMs = DEFAULT_CONFIG2.speed.minIntervalMs;
-    speed.maxIntervalMs = DEFAULT_CONFIG2.speed.maxIntervalMs;
+    speed.minIntervalMs = DEFAULT_CONFIG.speed.minIntervalMs;
+    speed.maxIntervalMs = DEFAULT_CONFIG.speed.maxIntervalMs;
   }
   return speed;
 }
 function normalizeCapacity(raw) {
   const input = asRecord10(raw);
   return {
-    enabled: boolFrom(input.enabled, DEFAULT_CONFIG2.capacity.enabled),
-    tokenDisplay: tokenDisplayFrom(input.tokenDisplay, DEFAULT_CONFIG2.capacity.tokenDisplay),
-    showLabel: boolFrom(input.showLabel, DEFAULT_CONFIG2.capacity.showLabel),
-    refreshIntervalMs: positiveFrom(input.refreshIntervalMs, DEFAULT_CONFIG2.capacity.refreshIntervalMs),
-    labels: sextet(input.labels, DEFAULT_CONFIG2.capacity.labels),
-    icons: sextet(input.icons, DEFAULT_CONFIG2.capacity.icons),
-    providerUsage: boolFrom(input.providerUsage, DEFAULT_CONFIG2.capacity.providerUsage),
-    providerRefreshMs: positiveFrom(input.providerRefreshMs, DEFAULT_CONFIG2.capacity.providerRefreshMs)
+    enabled: boolFrom(input.enabled, DEFAULT_CONFIG.capacity.enabled),
+    tokenDisplay: tokenDisplayFrom(input.tokenDisplay, DEFAULT_CONFIG.capacity.tokenDisplay),
+    showLabel: boolFrom(input.showLabel, DEFAULT_CONFIG.capacity.showLabel),
+    refreshIntervalMs: positiveFrom(input.refreshIntervalMs, DEFAULT_CONFIG.capacity.refreshIntervalMs),
+    labels: sextet(input.labels, DEFAULT_CONFIG.capacity.labels),
+    icons: sextet(input.icons, DEFAULT_CONFIG.capacity.icons),
+    providerUsage: boolFrom(input.providerUsage, DEFAULT_CONFIG.capacity.providerUsage),
+    providerRefreshMs: positiveFrom(input.providerRefreshMs, DEFAULT_CONFIG.capacity.providerRefreshMs)
   };
 }
 function normalizeConfig(raw) {
   const input = asRecord10(raw);
   return {
-    enabled: boolFrom(input.enabled, DEFAULT_CONFIG2.enabled),
+    enabled: boolFrom(input.enabled, DEFAULT_CONFIG.enabled),
     speed: normalizeSpeed(input.speed),
     capacity: normalizeCapacity(input.capacity)
   };
@@ -84091,16 +84191,14 @@ function registerSubagentTools(pi, subagentManager, options = {}) {
       }
       return foregroundResult;
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderCall(args, theme, context) {
       return agentToolRenderer.renderCall(args, theme, context);
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderResult(result4, options2, theme, context) {
       try {
         return agentToolRenderer.renderResult(result4, options2, theme, context);
       } catch (e) {
-        return new Text6("agent-err: " + (e?.message ?? "unknown"), 0, 0);
+        return new Text6("agent-err: " + (e instanceof Error ? e.message : "unknown"), 0, 0);
       }
     }
   };
@@ -84397,7 +84495,23 @@ function purgeStaleActiveRunIndexSyncIfLoaded() {
     logInternalError("register.cleanupRuntime.purgeStale", error);
   }
 }
+var REGISTERED_MARKER = /* @__PURE__ */ Symbol.for("pi-crew.registered-from");
+function duplicateInstallSourcePath() {
+  const self = fileURLToPath7(import.meta.url);
+  const holder = globalThis;
+  const existing = holder[REGISTERED_MARKER];
+  if (typeof existing === "string" && existing !== self) return existing;
+  holder[REGISTERED_MARKER] = self;
+  return void 0;
+}
 function registerPiTeams(pi) {
+  const firstCopy = duplicateInstallSourcePath();
+  if (firstCopy) {
+    console.error(
+      `[pi-crew] duplicate install detected \u2014 already registered from ${firstCopy}; skipping this copy (${fileURLToPath7(import.meta.url)}). Remove one of the pi-crew package entries in ~/.pi/agent/settings.json to silence this notice.`
+    );
+    return;
+  }
   const disposeI18n = initI18n(pi);
   resetTimings();
   const verbose = process.env.PI_CREW_VERBOSE === "1" || process.argv.includes("--verbose");

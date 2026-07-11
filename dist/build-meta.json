@@ -6092,7 +6092,7 @@
       "format": "esm"
     },
     "src/utils/sleep.ts": {
-      "bytes": 1691,
+      "bytes": 2147,
       "imports": [
         {
           "path": "node:child_process",
@@ -7040,7 +7040,7 @@
       "format": "esm"
     },
     "src/runtime/pi-spawn.ts": {
-      "bytes": 9482,
+      "bytes": 11557,
       "imports": [
         {
           "path": "node:child_process",
@@ -8111,7 +8111,7 @@
       "format": "esm"
     },
     "src/agents/discover-agents.ts": {
-      "bytes": 25646,
+      "bytes": 25643,
       "imports": [
         {
           "path": "node:fs",
@@ -10547,7 +10547,7 @@
       "format": "esm"
     },
     "src/runtime/live-extension-bridge.ts": {
-      "bytes": 4382,
+      "bytes": 3949,
       "imports": [],
       "format": "esm"
     },
@@ -10557,7 +10557,7 @@
       "format": "esm"
     },
     "src/runtime/mcp-proxy.ts": {
-      "bytes": 4214,
+      "bytes": 2536,
       "imports": [],
       "format": "esm"
     },
@@ -10578,7 +10578,7 @@
       "format": "esm"
     },
     "src/runtime/model-fallback.ts": {
-      "bytes": 16001,
+      "bytes": 21257,
       "imports": [
         {
           "path": "node:fs",
@@ -10609,6 +10609,11 @@
           "path": "src/runtime/model-scope.ts",
           "kind": "import-statement",
           "original": "./model-scope.ts"
+        },
+        {
+          "path": "@earendil-works/pi-ai",
+          "kind": "dynamic-import",
+          "external": true
         }
       ],
       "format": "esm"
@@ -12006,7 +12011,7 @@
       "format": "esm"
     },
     "src/runtime/live-session-runtime.ts": {
-      "bytes": 42609,
+      "bytes": 41496,
       "imports": [
         {
           "path": "node:fs",
@@ -13612,7 +13617,7 @@
       "format": "esm"
     },
     "src/extension/registration/team-tool.ts": {
-      "bytes": 9692,
+      "bytes": 9901,
       "imports": [
         {
           "path": "node:fs",
@@ -14533,29 +14538,13 @@
       ],
       "format": "esm"
     },
-    "src/runtime/task-id.ts": {
-      "bytes": 5793,
-      "imports": [
-        {
-          "path": "node:crypto",
-          "kind": "import-statement",
-          "external": true
-        }
-      ],
-      "format": "esm"
-    },
     "src/runtime/task-packet.ts": {
-      "bytes": 10509,
+      "bytes": 10146,
       "imports": [
         {
           "path": "node:path",
           "kind": "import-statement",
           "external": true
-        },
-        {
-          "path": "src/runtime/task-id.ts",
-          "kind": "import-statement",
-          "original": "./task-id.ts"
         }
       ],
       "format": "esm"
@@ -14861,7 +14850,7 @@
       "format": "esm"
     },
     "src/runtime/task-runner.ts": {
-      "bytes": 54809,
+      "bytes": 56405,
       "imports": [
         {
           "path": "node:fs",
@@ -15170,7 +15159,7 @@
       "format": "esm"
     },
     "src/runtime/team-runner.ts": {
-      "bytes": 77294,
+      "bytes": 77281,
       "imports": [
         {
           "path": "node:fs",
@@ -15840,7 +15829,7 @@
       "format": "esm"
     },
     "src/extension/team-tool/run.ts": {
-      "bytes": 44253,
+      "bytes": 48005,
       "imports": [
         {
           "path": "src/agents/discover-agents.ts",
@@ -16539,7 +16528,7 @@
       "format": "esm"
     },
     "src/extension/registration/viewers.ts": {
-      "bytes": 4252,
+      "bytes": 4283,
       "imports": [
         {
           "path": "src/config/config.ts",
@@ -16982,7 +16971,7 @@
       "format": "esm"
     },
     "src/extension/registration/commands.ts": {
-      "bytes": 46148,
+      "bytes": 46251,
       "imports": [
         {
           "path": "src/config/config.ts",
@@ -17732,7 +17721,7 @@
       "format": "esm"
     },
     "src/extension/registration/subagent-tools.ts": {
-      "bytes": 17386,
+      "bytes": 17592,
       "imports": [
         {
           "path": "node_modules/@sinclair/typebox/build/esm/index.mjs",
@@ -17988,7 +17977,7 @@
       "format": "esm"
     },
     "src/runtime/resilient-edit.ts": {
-      "bytes": 5549,
+      "bytes": 5555,
       "imports": [
         {
           "path": "src/runtime/replace.ts",
@@ -18004,7 +17993,7 @@
       "format": "esm"
     },
     "src/extension/register.ts": {
-      "bytes": 68063,
+      "bytes": 69502,
       "imports": [
         {
           "path": "node:fs",
@@ -18426,7 +18415,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6652506
+      "bytes": 6661981
     },
     "dist/index.mjs": {
       "imports": [
@@ -19051,6 +19040,11 @@
           "external": true
         },
         {
+          "path": "@earendil-works/pi-ai",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
           "path": "node:fs",
           "kind": "import-statement",
           "external": true
@@ -19482,11 +19476,6 @@
         },
         {
           "path": "node:fs",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "node:crypto",
           "kind": "import-statement",
           "external": true
         },
@@ -20633,7 +20622,7 @@
           "bytesInOutput": 502
         },
         "src/utils/sleep.ts": {
-          "bytesInOutput": 948
+          "bytesInOutput": 1213
         },
         "src/state/worker-atomic-writer.ts": {
           "bytesInOutput": 5243
@@ -20744,7 +20733,7 @@
           "bytesInOutput": 7463
         },
         "src/runtime/pi-spawn.ts": {
-          "bytesInOutput": 6694
+          "bytesInOutput": 7609
         },
         "src/runtime/peer-dep.ts": {
           "bytesInOutput": 4763
@@ -20822,7 +20811,7 @@
           "bytesInOutput": 1801
         },
         "src/runtime/child-pi.ts": {
-          "bytesInOutput": 45390
+          "bytesInOutput": 45399
         },
         "src/runtime/heartbeat-gradient.ts": {
           "bytesInOutput": 953
@@ -21242,13 +21231,13 @@
           "bytesInOutput": 2151
         },
         "src/runtime/live-extension-bridge.ts": {
-          "bytesInOutput": 1550
+          "bytesInOutput": 1481
         },
         "src/runtime/live-session-health.ts": {
           "bytesInOutput": 1343
         },
         "src/runtime/mcp-proxy.ts": {
-          "bytesInOutput": 1144
+          "bytesInOutput": 801
         },
         "src/runtime/model-resolver.ts": {
           "bytesInOutput": 1018
@@ -21257,7 +21246,7 @@
           "bytesInOutput": 1806
         },
         "src/runtime/model-fallback.ts": {
-          "bytesInOutput": 11957
+          "bytesInOutput": 13490
         },
         "src/runtime/sensitive-paths.ts": {
           "bytesInOutput": 583
@@ -21479,7 +21468,7 @@
           "bytesInOutput": 4743
         },
         "src/runtime/live-session-runtime.ts": {
-          "bytesInOutput": 30535
+          "bytesInOutput": 30371
         },
         "src/subagents/live/session-runtime.ts": {
           "bytesInOutput": 140
@@ -21632,7 +21621,7 @@
           "bytesInOutput": 2691
         },
         "src/extension/registration/team-tool.ts": {
-          "bytesInOutput": 7830
+          "bytesInOutput": 7700
         },
         "src/extension/team-tool/parallel-dispatch.ts": {
           "bytesInOutput": 4799
@@ -21769,11 +21758,8 @@
         "src/runtime/supervisor-contact.ts": {
           "bytesInOutput": 1482
         },
-        "src/runtime/task-id.ts": {
-          "bytesInOutput": 1374
-        },
         "src/runtime/task-packet.ts": {
-          "bytesInOutput": 3564
+          "bytesInOutput": 3442
         },
         "src/runtime/task-runner/capabilities.ts": {
           "bytesInOutput": 1169
@@ -21818,7 +21804,7 @@
           "bytesInOutput": 6123
         },
         "src/runtime/task-runner.ts": {
-          "bytesInOutput": 42554
+          "bytesInOutput": 42897
         },
         "src/runtime/workflow-state.ts": {
           "bytesInOutput": 2471
@@ -21893,7 +21879,7 @@
           "bytesInOutput": 6259
         },
         "src/extension/team-tool/run.ts": {
-          "bytesInOutput": 34966
+          "bytesInOutput": 39037
         },
         "src/extension/team-tool.ts": {
           "bytesInOutput": 35616
@@ -21923,7 +21909,7 @@
           "bytesInOutput": 13161
         },
         "src/extension/registration/viewers.ts": {
-          "bytesInOutput": 3185
+          "bytesInOutput": 3217
         },
         "src/ui/dashboard-panes/agents-pane.ts": {
           "bytesInOutput": 4528
@@ -22034,10 +22020,10 @@
           "bytesInOutput": 11678
         },
         "src/runtime/resilient-edit.ts": {
-          "bytesInOutput": 3150
+          "bytesInOutput": 3153
         },
         "src/extension/register.ts": {
-          "bytesInOutput": 45572
+          "bytesInOutput": 46296
         },
         "src/runtime/batch-barrier.ts": {
           "bytesInOutput": 3060
@@ -22085,7 +22071,7 @@
           "bytesInOutput": 10897
         },
         "src/extension/crew-vibes/config.ts": {
-          "bytesInOutput": 5221
+          "bytesInOutput": 5196
         },
         "src/extension/crew-vibes/font-detect.ts": {
           "bytesInOutput": 1467
@@ -22118,7 +22104,7 @@
           "bytesInOutput": 647
         },
         "src/extension/registration/subagent-tools.ts": {
-          "bytesInOutput": 15548
+          "bytesInOutput": 15433
         },
         "src/i18n.ts": {
           "bytesInOutput": 6837
@@ -22139,7 +22125,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3165033
+      "bytes": 3170559
     }
   }
 }

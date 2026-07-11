@@ -136,7 +136,40 @@ import { createSessionSnapshot } from "../runtime/session-snapshot.ts";
 
 export { __test__subagentSpawnParams };
 
+/**
+ * Poka-Yoke (2026-07-11): duplicate-install guard.
+ *
+ * pi-crew can end up registered TWICE in one Pi process — e.g. a path package
+ * (`../../pi-crew` dev checkout) plus a git package re-added by `pi install
+ * git:…` from another session's workflow. Two module graphs then race to
+ * register the same tool names and Pi hard-fails the second with seven
+ * `Tool "…" conflicts` errors at every startup.
+ *
+ * First copy wins and records its source path on globalThis (the ONLY scope
+ * shared across distinct module graphs). A second copy from a DIFFERENT path
+ * no-ops with one info line. The SAME path re-registering stays allowed so
+ * in-process reload keeps working.
+ */
+const REGISTERED_MARKER = Symbol.for("pi-crew.registered-from");
+
+function duplicateInstallSourcePath(): string | undefined {
+	const self = fileURLToPath(import.meta.url);
+	const holder = globalThis as Record<symbol, unknown>;
+	const existing = holder[REGISTERED_MARKER];
+	if (typeof existing === "string" && existing !== self) return existing;
+	holder[REGISTERED_MARKER] = self;
+	return undefined;
+}
+
 export function registerPiTeams(pi: ExtensionAPI): void {
+	const firstCopy = duplicateInstallSourcePath();
+	if (firstCopy) {
+		console.error(
+			`[pi-crew] duplicate install detected — already registered from ${firstCopy}; skipping this copy (${fileURLToPath(import.meta.url)}). ` +
+				"Remove one of the pi-crew package entries in ~/.pi/agent/settings.json to silence this notice.",
+		);
+		return;
+	}
 	const disposeI18n = initI18n(pi);
 	resetTimings();
 	// S06: Verbose/debug flags for pi-crew diagnostics
