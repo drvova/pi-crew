@@ -57,10 +57,15 @@ const PUA_CREW_FRAMES: readonly string[] = [
 /**
  * Return the indicator frames for the given style.
  *
- * - `"braille"` (default): standard Unicode braille spinner, works everywhere
- * - `"pua"`: runner-pose glyphs from crew-vibes.ttf, requires font install
+ * - `"braille"` (DEFAULT): standard Unicode braille spinner, renders on
+ *   every terminal without any font install. This is the safe default.
+ * - `"pua"`: runner-pose glyphs from crew-vibes.ttf — requires the font to
+ *   be installed AND a terminal that renders PUA codepoints. The install
+ *   postinstall deploys the font but fc-match resolution is unreliable
+ *   across terminals (observed: U+E700 not resolved despite font present),
+ *   so PUA is opt-in only.
  */
-export function crewFrames(style: "braille" | "pua" = "pua"): readonly string[] {
+export function crewFrames(style: "braille" | "pua" = "braille"): readonly string[] {
 	// Web terminals (gotty, wetty) cannot render PUA glyphs — fall back to braille
 	if (style === "pua" && isWebTerminal()) return BRAILLE_FRAMES;
 	return style === "pua" ? PUA_CREW_FRAMES : BRAILLE_FRAMES;

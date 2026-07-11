@@ -82424,7 +82424,7 @@ var PUA_CREW_FRAMES = [
   "\uE70E ",
   "\uE70F "
 ];
-function crewFrames(style = "pua") {
+function crewFrames(style = "braille") {
   if (style === "pua" && isWebTerminal()) return BRAILLE_FRAMES;
   return style === "pua" ? PUA_CREW_FRAMES : BRAILLE_FRAMES;
 }
