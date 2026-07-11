@@ -20164,6 +20164,35 @@ var init_run_index = __esm({
   }
 });
 
+// src/runtime/usage-tracker.ts
+function emptyLifetimeUsage() {
+  return { input: 0, output: 0, cacheWrite: 0 };
+}
+function addUsage(into, delta) {
+  if (typeof delta.input === "number") into.input += delta.input;
+  if (typeof delta.output === "number") into.output += delta.output;
+  if (typeof delta.cacheWrite === "number") into.cacheWrite += delta.cacheWrite;
+}
+function trackTaskUsage(taskId, delta) {
+  const existing = taskUsageMap.get(taskId) ?? emptyLifetimeUsage();
+  addUsage(existing, delta);
+  taskUsageMap.set(taskId, existing);
+}
+function getTrackedTaskUsage(taskId) {
+  return taskUsageMap.get(taskId) ?? emptyLifetimeUsage();
+}
+function clearTrackedTaskUsage(taskId) {
+  taskUsageMap.delete(taskId);
+}
+var taskUsageMap, getTaskUsage;
+var init_usage_tracker = __esm({
+  "src/runtime/usage-tracker.ts"() {
+    "use strict";
+    taskUsageMap = /* @__PURE__ */ new Map();
+    getTaskUsage = getTrackedTaskUsage;
+  }
+});
+
 // src/state/usage.ts
 function aggregateUsage(tasks) {
   const total = {};
@@ -20257,6 +20286,35 @@ function formatCostReport(tasks) {
 }
 var init_usage = __esm({
   "src/state/usage.ts"() {
+    "use strict";
+  }
+});
+
+// src/ui/live-duration.ts
+function toMs(v) {
+  if (v <= 0) return 0;
+  if (v > 1e9 && v < 1e10) return v * 1e3;
+  if (v > 1e11 && v < 1e13) return v;
+  return v;
+}
+function computeLiveDurationMs(activity, nowMs3 = Date.now()) {
+  const rawStarted = activity.startedAtMs || 0;
+  const rawCompleted = activity.completedAtMs || 0;
+  const startedMs = toMs(rawStarted);
+  const completedMs = rawCompleted > 0 ? toMs(rawCompleted) : 0;
+  const isValidStarted = startedMs > 0 && startedMs < nowMs3 + 6e4 && startedMs > nowMs3 - 31556926e6;
+  const end = completedMs > 0 && completedMs < nowMs3 + 6e4 ? completedMs : nowMs3;
+  const ms = end - (isValidStarted ? startedMs : nowMs3);
+  return Number.isFinite(ms) && ms >= 0 ? ms : 0;
+}
+function fmtDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1e3));
+  if (total < 60) return `${total}s`;
+  if (total < 3600) return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
+  return `${Math.floor(total / 3600)}h${String(Math.floor(total % 3600 / 60)).padStart(2, "0")}m`;
+}
+var init_live_duration = __esm({
+  "src/ui/live-duration.ts"() {
     "use strict";
   }
 });
@@ -20607,35 +20665,6 @@ var init_render_coalescer = __esm({
   }
 });
 
-// src/runtime/usage-tracker.ts
-function emptyLifetimeUsage() {
-  return { input: 0, output: 0, cacheWrite: 0 };
-}
-function addUsage(into, delta) {
-  if (typeof delta.input === "number") into.input += delta.input;
-  if (typeof delta.output === "number") into.output += delta.output;
-  if (typeof delta.cacheWrite === "number") into.cacheWrite += delta.cacheWrite;
-}
-function trackTaskUsage(taskId, delta) {
-  const existing = taskUsageMap.get(taskId) ?? emptyLifetimeUsage();
-  addUsage(existing, delta);
-  taskUsageMap.set(taskId, existing);
-}
-function getTrackedTaskUsage(taskId) {
-  return taskUsageMap.get(taskId) ?? emptyLifetimeUsage();
-}
-function clearTrackedTaskUsage(taskId) {
-  taskUsageMap.delete(taskId);
-}
-var taskUsageMap, getTaskUsage;
-var init_usage_tracker = __esm({
-  "src/runtime/usage-tracker.ts"() {
-    "use strict";
-    taskUsageMap = /* @__PURE__ */ new Map();
-    getTaskUsage = getTrackedTaskUsage;
-  }
-});
-
 // src/utils/visual.ts
 function isWideCodePoint(code) {
   for (const [lo, hi] of WIDE_RANGES) {
@@ -20865,35 +20894,6 @@ var init_visual = __esm({
       // Variation Selectors (emoji presentation)
     ];
     truncate = truncateToWidth;
-  }
-});
-
-// src/ui/live-duration.ts
-function toMs(v) {
-  if (v <= 0) return 0;
-  if (v > 1e9 && v < 1e10) return v * 1e3;
-  if (v > 1e11 && v < 1e13) return v;
-  return v;
-}
-function computeLiveDurationMs(activity, nowMs3 = Date.now()) {
-  const rawStarted = activity.startedAtMs || 0;
-  const rawCompleted = activity.completedAtMs || 0;
-  const startedMs = toMs(rawStarted);
-  const completedMs = rawCompleted > 0 ? toMs(rawCompleted) : 0;
-  const isValidStarted = startedMs > 0 && startedMs < nowMs3 + 6e4 && startedMs > nowMs3 - 31556926e6;
-  const end = completedMs > 0 && completedMs < nowMs3 + 6e4 ? completedMs : nowMs3;
-  const ms = end - (isValidStarted ? startedMs : nowMs3);
-  return Number.isFinite(ms) && ms >= 0 ? ms : 0;
-}
-function fmtDuration(ms) {
-  const total = Math.max(0, Math.floor(ms / 1e3));
-  if (total < 60) return `${total}s`;
-  if (total < 3600) return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
-  return `${Math.floor(total / 3600)}h${String(Math.floor(total % 3600 / 60)).padStart(2, "0")}m`;
-}
-var init_live_duration = __esm({
-  "src/ui/live-duration.ts"() {
-    "use strict";
   }
 });
 
@@ -21152,12 +21152,25 @@ function updatePiCrewPowerbar(events, cwd, config, manifestCache2, snapshotCache
   const queuedLabel = queuedCount === 1 ? "1 queued" : `${queuedCount} queued`;
   const crewStatus = runningCount > 0 && queuedCount > 0 ? `${runningLabel} \xB7 ${queuedLabel}` : runningCount > 0 ? runningLabel : queuedCount > 0 ? queuedLabel : "idle";
   const liveSuffix = liveRunning > 0 ? ` (${liveRunning} live)` : "";
+  let tps = 0;
+  if (liveRunning > 0) {
+    const liveHandles = listLiveAgents().filter((a) => a.status === "running");
+    let totalOutput = 0;
+    let maxMs = 0;
+    for (const h of liveHandles) {
+      const u = getTaskUsage(h.taskId);
+      totalOutput += u.output ?? 0;
+      maxMs = Math.max(maxMs, computeLiveDurationMs(h.activity));
+    }
+    if (maxMs > 1e3 && totalOutput > 0) tps = Math.round(totalOutput / (maxMs / 1e3));
+  }
+  const tpsText = tps > 0 ? `${tps} tok/s` : void 0;
   const notificationText = notificationBadge(notificationCount);
-  const suffixParts = [model, tokenText].filter(Boolean);
+  const suffixParts = [model, tokenText, tpsText].filter(Boolean);
   const activeSuffix = suffixParts.length > 0 ? suffixParts.join(" \xB7 ") : void 0;
   const progressSuffix = `${completed}/${total}${tokenText ? ` \xB7 ${tokenText}` : ""}`;
   const progressPart = `${completed}/${total}`;
-  const allParts = [`\u2699 ${crewStatus}`, model ?? "", tokenText ?? "", progressPart].filter(Boolean);
+  const allParts = [`\u2699 ${crewStatus}`, model ?? "", tpsText ?? "", tokenText ?? "", progressPart].filter(Boolean);
   const unifiedText = allParts.join(" \xB7 ");
   const activePayload = {
     id: "pi-crew-active",
@@ -21271,10 +21284,12 @@ var init_powerbar_publisher = __esm({
     init_run_index();
     init_crew_agent_records();
     init_live_agent_manager();
+    init_usage_tracker();
     init_process_status();
     init_usage();
     init_file_coalescer();
     init_internal_error();
+    init_live_duration();
     init_discover_workflows();
     init_render_coalescer();
     init_widget_formatters();

@@ -3,12 +3,14 @@ import type { CrewUiConfig } from "../config/config.ts";
 import { listRecentRuns } from "../extension/run-index.ts";
 import { readCrewAgents } from "../runtime/crew-agent-records.ts";
 import { listLiveAgents } from "../runtime/live-agent-manager.ts";
+import { getTaskUsage } from "../runtime/usage-tracker.ts";
 import type { ManifestCache } from "../runtime/manifest-cache.ts";
 import { isDisplayActiveRun } from "../runtime/process-status.ts";
 import type { TeamRunManifest, TeamTaskState } from "../state/types.ts";
 import { aggregateUsage } from "../state/usage.ts";
 import { readJsonFileCoalesced } from "../utils/file-coalescer.ts";
 import { logInternalError } from "../utils/internal-error.ts";
+import { computeLiveDurationMs } from "./live-duration.ts";
 import { allWorkflows, discoverWorkflows } from "../workflows/discover-workflows.ts";
 import type { WorkflowConfig, WorkflowStep } from "../workflows/workflow-config.ts";
 import { RenderCoalescer } from "./render-coalescer.ts";
@@ -191,9 +193,24 @@ export function updatePiCrewPowerbar(
 					? queuedLabel
 					: "idle";
 	const liveSuffix = liveRunning > 0 ? ` (${liveRunning} live)` : "";
+	// Aggregate tokens/sec across all running live agents — the single most
+	// useful real-time throughput metric on the input bar.
+	let tps = 0;
+	if (liveRunning > 0) {
+		const liveHandles = listLiveAgents().filter((a) => a.status === "running");
+		let totalOutput = 0;
+		let maxMs = 0;
+		for (const h of liveHandles) {
+			const u = getTaskUsage(h.taskId);
+			totalOutput += u.output ?? 0;
+			maxMs = Math.max(maxMs, computeLiveDurationMs(h.activity));
+		}
+		if (maxMs > 1000 && totalOutput > 0) tps = Math.round(totalOutput / (maxMs / 1000));
+	}
+	const tpsText = tps > 0 ? `${tps} tok/s` : undefined;
 	const notificationText = notificationBadge(notificationCount);
 	// Always show model + tokens as suffix when available (for activePayload consistency)
-	const suffixParts = [model, tokenText].filter(Boolean);
+	const suffixParts = [model, tokenText, tpsText].filter(Boolean);
 	const activeSuffix = suffixParts.length > 0 ? suffixParts.join(" · ") : undefined;
 	// Progress always includes token count for consistency
 	const progressSuffix = `${completed}/${total}${tokenText ? ` · ${tokenText}` : ""}`;
@@ -201,7 +218,7 @@ export function updatePiCrewPowerbar(
 	// Both fallback and events must use the SAME format - no conditional display
 	// Format: "⚙ 1 running · 1 queued · model · 30k · 0/1" (never changes based on availability)
 	const progressPart = `${completed}/${total}`;
-	const allParts = [`⚙ ${crewStatus}`, model ?? "", tokenText ?? "", progressPart].filter(Boolean);
+	const allParts = [`⚙ ${crewStatus}`, model ?? "", tpsText ?? "", tokenText ?? "", progressPart].filter(Boolean);
 	const unifiedText = allParts.join(" · ");
 	// activePayload.text includes notification badge for event payload
 	const activePayload = {

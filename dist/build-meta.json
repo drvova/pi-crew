@@ -7643,8 +7643,18 @@
       ],
       "format": "esm"
     },
+    "src/runtime/usage-tracker.ts": {
+      "bytes": 2263,
+      "imports": [],
+      "format": "esm"
+    },
     "src/state/usage.ts": {
       "bytes": 5104,
+      "imports": [],
+      "format": "esm"
+    },
+    "src/ui/live-duration.ts": {
+      "bytes": 3187,
       "imports": [],
       "format": "esm"
     },
@@ -7684,18 +7694,8 @@
       "imports": [],
       "format": "esm"
     },
-    "src/runtime/usage-tracker.ts": {
-      "bytes": 2263,
-      "imports": [],
-      "format": "esm"
-    },
     "src/utils/visual.ts": {
       "bytes": 8407,
-      "imports": [],
-      "format": "esm"
-    },
-    "src/ui/live-duration.ts": {
-      "bytes": 3187,
       "imports": [],
       "format": "esm"
     },
@@ -7721,7 +7721,7 @@
       "format": "esm"
     },
     "src/ui/powerbar-publisher.ts": {
-      "bytes": 14448,
+      "bytes": 15196,
       "imports": [
         {
           "path": "node:fs",
@@ -7744,6 +7744,11 @@
           "original": "../runtime/live-agent-manager.ts"
         },
         {
+          "path": "src/runtime/usage-tracker.ts",
+          "kind": "import-statement",
+          "original": "../runtime/usage-tracker.ts"
+        },
+        {
           "path": "src/runtime/process-status.ts",
           "kind": "import-statement",
           "original": "../runtime/process-status.ts"
@@ -7762,6 +7767,11 @@
           "path": "src/utils/internal-error.ts",
           "kind": "import-statement",
           "original": "../utils/internal-error.ts"
+        },
+        {
+          "path": "src/ui/live-duration.ts",
+          "kind": "import-statement",
+          "original": "./live-duration.ts"
         },
         {
           "path": "src/workflows/discover-workflows.ts",
@@ -18450,7 +18460,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6682771
+      "bytes": 6683966
     },
     "dist/index.mjs": {
       "imports": [
@@ -20866,8 +20876,14 @@
         "src/extension/run-index.ts": {
           "bytesInOutput": 3496
         },
+        "src/runtime/usage-tracker.ts": {
+          "bytesInOutput": 901
+        },
         "src/state/usage.ts": {
           "bytesInOutput": 3670
+        },
+        "src/ui/live-duration.ts": {
+          "bytesInOutput": 1106
         },
         "src/utils/frontmatter.ts": {
           "bytesInOutput": 1909
@@ -20878,20 +20894,14 @@
         "src/ui/render-coalescer.ts": {
           "bytesInOutput": 1330
         },
-        "src/runtime/usage-tracker.ts": {
-          "bytesInOutput": 901
-        },
         "src/utils/visual.ts": {
           "bytesInOutput": 7038
-        },
-        "src/ui/live-duration.ts": {
-          "bytesInOutput": 1106
         },
         "src/ui/widget/widget-formatters.ts": {
           "bytesInOutput": 5847
         },
         "src/ui/powerbar-publisher.ts": {
-          "bytesInOutput": 9964
+          "bytesInOutput": 10531
         },
         "src/ui/dwf-phase-display.ts": {
           "bytesInOutput": 2361
@@ -22160,7 +22170,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3177797
+      "bytes": 3178364
     }
   }
 }
