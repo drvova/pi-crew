@@ -137,14 +137,13 @@ function runListWindow(scrollOffset: number, count: number): RunListWindow {
 	return { slots, hasTop, hasBottom };
 }
 
+import { fmtDuration } from "./live-duration.ts";
+
 function formatAge(iso: string | undefined): string | undefined {
 	if (!iso) return undefined;
 	const ms = Math.max(0, Date.now() - new Date(iso).getTime());
 	if (!Number.isFinite(ms)) return undefined;
-	if (ms < 1000) return "now";
-	if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
-	if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`;
-	return `${Math.floor(ms / 3_600_000)}h`;
+	return fmtDuration(ms);
 }
 
 function renderLines(lines: string[], width: number): string[] {

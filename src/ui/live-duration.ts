@@ -49,7 +49,22 @@ export function computeLiveDurationMs(activity: LiveActivity, nowMs: number = Da
 	return Number.isFinite(ms) && ms >= 0 ? ms : 0;
 }
 
-/** Format a live duration in seconds, e.g. `12.3s`. Returns `0.0s` for 0. */
+/** Format a live duration in seconds, e.g. `12.3s`. Returns `0.0s` for 0.
+ *  Fixed-width output — intended for per-agent metric columns that must not
+ *  jitter across render ticks. */
 export function formatLiveDuration(activity: LiveActivity, nowMs: number = Date.now()): string {
 	return `${(computeLiveDurationMs(activity, nowMs) / 1000).toFixed(1)}s`;
+}
+
+/**
+ * Human-readable duration: `45s` / `2m34s` / `1h12m`. For display surfaces
+ * (sidebar headers, conversation overlays, status output, dashboard totals)
+ * where readability beats column stability. Updated 2026-07-11; source of
+ * truth kept here so all UI surfaces share one formatter.
+ */
+export function fmtDuration(ms: number): string {
+	const total = Math.max(0, Math.floor(ms / 1000));
+	if (total < 60) return `${total}s`;
+	if (total < 3600) return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
+	return `${Math.floor(total / 3600)}h${String(Math.floor((total % 3600) / 60)).padStart(2, "0")}m`;
 }

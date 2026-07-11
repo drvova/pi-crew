@@ -20885,6 +20885,12 @@ function computeLiveDurationMs(activity, nowMs3 = Date.now()) {
   const ms = end - (isValidStarted ? startedMs : nowMs3);
   return Number.isFinite(ms) && ms >= 0 ? ms : 0;
 }
+function fmtDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1e3));
+  if (total < 60) return `${total}s`;
+  if (total < 3600) return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
+  return `${Math.floor(total / 3600)}h${String(Math.floor(total % 3600 / 60)).padStart(2, "0")}m`;
+}
 var init_live_duration = __esm({
   "src/ui/live-duration.ts"() {
     "use strict";
@@ -21919,12 +21925,6 @@ var init_status_colors = __esm({
 });
 
 // src/ui/widget/widget-renderer.ts
-function fmtDuration(ms) {
-  const total = Math.max(0, Math.floor(ms / 1e3));
-  if (total < 60) return `${total}s`;
-  if (total < 3600) return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
-  return `${Math.floor(total / 3600)}h${String(Math.floor(total % 3600 / 60)).padStart(2, "0")}m`;
-}
 function progressBar(completed, total, cells = 5) {
   if (total <= 0) return "";
   const filled = Math.max(0, Math.min(cells, Math.round(completed / total * cells)));
@@ -22062,6 +22062,7 @@ var init_widget_renderer = __esm({
     init_status_colors();
     init_widget_formatters();
     init_widget_model();
+    init_live_duration();
     MAX_AGENTS_DISPLAY = 3;
     FINISHED_LINGER_MAX_AGE = 1;
     DEFAULT_WIDGET_WIDTH = 100;
@@ -72628,6 +72629,7 @@ var CHROME_LINES, MIN_VIEWPORT, LiveConversationOverlay;
 var init_live_conversation_overlay = __esm({
   "src/ui/live-conversation-overlay.ts"() {
     "use strict";
+    init_live_duration();
     init_visual();
     init_spinner();
     init_status_colors();
@@ -72712,7 +72714,7 @@ var init_live_conversation_overlay = __esm({
       }
       refreshSummary() {
         const act = this.handle.activity;
-        const summary = `${_LiveConversationOverlay.SUMMARY_PREFIX}[${act.turnCount} turns \xB7 ${act.toolUses} tools \xB7 ${(this.safeElapsedMs(act) / 1e3).toFixed(1)}s]`;
+        const summary = `${_LiveConversationOverlay.SUMMARY_PREFIX}[${act.turnCount} turns \xB7 ${act.toolUses} tools \xB7 ${fmtDuration(this.safeElapsedMs(act))}]`;
         const lastLine = this.cachedLines[this.cachedLines.length - 1];
         if (lastLine?.startsWith(_LiveConversationOverlay.SUMMARY_PREFIX)) {
           this.cachedLines[this.cachedLines.length - 1] = summary;
@@ -72738,7 +72740,7 @@ var init_live_conversation_overlay = __esm({
         const statusIcon4 = this.handle.status === "running" ? th.fg("accent", spinnerFrame(this.handle.taskId ?? this.handle.agentId)) : iconForStatus(this.handle.status);
         const name = this.handle.agent ?? this.handle.taskId;
         const act = this.handle.activity;
-        const elapsed3 = `${(this.safeElapsedMs(act) / 1e3).toFixed(1)}s`;
+        const elapsed3 = fmtDuration(this.safeElapsedMs(act));
         const headerParts = [];
         if (act.maxTurns != null) headerParts.push(`turn ${act.turnCount}/${act.maxTurns}`);
         else if (act.turnCount > 0) headerParts.push(`turn ${act.turnCount}`);
@@ -73508,7 +73510,7 @@ var init_cancellation_pane = __esm({
 
 // src/ui/dashboard-panes/health-pane.ts
 function seconds(ms) {
-  return `${Math.round(ms / 1e3)}s`;
+  return fmtDuration(ms);
 }
 function renderHealthPane(snapshot, opts = {}) {
   if (!snapshot) return ["Health pane: snapshot unavailable"];
@@ -73531,6 +73533,7 @@ var init_health_pane = __esm({
   "src/ui/dashboard-panes/health-pane.ts"() {
     "use strict";
     init_heartbeat_aggregator();
+    init_live_duration();
   }
 });
 
@@ -73964,10 +73967,7 @@ function formatAge2(iso) {
   if (!iso) return void 0;
   const ms = Math.max(0, Date.now() - new Date(iso).getTime());
   if (!Number.isFinite(ms)) return void 0;
-  if (ms < 1e3) return "now";
-  if (ms < 6e4) return `${Math.floor(ms / 1e3)}s`;
-  if (ms < 36e5) return `${Math.floor(ms / 6e4)}m`;
-  return `${Math.floor(ms / 36e5)}h`;
+  return fmtDuration(ms);
 }
 function renderLines2(lines, width) {
   const box = new Box(0, 0);
@@ -74170,6 +74170,7 @@ var init_run_dashboard = __esm({
     init_spinner();
     init_status_colors();
     init_theme_adapter();
+    init_live_duration();
     lastActivePane = "agents";
     TASK_READ_TTL_MS2 = 1e3;
     RUN_LIST_MAX = 8;

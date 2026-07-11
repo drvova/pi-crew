@@ -1,3 +1,4 @@
+import { fmtDuration } from './live-duration.ts';
 /**
  * live-conversation-overlay.ts — Live conversation overlay for viewing live-session agent output.
  *
@@ -106,7 +107,7 @@ export class LiveConversationOverlay {
 	}
 	private refreshSummary(): void {
 		const act = this.handle.activity;
-		const summary = `${LiveConversationOverlay.SUMMARY_PREFIX}[${act.turnCount} turns · ${act.toolUses} tools · ${(this.safeElapsedMs(act) / 1000).toFixed(1)}s]`;
+		const summary = `${LiveConversationOverlay.SUMMARY_PREFIX}[${act.turnCount} turns · ${act.toolUses} tools · ${fmtDuration(this.safeElapsedMs(act))}]`;
 		const lastLine = this.cachedLines[this.cachedLines.length - 1];
 		if (lastLine?.startsWith(LiveConversationOverlay.SUMMARY_PREFIX)) {
 			this.cachedLines[this.cachedLines.length - 1] = summary;
@@ -140,7 +141,7 @@ export class LiveConversationOverlay {
 				: iconForStatus(this.handle.status);
 		const name = this.handle.agent ?? this.handle.taskId;
 		const act = this.handle.activity;
-		const elapsed = `${(this.safeElapsedMs(act) / 1000).toFixed(1)}s`;
+		const elapsed = fmtDuration(this.safeElapsedMs(act));
 		const headerParts: string[] = [];
 		if (act.maxTurns != null) headerParts.push(`turn ${act.turnCount}/${act.maxTurns}`);
 		else if (act.turnCount > 0) headerParts.push(`turn ${act.turnCount}`);

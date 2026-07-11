@@ -8,8 +8,9 @@ export interface HealthPaneOptions {
 	now?: number | Date;
 }
 
+import { fmtDuration } from "../live-duration.ts";
 function seconds(ms: number): string {
-	return `${Math.round(ms / 1000)}s`;
+	return fmtDuration(ms);
 }
 
 export function renderHealthPane(snapshot: RunUiSnapshot | undefined, opts: HealthPaneOptions = {}): string[] {

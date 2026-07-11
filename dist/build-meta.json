@@ -7695,7 +7695,7 @@
       "format": "esm"
     },
     "src/ui/live-duration.ts": {
-      "bytes": 2445,
+      "bytes": 3187,
       "imports": [],
       "format": "esm"
     },
@@ -7927,7 +7927,7 @@
       "format": "esm"
     },
     "src/ui/widget/widget-renderer.ts": {
-      "bytes": 12592,
+      "bytes": 12152,
       "imports": [
         {
           "path": "src/runtime/live-agent-manager.ts",
@@ -7983,6 +7983,11 @@
           "path": "src/ui/widget/widget-model.ts",
           "kind": "import-statement",
           "original": "./widget-model.ts"
+        },
+        {
+          "path": "src/ui/live-duration.ts",
+          "kind": "import-statement",
+          "original": "../live-duration.ts"
         }
       ],
       "format": "esm"
@@ -16444,8 +16449,13 @@
       "format": "esm"
     },
     "src/ui/live-conversation-overlay.ts": {
-      "bytes": 7246,
+      "bytes": 7275,
       "imports": [
+        {
+          "path": "src/ui/live-duration.ts",
+          "kind": "import-statement",
+          "original": "./live-duration.ts"
+        },
         {
           "path": "src/utils/visual.ts",
           "kind": "import-statement",
@@ -16625,12 +16635,17 @@
       "format": "esm"
     },
     "src/ui/dashboard-panes/health-pane.ts": {
-      "bytes": 1347,
+      "bytes": 1386,
       "imports": [
         {
           "path": "src/ui/heartbeat-aggregator.ts",
           "kind": "import-statement",
           "original": "../heartbeat-aggregator.ts"
+        },
+        {
+          "path": "src/ui/live-duration.ts",
+          "kind": "import-statement",
+          "original": "../live-duration.ts"
         }
       ],
       "format": "esm"
@@ -16703,7 +16718,7 @@
       "format": "esm"
     },
     "src/ui/run-dashboard.ts": {
-      "bytes": 33632,
+      "bytes": 33523,
       "imports": [
         {
           "path": "node:fs",
@@ -16824,6 +16839,11 @@
           "path": "src/ui/theme-adapter.ts",
           "kind": "import-statement",
           "original": "./theme-adapter.ts"
+        },
+        {
+          "path": "src/ui/live-duration.ts",
+          "kind": "import-statement",
+          "original": "./live-duration.ts"
         }
       ],
       "format": "esm"
@@ -18430,7 +18450,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 6680013
+      "bytes": 6680096
     },
     "dist/index.mjs": {
       "imports": [
@@ -20865,7 +20885,7 @@
           "bytesInOutput": 7038
         },
         "src/ui/live-duration.ts": {
-          "bytesInOutput": 793
+          "bytesInOutput": 1106
         },
         "src/ui/widget/widget-formatters.ts": {
           "bytesInOutput": 5162
@@ -20895,7 +20915,7 @@
           "bytesInOutput": 1809
         },
         "src/ui/widget/widget-renderer.ts": {
-          "bytesInOutput": 7839
+          "bytesInOutput": 7552
         },
         "src/ui/widget/index.ts": {
           "bytesInOutput": 9599
@@ -21912,7 +21932,7 @@
           "bytesInOutput": 2094
         },
         "src/ui/live-conversation-overlay.ts": {
-          "bytesInOutput": 6914
+          "bytesInOutput": 6921
         },
         "src/ui/syntax-highlight.ts": {
           "bytesInOutput": 2229
@@ -21933,7 +21953,7 @@
           "bytesInOutput": 465
         },
         "src/ui/dashboard-panes/health-pane.ts": {
-          "bytesInOutput": 1170
+          "bytesInOutput": 1185
         },
         "src/ui/dashboard-panes/mailbox-pane.ts": {
           "bytesInOutput": 1509
@@ -21957,7 +21977,7 @@
           "bytesInOutput": 4158
         },
         "src/ui/run-dashboard.ts": {
-          "bytesInOutput": 28168
+          "bytesInOutput": 28049
         },
         "src/ui/overlays/confirm-overlay.ts": {
           "bytesInOutput": 2247
@@ -22140,7 +22160,7 @@
           "bytesInOutput": 81
         }
       },
-      "bytes": 3177184
+      "bytes": 3177113
     }
   }
 }

@@ -32,16 +32,7 @@ const ERROR_STATUSES = new Set(["failed", "cancelled", "stopped", "needs_attenti
 
 // ── Header ────────────────────────────────────────────────────────────
 
-/**
- * Human-readable duration: `45s`, `2m34s`, `1h12m`. Replaces raw second
- * counters (a long run used to show `2028s` and climbing — unreadable).
- */
-export function fmtDuration(ms: number): string {
-	const total = Math.max(0, Math.floor(ms / 1000));
-	if (total < 60) return `${total}s`;
-	if (total < 3600) return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
-	return `${Math.floor(total / 3600)}h${String(Math.floor((total % 3600) / 60)).padStart(2, "0")}m`;
-}
+import { fmtDuration } from "../live-duration.ts";
 
 /** Compact 5-cell progress bar (`▰▰▰▱▱`) — instant read of completion. */
 export function progressBar(completed: number, total: number, cells = 5): string {
