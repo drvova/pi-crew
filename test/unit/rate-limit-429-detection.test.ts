@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { type ParsedPiJsonOutput, parsePiJsonOutput } from "../../src/runtime/pi-json-output.ts";
-import { detectRetryableModelFailureFromOutput } from "../../src/runtime/task-runner.ts";
+import { detectModelFailureFromOutput } from "../../src/runtime/task-runner.ts";
 
 /**
  * 429/rate-limit fix (PI_CREW_TOOLING_429_NOTE.md). A worker can exit code 0
@@ -70,10 +70,10 @@ describe("parsePiJsonOutput — errorMessages extraction", () => {
 	});
 });
 
-describe("detectRetryableModelFailureFromOutput — 429-only run detection", () => {
+describe("detectModelFailureFromOutput — 429-only run detection", () => {
 	it("surfaces error when transcript has retryable 429 messages AND no real output", () => {
 		const parsed = parsePiJsonOutput(event429); // empty content, no text
-		const err = detectRetryableModelFailureFromOutput(parsed);
+		const err = detectModelFailureFromOutput(parsed);
 		assert.ok(err, "must surface the 429 as an error");
 		assert.match(err!, /429.*overloaded/i);
 		assert.match(err!, /no output/i);
@@ -81,7 +81,7 @@ describe("detectRetryableModelFailureFromOutput — 429-only run detection", () 
 
 	it("surfaces error for rate_limit_error too", () => {
 		const parsed = parsePiJsonOutput(eventRateLimit);
-		const err = detectRetryableModelFailureFromOutput(parsed);
+		const err = detectModelFailureFromOutput(parsed);
 		assert.ok(err);
 		assert.match(err!, /rate_limit_error/i);
 	});
@@ -89,31 +89,51 @@ describe("detectRetryableModelFailureFromOutput — 429-only run detection", () 
 	it("returns undefined when there's real output (model recovered despite transient 429s)", () => {
 		// 429 then a successful text response — the run recovered, don't fail it.
 		const parsed = parsePiJsonOutput(`${event429}\n${eventText}`);
-		const err = detectRetryableModelFailureFromOutput(parsed);
+		const err = detectModelFailureFromOutput(parsed);
 		assert.equal(err, undefined, "recovered run must not be flagged");
 	});
 
-	it("returns undefined for non-retryable errors (auth/billing) — those shouldn't trigger fallback", () => {
-		// Auth errors are NON_RETRYABLE — isRetryableModelFailure returns false.
-		// We should NOT surface them here (they'd be caught by other layers /
-		// would loop the fallback chain forever).
+	it("surfaces non-retryable errors (auth/billing) too — zero-output failures must fail the task, not complete", () => {
+		// 2026-07-11 regression: a worker whose ONLY turn ended in an error and
+		// produced zero output used to score "completed" when the error was
+		// non-retryable. The task must fail honestly. No fallback-loop risk: the
+		// attempt loop breaks on !isRetryableModelFailure(error).
 		const parsed = parsePiJsonOutput(eventAuth);
-		const err = detectRetryableModelFailureFromOutput(parsed);
-		assert.equal(err, undefined, "non-retryable auth errors must not trigger this path");
+		const err = detectModelFailureFromOutput(parsed);
+		assert.ok(err, "zero-output auth failure must surface as an error");
+		assert.match(err!, /no output/i);
+	});
+
+	it("surfaces permanent 400 provider incompatibility (developer role rejected) — observed 2026-07-11", () => {
+		// Real failure: windsurf/qwen rejects the OpenAI 'developer' role with a
+		// 400; the worker exits 0 with empty content and the run false-completed.
+		const event400 = JSON.stringify({
+			type: "message_end",
+			message: {
+				role: "assistant",
+				content: [],
+				errorMessage: "400 developer is not one of ['system', 'assistant', 'user', 'tool', 'function']",
+				stopReason: "error",
+			},
+		});
+		const parsed = parsePiJsonOutput(event400);
+		const err = detectModelFailureFromOutput(parsed);
+		assert.ok(err, "400 developer-role rejection with no output must fail the task");
+		assert.match(err!, /400 developer/);
 	});
 
 	it("returns undefined when no error messages at all (normal successful run)", () => {
 		const parsed = parsePiJsonOutput(eventText);
-		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
+		assert.equal(detectModelFailureFromOutput(parsed), undefined);
 	});
 
 	it("returns undefined for empty transcript", () => {
 		const parsed = parsePiJsonOutput("");
-		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
+		assert.equal(detectModelFailureFromOutput(parsed), undefined);
 	});
 });
 
-describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents signal (FIX 3)", () => {
+describe("detectModelFailureFromOutput — secondary messageEndEvents signal (FIX 3)", () => {
 	// FIX 3 (task packet 01_01-agent): the detector also inspects a raw
 	// `messageEndEvents` (or `transcript`) array on the parsed output as a
 	// secondary signal. The ParsedPiJsonOutput type does not currently declare
@@ -136,7 +156,7 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 				},
 			],
 		} as unknown as ParsedPiJsonOutput;
-		const err = detectRetryableModelFailureFromOutput(parsed);
+		const err = detectModelFailureFromOutput(parsed);
 		assert.ok(err, "must surface the api_error from messageEndEvents");
 		assert.match(err!, /api_error/i);
 		assert.match(err!, /no output/i);
@@ -151,7 +171,7 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			errorMessages: undefined,
 			transcript: [{ stopReason: "error", errorMessage: "upstream timeout" }],
 		} as unknown as ParsedPiJsonOutput;
-		const err = detectRetryableModelFailureFromOutput(parsed);
+		const err = detectModelFailureFromOutput(parsed);
 		assert.ok(err);
 		assert.match(err!, /upstream timeout/i);
 	});
@@ -170,7 +190,7 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 				},
 			],
 		} as unknown as ParsedPiJsonOutput;
-		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
+		assert.equal(detectModelFailureFromOutput(parsed), undefined);
 	});
 
 	it("ignores messageEndEvents with empty/non-string errorMessage", () => {
@@ -182,10 +202,12 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 			errorMessages: undefined,
 			messageEndEvents: [{ stopReason: "error", errorMessage: "" }, { stopReason: "error" /* no errorMessage field */ }],
 		} as unknown as ParsedPiJsonOutput;
-		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
+		assert.equal(detectModelFailureFromOutput(parsed), undefined);
 	});
 
-	it("ignores non-retryable messageEndEvents (auth/billing) and falls through", () => {
+	it("surfaces non-retryable messageEndEvents (auth/billing) too — zero-output failures must fail the task", () => {
+		// 2026-07-11: same honest-failure semantics as the primary signal — a
+		// worker that produced ONLY an error and no output must not complete.
 		const parsed = {
 			jsonEvents: 1,
 			textEvents: [],
@@ -199,7 +221,9 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 				},
 			],
 		} as unknown as ParsedPiJsonOutput;
-		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
+		const err = detectModelFailureFromOutput(parsed);
+		assert.ok(err, "zero-output non-retryable failure must surface");
+		assert.match(err!, /401 unauthorized/);
 	});
 
 	it("returns undefined for messageEndEvents when real output is present (recovered)", () => {
@@ -216,7 +240,7 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 				},
 			],
 		} as unknown as ParsedPiJsonOutput;
-		assert.equal(detectRetryableModelFailureFromOutput(parsed), undefined);
+		assert.equal(detectModelFailureFromOutput(parsed), undefined);
 	});
 
 	it("primary errorMessages signal still wins over secondary messageEndEvents", () => {
@@ -236,7 +260,7 @@ describe("detectRetryableModelFailureFromOutput — secondary messageEndEvents s
 				},
 			],
 		} as unknown as ParsedPiJsonOutput;
-		const err = detectRetryableModelFailureFromOutput(parsed);
+		const err = detectModelFailureFromOutput(parsed);
 		assert.ok(err);
 		assert.match(err!, /429.*overloaded/i);
 	});

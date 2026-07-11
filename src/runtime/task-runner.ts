@@ -642,8 +642,19 @@ export async function runTeamTask(input: TaskRunnerInput): Promise<{ manifest: T
 				// AND there is no real output text, surface it as an error so the
 				// model-fallback chain can retry on another model.
 				if (!error && parsedOutput) {
-					const rateLimitErr = detectRetryableModelFailureFromOutput(parsedOutput);
+					const rateLimitErr = detectModelFailureFromOutput(parsedOutput);
 					if (rateLimitErr) error = rateLimitErr;
+				}
+				// Poka-Yoke (2026-07-11): custom providers registered by Pi extensions
+				// (e.g. a windsurf/oauth provider) do NOT exist inside child workers —
+				// workers spawn with --no-extensions. The raw "Unknown provider" error
+				// is cryptic; append the actionable cause + fix. The original text is
+				// preserved so retryability pattern-matching still sees it (moving to
+				// the next candidate model IS the right first response).
+				if (error && /unknown provider/i.test(error)) {
+					error =
+						`${error.trim()} — this provider is likely registered by a Pi extension, and child workers run with --no-extensions. ` +
+						`Fix: add the provider extension to the agent's 'extensions' allowlist, or set the task/agent model to a built-in provider.`;
 				}
 				persistHeartbeat(true);
 				persistChildProgress({ type: "attempt_finished" }, true);
@@ -1249,32 +1260,39 @@ async function resolveTaskScopeModelsPatterns(cwd: string): Promise<string[]> {
  * produced a tool call, so the worker "completed" without doing anything.
  *
  * This helper inspects a ParsedPiJsonOutput and, if the run produced only
- * retryable model-failure messages AND no real output text (no finalText, no
- * text events, no patches), returns a surfaced error string so the
- * model-fallback chain (isRetryableModelFailure) can retry on another model.
- * Returns undefined when the run has real output (the 429s were recovered from)
- * or when there are no retryable error messages.
+ * model-failure messages AND no real output text (no finalText, no text
+ * events, no patches), returns a surfaced error string. Retryable failures
+ * (429/5xx/overloaded) are preferred in the returned message so the
+ * model-fallback chain (isRetryableModelFailure) retries on another model;
+ * permanent failures (e.g. `400 developer is not one of [...]` from providers
+ * that reject the OpenAI developer role) fail the task honestly instead of
+ * letting a zero-output worker score "completed".
+ * Returns undefined when the run has real output (the errors were recovered
+ * from) or when there are no error messages at all.
  */
-export function detectRetryableModelFailureFromOutput(parsed: ParsedPiJsonOutput): string | undefined {
+export function detectModelFailureFromOutput(parsed: ParsedPiJsonOutput): string | undefined {
 	// Primary signal: pre-extracted `errorMessages` (from pi-json-output parser).
 	// The parser already filters to non-empty trimmed strings from message_end
 	// events.
 	const messages = parsed.errorMessages;
 	if (messages && messages.length > 0) {
-		// Find the first retryable model-failure message
-		// (429 / rate-limit / overloaded / 5xx / ...).
-		const retryable = messages.find((m) => isRetryableModelFailure(m));
-		if (retryable) {
-			// Did the run actually produce real output despite the transient errors?
+		// Prefer the first retryable model-failure message (429 / rate-limit /
+		// overloaded / 5xx / ...) so the fallback chain sees a retryable pattern
+		// when one exists; otherwise surface the first error verbatim (permanent
+		// failures must fail the task, not silently complete).
+		const failure = messages.find((m) => isRetryableModelFailure(m)) ?? messages[0];
+		if (failure) {
+			// Did the run actually produce real output despite the errors?
 			// If finalText / textEvents / patches exist, the model recovered and we
 			// should NOT mark the run as failed — only flag it when the worker
-			// yielded nothing (the 429-only case from the bug report).
+			// yielded nothing (the 429-only case from the bug report, and the
+			// 400-developer-role case observed 2026-07-11).
 			const hasRealOutput =
 				(parsed.finalText?.trim().length ?? 0) > 0 ||
 				parsed.textEvents.some((t) => t.trim().length > 0) ||
 				(parsed.patches?.length ?? 0) > 0;
 			if (hasRealOutput) return undefined;
-			return `Model returned only retryable errors and no output: ${retryable}`;
+			return `Model returned only errors and no output: ${failure}`;
 		}
 	}
 	// Secondary signal (FIX 3, task packet 01_01-agent): inspect a raw
@@ -1301,7 +1319,6 @@ export function detectRetryableModelFailureFromOutput(parsed: ParsedPiJsonOutput
 		};
 		if (event.stopReason !== "error") continue;
 		if (typeof event.errorMessage !== "string" || event.errorMessage.length === 0) continue;
-		if (!isRetryableModelFailure(event.errorMessage)) continue;
 		// Same real-output gate as the primary signal — don't flag runs that
 		// recovered with real final text / patches.
 		const hasRealOutput =
@@ -1309,7 +1326,7 @@ export function detectRetryableModelFailureFromOutput(parsed: ParsedPiJsonOutput
 			parsed.textEvents.some((t) => t.trim().length > 0) ||
 			(parsed.patches?.length ?? 0) > 0;
 		if (hasRealOutput) return undefined;
-		return `Model returned only retryable errors and no output: ${event.errorMessage}`;
+		return `Model returned only errors and no output: ${event.errorMessage}`;
 	}
 	return undefined;
 }

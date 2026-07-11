@@ -377,6 +377,13 @@ export function buildConfiguredModelRouting(input: {
 	const configuredModels = rawModels
 		.filter((model): model is string => Boolean(model?.trim()))
 		.filter((model, idx) => {
+			// Fix (2026-07-11): the explicitly REQUESTED model (caller override /
+			// step / team-role / agent) is pinned for the same reason as the
+			// parentModel pin below — isAvailableModel only knows models.json /
+			// registry entries, NOT builtin Pi models. Silently dropping the
+			// caller's explicit choice (e.g. model:'anthropic/…' on a crew_agent
+			// call) re-routed work onto unrelated fallback models.
+			if (requested && model.trim() === requested.trim()) return true;
 			if (parentModelRaw && idx === 0 && model.trim() === parentModelRaw) return true;
 			return isAvailableModel(model.trim(), availableModels);
 		});

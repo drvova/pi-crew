@@ -868,7 +868,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 			if (count === 1) {
 				// Silent retryable failure: exit 0, no real text, message_end
 				// carries errorMessage matching `/provider[_ ]?error/i` so that
-				// `detectRetryableModelFailureFromOutput` surfaces it as an error
+				// `detectModelFailureFromOutput` surfaces it as an error
 				// and `isRetryableModelFailure` routes the next attempt to the
 				// next candidate model. `stopReason:"error"` (NOT "stop") so
 				// `isFinalAssistantEvent` does NOT prematurely terminate the run.
@@ -1345,7 +1345,7 @@ export async function runChildPi(input: ChildPiRunInput): Promise<ChildPiRunResu
 							killed: hardKilled,
 							// Phase-0 diagnostic (HB-003a): surface the final-drain race state.
 							// finalDrainArmed lets Phase 1 decide whether a signal-death (exitCode=null)
-							// should be treated as a forced final drain. READ-ONLY for now.
+							// should be treated as a forced final drain. READ-ONLY diagnostic field.
 							...(finalDrainArmed || forcedFinalDrain
 								? {
 										finalDrainArmed,
